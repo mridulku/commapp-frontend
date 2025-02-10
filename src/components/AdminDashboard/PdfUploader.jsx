@@ -11,7 +11,9 @@ function PdfUploader() {
 
 
   //  const backendURL = "https://bookish-guide-pjpjjpjgwxxgc7x5j-3001.app.github.dev/upload-pdf";
-  const backendURL = "http://localhost:3001/upload-pdf";
+  // const backendURL = "http://localhost:3001/upload-pdf";
+
+  const backendURL = `${import.meta.env.VITE_BACKEND_URL}/upload-pdf`;
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files.length > 0) {

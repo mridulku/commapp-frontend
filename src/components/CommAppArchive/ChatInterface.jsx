@@ -13,7 +13,12 @@ function ChatInterface() {
 
  
   //  const backendURL = "https://bookish-guide-pjpjjpjgwxxgc7x5j-3001.app.github.dev";
-  const backendURL = "http://localhost:3001";
+//  const backendURL = "http://localhost:3001";
+
+  const backendURL = import.meta.env.VITE_BACKEND_URL;
+
+
+  
   
 
   const startingPrompt = chatPrompts[id] || "Welcome to the chat!";

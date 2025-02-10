@@ -9,7 +9,10 @@ function AuthLogin() {
   const navigate = useNavigate();
 
   // const backendURL = "https://commapp-backend.onrender.com"
-  const backendURL = "http://localhost:3001";
+//  const backendURL = "http://localhost:3001";
+
+  const backendURL = import.meta.env.VITE_BACKEND_URL;
+
   
   const handleLogin = async () => {
     try {

@@ -10,7 +10,10 @@ function SubChaptersUploader() {
   // The URL of your backend route
   // e.g. "https://<your-codespace>-3001.app.github.dev/api/subChapters"
 //  const backendURL = "https://bookish-guide-pjpjjpjgwxxgc7x5j-3001.app.github.dev/api/subChapters";
-    const backendURL = "http://localhost:3001/api/subChapters";
+ //   const backendURL = "http://localhost:3001/api/subChapters";
+
+
+    const backendURL = `${import.meta.env.VITE_BACKEND_URL}/api/subChapters`;
 
   // Handler for the textarea changes
   const handleChange = (e) => {

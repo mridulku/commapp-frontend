@@ -10,7 +10,19 @@ function ChaptersUploader() {
 
 
   //  const backendURL = "https://bookish-guide-pjpjjpjgwxxgc7x5j-3001.app.github.dev/api/chapters";
-  const backendURL = "http://localhost:3001/api/chapters";
+
+
+//  const backendURL = import.meta.env.VITE_BACKEND_URL;
+
+  //  const backendURL = "http://localhost:3001"; // or your domain
+
+
+
+
+
+//  const backendURL = "http://localhost:3001/api/chapters";
+
+  const backendURL = `${import.meta.env.VITE_BACKEND_URL}/api/chapters`;
 
   // Track changes in the text area
   const handleChange = (e) => {

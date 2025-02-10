@@ -28,11 +28,22 @@ function BookTextViewer() {
   const [retrievedText, setRetrievedText] = useState("");
 
   // Endpoints
-  const bookNamesURL = "http://localhost:3001/api/rawbooks/bookNames";
-  const chaptersURL = "http://localhost:3001/api/chapters";
-  const subChaptersURL = "http://localhost:3001/api/subchapternames"; 
+
+  const backendURL = import.meta.env.VITE_BACKEND_URL;
+
+  const bookNamesURL = `${backendURL}/api/rawbooks/bookNames`;
+  const chaptersURL = `${backendURL}/api/chapters`;
+  const subChaptersURL = `${backendURL}/api/subchapternames`;
+  const pagesURL = `${backendURL}/api/rawbooks/pages`;
+
+
+
+
+ // const bookNamesURL = "http://localhost:3001/api/rawbooks/bookNames";
+  //const chaptersURL = "http://localhost:3001/api/chapters";
+  //const subChaptersURL = "http://localhost:3001/api/subchapternames"; 
   // you'll create a GET route: /api/subchapters?bookName=XXX&chapterName=YYY
-  const pagesURL = "http://localhost:3001/api/rawbooks/pages";
+  //const pagesURL = "http://localhost:3001/api/rawbooks/pages";
 
   // =========================== Fetch Books Once ===========================
   useEffect(() => {

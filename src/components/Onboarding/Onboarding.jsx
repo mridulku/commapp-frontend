@@ -7,7 +7,10 @@ function Onboarding() {
   const token = localStorage.getItem("token");
 
   // Adjust backend URL as needed
-  const backendURL = "http://localhost:3001";
+//  const backendURL = "http://localhost:3001";
+
+  const backendURL = import.meta.env.VITE_BACKEND_URL;
+
 
   /**
    * State to capture onboarding inputs.

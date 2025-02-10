@@ -14,7 +14,9 @@ import DoubtsSection from "./DoubtsSection";
 import DynamicTutorModal from "./DynamicTutorModal"; // adjust path as needed
 
 function BooksViewer2() {
-  const backendURL = "http://localhost:3001"; // or your domain
+  const backendURL = import.meta.env.VITE_BACKEND_URL;
+
+//  const backendURL = "http://localhost:3001"; // or your domain
 
   // Categories & Books
   const [categories, setCategories] = useState([]);

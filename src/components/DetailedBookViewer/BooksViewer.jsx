@@ -2,7 +2,9 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 
 function BooksViewer() {
-  const backendURL = "http://localhost:3001"; // or your domain
+//  const backendURL = "http://localhost:3001"; // or your domain
+  const backendURL = import.meta.env.VITE_BACKEND_URL;
+
   const [booksData, setBooksData] = useState([]);
   const [selectedBook, setSelectedBook] = useState(null);
   const [selectedChapter, setSelectedChapter] = useState(null);
