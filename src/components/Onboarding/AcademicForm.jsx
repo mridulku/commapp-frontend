@@ -1,124 +1,17 @@
-import React, { useState } from "react";
+import React from "react";
 
-function AcademicForm() {
-  // We store the entire form data in state for demonstration.
-  // You can replace this with your own formData object if desired.
-  const [formData, setFormData] = useState({
-    educationLevel: "",
-    country: "",
-    schoolClass: "",
-    collegeName: "",
-    department: "",
-    courseList: [
-      {
-        courseName: "",
-        pdfFiles: [],       // We'll store uploaded PDF filenames here
-        examDates: [
-          {
-            type: "",
-            date: "",
-          },
-        ],
-      },
-    ],
-    dailyHours: "",
-    preparationGoal: "",
-    additionalNote: "",
-  });
-
-  // Track which step (1–4) the user is on
-  const [currentStep, setCurrentStep] = useState(1);
-  const totalSteps = 4;
-
-  //---- Navigation Handlers ----
-  const goNext = () => {
-    // If not on the last step, move to the next
-    // Otherwise submit form
-    if (currentStep < totalSteps) {
-      setCurrentStep(currentStep + 1);
-    } else {
-      handleSubmit();
-    }
-  };
-
-  const goBack = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
-    }
-  };
-
-  //---- Final Submit ----
-  const handleSubmit = () => {
-    // Here you can handle your final form submission
-    // For the demo, just log the data and alert
-    console.log("Submitting form data:", formData);
-    alert("Form submitted! Check console for data.");
-  };
-
-  //---- Form Field Handlers ----
-  // 1) Generic input change for top-level fields
-  const handleInputChange = (event, fieldKey) => {
-    setFormData((prev) => ({
-      ...prev,
-      [fieldKey]: event.target.value,
-    }));
-  };
-
-  // 2) Tile-based selections (e.g., education level, country)
-  const handleTileSelection = (value, fieldKey) => {
-    setFormData((prev) => ({
-      ...prev,
-      [fieldKey]: value,
-    }));
-  };
-
-  // 3) Course fields
-  const handleCourseChange = (courseIndex, event, courseField) => {
-    const newCourses = [...formData.courseList];
-    newCourses[courseIndex][courseField] = event.target.value;
-    setFormData((prev) => ({ ...prev, courseList: newCourses }));
-  };
-
-  // 4) Add new course
-  const addNewCourse = () => {
-    setFormData((prev) => ({
-      ...prev,
-      courseList: [
-        ...prev.courseList,
-        {
-          courseName: "",
-          pdfFiles: [],
-          examDates: [{ type: "", date: "" }],
-        },
-      ],
-    }));
-  };
-
-  // 5) Handle PDF upload (demo only: we store just file names)
-  const handleUploadPDF = (courseIndex, event) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const newCourses = [...formData.courseList];
-      newCourses[courseIndex].pdfFiles.push(file.name);
-      setFormData((prev) => ({ ...prev, courseList: newCourses }));
-    }
-  };
-
-  // 6) Add new exam date
-  const addExamDate = (courseIndex) => {
-    const newCourses = [...formData.courseList];
-    newCourses[courseIndex].examDates.push({ type: "", date: "" });
-    setFormData((prev) => ({ ...prev, courseList: newCourses }));
-  };
-
-  // 7) Handle exam field changes
-  const handleExamFieldChange = (courseIndex, examIndex, event, fieldKey) => {
-    const newCourses = [...formData.courseList];
-    newCourses[courseIndex].examDates[examIndex][fieldKey] = event.target.value;
-    setFormData((prev) => ({ ...prev, courseList: newCourses }));
-  };
-
-  //---- Styling ----
+function AcademicForm({
+  // props passed from the parent (LearnerPersonaForm)
+  subStep,
+  formData,
+  handleInputChange,
+  handleCourseChange,
+  handleUploadPDF,
+  addExamDate,
+  handleExamFieldChange,
+  addNewCourse,
+}) {
+  //---- Styling constants (same as before) ----
   const sectionContainerStyle = {
     backgroundColor: "rgba(255,255,255,0.2)",
     padding: "20px",
@@ -180,7 +73,16 @@ function AcademicForm() {
     fontWeight: "bold",
   };
 
-  // Helper to render a tile
+  // Helper to choose tile
+  const handleTileSelection = (value, fieldKey) => {
+    // We'll re-use the parent's handleInputChange, which requires a "path"
+    // like "academic.educationLevel". So we can do:
+    const path = `academic.${fieldKey}`;
+    // Mock an event object
+    const mockEvent = { target: { value } };
+    handleInputChange(mockEvent, path);
+  };
+
   const renderTile = (label, value, currentValue, fieldKey, emoji = "") => {
     const isSelected = currentValue === value;
     return (
@@ -196,312 +98,272 @@ function AcademicForm() {
     );
   };
 
-  //---- Render ----
-  return (
-    <div style={{ maxWidth: "600px", margin: "0 auto" }}>
-      <h2 style={{ marginBottom: "30px" }}>🎓 Academic Learner Form</h2>
+  // ---- RENDER the correct sub-section based on subStep ----
 
-      {/* STEP 1: BASIC DETAILS */}
-      {currentStep === 1 && (
-        <div style={sectionContainerStyle}>
-          <h3 style={sectionHeadingStyle}>1. Basic Details</h3>
-          <span style={helperTextStyle}>
-            Please select your current education level and country.
-          </span>
+  // STEP 1 content
+  const Step1_BasicDetails = () => (
+    <div style={sectionContainerStyle}>
+      <h3 style={sectionHeadingStyle}>1. Basic Details</h3>
+      <span style={helperTextStyle}>
+        Please select your current education level and country.
+      </span>
 
-          {/* Education Level: Tile-based */}
-          <label style={{ marginBottom: "5px" }}>Education Level:</label>
-          <div style={tileContainerStyle}>
-            {renderTile(
-              "School",
-              "school",
-              formData.educationLevel,
-              "educationLevel",
-              "🏫"
-            )}
-            {renderTile(
-              "College",
-              "college",
-              formData.educationLevel,
-              "educationLevel",
-              "🏢"
-            )}
-          </div>
+      {/* Education Level: Tile-based */}
+      <label style={{ marginBottom: "5px" }}>Education Level:</label>
+      <div style={tileContainerStyle}>
+        {renderTile("School", "school", formData.educationLevel, "educationLevel", "🏫")}
+        {renderTile("College", "college", formData.educationLevel, "educationLevel", "🏢")}
+      </div>
 
-          {/* Country: Tile-based */}
-          <label style={{ marginBottom: "5px" }}>Country:</label>
-          <div style={tileContainerStyle}>
-            {renderTile(
-              "India",
-              "India",
-              formData.country,
-              "country",
-              "🇮🇳"
-            )}
-            {renderTile("US", "US", formData.country, "country", "🇺🇸")}
-          </div>
+      {/* Country: Tile-based */}
+      <label style={{ marginBottom: "5px" }}>Country:</label>
+      <div style={tileContainerStyle}>
+        {renderTile("India", "India", formData.country, "country", "🇮🇳")}
+        {renderTile("US", "US", formData.country, "country", "🇺🇸")}
+      </div>
 
-          {/* If School is selected */}
-          {formData.educationLevel === "school" && (
-            <>
-              <label>Which Class/Grade:</label>
-              <input
-                type="text"
-                placeholder="e.g. 9th grade, 12th grade..."
-                value={formData.schoolClass}
-                onChange={(e) => handleInputChange(e, "schoolClass")}
-                style={inputStyle}
-              />
-            </>
-          )}
-
-          {/* If College is selected */}
-          {formData.educationLevel === "college" && (
-            <>
-              <label>College Name:</label>
-              <input
-                type="text"
-                placeholder="e.g. XYZ University"
-                value={formData.collegeName}
-                onChange={(e) => handleInputChange(e, "collegeName")}
-                style={inputStyle}
-              />
-
-              <label>Department or Major:</label>
-              <input
-                type="text"
-                placeholder="e.g. Computer Science"
-                value={formData.department}
-                onChange={(e) => handleInputChange(e, "department")}
-                style={inputStyle}
-              />
-            </>
-          )}
-        </div>
+      {/* If School is selected */}
+      {formData.educationLevel === "school" && (
+        <>
+          <label>Which Class/Grade:</label>
+          <input
+            type="text"
+            placeholder="e.g. 9th grade, 12th grade..."
+            value={formData.schoolClass}
+            onChange={(e) => handleInputChange(e, "academic.schoolClass")}
+            style={inputStyle}
+          />
+        </>
       )}
 
-      {/* STEP 2: COURSES / SUBJECTS */}
-      {currentStep === 2 && (
-        <div style={sectionContainerStyle}>
-          <h3 style={sectionHeadingStyle}>2. Courses / Subjects 📚</h3>
-          <span style={helperTextStyle}>
-            Please provide information about the courses/subjects you have this
-            year/semester.
-          </span>
+      {/* If College is selected */}
+      {formData.educationLevel === "college" && (
+        <>
+          <label>College Name:</label>
+          <input
+            type="text"
+            placeholder="e.g. XYZ University"
+            value={formData.collegeName}
+            onChange={(e) => handleInputChange(e, "academic.collegeName")}
+            style={inputStyle}
+          />
 
-          {formData.courseList.map((course, courseIndex) => (
+          <label>Department or Major:</label>
+          <input
+            type="text"
+            placeholder="e.g. Computer Science"
+            value={formData.department}
+            onChange={(e) => handleInputChange(e, "academic.department")}
+            style={inputStyle}
+          />
+        </>
+      )}
+    </div>
+  );
+
+  // STEP 2 content
+  const Step2_Courses = () => (
+    <div style={sectionContainerStyle}>
+      <h3 style={sectionHeadingStyle}>2. Courses / Subjects 📚</h3>
+      <span style={helperTextStyle}>
+        Please provide information about the courses/subjects you have this
+        year/semester.
+      </span>
+
+      {formData.courseList && formData.courseList.map((course, courseIndex) => (
+        <div
+          // Use a stable, unique id for each course
+          key={course.id} 
+          style={{
+            backgroundColor: "rgba(255,255,255,0.1)",
+            padding: "10px",
+            borderRadius: "6px",
+            marginBottom: "20px",
+          }}
+        >
+          <label>Course Name:</label>
+          <input
+            type="text"
+            placeholder="e.g. Math 101"
+            value={course.courseName}
+            onChange={(e) => handleCourseChange(e, courseIndex, "courseName")}
+            style={inputStyle}
+          />
+
+          {/* PDF Upload */}
+          <label>Upload Materials (PDFs):</label>
+          <span style={helperTextStyle}>
+            You can upload all the materials you have for the course so the
+            AI can create a personalized plan for you.
+          </span>
+          {/* In a real app, you'd use onChange for <input type="file"> */}
+          <button
+            type="button"
+            onClick={() => handleUploadPDF(courseIndex)}
+            style={{
+              padding: "6px 12px",
+              borderRadius: "4px",
+              background: "#999",
+              cursor: "pointer",
+              border: "none",
+              marginBottom: "10px",
+            }}
+          >
+            Simulate PDF Upload
+          </button>
+          <ul style={{ listStyleType: "circle", marginLeft: "20px" }}>
+            {course.pdfFiles?.map((fileName, fileIdx) => (
+              <li key={fileIdx}>{fileName}</li>
+            ))}
+          </ul>
+
+          {/* Exams */}
+          <h5>Exam / Test Dates 🗓</h5>
+          <span style={helperTextStyle}>
+            Add exam or test dates so the AI can plan your content effectively.
+          </span>
+          {course.examDates?.map((examObj, examIdx) => (
             <div
-              key={courseIndex}
+              key={examIdx}
               style={{
                 backgroundColor: "rgba(255,255,255,0.1)",
-                padding: "10px",
-                borderRadius: "6px",
-                marginBottom: "20px",
+                padding: "5px",
+                borderRadius: "4px",
+                marginBottom: "5px",
               }}
             >
-              <label>Course Name:</label>
+              <label>Type of Exam:</label>
               <input
                 type="text"
-                placeholder="e.g. Math 101"
-                value={course.courseName}
+                placeholder="e.g. Final, Quiz"
+                value={examObj.type}
                 onChange={(e) =>
-                  handleCourseChange(courseIndex, e, "courseName")
+                  handleExamFieldChange(e, courseIndex, examIdx, "type")
                 }
-                style={inputStyle}
+                style={{ ...inputStyle, marginBottom: "5px" }}
               />
 
-              {/* PDF Upload */}
-              <label>Upload Materials (PDFs):</label>
-              <span style={helperTextStyle}>
-                You can upload all the materials you have for the course so the
-                AI can create a personalized plan for you. Feel free to add more
-                materials later as they become available.
-              </span>
+              <label>Date:</label>
               <input
-                type="file"
-                accept="application/pdf"
-                onChange={(e) => handleUploadPDF(courseIndex, e)}
-                style={{ marginBottom: "10px" }}
+                type="date"
+                value={examObj.date}
+                onChange={(e) =>
+                  handleExamFieldChange(e, courseIndex, examIdx, "date")
+                }
+                style={{ ...inputStyle, marginBottom: "5px" }}
               />
-              <ul style={{ listStyleType: "circle", marginLeft: "20px" }}>
-                {course.pdfFiles.map((fileName, fileIdx) => (
-                  <li key={fileIdx}>{fileName}</li>
-                ))}
-              </ul>
-
-              {/* Exams */}
-              <h5>Exam / Test Dates 🗓</h5>
-              <span style={helperTextStyle}>
-                Add exam or test dates so the AI can plan your content
-                effectively. You can add more dates as you get them.
-              </span>
-              {course.examDates.map((examObj, examIdx) => (
-                <div
-                  key={examIdx}
-                  style={{
-                    backgroundColor: "rgba(255,255,255,0.1)",
-                    padding: "5px",
-                    borderRadius: "4px",
-                    marginBottom: "5px",
-                  }}
-                >
-                  <label>Type of Exam:</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Final, Quiz"
-                    value={examObj.type}
-                    onChange={(e) =>
-                      handleExamFieldChange(courseIndex, examIdx, e, "type")
-                    }
-                    style={{ ...inputStyle, marginBottom: "5px" }}
-                  />
-
-                  <label>Date:</label>
-                  <input
-                    type="date"
-                    value={examObj.date}
-                    onChange={(e) =>
-                      handleExamFieldChange(courseIndex, examIdx, e, "date")
-                    }
-                    style={{ ...inputStyle, marginBottom: "5px" }}
-                  />
-                </div>
-              ))}
-
-              <button
-                type="button"
-                onClick={() => addExamDate(courseIndex)}
-                style={{
-                  padding: "6px 12px",
-                  borderRadius: "4px",
-                  background: "#999",
-                  cursor: "pointer",
-                  border: "none",
-                  marginBottom: "10px",
-                }}
-              >
-                + Add Another Exam
-              </button>
             </div>
           ))}
 
           <button
             type="button"
-            onClick={addNewCourse}
+            onClick={() => addExamDate(courseIndex)}
             style={{
-              marginBottom: "20px",
-              display: "block",
-              padding: "10px 20px",
+              padding: "6px 12px",
               borderRadius: "4px",
-              background: "#FFD700",
+              background: "#999",
               cursor: "pointer",
               border: "none",
-              fontWeight: "bold",
+              marginBottom: "10px",
             }}
           >
-            + Add Another Course
+            + Add Another Exam
           </button>
         </div>
-      )}
+      ))}
 
-      {/* STEP 3: TIME COMMITMENT & GOALS */}
-      {currentStep === 3 && (
-        <div style={sectionContainerStyle}>
-          <h3 style={sectionHeadingStyle}>3. Time Commitment & Goals</h3>
+      <button
+        type="button"
+        onClick={addNewCourse}
+        style={{
+          marginBottom: "20px",
+          display: "block",
+          padding: "10px 20px",
+          borderRadius: "4px",
+          background: "#FFD700",
+          cursor: "pointer",
+          border: "none",
+          fontWeight: "bold",
+        }}
+      >
+        + Add Another Course
+      </button>
+    </div>
+  );
 
-          <label>⏰ Daily Hours You Can Commit:</label>
-          <span style={helperTextStyle}>
-            This information helps the AI plan your study schedule effectively.
-          </span>
-          <input
-            type="number"
-            min="0"
-            step="0.5"
-            placeholder="e.g. 2"
-            value={formData.dailyHours}
-            onChange={(e) => handleInputChange(e, "dailyHours")}
-            style={inputStyle}
-          />
+  // STEP 3 content
+  const Step3_TimeGoals = () => (
+    <div style={sectionContainerStyle}>
+      <h3 style={sectionHeadingStyle}>3. Time Commitment & Goals</h3>
 
-          <label>🎯 Overall Preparation Goal:</label>
-          <span style={helperTextStyle}>
-            Please share your current level of understanding so the AI can plan
-            accordingly.
-          </span>
-          <select
-            value={formData.preparationGoal}
-            onChange={(e) => handleInputChange(e, "preparationGoal")}
-            style={selectStyle}
-          >
-            <option value="">Select</option>
-            <option value="revise">Revise & Refresh</option>
-            <option value="start afresh">Start Afresh</option>
-            <option value="deep mastery">Deep Mastery</option>
-          </select>
-        </div>
-      )}
+      <label>⏰ Daily Hours You Can Commit:</label>
+      <span style={helperTextStyle}>
+        This information helps the AI plan your study schedule effectively.
+      </span>
+      <input
+        type="number"
+        min="0"
+        step="0.5"
+        placeholder="e.g. 2"
+        value={formData.dailyHours}
+        onChange={(e) => handleInputChange(e, "academic.dailyHours")}
+        style={inputStyle}
+      />
 
-      {/* STEP 4: ADDITIONAL NOTES */}
-      {currentStep === 4 && (
-        <div style={sectionContainerStyle}>
-          <h3 style={sectionHeadingStyle}>4. Additional Notes 📝</h3>
-          <span style={helperTextStyle}>
-            Let us know anything else that might help the AI create a more
-            personalized plan for you.
-          </span>
-          <textarea
-            rows={3}
-            placeholder="Anything else you'd like us to know?"
-            value={formData.additionalNote}
-            onChange={(e) => handleInputChange(e, "additionalNote")}
-            style={{
-              width: "100%",
-              padding: "10px",
-              borderRadius: "4px",
-              marginBottom: "20px",
-              border: "none",
-              fontSize: "1rem",
-            }}
-          />
-        </div>
-      )}
+      <label>🎯 Overall Preparation Goal:</label>
+      <span style={helperTextStyle}>
+        Please share your goal so the AI can plan accordingly.
+      </span>
+      <select
+        value={formData.preparationGoal}
+        onChange={(e) => handleInputChange(e, "academic.preparationGoal")}
+        style={selectStyle}
+      >
+        <option value="">Select</option>
+        <option value="revise">Revise & Refresh</option>
+        <option value="start afresh">Start Afresh</option>
+        <option value="deep mastery">Deep Mastery</option>
+      </select>
+    </div>
+  );
 
-      {/* NAVIGATION BUTTONS */}
-      <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
-        {/* Back button (only visible from step 2 onward) */}
-        {currentStep > 1 && (
-          <button
-            type="button"
-            onClick={goBack}
-            style={{
-              padding: "10px 20px",
-              borderRadius: "4px",
-              background: "#888",
-              cursor: "pointer",
-              border: "none",
-              fontWeight: "bold",
-            }}
-          >
-            ← Back
-          </button>
-        )}
+  // STEP 4 content
+  const Step4_AdditionalNotes = () => (
+    <div style={sectionContainerStyle}>
+      <h3 style={sectionHeadingStyle}>4. Additional Notes 📝</h3>
+      <span style={helperTextStyle}>
+        Let us know anything else that might help the AI create a more
+        personalized plan for you.
+      </span>
+      <textarea
+        rows={3}
+        placeholder="Anything else you'd like us to know?"
+        value={formData.additionalNote}
+        onChange={(e) => handleInputChange(e, "academic.additionalNote")}
+        style={{
+          width: "100%",
+          padding: "10px",
+          borderRadius: "4px",
+          marginBottom: "20px",
+          border: "none",
+          fontSize: "1rem",
+        }}
+      />
+    </div>
+  );
 
-        {/* One button to either go to the next step or submit on the last step */}
-        <button
-          type="button"
-          onClick={goNext}
-          style={{
-            padding: "10px 20px",
-            borderRadius: "4px",
-            background: "#FFD700",
-            cursor: "pointer",
-            border: "none",
-            fontWeight: "bold",
-          }}
-        >
-          {currentStep < totalSteps ? "Next →" : "Submit"}
-        </button>
-      </div>
+  return (
+    <div style={{ maxWidth: "600px", margin: "0 auto" }}>
+      <h2 style={{ marginBottom: "30px" }}>🎓 Academic Learner Form</h2>
+
+      {/* Render whichever sub-step is active */}
+      {subStep === 1 && <Step1_BasicDetails />}
+      {subStep === 2 && <Step2_Courses />}
+      {subStep === 3 && <Step3_TimeGoals />}
+      {subStep === 4 && <Step4_AdditionalNotes />}
+
+      {/* No buttons here! 
+          The parent LearnerPersonaForm handles Next/Back/Submit */}
     </div>
   );
 }

@@ -30,9 +30,9 @@ function AuthLogin() {
 
         // 3) Onboarding check
         if (response.data.user.onboardingComplete) {
-          navigate("/main"); // take them to your main private route
+          navigate("/academichomepage"); // take them to your main private route
         } else {
-          navigate("/onboarding");
+          navigate("/platformintro");
         }
       } else {
         alert(response.data.error || "Login failed");

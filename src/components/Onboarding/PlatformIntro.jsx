@@ -39,7 +39,7 @@ function PlatformIntro() {
       setCurrentStep((prev) => prev + 1);
     } else {
       // On final step, navigate to the homepage (or wherever you like)
-      navigate("/");
+      navigate("/learnerpersona");
     }
   };
 

@@ -10,7 +10,7 @@ import AuthLogin from "./components/PreLogin/AuthLogin";
 import PrivateRoute from "./components/PreLogin/PrivateRoute";
 import Login from "./components/CommAppArchive/Login"; // The old "protected" page (rename if you'd like)
 import ChatInterface from "./components/CommAppArchive/ChatInterface";
-import Onboarding from "./components/Onboarding/Onboarding";
+import Onboarding from "./components/Archive/Onboarding";
 import PdfUploader from "./components/AdminDashboard/PdfUploader";
 import SubChaptersUploader from "./components/AdminDashboard/SubChaptersUploader";
 import ChaptersUploader from "./components/AdminDashboard/ChaptersUploader";

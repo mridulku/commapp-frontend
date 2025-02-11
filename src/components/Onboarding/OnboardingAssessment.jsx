@@ -1,10 +1,13 @@
 import React, { useState } from "react";
+import axios from "axios";
+import { useNavigate } from "react-router-dom"; // <-- for navigation
 
 /********************************************
  * OnboardingAssessment.jsx
  ********************************************/
-
 function OnboardingAssessment() {
+  const navigate = useNavigate(); // <-- needed to navigate after form submission
+
   /************************************************
    * Step Wizard (1 through 6)
    ************************************************/
@@ -20,12 +23,10 @@ sit amet consectetur rutrum. Nam tincidunt egestas neque, a faucibus nisl cursus
 
   const [startTime, setStartTime] = useState(null);
   const [endTime, setEndTime] = useState(null);
-  // For a small comprehension question
   const [comprehensionAnswers, setComprehensionAnswers] = useState({});
   const [comprehensionSubmitted, setComprehensionSubmitted] = useState(false);
   const [comprehensionScore, setComprehensionScore] = useState(null);
 
-  // Example comprehension Q
   const readingQuestions = [
     {
       id: 1,
@@ -61,7 +62,6 @@ sit amet consectetur rutrum. Nam tincidunt egestas neque, a faucibus nisl cursus
   };
 
   const handleSubmitComprehension = () => {
-    // Simple scoring
     let correctCount = 0;
     readingQuestions.forEach((q) => {
       if (comprehensionAnswers[q.id] === q.correctIndex) {
@@ -75,13 +75,12 @@ sit amet consectetur rutrum. Nam tincidunt egestas neque, a faucibus nisl cursus
   const getReadingTimeSec = () => {
     if (!startTime || !endTime) return null;
     const diffMs = endTime - startTime;
-    return (diffMs / 1000).toFixed(1); // in seconds
+    return (diffMs / 1000).toFixed(1);
   };
 
   /************************************************
    * 2) Domain-Specific Questions
    ************************************************/
-  // Example domain Q: "Basic knowledge about a certain field"
   const [domainAnswers, setDomainAnswers] = useState({});
   const domainQuestions = [
     {
@@ -165,7 +164,7 @@ Aliquam lorem urna, fermentum eget pellentesque eget, feugiat nec nulla.`;
   };
 
   /************************************************
-   * Helper: Next Step
+   * Helper: Step Navigation
    ************************************************/
   const goNext = () => {
     setStep((prev) => prev + 1);
@@ -175,11 +174,51 @@ Aliquam lorem urna, fermentum eget pellentesque eget, feugiat nec nulla.`;
   };
 
   /************************************************
-   * Final Step: Summaries
+   * Final Step: Summaries & Submission
    ************************************************/
-  const handleFinish = () => {
-    alert("Onboarding Test Finished. Use these results to build a plan!");
-    // Typically, you'd send this data to your backend or store in global state
+  const handleFinish = async () => {
+    // Gather all data
+    const formData = {
+      readingTimeSec: getReadingTimeSec(),
+      comprehensionScore,
+      domainAnswers,
+      styleAnswers,
+      sessionLength,
+      visitFrequency,
+      advancedTestScore,
+    };
+
+    try {
+
+      // Retrieve token from localStorage
+      const token = localStorage.getItem("token");
+      // POST data to Express backend
+      // Adjust the URL to match your server’s endpoint
+      const response = await axios.post(
+        "http://localhost:3001/onboardingassessment",
+        formData,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+
+
+
+
+
+      
+      if (response.data.success) {
+        // Navigate to /personalizationprogress upon success
+        navigate("/personalizationprogress");
+      } else {
+        console.error("Error saving assessment:", response.data);
+      }
+    } catch (error) {
+      console.error("Error submitting form data:", error);
+    }
   };
 
   /************************************************
@@ -619,7 +658,10 @@ function StepStressTest({
           <button style={buttonStyle} onClick={goPrev}>
             Back
           </button>
-          <button style={{ ...buttonStyle, marginLeft: "10px" }} onClick={goNext}>
+          <button
+            style={{ ...buttonStyle, marginLeft: "10px" }}
+            onClick={goNext}
+          >
             Next
           </button>
         </div>
@@ -659,8 +701,7 @@ function StepSummary({
       </p>
 
       <p>
-        Domain Familiarity: 
-        <br />
+        Domain Familiarity: <br />
         {Object.entries(domainAnswers).map(([qId, optIdx]) => (
           <span key={qId}>
             {qId}: Selected Option #{optIdx}
@@ -679,8 +720,7 @@ function StepSummary({
       </p>
 
       <p>
-        Session Length: ~{sessionLength} min, 
-        Frequency: {visitFrequency}
+        Session Length: ~{sessionLength} min, Frequency: {visitFrequency}
       </p>
 
       <p>

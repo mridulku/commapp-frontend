@@ -1,17 +1,44 @@
 import React, { useState } from "react";
-import axios from "axios"; // or any request library
+import { useNavigate } from "react-router-dom"; // for routing
+import axios from "axios";
 
-// Import our new subform components
+// (NEW) For generating unique IDs for each course
+import { v4 as uuidv4 } from "uuid";
+
+// Import subform components
 import AcademicForm from "./AcademicForm";
 import CompetitiveForm from "./CompetitiveForm";
 import VocationalForm from "./VocationalForm";
 import CasualForm from "./CasualForm";
 
 function LearnerPersonaForm() {
-  const [step, setStep] = useState(1); // Step 1 = choose category, Step 2 = fill out form
+  const navigate = useNavigate();
+
+  // -----------------------------
+  // MAIN STEPS:
+  // step = 1 => Choose category
+  // step >= 2 => Sub-steps for the chosen category
+  // -----------------------------
+  const [step, setStep] = useState(1);
   const [category, setCategory] = useState("");
 
-  // Main form data object
+  // For convenience, define how many sub-steps each category has:
+  // (Adjust these if your other forms have more or fewer steps.)
+  const maxSubSteps = {
+    academic: 4, // matches AcademicForm
+    competitive: 1,
+    vocational: 1,
+    casual: 1,
+  };
+
+  // The sub-step we are on, once a category is chosen.
+  // For example, if step=2, subStep = 1 (first sub-step of the form).
+  // If step=3, subStep = 2, and so on.
+  const subStep = step - 1;
+
+  // -----------------------------
+  // MASTER FORM DATA
+  // -----------------------------
   const [formData, setFormData] = useState({
     academic: {
       educationLevel: "",
@@ -19,10 +46,11 @@ function LearnerPersonaForm() {
       schoolClass: "",
       collegeName: "",
       department: "",
-      examOrCourses: [],
+      examOrCourses: [], // (kept as-is if you’re still using it somewhere)
       examTimeline: "",
       dailyHours: "",
       preparationGoal: "",
+      // Each course object should now have an `id`.
       courseList: [],
       additionalNote: "",
     },
@@ -46,13 +74,22 @@ function LearnerPersonaForm() {
     },
   });
 
-  // ================ HANDLERS ================
+  // -----------------------------
+  // HANDLERS
+  // -----------------------------
   const handleCategorySelect = (selected) => {
     setCategory(selected);
+    // Move to sub-steps
     setStep(2);
   };
 
-  // Helper for simple path-based updates (e.g. "academic.dailyHours")
+  // A small helper to show "Coming Soon" pop-up
+  const handleComingSoon = () => {
+    alert("Coming Soon!");
+  };
+
+  // Generic input handler for simple text fields
+  // path is something like "academic.dailyHours" => [mainKey, subKey]
   const handleInputChange = (e, path) => {
     const [mainKey, subKey] = path.split(".");
     setFormData((prev) => ({
@@ -64,7 +101,7 @@ function LearnerPersonaForm() {
     }));
   };
 
-  // Multi-select toggles
+  // For toggling items in an array (e.g. multi-select)
   const handleMultiSelectChange = (value, path) => {
     const [mainKey, subKey] = path.split(".");
     setFormData((prev) => {
@@ -91,7 +128,10 @@ function LearnerPersonaForm() {
     });
   };
 
-  // ============ ACADEMIC: Specialized handlers ============
+  // -----------------------------
+  // ACADEMIC: specialized handlers
+  // -----------------------------
+  // We now generate a stable `id` whenever we create a new course.
   const addNewCourse = () => {
     setFormData((prev) => ({
       ...prev,
@@ -99,7 +139,12 @@ function LearnerPersonaForm() {
         ...prev.academic,
         courseList: [
           ...prev.academic.courseList,
-          { courseName: "", pdfFiles: [], examDates: [{ type: "", date: "" }] },
+          {
+            id: uuidv4(), // <-- unique stable ID
+            courseName: "",
+            pdfFiles: [],
+            examDates: [{ type: "", date: "" }],
+          },
         ],
       },
     }));
@@ -124,8 +169,7 @@ function LearnerPersonaForm() {
   };
 
   const handleUploadPDF = (courseIdx) => {
-    // Here you'd open a file picker or something.
-    // For demonstration, we just push a placeholder
+    // File picker logic can go here; for demo, just a placeholder:
     const fakeFileName = "example.pdf";
     setFormData((prev) => {
       const updatedCourses = [...prev.academic.courseList];
@@ -148,7 +192,10 @@ function LearnerPersonaForm() {
       const updatedCourses = [...prev.academic.courseList];
       updatedCourses[courseIdx] = {
         ...updatedCourses[courseIdx],
-        examDates: [...updatedCourses[courseIdx].examDates, { type: "", date: "" }],
+        examDates: [
+          ...updatedCourses[courseIdx].examDates,
+          { type: "", date: "" },
+        ],
       };
       return {
         ...prev,
@@ -182,28 +229,73 @@ function LearnerPersonaForm() {
     });
   };
 
-  // ============ Submission ============
+  // -----------------------------
+  // PARENT NAVIGATION
+  // -----------------------------
+  // "Back" button:
+  // - If we're in subStep > 1, just decrement the step.
+  // - If we're in subStep=1 (step=2), go back to step=1 (category selection).
+  const handleBack = () => {
+    if (step > 2) {
+      setStep((prev) => prev - 1);
+    } else {
+      // If step=2 (subStep=1) and user clicks back,
+      // go back to category selection
+      setStep(1);
+      setCategory("");
+    }
+  };
+
+  // "Next" button:
+  // - If we're not on the last sub-step, increment the step.
+  // - If on the last sub-step, do final submission.
+  const handleNext = () => {
+    if (subStep < maxSubSteps[category]) {
+      setStep((prev) => prev + 1);
+    } else {
+      handleSubmit();
+    }
+  };
+
+  // -----------------------------
+  // SUBMISSION
+  // -----------------------------
   const handleSubmit = async () => {
     try {
       const payload = {
         category,
         answers: formData[category],
       };
-      console.log("Submitting payload:", payload);
 
-      // Example (uncomment and change to your backend):
-      // await axios.post("https://your-backend.com/api/onboard", payload);
+      console.log("Submitting Learner Persona payload:", payload);
 
-      alert("Form submitted successfully (check console for payload).");
+      const token = localStorage.getItem("token");
+      console.log("Token is:", token);
+
+      const response = await axios.post(
+        "http://localhost:3001/api/learnerpersona",
+        payload,
+        {
+          headers: {
+            Authorization: token ? `Bearer ${token}` : "",
+          },
+        }
+      );
+
+      console.log("Request succeeded with response:", response.data);
+      navigate("/onboardingassessment");
     } catch (err) {
       console.error("Submission error:", err);
       alert("Failed to submit form. Check console for details.");
     }
   };
 
-  // ============ STEP 1: Category selection ============
+  // -----------------------------
+  // RENDER
+  // -----------------------------
+
+  // STEP 1: Category selection
   if (step === 1) {
-    // tileStyle for the selection tiles
     const tileStyle = {
       backgroundColor: "#333",
       borderRadius: "8px",
@@ -211,6 +303,14 @@ function LearnerPersonaForm() {
       cursor: "pointer",
       transition: "transform 0.3s",
       textAlign: "left",
+    };
+
+    // Style for disabled/coming-soon tiles
+    const disabledTileStyle = {
+      ...tileStyle,
+      opacity: 0.5,
+      // You can optionally change cursor to something else:
+      cursor: "not-allowed",
     };
 
     return (
@@ -243,6 +343,7 @@ function LearnerPersonaForm() {
           </p>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+            {/* Academic Learner (Active) */}
             <div onClick={() => handleCategorySelect("academic")} style={tileStyle}>
               <h2 style={{ margin: 0 }}>Academic Learner</h2>
               <p style={{ margin: 0 }}>
@@ -250,22 +351,25 @@ function LearnerPersonaForm() {
               </p>
             </div>
 
-            <div onClick={() => handleCategorySelect("competitive")} style={tileStyle}>
-              <h2 style={{ margin: 0 }}>Competitive Exam</h2>
+            {/* Competitive Exam (Disabled) */}
+            <div onClick={handleComingSoon} style={disabledTileStyle}>
+              <h2 style={{ margin: 0 }}>Competitive Exam (Coming Soon)</h2>
               <p style={{ margin: 0 }}>
                 Preparing for a standardized test or entrance exam.
               </p>
             </div>
 
-            <div onClick={() => handleCategorySelect("vocational")} style={tileStyle}>
-              <h2 style={{ margin: 0 }}>Vocational Learner</h2>
+            {/* Vocational Learner (Disabled) */}
+            <div onClick={handleComingSoon} style={disabledTileStyle}>
+              <h2 style={{ margin: 0 }}>Vocational Learner (Coming Soon)</h2>
               <p style={{ margin: 0 }}>
                 Practical, job-oriented skills (coding, design, etc.).
               </p>
             </div>
 
-            <div onClick={() => handleCategorySelect("casual")} style={tileStyle}>
-              <h2 style={{ margin: 0 }}>Casual Learner</h2>
+            {/* Casual Learner (Disabled) */}
+            <div onClick={handleComingSoon} style={disabledTileStyle}>
+              <h2 style={{ margin: 0 }}>Casual Learner (Coming Soon)</h2>
               <p style={{ margin: 0 }}>
                 Learning for personal growth or general improvement.
               </p>
@@ -276,7 +380,7 @@ function LearnerPersonaForm() {
     );
   }
 
-  // ============ STEP 2: Render correct subform ============
+  // STEP >= 2: We show the relevant sub-form with sub-steps.
   const cardStyle = {
     backgroundColor: "rgba(255,255,255,0.1)",
     backdropFilter: "blur(8px)",
@@ -285,6 +389,9 @@ function LearnerPersonaForm() {
     maxWidth: "600px",
     width: "100%",
   };
+
+  // The second button is either "Next" or "Submit" if it's the last sub-step.
+  const isLastSubStep = subStep === maxSubSteps[category];
 
   return (
     <div
@@ -312,6 +419,8 @@ function LearnerPersonaForm() {
 
         {category === "academic" && (
           <AcademicForm
+            // We pass the sub-step so AcademicForm knows which part to render
+            subStep={subStep}
             formData={formData.academic}
             handleInputChange={handleInputChange}
             handleCourseChange={handleCourseChange}
@@ -345,10 +454,45 @@ function LearnerPersonaForm() {
           />
         )}
 
-        {/*
-          The original "Back" and "Submit" buttons were here.
-          They have been removed as requested.
-        */}
+        {/* NAVIGATION BUTTONS (only shown once a category is picked) */}
+        <div style={{ textAlign: "center", marginTop: "30px" }}>
+          {/* "Back" appears from step=2 onwards */}
+          <button
+            type="button"
+            onClick={handleBack}
+            style={{
+              padding: "10px 20px",
+              borderRadius: "4px",
+              border: "none",
+              fontWeight: "bold",
+              fontSize: "1rem",
+              background: "#888",
+              color: "#fff",
+              cursor: "pointer",
+              marginRight: "10px",
+            }}
+          >
+            Back
+          </button>
+
+          {/* If it's the last sub-step, show "Submit", otherwise "Next" */}
+          <button
+            type="button"
+            onClick={isLastSubStep ? handleSubmit : handleNext}
+            style={{
+              padding: "10px 20px",
+              borderRadius: "4px",
+              border: "none",
+              fontWeight: "bold",
+              fontSize: "1rem",
+              background: "#FFD700",
+              color: "#000",
+              cursor: "pointer",
+            }}
+          >
+            {isLastSubStep ? "Submit" : "Next"}
+          </button>
+        </div>
       </div>
     </div>
   );
