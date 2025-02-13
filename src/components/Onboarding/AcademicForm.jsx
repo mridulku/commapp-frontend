@@ -1,9 +1,6 @@
-// AcademicForm.jsx
-
 import React, { useState } from "react";
-// Import the necessary firebase storage methods
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { storage } from "./firebase"; // <-- your firebase.js file
+import { storage } from "./firebase"; // your firebase.js file
 
 function AcademicForm({
   subStep,
@@ -15,26 +12,20 @@ function AcademicForm({
   addNewCourse,
   storePdfLinkInState,
 }) {
-  //---- STYLES (same as before) ----
+  // ---------- STYLES (unchanged) ----------
   const sectionContainerStyle = {
     backgroundColor: "rgba(255,255,255,0.2)",
     padding: "20px",
     borderRadius: "6px",
     marginBottom: "20px",
   };
-
-  const sectionHeadingStyle = {
-    marginBottom: "10px",
-    fontWeight: "bold",
-  };
-
+  const sectionHeadingStyle = { marginBottom: "10px", fontWeight: "bold" };
   const helperTextStyle = {
     fontStyle: "italic",
     color: "#eee",
     marginBottom: "10px",
     display: "block",
   };
-
   const inputStyle = {
     width: "100%",
     padding: "10px",
@@ -43,7 +34,6 @@ function AcademicForm({
     marginBottom: "15px",
     fontSize: "1rem",
   };
-
   const selectStyle = {
     width: "100%",
     padding: "10px",
@@ -52,14 +42,12 @@ function AcademicForm({
     fontSize: "1rem",
     marginBottom: "15px",
   };
-
   const tileContainerStyle = {
     display: "flex",
     gap: "10px",
     marginBottom: "20px",
     flexWrap: "wrap",
   };
-
   const tileStyle = {
     display: "inline-block",
     padding: "10px 20px",
@@ -70,20 +58,23 @@ function AcademicForm({
     transition: "background-color 0.2s ease-in-out",
     userSelect: "none",
   };
-
   const tileSelectedStyle = {
     backgroundColor: "#FFD700",
     color: "#333",
     fontWeight: "bold",
   };
 
-  // Helper to choose tile
+  // ---------- STATE for selected files ----------
+  // We'll store the PDF files in an array that parallels your courseList
+  // e.g. selectedFiles[courseIndex] = File object
+  const [selectedFiles, setSelectedFiles] = useState([]);
+
+  // ---------- TILES Helper (unchanged) ----------
   const handleTileSelection = (value, fieldKey) => {
     const path = `academic.${fieldKey}`;
     const mockEvent = { target: { value } };
     handleInputChange(mockEvent, path);
   };
-
   const renderTile = (label, value, currentValue, fieldKey, emoji = "") => {
     const isSelected = currentValue === value;
     return (
@@ -99,64 +90,95 @@ function AcademicForm({
     );
   };
 
-  // ---------------------------------------------
-  // PDF Upload Handler
-  // ---------------------------------------------
-  const handlePdfUpload = async (file, courseIdx) => {
+  // ---------- PDF Upload on *final submission* ----------
+  // Instead of uploading onChange, we'll do the actual upload here
+  // passing metadata like "category" and "courseName".
+  const uploadPDFwithMetadata = async (file, courseName, categoryValue) => {
+    return new Promise((resolve, reject) => {
+      try {
+        // Unique path
+        const storagePath = `pdfUploads/${courseName}/${file.name}`;
+        const storageRef = ref(storage, storagePath);
+
+        // Metadata example
+        const metadata = {
+          customMetadata: {
+            category: categoryValue,
+            courseName: courseName,
+          },
+        };
+
+        const uploadTask = uploadBytesResumable(storageRef, file, metadata);
+
+        uploadTask.on(
+          "state_changed",
+          (snapshot) => {
+            const progress =
+              (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            console.log(`${courseName} PDF upload is ${progress}% done`);
+          },
+          (error) => {
+            console.error("Error uploading PDF:", error);
+            reject(error);
+          },
+          async () => {
+            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            console.log(`${courseName} PDF available at:`, downloadURL);
+            resolve(downloadURL);
+          }
+        );
+      } catch (err) {
+        reject(err);
+      }
+    });
+  };
+
+  // ---------- Final Submission Handler ----------
+  // This is an example of how you might do a "submit" that:
+  // 1) Uploads PDFs for each course that has a selected file
+  // 2) Then calls storePdfLinkInState or does final form logic
+  const handleFinalSubmit = async () => {
     try {
-      if (!file) return;
+      // Example: We'll assume "academic" is the categoryValue
+      // (or you can read from formData if you have a specific field)
+      const categoryValue = "Academic";
 
-      const categoryValue = "Academic"; // or from formData, e.g. formData.category
-
-
-      // Create a unique storage path (e.g. using the course ID + file name)
-      const courseId = formData.courseList[courseIdx].id;
-      const storagePath = `pdfUploads/${courseId}/${file.name}`;
-
-      // Create a reference in Storage
-      const storageRef = ref(storage, storagePath);
-
-      // ADD METADATA HERE:
-      const metadata = {
-        customMetadata: {
-          category: categoryValue
+      for (let i = 0; i < formData.courseList.length; i++) {
+        const course = formData.courseList[i];
+        const file = selectedFiles[i]; // The file the user picked for this course
+        if (file) {
+          // Do the upload
+          const dlURL = await uploadPDFwithMetadata(
+            file,
+            course.courseName || `Course${i + 1}`,
+            categoryValue
+          );
+          // Once uploaded, store the link in your parent state
+          storePdfLinkInState(i, dlURL);
         }
-      };
+      }
 
-      // Start upload
-      const uploadTask = uploadBytesResumable(storageRef, file, metadata);
+      alert("All PDFs uploaded (if any) and final form submission done!");
+      // Next, you might do more logic: e.g. save the entire form to Firestore or call an API.
 
-      // You can also track progress here if desired:
-      uploadTask.on(
-        "state_changed",
-        (snapshot) => {
-          // progress function (optional)
-          const progress =
-            (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          console.log(`Upload is ${progress}% done`);
-        },
-        (error) => {
-          // error function
-          console.error("Error uploading PDF:", error);
-          alert("Failed to upload PDF. See console for details.");
-        },
-        async () => {
-          // complete function
-          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-          console.log("File available at:", downloadURL);
-
-          // Now store this URL in the parent state
-          storePdfLinkInState(courseIdx, downloadURL);
-          alert("PDF uploaded successfully!");
-        }
-      );
     } catch (err) {
-      console.error("handlePdfUpload error:", err);
-      alert("Failed to upload PDF file");
+      console.error("handleFinalSubmit error:", err);
+      alert("Error in final submission. Check console.");
     }
   };
 
-  // ---- Sub-step 1: Basic Details ----
+  // ---------- onFileSelect (instead of immediate upload) ----------
+  const handleFileSelect = (file, courseIndex) => {
+    if (!file) return;
+    // Store the file in local state so we can upload later
+    setSelectedFiles((prev) => {
+      const updated = [...prev];
+      updated[courseIndex] = file;
+      return updated;
+    });
+  };
+
+  // ---------- Steps: Basic, Courses, etc. (unchanged except for the file input) ----------
   const Step1_BasicDetails = () => (
     <div style={sectionContainerStyle}>
       <h3 style={sectionHeadingStyle}>1. Basic Details</h3>
@@ -164,14 +186,12 @@ function AcademicForm({
         Please select your current education level and country.
       </span>
 
-      {/* Education Level: Tile-based */}
       <label style={{ marginBottom: "5px" }}>Education Level:</label>
       <div style={tileContainerStyle}>
         {renderTile("School", "school", formData.educationLevel, "educationLevel", "🏫")}
         {renderTile("College", "college", formData.educationLevel, "educationLevel", "🏢")}
       </div>
 
-      {/* Country: Tile-based */}
       <label style={{ marginBottom: "5px" }}>Country:</label>
       <div style={tileContainerStyle}>
         {renderTile("India", "India", formData.country, "country", "🇮🇳")}
@@ -201,7 +221,6 @@ function AcademicForm({
             onChange={(e) => handleInputChange(e, "academic.collegeName")}
             style={inputStyle}
           />
-
           <label>Department or Major:</label>
           <input
             type="text"
@@ -215,7 +234,6 @@ function AcademicForm({
     </div>
   );
 
-  // ---- Sub-step 2: Courses ----
   const Step2_Courses = () => (
     <div style={sectionContainerStyle}>
       <h3 style={sectionHeadingStyle}>2. Courses / Subjects 📚</h3>
@@ -234,7 +252,6 @@ function AcademicForm({
               marginBottom: "20px",
             }}
           >
-            {/* Course Name */}
             <label>Course Name:</label>
             <input
               type="text"
@@ -244,19 +261,19 @@ function AcademicForm({
               style={inputStyle}
             />
 
-            {/* PDF Upload */}
-            <label>Upload One PDF (Materials/Notes):</label>
+            <label>Attach One PDF (Materials/Notes):</label>
             <span style={helperTextStyle}>
-              Currently limited to 1 PDF. Feature to add more coming soon!
+              Will be uploaded on final form submission.
             </span>
             <input
               type="file"
               accept="application/pdf"
-              disabled={!!course.pdfLink} 
+              disabled={!!course.pdfLink} // if we already have a link, disable
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) {
-                  handlePdfUpload(file, courseIndex);
+                  // Instead of uploading immediately, we just store the file
+                  handleFileSelect(file, courseIndex);
                 }
               }}
               style={{
@@ -265,7 +282,12 @@ function AcademicForm({
               }}
             />
 
-            {/* Show uploaded PDF link if we have one */}
+            {/* Show "File selected" or "Uploaded link" */}
+            {selectedFiles[courseIndex] && !course.pdfLink && (
+              <p style={{ color: "#FFD700" }}>
+                File selected: {selectedFiles[courseIndex].name}
+              </p>
+            )}
             {course.pdfLink && (
               <p>
                 Uploaded PDF:{" "}
@@ -280,7 +302,6 @@ function AcademicForm({
               </p>
             )}
 
-            {/* Exams */}
             <h5>Exam / Test Dates 🗓</h5>
             <span style={helperTextStyle}>
               Add exam or test dates for the AI to plan your content.
@@ -355,11 +376,9 @@ function AcademicForm({
     </div>
   );
 
-  // ---- Sub-step 3: Time & Goals ----
   const Step3_TimeGoals = () => (
     <div style={sectionContainerStyle}>
       <h3 style={sectionHeadingStyle}>3. Time Commitment & Goals</h3>
-
       <label>⏰ Daily Hours:</label>
       <span style={helperTextStyle}>
         Helps the AI plan your study schedule effectively.
@@ -391,7 +410,6 @@ function AcademicForm({
     </div>
   );
 
-  // ---- Sub-step 4: Additional Notes ----
   const Step4_AdditionalNotes = () => (
     <div style={sectionContainerStyle}>
       <h3 style={sectionHeadingStyle}>4. Additional Notes 📝</h3>
@@ -424,7 +442,26 @@ function AcademicForm({
       {subStep === 3 && <Step3_TimeGoals />}
       {subStep === 4 && <Step4_AdditionalNotes />}
 
-      {/* Navigation buttons are in the parent (LearnerPersonaForm). */}
+      {/* Example "Finalize" button here to show how you'd do it:
+          (In your real code, you might have it in the parent component or after subStep=4) */}
+      {subStep === 4 && (
+        <button
+          type="button"
+          onClick={handleFinalSubmit}
+          style={{
+            display: "block",
+            margin: "20px 0",
+            padding: "10px 20px",
+            background: "#FFD700",
+            border: "none",
+            borderRadius: "4px",
+            fontWeight: "bold",
+            cursor: "pointer",
+          }}
+        >
+          Submit All (Upload PDFs + Save Form)
+        </button>
+      )}
     </div>
   );
 }
