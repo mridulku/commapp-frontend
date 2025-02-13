@@ -106,6 +106,9 @@ function AcademicForm({
     try {
       if (!file) return;
 
+      const categoryValue = "Academic"; // or from formData, e.g. formData.category
+
+
       // Create a unique storage path (e.g. using the course ID + file name)
       const courseId = formData.courseList[courseIdx].id;
       const storagePath = `pdfUploads/${courseId}/${file.name}`;
@@ -113,8 +116,15 @@ function AcademicForm({
       // Create a reference in Storage
       const storageRef = ref(storage, storagePath);
 
+      // ADD METADATA HERE:
+      const metadata = {
+        customMetadata: {
+          category: categoryValue
+        }
+      };
+
       // Start upload
-      const uploadTask = uploadBytesResumable(storageRef, file);
+      const uploadTask = uploadBytesResumable(storageRef, file, metadata);
 
       // You can also track progress here if desired:
       uploadTask.on(
