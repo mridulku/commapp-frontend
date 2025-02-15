@@ -1,36 +1,43 @@
-
 import React, { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import { auth } from "../../firebase"; // or the correct relative path
+import { signInWithCustomToken } from "firebase/auth";
 
 function AuthLogin() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
 
-  // const backendURL = "https://commapp-backend.onrender.com"
-//  const backendURL = "http://localhost:3001";
-
+  // Adjust to your actual backend URL environment variable
   const backendURL = import.meta.env.VITE_BACKEND_URL;
 
-  
   const handleLogin = async () => {
     try {
-      const response = await axios.post(`${backendURL}/login`, {
-        username,
-        password,
-      });
+      const response = await axios.post(`${backendURL}/login`, { username, password });
 
       if (response.data.success) {
-        // 1) Store token
-        localStorage.setItem("token", response.data.token);
+        // 1) Get the firebaseCustomToken from your backend
+        const firebaseCustomToken = response.data.firebaseCustomToken;
+        if (!firebaseCustomToken) {
+          alert("No firebase custom token returned from server.");
+          return;
+        }
 
-        // 2) Store user data
+        // 2) Sign in to Firebase Auth on the client
+        await signInWithCustomToken(auth, firebaseCustomToken);
+
+        // 3) Log the user object or UID to confirm sign-in success
+        console.log("Auth current user after login:", auth.currentUser);
+        console.log("User UID:", auth.currentUser?.uid);
+
+        // 4) (Optional) Store your server JWT if you still need it
+        localStorage.setItem("token", response.data.token);
         localStorage.setItem("userData", JSON.stringify(response.data.user));
 
-        // 3) Onboarding check
+        // 5) Check onboarding
         if (response.data.user.onboardingComplete) {
-          navigate("/academichomepage"); // take them to your main private route
+          navigate("/academichomepage");
         } else {
           navigate("/platformintro");
         }

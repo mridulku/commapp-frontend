@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { storage } from "./firebase"; // your firebase.js file
+import { storage,auth } from "../../firebase"; // your firebase.js file
+
 
 function AcademicForm({
   subStep,
@@ -99,12 +100,20 @@ function AcademicForm({
         // Unique path
         const storagePath = `pdfUploads/${courseName}/${file.name}`;
         const storageRef = ref(storage, storagePath);
+//        const currentUser = auth.currentUser;
+
+
+        const user = auth.currentUser;
+
 
         // Metadata example
         const metadata = {
           customMetadata: {
             category: categoryValue,
             courseName: courseName,
+            userId: user?.uid, // directly use the user's UID
+
+//            userid: currentUser,
           },
         };
 

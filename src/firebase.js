@@ -2,6 +2,9 @@
 
 import { initializeApp } from "firebase/app";
 import { getStorage } from "firebase/storage";
+import { getAuth } from "firebase/auth";
+
+
 
 // Use your actual public Firebase config object here:
 const firebaseConfig = {
@@ -20,6 +23,7 @@ const app = initializeApp(firebaseConfig);
 
 // 2) Initialize Storage (so you can upload files from the client)
 export const storage = getStorage(app);
+export const auth = getAuth(app);
 
 // If you need other Firebase services (Firestore, Auth, etc.), import and export them here too:
 // import { getFirestore } from "firebase/firestore";
