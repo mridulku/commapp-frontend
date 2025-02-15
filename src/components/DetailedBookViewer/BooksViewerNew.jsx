@@ -3,6 +3,8 @@
  ********************************************/
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+// Import your Firebase Auth instance
+import { auth } from "../../firebase";
 
 import BooksSidebar from "./BooksSidebar";
 import BookProgress from "./BookProgress";
@@ -10,13 +12,10 @@ import SubchapterContent from "./SubchapterContent";
 import SummarizeSection from "./SummarizeSection";
 import QuizSection from "./QuizSection";
 import DoubtsSection from "./DoubtsSection";
-
-import DynamicTutorModal from "./DynamicTutorModal"; // adjust path as needed
+import DynamicTutorModal from "./DynamicTutorModal"; // adjust path if needed
 
 function BooksViewer2() {
   const backendURL = import.meta.env.VITE_BACKEND_URL;
-
-//  const backendURL = "http://localhost:3001"; // or your domain
 
   // Categories & Books
   const [categories, setCategories] = useState([]);
@@ -50,8 +49,9 @@ function BooksViewer2() {
   // Dynamic Tutor modal
   const [showTutorModal, setShowTutorModal] = useState(false);
 
-  // Hard-coded user
-  const userId = "testUser123";
+  // Use the current Firebase Auth user, or fall back
+  // This ensures we pass the real UID if logged in, otherwise "testUser123"
+  const userId = auth.currentUser?.uid || "testUser123";
 
   /********************************************************
    * 1) Fetch categories on mount
@@ -88,9 +88,9 @@ function BooksViewer2() {
 
   const fetchAllData = async () => {
     try {
-      // 1) Get books for this category
+      // 1) Get books for this category, pass userId so backend can filter if needed
       const booksRes = await axios.get(
-        `${backendURL}/api/books?categoryId=${selectedCategory}`
+        `${backendURL}/api/books?categoryId=${selectedCategory}&userId=${userId}`
       );
       const books = booksRes.data;
 
@@ -100,11 +100,11 @@ function BooksViewer2() {
       );
       const progressData = progRes.data;
 
-      // Merge done status
       if (!progressData.success) {
         console.error("Failed to fetch user progress:", progressData.error);
         setBooksData(books);
       } else {
+        // Merge done status
         const doneSet = new Set(
           progressData.progress
             .filter((p) => p.isDone)
@@ -126,10 +126,10 @@ function BooksViewer2() {
         setBooksData(merged);
       }
 
-      // 3) Fetch aggregator data
+      // 3) Fetch aggregator data (progress with total words, etc.)
       await fetchAggregatedData();
 
-      // Reset all selections
+      // Reset selections
       resetSelections();
     } catch (err) {
       console.error("Error in fetchAllData:", err);
@@ -164,7 +164,6 @@ function BooksViewer2() {
 
     setSummaryOutput("");
     setCustomPrompt("");
-
     setDoubts([]);
     setDoubtInput("");
   };
@@ -226,9 +225,9 @@ function BooksViewer2() {
     try {
       const url = `${backendURL}/api/quizzes?bookName=${encodeURIComponent(
         bookName
-      )}&chapterName=${encodeURIComponent(chapterName)}&subChapterName=${encodeURIComponent(
-        subChapterName
-      )}`;
+      )}&chapterName=${encodeURIComponent(
+        chapterName
+      )}&subChapterName=${encodeURIComponent(subChapterName)}`;
       const res = await axios.get(url);
       if (res.data.success === false) {
         console.error("Quiz fetch error:", res.data.error);
@@ -293,7 +292,8 @@ function BooksViewer2() {
           "This is a simple explanation for a 5-year-old level. It's short and uses easy words!";
         break;
       case "bulletPoints":
-        mockResponse = "- Point 1\n- Point 2\n- Point 3\nA quick bullet-style summary.";
+        mockResponse =
+          "- Point 1\n- Point 2\n- Point 3\nA quick bullet-style summary.";
         break;
       case "conciseSummary":
         mockResponse =
