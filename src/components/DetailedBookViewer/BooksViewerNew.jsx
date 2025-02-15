@@ -51,7 +51,7 @@ function BooksViewer2() {
 
   // Use the current Firebase Auth user, or fall back
   // This ensures we pass the real UID if logged in, otherwise "testUser123"
-  const userId = auth.currentUser?.uid || "testUser123";
+  const userId = auth.currentUser?.uid;
 
   /********************************************************
    * 1) Fetch categories on mount

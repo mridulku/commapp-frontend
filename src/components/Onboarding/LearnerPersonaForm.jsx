@@ -1,6 +1,6 @@
 // LearnerPersonaForm.jsx
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { v4 as uuidv4 } from "uuid";
@@ -12,6 +12,9 @@ import VocationalForm from "./VocationalForm";
 import CasualForm from "./CasualForm";
 
 function LearnerPersonaForm() {
+
+
+
   const navigate = useNavigate();
 
   // -----------------------------
@@ -19,19 +22,28 @@ function LearnerPersonaForm() {
   // step = 1 => Choose category
   // step >= 2 => Sub-steps for the chosen category
   // -----------------------------
+
+
+
+
   const [step, setStep] = useState(1);
   const [category, setCategory] = useState("");
+
+
 
   // For convenience, define how many sub-steps each category has:
   const maxSubSteps = {
     academic: 4, // matches the 4 steps in AcademicForm
-    competitive: 1, 
+    competitive: 1,
     vocational: 1,
     casual: 1,
   };
 
-  // The sub-step we are on, once a category is chosen
+  // subStep = step - 1
   const subStep = step - 1;
+
+  console.log("Rendering LearnerPersonaForm... step =", step, "subStep =", subStep);
+
 
   // -----------------------------
   // MASTER FORM DATA
@@ -43,11 +55,10 @@ function LearnerPersonaForm() {
       schoolClass: "",
       collegeName: "",
       department: "",
-      examOrCourses: [], 
+      examOrCourses: [],
       examTimeline: "",
       dailyHours: "",
       preparationGoal: "",
-      // Now each course object has an id and we store only 1 course
       courseList: [],
       additionalNote: "",
     },
@@ -71,21 +82,24 @@ function LearnerPersonaForm() {
     },
   });
 
+  // For calling methods on the AcademicForm
+  const academicFormRef = useRef(null);
+
   // -----------------------------
   // HANDLERS
   // -----------------------------
+  // 1) Category Selection
   const handleCategorySelect = (selected) => {
     setCategory(selected);
-    // Move to sub-steps
-    setStep(2);
+    setStep(2); // Move to first sub-step
   };
 
-  // Show "Coming Soon" pop-up for disabled tiles
+  // Show "Coming Soon"
   const handleComingSoon = () => {
     alert("Coming Soon!");
   };
 
-  // Generic input handler for simple text fields
+  // 2) Generic text input changes
   const handleInputChange = (e, path) => {
     const [mainKey, subKey] = path.split(".");
     setFormData((prev) => ({
@@ -97,13 +111,12 @@ function LearnerPersonaForm() {
     }));
   };
 
-  // For toggling items in an array (if you need multi-select somewhere)
+  // For multi-select fields
   const handleMultiSelectChange = (value, path) => {
     const [mainKey, subKey] = path.split(".");
     setFormData((prev) => {
       const currentArray = prev[mainKey][subKey] || [];
       if (currentArray.includes(value)) {
-        // remove
         return {
           ...prev,
           [mainKey]: {
@@ -112,7 +125,6 @@ function LearnerPersonaForm() {
           },
         };
       } else {
-        // add
         return {
           ...prev,
           [mainKey]: {
@@ -124,16 +136,12 @@ function LearnerPersonaForm() {
     });
   };
 
-  // ACADEMIC: specialized handlers
-
-  //  Only let the user add 1 course for the MVP
+  // 3) Academic-specific
   const addNewCourse = () => {
-    // If there's already 1 course, do nothing (or show alert).
     if (formData.academic.courseList.length >= 1) {
       alert("Currently only 1 course can be added. Coming soon!");
       return;
     }
-
     setFormData((prev) => ({
       ...prev,
       academic: {
@@ -143,7 +151,6 @@ function LearnerPersonaForm() {
           {
             id: uuidv4(),
             courseName: "",
-            // We'll store just ONE PDF link in each course (instead of an array)
             pdfLink: "",
             examDates: [{ type: "", date: "" }],
           },
@@ -170,8 +177,6 @@ function LearnerPersonaForm() {
     });
   };
 
-  // We'll handle the actual file upload inside AcademicForm (so we can pass the file input).
-  // But we do define a small helper to store the final PDF link in the state:
   const storePdfLinkInState = (courseIdx, url) => {
     setFormData((prev) => {
       const updatedCourses = [...prev.academic.courseList];
@@ -229,14 +234,12 @@ function LearnerPersonaForm() {
     });
   };
 
-  // -----------------------------
-  // NAVIGATION
-  // -----------------------------
+  // 4) Navigation
   const handleBack = () => {
     if (step > 2) {
       setStep((prev) => prev - 1);
     } else {
-      // If step=2 (subStep=1) and user clicks back => go back to category selection
+      // If at sub-step=1, going back resets to category selection
       setStep(1);
       setCategory("");
     }
@@ -246,15 +249,22 @@ function LearnerPersonaForm() {
     if (subStep < maxSubSteps[category]) {
       setStep((prev) => prev + 1);
     } else {
+      // If it's already the last sub-step, do final form submit
       handleSubmit();
     }
   };
 
-  // -----------------------------
-  // SUBMIT
-  // -----------------------------
+  const isLastSubStep = subStep === maxSubSteps[category];
+
+  // 5) Final Submission
   const handleSubmit = async () => {
     try {
+      // If user is academic, first upload PDFs
+      if (category === "academic" && academicFormRef.current) {
+        await academicFormRef.current.uploadAllPDFs();
+      }
+
+      // Now submit everything
       const payload = {
         category,
         answers: formData[category],
@@ -296,7 +306,6 @@ function LearnerPersonaForm() {
       transition: "transform 0.3s",
       textAlign: "left",
     };
-
     const disabledTileStyle = {
       ...tileStyle,
       opacity: 0.5,
@@ -341,7 +350,7 @@ function LearnerPersonaForm() {
               </p>
             </div>
 
-            {/* Others disabled */}
+            {/* Others (disabled) */}
             <div onClick={handleComingSoon} style={disabledTileStyle}>
               <h2 style={{ margin: 0 }}>Competitive Exam (Coming Soon)</h2>
               <p style={{ margin: 0 }}>
@@ -366,7 +375,7 @@ function LearnerPersonaForm() {
     );
   }
 
-  // STEP >= 2 => Show the sub-form
+  // STEP >= 2 => subForm with Next/Back
   const cardStyle = {
     backgroundColor: "rgba(255,255,255,0.1)",
     backdropFilter: "blur(8px)",
@@ -375,8 +384,6 @@ function LearnerPersonaForm() {
     maxWidth: "600px",
     width: "100%",
   };
-
-  const isLastSubStep = subStep === maxSubSteps[category];
 
   return (
     <div
@@ -404,6 +411,7 @@ function LearnerPersonaForm() {
 
         {category === "academic" && (
           <AcademicForm
+            ref={academicFormRef} // forwardRef usage
             subStep={subStep}
             formData={formData.academic}
             handleInputChange={handleInputChange}
@@ -411,7 +419,6 @@ function LearnerPersonaForm() {
             addExamDate={addExamDate}
             handleExamFieldChange={handleExamFieldChange}
             addNewCourse={addNewCourse}
-            // The function to store the final PDF link in parent state
             storePdfLinkInState={storePdfLinkInState}
           />
         )}
@@ -458,7 +465,6 @@ function LearnerPersonaForm() {
           >
             Back
           </button>
-
           <button
             type="button"
             onClick={isLastSubStep ? handleSubmit : handleNext}
