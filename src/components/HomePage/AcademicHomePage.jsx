@@ -1,312 +1,427 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import NavigationBar from "../DetailedBookViewer/NavigationBar";
+
+const backendURL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
+
+/** ============================= Utility Functions ============================= **/
 
 /**
- * AcademicHomePage.jsx
- * Minimal modifications based on your requests:
- * 1) Removed "Mark as Completed" checkbox.
- * 2) Removed AI-powered recommendations section.
- * 3) Added a "Switch to Light Mode" button to the sidebar (bottom).
+ * Parse leading numeric sections (e.g., "10.2.1 Subchapter" => [10, 2, 1])
  */
+function parseLeadingSections(str) {
+  const parts = str.split(".").map((p) => p.trim());
+  const result = [];
+  for (let i = 0; i < parts.length; i++) {
+    const maybeNum = parseInt(parts[i], 10);
+    if (!isNaN(maybeNum)) {
+      result.push(maybeNum);
+    } else {
+      break;
+    }
+  }
+  if (result.length === 0) return [Infinity];
+  return result;
+}
+
+/** Compare arrays of numeric segments lexicographically. */
+function compareSections(aSections, bSections) {
+  const len = Math.max(aSections.length, bSections.length);
+  for (let i = 0; i < len; i++) {
+    const aVal = aSections[i] ?? 0;
+    const bVal = bSections[i] ?? 0;
+    if (aVal !== bVal) {
+      return aVal - bVal;
+    }
+  }
+  return 0;
+}
+
+/** Sort array of objects by numeric segments in obj.name. */
+function sortByNameWithNumericAware(items) {
+  return items.sort((a, b) => {
+    if (!a.name && !b.name) return 0;
+    if (!a.name) return 1;
+    if (!b.name) return -1;
+
+    const aSections = parseLeadingSections(a.name);
+    const bSections = parseLeadingSections(b.name);
+
+    const sectionCompare = compareSections(aSections, bSections);
+    if (sectionCompare !== 0) {
+      return sectionCompare;
+    } else {
+      return a.name.localeCompare(b.name);
+    }
+  });
+}
+
+/** Compute word counts for read/proficient progress bars. */
+function getBookProgressStats(book) {
+  let totalWords = 0;
+  let readOrProficientWords = 0;
+  let proficientWords = 0;
+
+  if (book.chapters) {
+    book.chapters.forEach((ch) => {
+      if (!ch.subchapters) return;
+      ch.subchapters.forEach((sub) => {
+        const wc = sub.wordCount || 0;
+        totalWords += wc;
+        if (sub.proficiency === "read" || sub.proficiency === "proficient") {
+          readOrProficientWords += wc;
+        }
+        if (sub.proficiency === "proficient") {
+          proficientWords += wc;
+        }
+      });
+    });
+  }
+
+  return { totalWords, readOrProficientWords, proficientWords };
+}
+
+/** ============================= AcademicHomePage ============================= **/
+
 function AcademicHomePage() {
-  const userName = "John Doe"; // or fetch from context/user store
-  const [today] = useState(new Date().toDateString()); // e.g. "Thu Sep 21 2023"
+  // Hardcoded reading parameters
+  const wpm = 200;
+  const dailyTime = 10; 
+  const wordsPerDay = wpm * dailyTime;
 
-  // User’s goal: preparing for semester exams
-  const userGoal = "Preparing for Semester Exams";
-  const overallGoalProgress = 40; // e.g. 40% progress towards the user’s semester exam prep
+  // State for fetched books data
+  const [books, setBooks] = useState([]);
+  const [readingPlan, setReadingPlan] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Today’s tasks grouped by course
-  const [dailyTasks, setDailyTasks] = useState([
-    {
-      courseId: 1,
-      courseName: "Algorithms",
-      tasks: [
-        {
-          id: "alg-read-1",
-          type: "reading",
-          label: "Chapter 1: Complexity Overview",
-          estimatedTime: "30 min",
-          completed: false,
-        },
-        {
-          id: "alg-quiz-1",
-          type: "quiz",
-          label: "Complexity Quiz",
-          estimatedTime: "15 min",
-          completed: false,
-        },
-      ],
-    },
-    {
-      courseId: 2,
-      courseName: "Machine Learning",
-      tasks: [
-        {
-          id: "ml-read-2",
-          type: "reading",
-          label: "Chapter 2: Linear Regression",
-          estimatedTime: "45 min",
-          completed: false,
-        },
-      ],
-    },
-    {
-      courseId: 3,
-      courseName: "Data Intensive Computing",
-      tasks: [
-        {
-          id: "dic-read-1",
-          type: "reading",
-          label: "Lecture 4: MapReduce",
-          estimatedTime: "25 min",
-          completed: false,
-        },
-        {
-          id: "dic-quiz-1",
-          type: "quiz",
-          label: "MapReduce Quiz",
-          estimatedTime: "10 min",
-          completed: false,
-        },
-      ],
-    },
-  ]);
+  // Fetch book data on mount
+  useEffect(() => {
+    fetch(`${backendURL}/api/books-structure`)
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error("Failed to fetch book data");
+        }
+        return res.json();
+      })
+      .then((data) => {
+        // Sort chapters/subchapters numerically
+        const sortedBooks = data.map((book) => {
+          if (!book.chapters) return book;
+          // Sort chapters
+          const sortedChapters = sortByNameWithNumericAware([...book.chapters]).map((chapter) => {
+            if (!chapter.subchapters) return chapter;
+            // Sort subchapters
+            const sortedSubs = sortByNameWithNumericAware([...chapter.subchapters]);
+            return { ...chapter, subchapters: sortedSubs };
+          });
+          return { ...book, chapters: sortedChapters };
+        });
+        setBooks(sortedBooks);
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err.message);
+        setLoading(false);
+      });
+  }, []);
 
-  // Calculate daily completion
-  const allTasks = dailyTasks.flatMap((course) => course.tasks);
-  const totalTasks = allTasks.length;
-  const completedTasks = allTasks.filter((t) => t.completed).length;
-  const dailyCompletion =
-    totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+  // Generate the reading plan whenever we get our sorted books
+  useEffect(() => {
+    if (books.length === 0) return;
+    const newPlan = books.map((book) => {
+      const days = [];
+      let currentDaySubchapters = [];
+      let currentDayWordCount = 0;
+      let dayIndex = 1;
 
-  // Calculate total estimated time (simple parse from "xx min")
-  const totalEstimatedTime = allTasks.reduce((acc, task) => {
-    const match = task.estimatedTime.match(/\d+/);
-    return match ? acc + parseInt(match[0]) : acc;
-  }, 0);
+      if (!book.chapters) {
+        return {
+          bookName: book.name || "Untitled Book",
+          days: [],
+          bookData: book,
+        };
+      }
 
-  // Example daily history
-  const dailyHistory = [
-    { date: "Sep 18", timeSpent: 120 },
-    { date: "Sep 19", timeSpent: 90 },
-    { date: "Sep 20", timeSpent: 150 },
-    { date: "Sep 21", timeSpent: 80 },
-  ];
+      // Build day-by-day distribution
+      for (const chapter of book.chapters) {
+        if (!chapter.subchapters) continue;
+        for (const sub of chapter.subchapters) {
+          const subWordCount = sub.wordCount || 0;
+          // If adding this subchapter exceeds daily limit, start a new day
+          if (
+            currentDayWordCount + subWordCount > wordsPerDay &&
+            currentDayWordCount > 0
+          ) {
+            days.push({
+              dayNumber: dayIndex,
+              subchapters: currentDaySubchapters,
+              totalWords: currentDayWordCount,
+            });
+            dayIndex += 1;
+            currentDaySubchapters = [];
+            currentDayWordCount = 0;
+          }
+          currentDaySubchapters.push({
+            chapterName: chapter.name,
+            subchapterName: sub.name,
+            wordCount: subWordCount,
+            proficiency: sub.proficiency || null,
+          });
+          currentDayWordCount += subWordCount;
+        }
+      }
 
-  // Handler to jump into a specific task
-  const handleGoToTask = (courseId, taskId) => {
-    alert(`Go directly to task ${taskId} in course ID ${courseId}`);
-    // e.g., navigate(`/courses/${courseId}/tasks/${taskId}`);
+      // leftover subchapters for the last day
+      if (currentDaySubchapters.length > 0) {
+        days.push({
+          dayNumber: dayIndex,
+          subchapters: currentDaySubchapters,
+          totalWords: currentDayWordCount,
+        });
+      }
+
+      return {
+        bookName: book.name || "Untitled Book",
+        bookData: book,
+        days,
+      };
+    });
+
+    setReadingPlan(newPlan);
+  }, [books, wordsPerDay]);
+
+  /** ========== Rendering Helpers ========== **/
+
+  // Returns background color for row based on subchapter proficiency
+  const getRowStyle = (proficiency) => {
+    if (proficiency === "proficient") {
+      return { backgroundColor: "rgba(0,255,0,0.3)" }; // Light green overlay
+    }
+    if (proficiency === "read") {
+      return { backgroundColor: "rgba(255,255,0,0.3)" }; // Light yellow overlay
+    }
+    return {}; // default
   };
+
+  // Simple progress bar
+  function ProgressBar({ percentage, color }) {
+    return (
+      <div
+        style={{
+          width: "100%",
+          backgroundColor: "#444",
+          height: "12px",
+          borderRadius: "4px",
+        }}
+      >
+        <div
+          style={{
+            width: `${percentage}%`,
+            backgroundColor: color,
+            height: "100%",
+            borderRadius: "4px",
+            transition: "width 0.4s ease",
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div
       style={{
         display: "flex",
+        flexDirection: "column",
         minHeight: "100vh",
-        background: "linear-gradient(135deg, #0F2027, #203A43, #2C5364)",
-        fontFamily: "'Open Sans', sans-serif",
-        color: "#fff",
       }}
     >
-      {/* ============ Sidebar ============ */}
-      <aside
+      {/* === Top NavBar === */}
+      <NavigationBar />
+
+      {/* === Main Layout (sidebar + content) === */}
+      <div
         style={{
-          width: "220px",
-          backgroundColor: "rgba(255,255,255,0.1)",
-          backdropFilter: "blur(8px)",
-          padding: "20px",
           display: "flex",
-          flexDirection: "column",
-          gap: "15px",
+          flex: 1,
+          background: "linear-gradient(135deg, #0F2027, #203A43, #2C5364)",
+          fontFamily: "'Open Sans', sans-serif",
+          color: "#fff",
         }}
       >
-        <h3 style={{ marginTop: 0 }}>Menu</h3>
-
-        <button
-          style={sidebarButtonStyle}
-          onClick={() => alert("View All Courses clicked")}
+        {/* ======= Sidebar ======= */}
+        <aside
+          style={{
+            width: "220px",
+            backgroundColor: "rgba(255,255,255,0.1)",
+            backdropFilter: "blur(8px)",
+            padding: "20px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "15px",
+          }}
         >
-          View All Courses
-        </button>
-        <button
-          style={sidebarButtonStyle}
-          onClick={() => alert("Upload Material clicked")}
-        >
-          Upload Material
-        </button>
-        <button
-          style={sidebarButtonStyle}
-          onClick={() => alert("Change Configuration clicked")}
-        >
-          Change Configuration
-        </button>
-
-        {/* Light/Dark Mode Switch moved here */}
-        <div style={{ marginTop: "auto" }}>
+          <h3 style={{ marginTop: 0 }}>Menu</h3>
           <button
             style={sidebarButtonStyle}
-            onClick={() => alert("Switch to Light Mode toggled!")}
+            onClick={() => alert("View All Courses clicked")}
           >
-            Switch to Light Mode
+            View All Courses
           </button>
-        </div>
-      </aside>
-
-      {/* ============ Main Content ============ */}
-      <main style={{ flex: 1, padding: "30px" }}>
-        {/* Header */}
-        <div style={{ textAlign: "left", marginBottom: "30px" }}>
-          <h1 style={{ margin: 0 }}>Welcome back, {userName}!</h1>
-          <p style={{ margin: 0, fontSize: "1.2rem" }}>
-            Here’s your personalized study plan
-          </p>
-          <p style={{ margin: "10px 0", fontSize: "0.9rem" }}>Today is {today}</p>
-        </div>
-
-        {/* ============ Goal Section ============ */}
-        <section
-          style={{
-            backgroundColor: "rgba(255,255,255,0.1)",
-            borderRadius: "10px",
-            padding: "20px",
-            marginBottom: "30px",
-          }}
-        >
-          <h2 style={{ marginTop: 0 }}>Your Goal</h2>
-          <p style={{ marginBottom: "10px" }}>{userGoal}</p>
-          <div style={{ marginBottom: "10px" }}>
-            <strong>Progress towards goal:</strong> {overallGoalProgress}%
+          <button
+            style={sidebarButtonStyle}
+            onClick={() => alert("Upload Material clicked")}
+          >
+            Upload Material
+          </button>
+          <button
+            style={sidebarButtonStyle}
+            onClick={() => alert("Change Configuration clicked")}
+          >
+            Change Configuration
+          </button>
+          <div style={{ marginTop: "auto" }}>
+            <button
+              style={sidebarButtonStyle}
+              onClick={() => alert("Switch to Light Mode toggled!")}
+            >
+              Switch to Light Mode
+            </button>
           </div>
+        </aside>
+
+        {/* ======= Main Content: Reading Plan ======= */}
+        <main style={{ flex: 1, padding: "30px" }}>
           <div
             style={{
-              backgroundColor: "rgba(255,255,255,0.3)",
-              height: "8px",
-              width: "300px",
-              borderRadius: "4px",
-              overflow: "hidden",
-              marginBottom: "15px",
+              backgroundColor: "rgba(255,255,255,0.1)",
+              borderRadius: "10px",
+              padding: "20px",
             }}
           >
-            <div
-              style={{
-                width: `${overallGoalProgress}%`,
-                backgroundColor: "#FFD700",
-                height: "100%",
-                transition: "width 0.3s",
-              }}
-            />
-          </div>
-          <p style={{ fontSize: "0.85rem", margin: 0 }}>
-            Keep going! You’re making great progress.
-          </p>
-        </section>
+            <h1 style={{ marginTop: 0, marginBottom: "1rem" }}>Reading Plan</h1>
 
-        {/* ============ Today’s Tasks ============ */}
-        <section
-          style={{
-            backgroundColor: "rgba(255,255,255,0.1)",
-            borderRadius: "10px",
-            padding: "20px",
-            marginBottom: "30px",
-          }}
-        >
-          <h2 style={{ marginTop: 0 }}>Today’s Tasks</h2>
-          <p style={{ marginBottom: "10px" }}>
-            Estimated total study time: <strong>{totalEstimatedTime} min</strong>
-          </p>
-          <p style={{ marginBottom: "20px" }}>
-            Overall completion for today: <strong>{dailyCompletion}%</strong>
-            <div
-              style={{
-                backgroundColor: "rgba(255,255,255,0.3)",
-                height: "8px",
-                width: "300px",
-                borderRadius: "4px",
-                overflow: "hidden",
-                marginTop: "5px",
-              }}
-            >
-              <div
-                style={{
-                  width: `${dailyCompletion}%`,
-                  backgroundColor: "#FFD700",
-                  height: "100%",
-                  transition: "width 0.3s",
-                }}
-              />
-            </div>
-          </p>
+            {/* Auto-generated plan info */}
+            <p style={{ marginBottom: "1rem" }}>
+              Reading Rate: <strong>{wpm} words/min</strong> &nbsp;|&nbsp; Daily
+              Reading Time: <strong>{dailyTime} min</strong>
+            </p>
 
-          {dailyTasks.map((course) => (
-            <div key={course.courseId} style={{ marginBottom: "20px" }}>
-              <h3 style={{ margin: "0 0 10px" }}>{course.courseName}</h3>
+            {loading && <p>Loading data…</p>}
+            {error && <p style={{ color: "red" }}>Error: {error}</p>}
 
-              {course.tasks.map((task) => (
-                <div
-                  key={task.id}
-                  style={{
-                    backgroundColor: "#333",
-                    borderRadius: "8px",
-                    padding: "15px",
-                    marginBottom: "10px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <div style={{ flex: 1, marginRight: "20px" }}>
-                    <p style={{ margin: 0 }}>
-                      <strong>{task.type.toUpperCase()}:</strong> {task.label}
-                    </p>
-                    <p style={{ margin: "5px 0" }}>
-                      Estimated Time: {task.estimatedTime}
-                    </p>
-                    {/* REMOVED the "Mark as Completed" checkbox/label */}
+            {!loading && !error && readingPlan.length === 0 && (
+              <p>No books found.</p>
+            )}
+
+            {!loading &&
+              !error &&
+              readingPlan.map((bookPlan, idx) => {
+                // Compute reading & proficiency progress for each book
+                const { totalWords, readOrProficientWords, proficientWords } =
+                  getBookProgressStats(bookPlan.bookData);
+                const readingPercent =
+                  totalWords > 0
+                    ? (readOrProficientWords / totalWords) * 100
+                    : 0;
+                const proficiencyPercent =
+                  totalWords > 0 ? (proficientWords / totalWords) * 100 : 0;
+
+                return (
+                  <div key={idx} style={{ marginBottom: "2rem" }}>
+                    <h2 style={{ marginBottom: "0.5rem" }}>
+                      {bookPlan.bookName}
+                    </h2>
+
+                    {/* Progress bars */}
+                    <div style={{ marginBottom: "0.5rem" }}>
+                      <p style={{ margin: "0 0 4px 0" }}>
+                        Reading Progress: {readOrProficientWords} / {totalWords}{" "}
+                        words
+                      </p>
+                      <ProgressBar percentage={readingPercent} color="#FFD700" />
+                    </div>
+                    <div style={{ marginBottom: "1rem" }}>
+                      <p style={{ margin: "0 0 4px 0" }}>
+                        Proficiency Progress: {proficientWords} / {totalWords}{" "}
+                        words
+                      </p>
+                      <ProgressBar percentage={proficiencyPercent} color="lime" />
+                    </div>
+
+                    {/* Day-by-Day Plan */}
+                    {bookPlan.days.length === 0 ? (
+                      <p>No chapters/subchapters in this book.</p>
+                    ) : (
+                      bookPlan.days.map((day) => (
+                        <div
+                          key={day.dayNumber}
+                          style={{
+                            border: "1px solid rgba(255,255,255,0.3)",
+                            padding: "1rem",
+                            marginBottom: "1rem",
+                            borderRadius: "8px",
+                          }}
+                        >
+                          <h3 style={{ marginTop: 0 }}>Day {day.dayNumber}</h3>
+                          <p style={{ marginBottom: "0.5rem" }}>
+                            Total Words: {day.totalWords}
+                          </p>
+
+                          <table
+                            style={{
+                              width: "100%",
+                              borderCollapse: "collapse",
+                              color: "#fff",
+                            }}
+                          >
+                            <thead>
+                              <tr
+                                style={{
+                                  borderBottom: "1px solid #666",
+                                  textAlign: "left",
+                                }}
+                              >
+                                <th style={{ width: "40%" }}>Chapter</th>
+                                <th style={{ width: "40%" }}>Subchapter</th>
+                                <th>Word Count</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {day.subchapters.map((sc, index) => (
+                                <tr
+                                  key={index}
+                                  style={{
+                                    borderBottom: "1px solid rgba(255,255,255,0.2)",
+                                    ...getRowStyle(sc.proficiency),
+                                  }}
+                                >
+                                  <td style={{ padding: "4px 8px" }}>
+                                    {sc.chapterName}
+                                  </td>
+                                  <td style={{ padding: "4px 8px" }}>
+                                    {sc.subchapterName}
+                                  </td>
+                                  <td style={{ padding: "4px 8px" }}>
+                                    {sc.wordCount}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ))
+                    )}
                   </div>
-
-                  <button
-                    style={continueButtonStyle}
-                    onClick={() => handleGoToTask(course.courseId, task.id)}
-                  >
-                    Start Now
-                  </button>
-                </div>
-              ))}
-            </div>
-          ))}
-        </section>
-
-        {/* ============ Daily History (recommendations removed) ============ */}
-        <section
-          style={{
-            backgroundColor: "rgba(255,255,255,0.1)",
-            borderRadius: "10px",
-            padding: "20px",
-          }}
-        >
-          <h2 style={{ marginTop: 0 }}>Daily History</h2>
-          <div style={{ display: "flex", gap: "30px" }}>
-            {/* Daily History only */}
-            <div style={{ flex: 1 }}>
-              <h4 style={{ marginBottom: "10px" }}>Time Spent (Past Few Days)</h4>
-              <ul style={{ listStyleType: "none", paddingLeft: 0 }}>
-                {dailyHistory.map((entry, idx) => (
-                  <li key={idx} style={{ marginBottom: "5px" }}>
-                    <strong>{entry.date}:</strong> {entry.timeSpent} min
-                  </li>
-                ))}
-              </ul>
-            </div>
-            {/* (AI-powered recommendations removed) */}
+                );
+              })}
           </div>
-        </section>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }
 
-/** Reusable style objects */
+/** ====== Reusable sidebar button style ====== **/
 const sidebarButtonStyle = {
   background: "none",
   border: "1px solid #FFD700",
@@ -315,17 +430,7 @@ const sidebarButtonStyle = {
   color: "#FFD700",
   fontWeight: "bold",
   cursor: "pointer",
-};
-
-const continueButtonStyle = {
-  background: "#FFD700",
-  color: "#000",
-  border: "none",
-  borderRadius: "4px",
-  padding: "10px 20px",
-  fontWeight: "bold",
-  cursor: "pointer",
-  transition: "opacity 0.3s",
+  marginBottom: "5px",
 };
 
 export default AcademicHomePage;

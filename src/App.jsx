@@ -5,6 +5,13 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 // NEW: Landing Page (public)
 import LandingPage from "./components/PreLogin/LandingPage";
 
+import BooksOverview from "./components/BooksOverview/BooksOverview";
+import ReadingPlan from "./components/BooksOverview/ReadingPlan";
+
+
+import GptQuestionGenerator from "./components/Quiz/GptQuestionGenerator";
+
+
 // Existing components (unchanged)
 import AuthLogin from "./components/PreLogin/AuthLogin";
 import PrivateRoute from "./components/PreLogin/PrivateRoute";
@@ -329,6 +336,37 @@ function App() {
           element={
             <PrivateRoute>
               <OnboardingAssessment />
+            </PrivateRoute>
+          }
+        />
+
+        {/* 15. Academic Home Page */}
+        <Route
+          path="/booksoverview"
+          element={
+            <PrivateRoute>
+              <BooksOverview />
+            </PrivateRoute>
+          }
+        />
+
+        {/* 15. Academic Home Page */}
+        <Route
+          path="/readingplan"
+          element={
+            <PrivateRoute>
+              <ReadingPlan />
+            </PrivateRoute>
+          }
+        />
+
+
+        {/* 15. Academic Home Page */}
+        <Route
+          path="/gptquestiongenerator"
+          element={
+            <PrivateRoute>
+              <GptQuestionGenerator />
             </PrivateRoute>
           }
         />
