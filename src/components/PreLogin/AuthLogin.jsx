@@ -37,7 +37,7 @@ function AuthLogin() {
 
         // 5) Check onboarding
         if (response.data.user.onboardingComplete) {
-          navigate("/academichomepage");
+          navigate("/books2");
         } else {
           navigate("/platformintro");
         }

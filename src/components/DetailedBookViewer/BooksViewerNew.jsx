@@ -3,7 +3,6 @@
  ********************************************/
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-// Import your Firebase Auth instance
 import { auth } from "../../firebase";
 
 import BooksSidebar from "./BooksSidebar";
@@ -14,48 +13,42 @@ import QuizSection from "./QuizSection";
 import DoubtsSection from "./DoubtsSection";
 import DynamicTutorModal from "./DynamicTutorModal"; // adjust path if needed
 
+// === NEW IMPORT for NavigationBar ===
+import NavigationBar from "./NavigationBar";
+
 function BooksViewer2() {
   const backendURL = import.meta.env.VITE_BACKEND_URL;
 
-  // Categories & Books
+  // ----------------------------- State Variables -----------------------------
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [booksData, setBooksData] = useState([]);
   const [booksProgressData, setBooksProgressData] = useState([]);
 
-  // Selection states
   const [selectedBook, setSelectedBook] = useState(null);
   const [selectedChapter, setSelectedChapter] = useState(null);
   const [selectedSubChapter, setSelectedSubChapter] = useState(null);
 
-  // Expand/collapse states for sidebar
   const [expandedBookName, setExpandedBookName] = useState(null);
   const [expandedChapterName, setExpandedChapterName] = useState(null);
 
-  // Quiz states
   const [quizData, setQuizData] = useState([]);
   const [selectedAnswers, setSelectedAnswers] = useState({});
   const [quizSubmitted, setQuizSubmitted] = useState(false);
   const [score, setScore] = useState(null);
 
-  // Summaries
   const [summaryOutput, setSummaryOutput] = useState("");
   const [customPrompt, setCustomPrompt] = useState("");
 
-  // Doubts chat
   const [doubts, setDoubts] = useState([]);
   const [doubtInput, setDoubtInput] = useState("");
 
-  // Dynamic Tutor modal
   const [showTutorModal, setShowTutorModal] = useState(false);
 
-  // Use the current Firebase Auth user, or fall back
-  // This ensures we pass the real UID if logged in, otherwise "testUser123"
+  // Use the current Firebase Auth user, or default to some test user
   const userId = auth.currentUser?.uid;
 
-  /********************************************************
-   * 1) Fetch categories on mount
-   ********************************************************/
+  // ---------------------------- Fetching Categories ---------------------------
   useEffect(() => {
     const fetchCategories = async () => {
       try {
@@ -74,12 +67,9 @@ function BooksViewer2() {
       }
     };
     fetchCategories();
-    // eslint-disable-next-line
-  }, []);
+  }, [backendURL]);
 
-  /********************************************************
-   * 2) Whenever selectedCategory changes -> fetch books & progress
-   ********************************************************/
+  // --------------------------- Fetch Books & Progress -------------------------
   useEffect(() => {
     if (!selectedCategory) return;
     fetchAllData();
@@ -88,13 +78,12 @@ function BooksViewer2() {
 
   const fetchAllData = async () => {
     try {
-      // 1) Get books for this category, pass userId so backend can filter if needed
       const booksRes = await axios.get(
         `${backendURL}/api/books?categoryId=${selectedCategory}&userId=${userId}`
       );
       const books = booksRes.data;
 
-      // 2) Get user progress
+      // Get user progress
       const progRes = await axios.get(
         `${backendURL}/api/user-progress?userId=${userId}`
       );
@@ -150,9 +139,7 @@ function BooksViewer2() {
     }
   };
 
-  /********************************************************
-   * Reset selections & quiz states
-   ********************************************************/
+  // ----------------------------- Reset Selections -----------------------------
   const resetSelections = () => {
     setSelectedBook(null);
     setSelectedChapter(null);
@@ -175,9 +162,7 @@ function BooksViewer2() {
     setScore(null);
   };
 
-  /********************************************************
-   * Handlers for sidebar selections
-   ********************************************************/
+  // --------------------------- Sidebar Handlers -------------------------------
   const handleCategoryChange = (e) => {
     setSelectedCategory(e.target.value);
   };
@@ -218,16 +203,14 @@ function BooksViewer2() {
     }
   };
 
-  /********************************************************
-   * Quiz logic
-   ********************************************************/
+  // ------------------------------ Quiz Logic ----------------------------------
   const fetchQuiz = async (bookName, chapterName, subChapterName) => {
     try {
       const url = `${backendURL}/api/quizzes?bookName=${encodeURIComponent(
         bookName
-      )}&chapterName=${encodeURIComponent(
-        chapterName
-      )}&subChapterName=${encodeURIComponent(subChapterName)}`;
+      )}&chapterName=${encodeURIComponent(chapterName)}&subChapterName=${encodeURIComponent(
+        subChapterName
+      )}`;
       const res = await axios.get(url);
       if (res.data.success === false) {
         console.error("Quiz fetch error:", res.data.error);
@@ -261,9 +244,7 @@ function BooksViewer2() {
     setQuizSubmitted(true);
   };
 
-  /********************************************************
-   * Mark subchapter done
-   ********************************************************/
+  // --------------------------- Subchapter Progress -----------------------------
   const handleToggleDone = async (subChapter) => {
     try {
       const newDoneState = !subChapter.isDone;
@@ -281,9 +262,7 @@ function BooksViewer2() {
     }
   };
 
-  /********************************************************
-   * Summaries (mocked)
-   ********************************************************/
+  // ------------------------------ Summaries -----------------------------------
   const handleSummarizePreset = (promptName) => {
     let mockResponse = "";
     switch (promptName) {
@@ -314,9 +293,7 @@ function BooksViewer2() {
     setSummaryOutput(mockResponse);
   };
 
-  /********************************************************
-   * Doubts chat (mock)
-   ********************************************************/
+  // ------------------------------ Doubts Chat ---------------------------------
   const handleSendDoubt = () => {
     if (!doubtInput.trim()) return;
     const newUserMessage = { role: "user", content: doubtInput };
@@ -328,22 +305,18 @@ function BooksViewer2() {
     setDoubtInput("");
   };
 
-  /********************************************************
-   * Helper: get progress data for selected book
-   ********************************************************/
+  // ------------------------- Book Progress Helper ------------------------------
   const getBookProgressInfo = (bookName) => {
     return booksProgressData.find((b) => b.bookName === bookName);
   };
 
-  /********************************************************
-   * Styles
-   ********************************************************/
+  // ----------------------------- Styles ---------------------------------------
+  // This is the "row" container style (sidebar + main content)
   const containerStyle = {
-    minHeight: "100vh",
     display: "flex",
     flexDirection: "row",
+    flex: 1,
     background: "linear-gradient(135deg, #0F2027, #203A43, #2C5364)",
-    fontFamily: "'Open Sans', sans-serif",
     color: "#fff",
   };
 
@@ -365,116 +338,124 @@ function BooksViewer2() {
     marginTop: "10px",
   };
 
+  // ---------------------------- Render ----------------------------------------
   return (
-    <div style={containerStyle}>
-      {/* =========== SIDEBAR =========== */}
-      <BooksSidebar
-        categories={categories}
-        selectedCategory={selectedCategory}
-        onCategoryChange={handleCategoryChange}
-        booksData={booksData}
-        expandedBookName={expandedBookName}
-        expandedChapterName={expandedChapterName}
-        toggleBookExpansion={toggleBookExpansion}
-        toggleChapterExpansion={toggleChapterExpansion}
-        handleBookClick={handleBookClick}
-        handleChapterClick={handleChapterClick}
-        handleSubChapterClick={handleSubChapterClick}
-      />
+    // 1) Wrap everything in a column so we can place the NavBar on top
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+      {/* ========== NAVIGATION BAR (NEW) ========== */}
+      <NavigationBar />
 
-      {/* =========== MAIN CONTENT =========== */}
-      <div style={mainContentStyle}>
-        {selectedBook && (
-          <button
-            style={{
-              ...buttonStyle,
-              position: "absolute",
-              top: "20px",
-              right: "20px",
-              zIndex: 10,
-            }}
-            onClick={() => setShowTutorModal(true)}
-          >
-            Learn Through Dynamic Tutor
-          </button>
-        )}
+      {/* 2) Main content row (Sidebar + right panel) */}
+      <div style={containerStyle}>
+        {/* =========== SIDEBAR =========== */}
+        <BooksSidebar
+          categories={categories}
+          selectedCategory={selectedCategory}
+          onCategoryChange={handleCategoryChange}
+          booksData={booksData}
+          expandedBookName={expandedBookName}
+          expandedChapterName={expandedChapterName}
+          toggleBookExpansion={toggleBookExpansion}
+          toggleChapterExpansion={toggleChapterExpansion}
+          handleBookClick={handleBookClick}
+          handleChapterClick={handleChapterClick}
+          handleSubChapterClick={handleSubChapterClick}
+        />
 
-        {/* 1) PROGRESS SECTION */}
-        {selectedBook && (
-          <BookProgress
-            book={selectedBook}
-            getBookProgressInfo={getBookProgressInfo}
-          />
-        )}
-
-        {/* If no subchapter selected, show fallback */}
-        {!selectedSubChapter && (
-          <div
-            style={{
-              backgroundColor: "rgba(255,255,255,0.1)",
-              backdropFilter: "blur(6px)",
-              padding: "15px",
-              borderRadius: "6px",
-              marginBottom: "20px",
-            }}
-          >
-            <h2
+        {/* =========== MAIN CONTENT =========== */}
+        <div style={mainContentStyle}>
+          {selectedBook && (
+            <button
               style={{
-                marginTop: 0,
-                borderBottom: "1px solid rgba(255,255,255,0.3)",
-                paddingBottom: "5px",
-                marginBottom: "10px",
+                ...buttonStyle,
+                position: "absolute",
+                top: "20px",
+                right: "20px",
+                zIndex: 10,
+              }}
+              onClick={() => setShowTutorModal(true)}
+            >
+              Learn Through Dynamic Tutor
+            </button>
+          )}
+
+          {/* 1) Book Progress Section */}
+          {selectedBook && (
+            <BookProgress
+              book={selectedBook}
+              getBookProgressInfo={getBookProgressInfo}
+            />
+          )}
+
+          {/* Fallback if no subchapter is selected */}
+          {!selectedSubChapter && (
+            <div
+              style={{
+                backgroundColor: "rgba(255,255,255,0.1)",
+                backdropFilter: "blur(6px)",
+                padding: "15px",
+                borderRadius: "6px",
+                marginBottom: "20px",
               }}
             >
-              No Subchapter Selected
-            </h2>
-            <p>Please select a subchapter from the sidebar to see its content.</p>
-          </div>
-        )}
+              <h2
+                style={{
+                  marginTop: 0,
+                  borderBottom: "1px solid rgba(255,255,255,0.3)",
+                  paddingBottom: "5px",
+                  marginBottom: "10px",
+                }}
+              >
+                No Subchapter Selected
+              </h2>
+              <p>Please select a subchapter from the sidebar to see its content.</p>
+            </div>
+          )}
 
-        {/* 2) If subchapter is selected: show content, summary, quiz, doubts */}
-        {selectedSubChapter && (
-          <>
-            <SubchapterContent
+          {/* 2) Selected subchapter sections */}
+          {selectedSubChapter && (
+            <>
+              <SubchapterContent
+                subChapter={selectedSubChapter}
+                onToggleDone={handleToggleDone}
+              />
+
+              <SummarizeSection
+                summaryOutput={summaryOutput}
+                customPrompt={customPrompt}
+                setCustomPrompt={setCustomPrompt}
+                handleSummarizePreset={handleSummarizePreset}
+                handleCustomPromptSubmit={handleCustomPromptSubmit}
+              />
+
+              <QuizSection
+                quizData={quizData}
+                selectedAnswers={selectedAnswers}
+                quizSubmitted={quizSubmitted}
+                score={score}
+                handleOptionSelect={handleOptionSelect}
+                handleSubmitQuiz={handleSubmitQuiz}
+              />
+
+              <DoubtsSection
+                doubts={doubts}
+                doubtInput={doubtInput}
+                setDoubtInput={setDoubtInput}
+                handleSendDoubt={handleSendDoubt}
+              />
+            </>
+          )}
+
+          {/* =========== Dynamic Tutor Modal =========== */}
+          {showTutorModal && (
+            <DynamicTutorModal
+              book={selectedBook}
+              chapter={selectedChapter}
               subChapter={selectedSubChapter}
-              onToggleDone={handleToggleDone}
+              onClose={() => setShowTutorModal(false)}
             />
-
-            <SummarizeSection
-              summaryOutput={summaryOutput}
-              customPrompt={customPrompt}
-              setCustomPrompt={setCustomPrompt}
-              handleSummarizePreset={handleSummarizePreset}
-              handleCustomPromptSubmit={handleCustomPromptSubmit}
-            />
-
-            <QuizSection
-              quizData={quizData}
-              selectedAnswers={selectedAnswers}
-              quizSubmitted={quizSubmitted}
-              score={score}
-              handleOptionSelect={handleOptionSelect}
-              handleSubmitQuiz={handleSubmitQuiz}
-            />
-
-            <DoubtsSection
-              doubts={doubts}
-              doubtInput={doubtInput}
-              setDoubtInput={setDoubtInput}
-              handleSendDoubt={handleSendDoubt}
-            />
-          </>
-        )}
-
-        {/* =========== Dynamic Tutor Modal =========== */}
-        {showTutorModal && (
-          <DynamicTutorModal
-            book={selectedBook}
-            chapter={selectedChapter}
-            subChapter={selectedSubChapter}
-            onClose={() => setShowTutorModal(false)}
-          />
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

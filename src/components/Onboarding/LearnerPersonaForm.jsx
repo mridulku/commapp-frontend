@@ -11,14 +11,9 @@ import CompetitiveForm from "./CompetitiveForm";
 import VocationalForm from "./VocationalForm";
 import CasualForm from "./CasualForm";
 
-
 const backendURL = import.meta.env.VITE_BACKEND_URL;
 
-
 function LearnerPersonaForm() {
-
-
-
   const navigate = useNavigate();
 
   // -----------------------------
@@ -27,13 +22,8 @@ function LearnerPersonaForm() {
   // step >= 2 => Sub-steps for the chosen category
   // -----------------------------
 
-
-
-
   const [step, setStep] = useState(1);
   const [category, setCategory] = useState("");
-
-
 
   // For convenience, define how many sub-steps each category has:
   const maxSubSteps = {
@@ -48,17 +38,15 @@ function LearnerPersonaForm() {
 
   console.log("Rendering LearnerPersonaForm... step =", step, "subStep =", subStep);
 
-
   // -----------------------------
   // MASTER FORM DATA
   // -----------------------------
   const [formData, setFormData] = useState({
     academic: {
-      educationLevel: "",
-      country: "",
-      schoolClass: "",
-      collegeName: "",
-      department: "",
+      // CHANGED: only keep exam, subject, etc. for step 1
+      exam: "",
+      subject: "",
+
       examOrCourses: [],
       examTimeline: "",
       dailyHours: "",

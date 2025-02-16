@@ -1,9 +1,11 @@
+// AcademicForm.jsx
+
 import React, {
   useState,
   useImperativeHandle,
   forwardRef,
   useCallback,
-  useEffect, // <-- Make sure to import useEffect
+  useEffect,
 } from "react";
 import {
   ref as firebaseRef,
@@ -175,9 +177,14 @@ function AcademicForm(
       console.error("uploadAllPDFs error:", err);
       throw err; // re-throw so parent knows it failed
     }
-  }, [formData.courseList, selectedFiles, storePdfLinkInState, uploadPDFwithMetadata]);
+  }, [
+    formData.courseList,
+    selectedFiles,
+    storePdfLinkInState,
+    uploadPDFwithMetadata,
+  ]);
 
-  // Make `uploadAllPDFs` callable from parent via `academicFormRef.current.uploadAllPDFs()`
+  // Make `uploadAllPDFs` callable from parent
   useImperativeHandle(ref, () => ({
     uploadAllPDFs,
   }));
@@ -192,59 +199,69 @@ function AcademicForm(
     });
   };
 
-  // ---------- Step Components ----------
-
-  // Step 1
-  const Step1_BasicDetails = () => (
+  // ---------- Step 1 (REPLACED) ----------
+  const Step1_ExamAndSubject = () => (
     <div style={sectionContainerStyle}>
-      <h3 style={sectionHeadingStyle}>1. Basic Details</h3>
+      <h3 style={sectionHeadingStyle}>1. Exam & Subject</h3>
       <span style={helperTextStyle}>
-        Please select your current education level and country.
+        Please select the exam you are preparing for, then choose your subject.
       </span>
 
-      <label style={{ marginBottom: "5px" }}>Education Level:</label>
+      {/* --- Exams --- */}
+      <label style={{ marginBottom: "5px" }}>Select Exam:</label>
       <div style={tileContainerStyle}>
-        {renderTile("School", "school", formData.educationLevel, "educationLevel", "🏫")}
-        {renderTile("College", "college", formData.educationLevel, "educationLevel", "🏢")}
+        {renderTile("UPSC", "UPSC", formData.exam, "exam", "🏛️")}
+        {renderTile("JEE", "JEE", formData.exam, "exam", "📐")}
       </div>
 
-      <label style={{ marginBottom: "5px" }}>Country:</label>
-      <div style={tileContainerStyle}>
-        {renderTile("India", "India", formData.country, "country", "🇮🇳")}
-        {renderTile("US", "US", formData.country, "country", "🇺🇸")}
-      </div>
-
-      {formData.educationLevel === "school" && (
+      {/* --- Subjects: show only if an exam is chosen --- */}
+      {formData.exam === "UPSC" && (
         <>
-          <label>Which Class/Grade:</label>
-          <input
-            type="text"
-            placeholder="e.g. 9th grade, 12th grade..."
-            value={formData.schoolClass}
-            onChange={(e) => handleInputChange(e, "academic.schoolClass")}
-            style={inputStyle}
-          />
+          <label style={{ marginBottom: "5px" }}>Select UPSC Subject:</label>
+          <div style={tileContainerStyle}>
+            {renderTile("History", "History", formData.subject, "subject", "📜")}
+            {renderTile(
+              "Polity & Governance",
+              "Polity & Governance",
+              formData.subject,
+              "subject",
+              "🏛️"
+            )}
+            {renderTile("Geography", "Geography", formData.subject, "subject", "🌐")}
+            {renderTile("Economics", "Economics", formData.subject, "subject", "💰")}
+            {renderTile(
+              "Environment & Ecology",
+              "Environment & Ecology",
+              formData.subject,
+              "subject",
+              "🌱"
+            )}
+            {renderTile(
+              "General Science",
+              "General Science",
+              formData.subject,
+              "subject",
+              "🔬"
+            )}
+            {renderTile(
+              "Current Affairs",
+              "Current Affairs",
+              formData.subject,
+              "subject",
+              "📰"
+            )}
+          </div>
         </>
       )}
 
-      {formData.educationLevel === "college" && (
+      {formData.exam === "JEE" && (
         <>
-          <label>College Name:</label>
-          <input
-            type="text"
-            placeholder="e.g. XYZ University"
-            value={formData.collegeName}
-            onChange={(e) => handleInputChange(e, "academic.collegeName")}
-            style={inputStyle}
-          />
-          <label>Department or Major:</label>
-          <input
-            type="text"
-            placeholder="e.g. Computer Science"
-            value={formData.department}
-            onChange={(e) => handleInputChange(e, "academic.department")}
-            style={inputStyle}
-          />
+          <label style={{ marginBottom: "5px" }}>Select JEE Subject:</label>
+          <div style={tileContainerStyle}>
+            {renderTile("Physics", "Physics", formData.subject, "subject", "🔭")}
+            {renderTile("Chemistry", "Chemistry", formData.subject, "subject", "⚗️")}
+            {renderTile("Mathematics", "Mathematics", formData.subject, "subject", "➕")}
+          </div>
         </>
       )}
     </div>
@@ -253,14 +270,14 @@ function AcademicForm(
   // Step 2
   const Step2_Courses = () => (
     <div style={sectionContainerStyle}>
-      <h3 style={sectionHeadingStyle}>2. Courses / Subjects 📚</h3>
+      <h3 style={sectionHeadingStyle}>2. Book/Course PDF 📚</h3>
       <span style={helperTextStyle}>
-        Currently, only 1 course is supported in this MVP.
+        Currently, only 1 PDF is supported.
       </span>
 
       {formData.courseList.map((course, courseIndex) => (
         <div
-          key={course.id} // stable key from the course object
+          key={course.id}
           style={{
             backgroundColor: "rgba(255,255,255,0.1)",
             padding: "10px",
@@ -268,7 +285,7 @@ function AcademicForm(
             marginBottom: "20px",
           }}
         >
-          <label>Course Name:</label>
+          <label>Course/Book Name:</label>
           <input
             type="text"
             placeholder="e.g. Math 101"
@@ -277,14 +294,13 @@ function AcademicForm(
             style={inputStyle}
           />
 
-          <label>Attach One PDF (Materials/Notes):</label>
+          <label> </label>
           <span style={helperTextStyle}>
-            Will be uploaded on final form submission.
-          </span>
+           </span>
           <input
             type="file"
             accept="application/pdf"
-            disabled={!!course.pdfLink} // if we already have a link, disable
+            disabled={!!course.pdfLink}
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) {
@@ -294,7 +310,6 @@ function AcademicForm(
             style={{ marginBottom: "10px", display: "block" }}
           />
 
-          {/* Show "File selected" or "Uploaded link" */}
           {selectedFiles[courseIndex] && !course.pdfLink && (
             <p style={{ color: "#FFD700" }}>
               File selected: {selectedFiles[courseIndex].name}
@@ -320,7 +335,7 @@ function AcademicForm(
           </span>
           {course.examDates?.map((examObj, examIdx) => (
             <div
-              key={examIdx} // stable index-based key within this course
+              key={examIdx}
               style={{
                 backgroundColor: "rgba(255,255,255,0.1)",
                 padding: "5px",
@@ -383,7 +398,7 @@ function AcademicForm(
           fontWeight: "bold",
         }}
       >
-        + Add Another Course
+        + Add Book/Course PDF
       </button>
     </div>
   );
@@ -452,7 +467,7 @@ function AcademicForm(
     <div style={{ maxWidth: "600px", margin: "0 auto" }}>
       <h2 style={{ marginBottom: "30px" }}>🎓 Academic Learner Form</h2>
 
-      {subStep === 1 && <Step1_BasicDetails />}
+      {subStep === 1 && <Step1_ExamAndSubject />}
       {subStep === 2 && <Step2_Courses />}
       {subStep === 3 && <Step3_TimeGoals />}
       {subStep === 4 && <Step4_AdditionalNotes />}
@@ -460,5 +475,4 @@ function AcademicForm(
   );
 }
 
-// Make sure to export with forwardRef so the parent can do: academicFormRef.current.uploadAllPDFs()
 export default forwardRef(AcademicForm);
