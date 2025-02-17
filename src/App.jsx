@@ -12,6 +12,9 @@ import ReadingPlan from "./components/BooksOverview/ReadingPlan";
 import GptQuestionGenerator from "./components/Quiz/GptQuestionGenerator";
 
 
+import BooksViewer3 from "./components/RevampViewer/BooksViewer3";
+
+
 // Existing components (unchanged)
 import AuthLogin from "./components/PreLogin/AuthLogin";
 import PrivateRoute from "./components/PreLogin/PrivateRoute";
@@ -367,6 +370,16 @@ function App() {
           element={
             <PrivateRoute>
               <GptQuestionGenerator />
+            </PrivateRoute>
+          }
+        />
+
+         {/* 15. Academic Home Page */}
+         <Route
+          path="/books3"
+          element={
+            <PrivateRoute>
+              <BooksViewer3 />
             </PrivateRoute>
           }
         />

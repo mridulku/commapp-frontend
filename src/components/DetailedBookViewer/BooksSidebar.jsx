@@ -81,7 +81,10 @@ function BooksSidebar({
     <div style={sidebarStyle}>
       {/* Category Dropdown */}
       <div style={dropdownContainerStyle}>
-        <label htmlFor="categorySelect" style={{ marginRight: "10px", color: "#fff" }}>
+        <label
+          htmlFor="categorySelect"
+          style={{ marginRight: "10px", color: "#fff" }}
+        >
           Select Category:
         </label>
         <select
@@ -124,7 +127,8 @@ function BooksSidebar({
               {/* Chapters */}
               {isBookExpanded &&
                 book.chapters.map((chapter) => {
-                  const isChapterExpanded = expandedChapterName === chapter.chapterName;
+                  const isChapterExpanded =
+                    expandedChapterName === chapter.chapterName;
                   return (
                     <div key={chapter.chapterName}>
                       <div
@@ -134,7 +138,8 @@ function BooksSidebar({
                           toggleChapterExpansion(chapter.chapterName);
                         }}
                         onMouseOver={(e) =>
-                          (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)")
+                          (e.currentTarget.style.backgroundColor =
+                            "rgba(255,255,255,0.2)")
                         }
                         onMouseOut={(e) =>
                           (e.currentTarget.style.backgroundColor = "transparent")
@@ -151,14 +156,18 @@ function BooksSidebar({
                             style={subChapterTitleStyle}
                             onClick={() => handleSubChapterClick(subChap)}
                             onMouseOver={(e) =>
-                              (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)")
+                              (e.currentTarget.style.backgroundColor =
+                                "rgba(255,255,255,0.2)")
                             }
                             onMouseOut={(e) =>
-                              (e.currentTarget.style.backgroundColor = "transparent")
+                              (e.currentTarget.style.backgroundColor =
+                                "transparent")
                             }
                           >
                             {subChap.subChapterName}
-                            {subChap.isDone && <span style={doneBadgeStyle}>(Done)</span>}
+                            {subChap.isDone && (
+                              <span style={doneBadgeStyle}>(Done)</span>
+                            )}
                           </div>
                         ))}
                     </div>

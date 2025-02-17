@@ -110,7 +110,7 @@ function QuizSection({
 
       {/* Submit or score */}
       {!quizSubmitted ? (
-        <button onClick={handleSubmitQuiz} style={{ ...buttonStyle, marginTop: "10px" }}>
+        <button onClick={handleSubmitQuiz} style={buttonStyle}>
           Submit Quiz
         </button>
       ) : (

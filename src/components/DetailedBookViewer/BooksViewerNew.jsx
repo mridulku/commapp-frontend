@@ -11,7 +11,7 @@ import SubchapterContent from "./SubchapterContent";
 import SummarizeSection from "./SummarizeSection";
 import QuizSection from "./QuizSection";
 import DoubtsSection from "./DoubtsSection";
-import DynamicTutorModal from "./DynamicTutorModal"; // adjust path if needed
+import DynamicTutorModal from "./DynamicTutorModal";
 
 // === NEW IMPORT for NavigationBar ===
 import NavigationBar from "./NavigationBar";
@@ -78,12 +78,13 @@ function BooksViewer2() {
 
   const fetchAllData = async () => {
     try {
+      // 1) Fetch Books for selectedCategory & user
       const booksRes = await axios.get(
         `${backendURL}/api/books?categoryId=${selectedCategory}&userId=${userId}`
       );
       const books = booksRes.data;
 
-      // Get user progress
+      // 2) Fetch user progress
       const progRes = await axios.get(
         `${backendURL}/api/user-progress?userId=${userId}`
       );
@@ -93,7 +94,7 @@ function BooksViewer2() {
         console.error("Failed to fetch user progress:", progressData.error);
         setBooksData(books);
       } else {
-        // Merge done status
+        // Merge done status (isDone) into the book/chapter/subchapter structure
         const doneSet = new Set(
           progressData.progress
             .filter((p) => p.isDone)
@@ -118,7 +119,7 @@ function BooksViewer2() {
       // 3) Fetch aggregator data (progress with total words, etc.)
       await fetchAggregatedData();
 
-      // Reset selections
+      // Reset subchapter selections
       resetSelections();
     } catch (err) {
       console.error("Error in fetchAllData:", err);
@@ -263,6 +264,8 @@ function BooksViewer2() {
   };
 
   // ------------------------------ Summaries -----------------------------------
+  // (These handle *only* the old "summaryOutput" logic from your code. 
+  //  The advanced SummarizeSection below has its own approach.)
   const handleSummarizePreset = (promptName) => {
     let mockResponse = "";
     switch (promptName) {
@@ -311,7 +314,7 @@ function BooksViewer2() {
   };
 
   // ----------------------------- Styles ---------------------------------------
-  // This is the "row" container style (sidebar + main content)
+  // This is the main row container style (Sidebar + main content)
   const containerStyle = {
     display: "flex",
     flexDirection: "row",
@@ -342,7 +345,7 @@ function BooksViewer2() {
   return (
     // 1) Wrap everything in a column so we can place the NavBar on top
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
-      {/* ========== NAVIGATION BAR (NEW) ========== */}
+      {/* ========== NAVIGATION BAR ========== */}
       <NavigationBar />
 
       {/* 2) Main content row (Sidebar + right panel) */}
@@ -387,7 +390,7 @@ function BooksViewer2() {
             />
           )}
 
-          {/* Fallback if no subchapter is selected */}
+          {/* If no subchapter is selected, show a placeholder */}
           {!selectedSubChapter && (
             <div
               style={{
@@ -420,7 +423,10 @@ function BooksViewer2() {
                 onToggleDone={handleToggleDone}
               />
 
+              {/* The “enhanced” Summaries wizard: */}
               <SummarizeSection
+                // If you still want your older summaryOutput logic,
+                // you can pass them in as props or keep it separate
                 summaryOutput={summaryOutput}
                 customPrompt={customPrompt}
                 setCustomPrompt={setCustomPrompt}

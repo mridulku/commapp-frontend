@@ -8,8 +8,6 @@ function DynamicTutorModal({ book, chapter, subChapter, onClose }) {
   const [messages, setMessages] = useState([]);
   const [userInput, setUserInput] = useState("");
 
-  // Example "lesson step" logic — the tutor could adapt its approach
-  // based on whether the user is learning a book vs. a subchapter.
   const [lessonStep, setLessonStep] = useState(1);
 
   useEffect(() => {
@@ -41,14 +39,15 @@ I'll ask a few guiding questions to ensure you grasp the key ideas.`,
 
     // Add user message
     const userMsg = { role: "user", content: userInput };
-    setMessages((prev) => [...prev, userMsg]);
+    const newMessages = [...messages, userMsg];
+    setMessages(newMessages);
 
     // Mock an AI response
-    // Replace with real backend call for dynamic tutor logic
     const tutorResponse = getTutorResponse(userInput, lessonStep);
-    setMessages((prev) => [...prev, userMsg, tutorResponse]);
+    const finalMessages = [...newMessages, tutorResponse];
+    setMessages(finalMessages);
 
-    // Possibly increment lesson step to simulate guided progress
+    // Possibly increment lesson step
     setLessonStep((prev) => prev + 1);
 
     // Clear input
@@ -57,18 +56,16 @@ I'll ask a few guiding questions to ensure you grasp the key ideas.`,
 
   // Basic mock AI/tutor response logic
   const getTutorResponse = (userText, currentStep) => {
-    // You can do step-based or context-based logic here
     let content = "";
     if (currentStep === 1) {
-      content = `Thanks for sharing! Let’s check your understanding. What do you think is the main idea of this content?`;
+      content = `Thanks for sharing! Let's check your understanding. What do you think is the main idea here?`;
     } else if (currentStep === 2) {
       content = `Interesting. Could you elaborate on how you'd apply it in a real situation?`;
     } else if (userText.toLowerCase().includes("i'm confused")) {
       content = `It's okay to be confused! Let's pinpoint the confusion. Which part is unclear?`;
     } else {
-      content = `Great input! Let's keep exploring. (Mock AI response) You said: "${userText}". Here’s a tip: [ ...some dynamic advice... ]`;
+      content = `Great input! (Mock AI). You said: "${userText}". Here's a tip: [some dynamic advice here].`;
     }
-
     return { role: "assistant", content };
   };
 

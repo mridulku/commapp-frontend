@@ -1,5 +1,5 @@
 /********************************************
- * SubchapterContent.jsx (Simple Highlight + Single Button)
+ * SubchapterContent.jsx
  ********************************************/
 import React, { useState, useRef } from "react";
 
@@ -14,11 +14,10 @@ function SubchapterContent({ subChapter, onToggleDone }) {
   const highlightCounter = useRef(1);
 
   // For controlling the Q&A input for the most recently added highlight
-  // e.g. { highlightId, userQuestion: "", isOpen: true/false }
   const [activeQA, setActiveQA] = useState(null);
 
   /********************************************************
-   * Style
+   * Styles
    ********************************************************/
   const panelStyle = {
     backgroundColor: "rgba(255,255,255,0.1)",
@@ -46,6 +45,7 @@ function SubchapterContent({ subChapter, onToggleDone }) {
     cursor: "pointer",
     transition: "opacity 0.3s",
     marginTop: "10px",
+    marginRight: "10px",
   };
 
   const contentStyle = {
@@ -119,7 +119,7 @@ function SubchapterContent({ subChapter, onToggleDone }) {
   };
 
   /********************************************************
-   * Handle text selection (no floating button)
+   * Handle text selection
    ********************************************************/
   const handleMouseUp = () => {
     const selection = window.getSelection();
@@ -149,11 +149,9 @@ function SubchapterContent({ subChapter, onToggleDone }) {
     };
 
     setHighlights((prev) => [...prev, newHighlight]);
-
-    // Clear selection
     setSelectedText("");
 
-    // Immediately open Q&A input
+    // Immediately open Q&A input for that highlight
     setActiveQA({
       highlightId: id,
       userQuestion: "",
@@ -206,9 +204,6 @@ function SubchapterContent({ subChapter, onToggleDone }) {
     }
   };
 
-  /********************************************************
-   * Render
-   ********************************************************/
   return (
     <div style={panelStyle}>
       <h2 style={sectionTitleStyle}>Content</h2>
@@ -242,7 +237,7 @@ function SubchapterContent({ subChapter, onToggleDone }) {
       {/* The highlight logs / Q&A */}
       {highlights.length > 0 && (
         <div style={highlightLogContainerStyle}>
-          <h3 style={{ marginTop: 0 }}>Highlights & Questions</h3>
+          <h3 style={{ marginTop: 0 }}>Highlights &amp; Questions</h3>
 
           {highlights.map((h) => (
             <div key={h.id} style={highlightItemStyle}>
@@ -260,7 +255,6 @@ function SubchapterContent({ subChapter, onToggleDone }) {
 
               {!h.collapsed && (
                 <div>
-                  {/* If this is the highlight for which we are collecting a question */}
                   {activeQA && activeQA.highlightId === h.id && activeQA.isOpen ? (
                     <div style={qaInputContainerStyle}>
                       <input
