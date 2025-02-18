@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 
+// 1) Import our new QuizModal
+import QuizModal from "./QuizModal";
+
 function SubchapterContent({
   subChapter, // { subChapterId, proficiency, summary, wordCount, subChapterName, ... }
   userId,
@@ -17,28 +20,23 @@ function SubchapterContent({
   );
 
   // -----------------------------------------
-  // 2) isExpanded:
-  //    - We do NOT show the expand/collapse button at all
+  // 2) isExpanded logic
+  //    - We do NOT show expand/collapse button
   //      if proficiency is "empty" or "reading".
-  //    - For "read"/"proficient", we show the expand/collapse button.
-  //    - On initial load of a sub-chapter:
-  //       * If "reading", start expanded
-  //       * Otherwise, start collapsed
+  //    - For "read"/"proficient", we show it.
+  //    - On initial load, if "reading" => expanded,
+  //      else => collapsed.
   // -----------------------------------------
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Whenever we switch to a new sub-chapter ID:
-  // reset localProficiency from subChapter
-  // and reset isExpanded according to that proficiency
+  // Whenever we switch to a new sub-chapter ID, reset localProficiency & isExpanded
   useEffect(() => {
     const initialProf = subChapter.proficiency || "empty";
     setLocalProficiency(initialProf);
 
     if (initialProf === "reading") {
-      // reading => auto expanded
       setIsExpanded(true);
     } else {
-      // empty, read, proficient => default collapsed
       setIsExpanded(false);
     }
   }, [subChapter.subChapterId, subChapter.proficiency]);
@@ -51,7 +49,7 @@ function SubchapterContent({
   const decreaseFont = () => setFontSizeLevel((prev) => (prev > -2 ? prev - 1 : prev));
 
   // -----------------------------------------
-  // 4) Quiz modal
+  // 4) Quiz modal - replaced inline modal with <QuizModal />
   // -----------------------------------------
   const [showQuizModal, setShowQuizModal] = useState(false);
   const openQuizModal = () => setShowQuizModal(true);
@@ -60,11 +58,11 @@ function SubchapterContent({
   // -----------------------------------------
   // 5) Reading Handlers
   // -----------------------------------------
-  // "Start Reading" => proficiency="reading", text becomes expanded, show "Stop Reading"
+  // "Start Reading" => proficiency="reading", text becomes expanded
   const handleStartReading = async () => {
-    // Optimistic
+    // Optimistic update
     setLocalProficiency("reading");
-    setIsExpanded(true); // show full text
+    setIsExpanded(true);
     try {
       await axios.post(`${backendURL}/api/complete-subchapter`, {
         userId,
@@ -81,12 +79,11 @@ function SubchapterContent({
     }
   };
 
-  // "Stop Reading" => proficiency="read", remain expanded in same sub-chapter
-  // so user sees "Collapse Content" + "Take Quiz"
+  // "Stop Reading" => proficiency="read", remain expanded
   const handleStopReading = async () => {
-    // Optimistic
+    // Optimistic update
     setLocalProficiency("read");
-    setIsExpanded(true); // remain expanded
+    setIsExpanded(true);
     try {
       await axios.post(`${backendURL}/api/complete-subchapter`, {
         userId,
@@ -113,21 +110,18 @@ function SubchapterContent({
 
   let displayedText;
   if (localProficiency === "empty") {
-    // always show truncated if it's not started
     displayedText = truncatedText;
   } else if (localProficiency === "reading") {
-    // always show full text
     displayedText = rawText;
   } else {
-    // "read" or "proficient" => user can toggle
+    // "read" or "proficient"
     displayedText = isExpanded ? rawText : truncatedText;
   }
 
   // -----------------------------------------
   // 7) Expand/Collapse button logic
   // -----------------------------------------
-  // The user only sees expand/collapse if proficiency is "read" or "proficient".
-  // If "empty" or "reading", we do NOT show expand/collapse.
+  // Only "read" or "proficient" => show expand/collapse
   const canShowExpandCollapse =
     localProficiency === "read" || localProficiency === "proficient";
 
@@ -218,40 +212,6 @@ function SubchapterContent({
     marginTop: "20px",
   };
 
-  const modalOverlayStyle = {
-    position: "fixed",
-    top: 0,
-    left: 0,
-    width: "100vw",
-    height: "100vh",
-    backgroundColor: "rgba(0,0,0,0.5)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 9999,
-  };
-
-  const modalContentStyle = {
-    backgroundColor: "#fff",
-    color: "#000",
-    borderRadius: "6px",
-    padding: "20px",
-    width: "500px",
-    maxWidth: "90%",
-    position: "relative",
-  };
-
-  const closeModalButtonStyle = {
-    position: "absolute",
-    top: "10px",
-    right: "10px",
-    background: "none",
-    border: "none",
-    cursor: "pointer",
-    fontSize: "1.2rem",
-    fontWeight: "bold",
-  };
-
   // -----------------------------------------
   // Render
   // -----------------------------------------
@@ -259,7 +219,9 @@ function SubchapterContent({
     <div style={panelStyle}>
       {/* ---------- TOP BAR ---------- */}
       <div style={titleBarStyle}>
-        <h2 style={leftTitleStyle}>{subChapter.subChapterName || "Subchapter"}</h2>
+        <h2 style={leftTitleStyle}>
+          {subChapter.subChapterName || "Subchapter"}
+        </h2>
 
         <div style={rightInfoContainerStyle}>
           {subChapter.wordCount && (
@@ -287,7 +249,7 @@ function SubchapterContent({
         {/* The proficiency-specific section */}
         {renderActionButtons(localProficiency)}
 
-        {/* Expand/Collapse appears ONLY if read or proficient */}
+        {/* Expand/Collapse if "read" or "proficient" */}
         {canShowExpandCollapse && (
           <button style={secondaryButtonStyle} onClick={toggleExpand}>
             {isExpanded ? "Collapse Content" : "Expand Content"}
@@ -295,28 +257,12 @@ function SubchapterContent({
         )}
       </div>
 
-      {/* ---------- QUIZ MODAL ---------- */}
-      {showQuizModal && (
-        <div style={modalOverlayStyle}>
-          <div style={modalContentStyle}>
-            <button style={closeModalButtonStyle} onClick={closeQuizModal}>
-              ×
-            </button>
-            <h3>Quiz for {subChapter.subChapterName}</h3>
-            <p>This is a placeholder quiz. Replace with real questions!</p>
-            <button
-              style={{
-                ...primaryButtonStyle,
-                backgroundColor: "#203A43",
-                color: "#fff",
-              }}
-              onClick={closeQuizModal}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
+      {/* ---------- QUIZ MODAL (now external) ---------- */}
+      <QuizModal
+        isOpen={showQuizModal}
+        onClose={closeQuizModal}
+        subChapterName={subChapter.subChapterName}
+      />
     </div>
   );
 
@@ -327,7 +273,6 @@ function SubchapterContent({
   function renderActionButtons(prof) {
     switch (prof) {
       case "empty":
-        // Show truncated text, "Start Reading" only
         return (
           <button style={primaryButtonStyle} onClick={handleStartReading}>
             Start Reading
@@ -335,7 +280,6 @@ function SubchapterContent({
         );
 
       case "reading":
-        // Show full text, "Stop Reading" only
         return (
           <button style={primaryButtonStyle} onClick={handleStopReading}>
             Stop Reading
@@ -343,7 +287,6 @@ function SubchapterContent({
         );
 
       case "read":
-        // Show Expand/Collapse + "Take Quiz" (see above for the expand/collapse button)
         return (
           <button style={primaryButtonStyle} onClick={openQuizModal}>
             Take Quiz
@@ -351,7 +294,6 @@ function SubchapterContent({
         );
 
       case "proficient":
-        // Show Expand/Collapse + "Take Another Quiz"
         return (
           <button style={primaryButtonStyle} onClick={openQuizModal}>
             Take Another Quiz
