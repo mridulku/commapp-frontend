@@ -57,7 +57,7 @@ import UserProfileAnalytics from "./components/AddedFunctions/UserProfileAnalyti
 
 
 // NEW: Import your BooksViewer component
-import BooksViewer from "./components/DetailedBookViewer/BooksViewer"; 
+import BooksViewer from "./components/Archive/BooksViewer"; 
 import BooksViewer2 from "./components/DetailedBookViewer/BooksViewerNew"; 
 
 

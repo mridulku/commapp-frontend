@@ -1,10 +1,9 @@
 /********************************************
  * BooksViewer2.jsx (Parent Container)
  ********************************************/
-import React, { useState, useEffect } from "react";
-import axios from "axios";
-import { auth } from "../../firebase";
+import React from "react";
 
+// Child components
 import BooksSidebar from "./BooksSidebar";
 import BookProgress from "./BookProgress";
 import SubchapterContent from "./SubchapterContent";
@@ -12,309 +11,64 @@ import SummarizeSection from "./SummarizeSection";
 import QuizSection from "./QuizSection";
 import DoubtsSection from "./DoubtsSection";
 import DynamicTutorModal from "./DynamicTutorModal";
-
-// === NEW IMPORT for NavigationBar ===
 import NavigationBar from "./NavigationBar";
 
+// The custom hook with all your logic
+import { useBooksViewer } from "./hooks/useBooksViewer";
+
+// The ActivityLog component
+import ActivityLog from "./ActivityLog";
+
 function BooksViewer2() {
-  const backendURL = import.meta.env.VITE_BACKEND_URL;
+  // Extract state + methods from your hook
+  const {
+    userId,
+    categories,
+    selectedCategory,
+    booksData,
+    booksProgressData,
+    selectedBook,
+    selectedChapter,
+    selectedSubChapter,
 
-  // ----------------------------- State Variables -----------------------------
-  const [categories, setCategories] = useState([]);
-  const [selectedCategory, setSelectedCategory] = useState(null);
-  const [booksData, setBooksData] = useState([]);
-  const [booksProgressData, setBooksProgressData] = useState([]);
+    // Single expanded book
+    expandedBookName,
+    // Multi-chapter expansions
+    expandedChapters,
 
-  const [selectedBook, setSelectedBook] = useState(null);
-  const [selectedChapter, setSelectedChapter] = useState(null);
-  const [selectedSubChapter, setSelectedSubChapter] = useState(null);
+    quizData,
+    selectedAnswers,
+    quizSubmitted,
+    score,
+    summaryOutput,
+    customPrompt,
+    doubts,
+    doubtInput,
+    showTutorModal,
 
-  const [expandedBookName, setExpandedBookName] = useState(null);
-  const [expandedChapterName, setExpandedChapterName] = useState(null);
+    // State setters or toggles
+    setShowTutorModal,
+    setCustomPrompt,
+    setDoubtInput,
 
-  const [quizData, setQuizData] = useState([]);
-  const [selectedAnswers, setSelectedAnswers] = useState({});
-  const [quizSubmitted, setQuizSubmitted] = useState(false);
-  const [score, setScore] = useState(null);
+    // Methods
+    handleCategoryChange,
+    toggleBookExpansion,
+    toggleChapterExpansion, // Now toggles an array, not just one
+    handleBookClick,
+    handleChapterClick,
+    handleSubChapterClick,
+    handleOptionSelect,
+    handleSubmitQuiz,
+    handleToggleDone,
+    handleSummarizePreset,
+    handleCustomPromptSubmit,
+    handleSendDoubt,
+    getBookProgressInfo,
+    fetchAllData,
+  } = useBooksViewer();
 
-  const [summaryOutput, setSummaryOutput] = useState("");
-  const [customPrompt, setCustomPrompt] = useState("");
-
-  const [doubts, setDoubts] = useState([]);
-  const [doubtInput, setDoubtInput] = useState("");
-
-  const [showTutorModal, setShowTutorModal] = useState(false);
-
-  // Use the current Firebase Auth user, or default to some test user
-  const userId = auth.currentUser?.uid;
-
-  // ---------------------------- Fetching Categories ---------------------------
-  useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        const res = await axios.get(`${backendURL}/api/categories`);
-        if (res.data.success !== false) {
-          const catData = res.data.data || res.data;
-          setCategories(catData);
-          if (catData.length > 0) {
-            setSelectedCategory(catData[0].categoryId);
-          }
-        } else {
-          console.error("Failed to fetch categories:", res.data.error);
-        }
-      } catch (err) {
-        console.error("Error fetching categories:", err);
-      }
-    };
-    fetchCategories();
-  }, [backendURL]);
-
-  // --------------------------- Fetch Books & Progress -------------------------
-  useEffect(() => {
-    if (!selectedCategory) return;
-    fetchAllData();
-    // eslint-disable-next-line
-  }, [selectedCategory]);
-
-  const fetchAllData = async () => {
-    try {
-      // 1) Fetch Books for selectedCategory & user
-      const booksRes = await axios.get(
-        `${backendURL}/api/books?categoryId=${selectedCategory}&userId=${userId}`
-      );
-      const books = booksRes.data;
-
-      // 2) Fetch user progress
-      const progRes = await axios.get(
-        `${backendURL}/api/user-progress?userId=${userId}`
-      );
-      const progressData = progRes.data;
-
-      if (!progressData.success) {
-        console.error("Failed to fetch user progress:", progressData.error);
-        setBooksData(books);
-      } else {
-        // Merge done status (isDone) into the book/chapter/subchapter structure
-        const doneSet = new Set(
-          progressData.progress
-            .filter((p) => p.isDone)
-            .map((p) => `${p.bookName}||${p.chapterName}||${p.subChapterName}`)
-        );
-
-        const merged = books.map((book) => {
-          return {
-            ...book,
-            chapters: book.chapters.map((chap) => {
-              const updatedSubs = chap.subChapters.map((sc) => {
-                const key = `${book.bookName}||${chap.chapterName}||${sc.subChapterName}`;
-                return { ...sc, isDone: doneSet.has(key) };
-              });
-              return { ...chap, subChapters: updatedSubs };
-            }),
-          };
-        });
-        setBooksData(merged);
-      }
-
-      // 3) Fetch aggregator data (progress with total words, etc.)
-      await fetchAggregatedData();
-
-      // Reset subchapter selections
-      resetSelections();
-    } catch (err) {
-      console.error("Error in fetchAllData:", err);
-    }
-  };
-
-  const fetchAggregatedData = async () => {
-    try {
-      const url = `${backendURL}/api/books-aggregated?userId=${userId}&categoryId=${selectedCategory}`;
-      const res = await axios.get(url);
-      if (res.data.success) {
-        setBooksProgressData(res.data.data);
-      } else {
-        console.error("Failed aggregator:", res.data.error);
-      }
-    } catch (err) {
-      console.error("Error aggregator:", err);
-    }
-  };
-
-  // ----------------------------- Reset Selections -----------------------------
-  const resetSelections = () => {
-    setSelectedBook(null);
-    setSelectedChapter(null);
-    setSelectedSubChapter(null);
-    resetQuizState();
-
-    setExpandedBookName(null);
-    setExpandedChapterName(null);
-
-    setSummaryOutput("");
-    setCustomPrompt("");
-    setDoubts([]);
-    setDoubtInput("");
-  };
-
-  const resetQuizState = () => {
-    setQuizData([]);
-    setSelectedAnswers({});
-    setQuizSubmitted(false);
-    setScore(null);
-  };
-
-  // --------------------------- Sidebar Handlers -------------------------------
-  const handleCategoryChange = (e) => {
-    setSelectedCategory(e.target.value);
-  };
-
-  const toggleBookExpansion = (bookName) => {
-    setExpandedBookName((prev) => (prev === bookName ? null : bookName));
-    setExpandedChapterName(null);
-  };
-
-  const toggleChapterExpansion = (chapterName) => {
-    setExpandedChapterName((prev) => (prev === chapterName ? null : chapterName));
-  };
-
-  const handleBookClick = (book) => {
-    setSelectedBook(book);
-    setSelectedChapter(null);
-    setSelectedSubChapter(null);
-    resetQuizState();
-  };
-
-  const handleChapterClick = (chapter) => {
-    setSelectedChapter(chapter);
-    setSelectedSubChapter(null);
-    resetQuizState();
-  };
-
-  const handleSubChapterClick = async (subChapter) => {
-    setSelectedSubChapter(subChapter);
-    resetQuizState();
-
-    // If we have selectedBook + selectedChapter, fetch the quiz
-    if (selectedBook && selectedChapter && subChapter) {
-      await fetchQuiz(
-        selectedBook.bookName,
-        selectedChapter.chapterName,
-        subChapter.subChapterName
-      );
-    }
-  };
-
-  // ------------------------------ Quiz Logic ----------------------------------
-  const fetchQuiz = async (bookName, chapterName, subChapterName) => {
-    try {
-      const url = `${backendURL}/api/quizzes?bookName=${encodeURIComponent(
-        bookName
-      )}&chapterName=${encodeURIComponent(chapterName)}&subChapterName=${encodeURIComponent(
-        subChapterName
-      )}`;
-      const res = await axios.get(url);
-      if (res.data.success === false) {
-        console.error("Quiz fetch error:", res.data.error);
-        setQuizData([]);
-        resetQuizState();
-      } else {
-        setQuizData(res.data.data || []);
-      }
-    } catch (error) {
-      console.error("Quiz fetch error:", error);
-      setQuizData([]);
-      resetQuizState();
-    }
-  };
-
-  const handleOptionSelect = (questionIndex, optionIndex) => {
-    setSelectedAnswers((prev) => ({
-      ...prev,
-      [questionIndex]: optionIndex,
-    }));
-  };
-
-  const handleSubmitQuiz = () => {
-    let correctCount = 0;
-    quizData.forEach((q, idx) => {
-      if (selectedAnswers[idx] === q.correctAnswerIndex) {
-        correctCount++;
-      }
-    });
-    setScore(correctCount);
-    setQuizSubmitted(true);
-  };
-
-  // --------------------------- Subchapter Progress -----------------------------
-  const handleToggleDone = async (subChapter) => {
-    try {
-      const newDoneState = !subChapter.isDone;
-      await axios.post(`${backendURL}/api/complete-subchapter`, {
-        userId,
-        bookName: selectedBook.bookName,
-        chapterName: selectedChapter.chapterName,
-        subChapterName: subChapter.subChapterName,
-        done: newDoneState,
-      });
-      await fetchAllData();
-    } catch (error) {
-      console.error("Error toggling done state:", error);
-      alert("Failed to update completion status.");
-    }
-  };
-
-  // ------------------------------ Summaries -----------------------------------
-  // (These handle *only* the old "summaryOutput" logic from your code. 
-  //  The advanced SummarizeSection below has its own approach.)
-  const handleSummarizePreset = (promptName) => {
-    let mockResponse = "";
-    switch (promptName) {
-      case "explainLike5":
-        mockResponse =
-          "This is a simple explanation for a 5-year-old level. It's short and uses easy words!";
-        break;
-      case "bulletPoints":
-        mockResponse =
-          "- Point 1\n- Point 2\n- Point 3\nA quick bullet-style summary.";
-        break;
-      case "conciseSummary":
-        mockResponse =
-          "This is a very concise summary, focusing on core ideas in a short paragraph.";
-        break;
-      default:
-        mockResponse = "Unknown preset prompt. (Mocked response)";
-    }
-    setSummaryOutput(mockResponse);
-  };
-
-  const handleCustomPromptSubmit = () => {
-    if (!customPrompt.trim()) {
-      alert("Please enter a custom prompt first.");
-      return;
-    }
-    const mockResponse = `Mocked AI answer for your prompt:\n"${customPrompt}"\n(Replace with real API call logic.)`;
-    setSummaryOutput(mockResponse);
-  };
-
-  // ------------------------------ Doubts Chat ---------------------------------
-  const handleSendDoubt = () => {
-    if (!doubtInput.trim()) return;
-    const newUserMessage = { role: "user", content: doubtInput };
-    const newAssistantMessage = {
-      role: "assistant",
-      content: `I'm a mock AI. You asked:\n"${doubtInput}".\nHere's a helpful explanation!`,
-    };
-    setDoubts((prev) => [...prev, newUserMessage, newAssistantMessage]);
-    setDoubtInput("");
-  };
-
-  // ------------------------- Book Progress Helper ------------------------------
-  const getBookProgressInfo = (bookName) => {
-    return booksProgressData.find((b) => b.bookName === bookName);
-  };
-
-  // ----------------------------- Styles ---------------------------------------
-  // This is the main row container style (Sidebar + main content)
+  // ====== Styles ======
   const containerStyle = {
     display: "flex",
     flexDirection: "row",
@@ -341,25 +95,32 @@ function BooksViewer2() {
     marginTop: "10px",
   };
 
-  // ---------------------------- Render ----------------------------------------
+  // Debug logs
+  console.log("DEBUG: userId =>", userId);
+  console.log("DEBUG: selectedSubChapter =>", selectedSubChapter);
+  console.log("DEBUG: expandedChapters =>", expandedChapters);
+
   return (
-    // 1) Wrap everything in a column so we can place the NavBar on top
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
-      {/* ========== NAVIGATION BAR ========== */}
       <NavigationBar />
 
-      {/* 2) Main content row (Sidebar + right panel) */}
       <div style={containerStyle}>
         {/* =========== SIDEBAR =========== */}
         <BooksSidebar
           categories={categories}
           selectedCategory={selectedCategory}
+          selectedSubChapter={selectedSubChapter}
           onCategoryChange={handleCategoryChange}
           booksData={booksData}
+
+          // Single expanded book
           expandedBookName={expandedBookName}
-          expandedChapterName={expandedChapterName}
           toggleBookExpansion={toggleBookExpansion}
+
+          // Multi-chapter expansions
+          expandedChapters={expandedChapters}
           toggleChapterExpansion={toggleChapterExpansion}
+
           handleBookClick={handleBookClick}
           handleChapterClick={handleChapterClick}
           handleSubChapterClick={handleSubChapterClick}
@@ -367,6 +128,7 @@ function BooksViewer2() {
 
         {/* =========== MAIN CONTENT =========== */}
         <div style={mainContentStyle}>
+          {/* Tutor Modal button */}
           {selectedBook && (
             <button
               style={{
@@ -382,7 +144,7 @@ function BooksViewer2() {
             </button>
           )}
 
-          {/* 1) Book Progress Section */}
+          {/* Book Progress */}
           {selectedBook && (
             <BookProgress
               book={selectedBook}
@@ -390,7 +152,7 @@ function BooksViewer2() {
             />
           )}
 
-          {/* If no subchapter is selected, show a placeholder */}
+          {/* If no subchapter is selected, show placeholder */}
           {!selectedSubChapter && (
             <div
               style={{
@@ -415,18 +177,18 @@ function BooksViewer2() {
             </div>
           )}
 
-          {/* 2) Selected subchapter sections */}
+          {/* If a subchapter is selected, show content & quiz & doubts */}
           {selectedSubChapter && (
             <>
               <SubchapterContent
                 subChapter={selectedSubChapter}
                 onToggleDone={handleToggleDone}
+                userId={userId}
+                backendURL={import.meta.env.VITE_BACKEND_URL}
+                onRefreshData={fetchAllData}
               />
 
-              {/* The “enhanced” Summaries wizard: */}
               <SummarizeSection
-                // If you still want your older summaryOutput logic,
-                // you can pass them in as props or keep it separate
                 summaryOutput={summaryOutput}
                 customPrompt={customPrompt}
                 setCustomPrompt={setCustomPrompt}
@@ -452,7 +214,16 @@ function BooksViewer2() {
             </>
           )}
 
-          {/* =========== Dynamic Tutor Modal =========== */}
+          {/* Activity Log at the bottom, for the current user and selected subchapter */}
+          {userId && selectedSubChapter && selectedSubChapter.subChapterId && (
+            <ActivityLog
+              userId={userId}
+              subChapterId={selectedSubChapter.subChapterId}
+              backendURL={import.meta.env.VITE_BACKEND_URL}
+            />
+          )}
+
+          {/* Dynamic Tutor Modal */}
           {showTutorModal && (
             <DynamicTutorModal
               book={selectedBook}

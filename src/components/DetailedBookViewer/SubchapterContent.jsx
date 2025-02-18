@@ -2,8 +2,14 @@
  * SubchapterContent.jsx
  ********************************************/
 import React, { useState, useRef } from "react";
+import axios from "axios";
 
-function SubchapterContent({ subChapter, onToggleDone }) {
+function SubchapterContent({
+  subChapter,
+  userId,
+  backendURL,
+  onRefreshData, // function to refetch data from the parent
+}) {
   if (!subChapter) return null;
 
   /********************************************************
@@ -17,7 +23,7 @@ function SubchapterContent({ subChapter, onToggleDone }) {
   const [activeQA, setActiveQA] = useState(null);
 
   /********************************************************
-   * Styles
+   * Styles (same as before)
    ********************************************************/
   const panelStyle = {
     backgroundColor: "rgba(255,255,255,0.1)",
@@ -119,7 +125,78 @@ function SubchapterContent({ subChapter, onToggleDone }) {
   };
 
   /********************************************************
-   * Handle text selection
+   * Reading Start/Finish
+   ********************************************************/
+  const handleStartReading = async () => {
+    try {
+      await axios.post(`${backendURL}/api/complete-subchapter`, {
+        userId,
+        bookName: subChapter.bookName,         // or derive from subChapter if it’s stored
+        chapterName: subChapter.chapterName,
+        subChapterName: subChapter.subChapterName,
+        startReading: true,
+      });
+      onRefreshData && onRefreshData(); // re-fetch updated data
+    } catch (err) {
+      console.error("Error starting reading:", err);
+      alert("Failed to start reading.");
+    }
+  };
+
+  const handleFinishReading = async () => {
+    try {
+      await axios.post(`${backendURL}/api/complete-subchapter`, {
+        userId,
+        bookName: subChapter.bookName,
+        chapterName: subChapter.chapterName,
+        subChapterName: subChapter.subChapterName,
+        endReading: true,
+      });
+      onRefreshData && onRefreshData(); // re-fetch updated data
+    } catch (err) {
+      console.error("Error finishing reading:", err);
+      alert("Failed to finish reading.");
+    }
+  };
+
+  // Has user started/finished reading?
+  const hasStartedReading = !!subChapter.readStartTime;
+  const hasFinishedReading = !!subChapter.readEndTime;
+
+  // Convert Firestore timestamps or date strings
+  const formatTimestamp = (ts) => {
+    if (!ts) return null;
+    // If it's a Firestore Timestamp object:
+    if (ts.seconds) {
+      return new Date(ts.seconds * 1000).toLocaleString();
+    }
+    // If it's a string or JS date
+    return new Date(ts).toLocaleString();
+  };
+
+  // Compute reading duration in minutes (if finished)
+  const readingDuration = (() => {
+    if (hasStartedReading && hasFinishedReading) {
+      const startTimeMs = tsToMs(subChapter.readStartTime);
+      const endTimeMs = tsToMs(subChapter.readEndTime);
+      const diffMin = (endTimeMs - startTimeMs) / 1000 / 60;
+      return Math.round(diffMin * 10) / 10; // 1 decimal place
+    }
+    return null;
+  })();
+
+  // Helper to convert Firestore or string timestamps to ms
+  function tsToMs(ts) {
+    if (!ts) return 0;
+    if (ts.seconds) {
+      return ts.seconds * 1000;
+    }
+    // If stored as string/date
+    return new Date(ts).getTime();
+  }
+
+  /********************************************************
+   * Handle text selection for highlights
    ********************************************************/
   const handleMouseUp = () => {
     const selection = window.getSelection();
@@ -127,17 +204,11 @@ function SubchapterContent({ subChapter, onToggleDone }) {
     setSelectedText(text);
   };
 
-  /********************************************************
-   * The user clicks "Explain Selected Content"
-   ********************************************************/
   const handleExplainSelected = () => {
-    // Check if there's any selected text
     if (!selectedText) {
       alert("No text is selected! Please highlight text in the content first.");
       return;
     }
-
-    // Create a highlight record
     const id = `H${highlightCounter.current}`;
     highlightCounter.current += 1;
 
@@ -204,13 +275,47 @@ function SubchapterContent({ subChapter, onToggleDone }) {
     }
   };
 
+  /********************************************************
+   * Render
+   ********************************************************/
   return (
     <div style={panelStyle}>
-      <h2 style={sectionTitleStyle}>Content</h2>
+      <h2 style={sectionTitleStyle}>{subChapter.subChapterName || "Subchapter"}</h2>
       {subChapter.wordCount && (
         <p style={{ fontStyle: "italic" }}>
           Word Count: {subChapter.wordCount} — Estimated Time:{" "}
           {Math.ceil(subChapter.wordCount / 200)} min
+        </p>
+      )}
+
+      {/* Reading flow buttons */}
+      {!hasStartedReading && (
+        <button style={buttonStyle} onClick={handleStartReading}>
+          Start Reading
+        </button>
+      )}
+      {hasStartedReading && !hasFinishedReading && (
+        <button style={buttonStyle} onClick={handleFinishReading}>
+          Finish Reading
+        </button>
+      )}
+
+      {/* Timestamps */}
+      {hasStartedReading && (
+        <p>
+          <strong>Started Reading:</strong>{" "}
+          {formatTimestamp(subChapter.readStartTime)}
+        </p>
+      )}
+      {hasFinishedReading && (
+        <p>
+          <strong>Finished Reading:</strong>{" "}
+          {formatTimestamp(subChapter.readEndTime)}
+        </p>
+      )}
+      {readingDuration && (
+        <p>
+          <strong>Reading Duration:</strong> {readingDuration} minutes
         </p>
       )}
 
@@ -224,21 +329,10 @@ function SubchapterContent({ subChapter, onToggleDone }) {
         Explain Selected Content
       </button>
 
-      {/* Mark subchapter done/incomplete */}
-      <button
-        style={buttonStyle}
-        onClick={() => onToggleDone(subChapter)}
-        onMouseOver={(e) => (e.currentTarget.style.opacity = "0.8")}
-        onMouseOut={(e) => (e.currentTarget.style.opacity = "1")}
-      >
-        {subChapter.isDone ? "Mark Incomplete" : "Mark as Done"}
-      </button>
-
       {/* The highlight logs / Q&A */}
       {highlights.length > 0 && (
         <div style={highlightLogContainerStyle}>
           <h3 style={{ marginTop: 0 }}>Highlights &amp; Questions</h3>
-
           {highlights.map((h) => (
             <div key={h.id} style={highlightItemStyle}>
               <div style={highlightTitleStyle}>
