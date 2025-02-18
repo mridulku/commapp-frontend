@@ -87,14 +87,17 @@ export function useBooksViewer() {
   useEffect(() => {
     if (!userId) return;
     if (!selectedCategory) return;
-    fetchAllData();
+
+    // We call fetchAllData with shouldReset = true 
+    // when the user changes categories or logs in.
+    fetchAllData(true);
     // eslint-disable-next-line
   }, [userId, selectedCategory]);
 
   // --------------------------------------------
-  // 4) Fetch All Data
+  // 4) Fetch All Data (with optional reset)
   // --------------------------------------------
-  const fetchAllData = async () => {
+  const fetchAllData = async (shouldReset = false) => {
     try {
       // 1) /api/books to get raw book/chapter/subchapter structure
       const booksRes = await axios.get(
@@ -105,8 +108,11 @@ export function useBooksViewer() {
       // 2) /api/books-aggregated for aggregator with "read"/"proficient"
       await fetchAggregatedData();
 
-      // 3) Reset subchapter selections
-      resetSelections();
+      // 3) Optionally reset subchapter selections 
+      // (only if this fetch was triggered by a big state change, e.g. new category)
+      if (shouldReset) {
+        resetSelections();
+      }
     } catch (err) {
       console.error("Error in fetchAllData:", err);
     }
@@ -184,6 +190,8 @@ export function useBooksViewer() {
   const handleSubChapterClick = async (subChapter) => {
     setSelectedSubChapter(subChapter);
     resetQuizState();
+
+    // We still fetch quiz data if it exists
     if (selectedBook && selectedChapter && subChapter) {
       await fetchQuiz(
         selectedBook.bookName,
@@ -196,7 +204,11 @@ export function useBooksViewer() {
   // ------------------------------ Quiz Logic ----------------------------------
   const fetchQuiz = async (bookName, chapterName, subChapterName) => {
     try {
-      const url = `${backendURL}/api/quizzes?bookName=${encodeURIComponent(bookName)}&chapterName=${encodeURIComponent(chapterName)}&subChapterName=${encodeURIComponent(subChapterName)}`;
+      const url = `${backendURL}/api/quizzes?bookName=${encodeURIComponent(
+        bookName
+      )}&chapterName=${encodeURIComponent(chapterName)}&subChapterName=${encodeURIComponent(
+        subChapterName
+      )}`;
       const res = await axios.get(url);
       if (res.data.success === false) {
         console.error("Quiz fetch error:", res.data.error);
@@ -230,11 +242,11 @@ export function useBooksViewer() {
     setQuizSubmitted(true);
   };
 
-  // If you still want to toggle "done" for a subchapter, you can do so,
-  // but it won't change the aggregator if aggregator is using proficiency from subChapters_demo
+  // If you want to toggle "done" for a subchapter
   const handleToggleDone = async (subChapter) => {
-    alert("handleToggleDone: Not implemented if aggregator uses 'proficiency' field only.");
-    // If you want to POST to /api/complete-subchapter => up to you
+    alert(
+      "handleToggleDone: Not implemented. If aggregator uses 'proficiency' in subChapters_demo, you'd update that doc or user_progress_demo here."
+    );
   };
 
   // ------------------------------ Summaries (Old) -----------------------------
@@ -283,14 +295,18 @@ export function useBooksViewer() {
     return booksProgressData.find((b) => b.bookName === bookName);
   };
 
-  // 5) Return everything the parent might need
+  // If other components want to refresh data w/o resetting selections, 
+  // they can call fetchAllData(false) or just call fetchAggregatedData for progress-only.
+  // Example usage in SubchapterContent: onRefreshData && onRefreshData(); 
+  // can internally do fetchAllData(false) or fetchAggregatedData().
+  
   return {
     // states
     userId,
     categories,
     selectedCategory,
-    booksData,           // raw structure
-    booksProgressData,   // aggregator structure
+    booksData,
+    booksProgressData,
     selectedBook,
     selectedChapter,
     selectedSubChapter,
@@ -321,11 +337,14 @@ export function useBooksViewer() {
     handleSubChapterClick,
     handleOptionSelect,
     handleSubmitQuiz,
-    handleToggleDone,          // dummy or partial
+    handleToggleDone,
     handleSummarizePreset,
     handleCustomPromptSubmit,
     handleSendDoubt,
     getBookProgressInfo,
+
+    // This is the main fetch; by default, we won't reset user selections
     fetchAllData,
+    fetchAggregatedData,
   };
 }

@@ -1,13 +1,8 @@
-/********************************************
- * BookProgress.jsx (Stacked Bars + Colored Subchapter Label)
- ********************************************/
 import React from "react";
 
 /**
- * Renders a single stacked bar that shows:
- * - Proficient portion (blue)
- * - Read-but-not-proficient portion (green)
- * - Unread portion (gray)
+ * A single stacked bar for proficient (blue), read-only (green),
+ * unread (gray), plus a tiny textual summary below it.
  */
 function CombinedProgressBar({
   label,
@@ -15,14 +10,13 @@ function CombinedProgressBar({
   proficientWords,
   totalWords,
 }) {
-  // Avoid divide-by-zero
   const total = totalWords || 0;
   const rp = readOrProficientWords || 0;
   const prof = proficientWords || 0;
 
-  // Ensure we don't exceed total
+  // Segments
   const proficientSegment = Math.min(prof, total);
-  const readOnlySegment = Math.min(rp - prof, total - prof); // read portion excluding proficient
+  const readOnlySegment = Math.min(rp - prof, total - prof);
   const unreadSegment = Math.max(total - rp, 0);
 
   // Convert to percentages
@@ -30,18 +24,20 @@ function CombinedProgressBar({
   const readPct = total > 0 ? (readOnlySegment / total) * 100 : 0;
   const unreadPct = total > 0 ? (unreadSegment / total) * 100 : 0;
 
-  // A simple container style for the stacked bar
+  // For numeric details
+  const readTotalPct = total > 0 ? (rp / total) * 100 : 0;
+  const profTotalPct = total > 0 ? (prof / total) * 100 : 0;
+
+  // The container for the stacked bar
   const containerStyle = {
     display: "flex",
-    width: "100%",
+    width: "180px",
     height: "10px",
     borderRadius: "6px",
     overflow: "hidden",
     backgroundColor: "rgba(255,255,255,0.3)",
-    marginBottom: "8px",
   };
 
-  // Each segment gets a flex-basis based on the fraction
   const proficientStyle = {
     width: `${profPct}%`,
     backgroundColor: "blue",
@@ -60,22 +56,28 @@ function CombinedProgressBar({
     transition: "width 0.3s",
   };
 
-  // We'll also show text for “Read: X% Proficient: Y%”
-  const readPercent = total > 0 ? (rp / total) * 100 : 0;
-  const profPercent = total > 0 ? (prof / total) * 100 : 0;
-
   return (
-    <div style={{ marginBottom: "12px" }}>
-      {/* The textual label */}
-      <p style={{ margin: "4px 0" }}>
-        <strong>{label}: </strong>
-        {`Read: ${readPercent.toFixed(2)}%, Proficient: ${profPercent.toFixed(2)}%`}
-      </p>
-      {/* The stacked bar */}
+    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+      {/* 1) Small label at top */}
+      <div style={{ fontWeight: "bold", fontSize: "0.9rem" }}>{label}</div>
+
+      {/* 2) The stacked bar */}
       <div style={containerStyle}>
         <div style={proficientStyle} />
         <div style={readStyle} />
         <div style={unreadStyle} />
+      </div>
+
+      {/* 3) The textual details in a tiny form:
+             e.g. "Read: 40% (4000 / 10000),
+                  Proficient: 20% (2000 / 10000)" */}
+      <div style={{ fontSize: "0.8rem", lineHeight: "1.2" }}>
+        <div>
+          <strong>Read:</strong> {readTotalPct.toFixed(2)}% ({rp} / {total})
+        </div>
+        <div>
+          <strong>Proficient:</strong> {profTotalPct.toFixed(2)}% ({prof} / {total})
+        </div>
       </div>
     </div>
   );
@@ -87,34 +89,16 @@ function BookProgress({
   selectedSubChapter,
   getBookProgressInfo,
 }) {
-  const panelStyle = {
-    backgroundColor: "rgba(255,255,255,0.1)",
-    backdropFilter: "blur(6px)",
-    padding: "15px",
-    borderRadius: "6px",
-    marginBottom: "20px",
-  };
-
-  const sectionTitleStyle = {
-    marginTop: 0,
-    borderBottom: "1px solid rgba(255,255,255,0.3)",
-    paddingBottom: "5px",
-    marginBottom: "10px",
-  };
-
   if (!book) return null;
-
-  // 1) Aggregator for entire book
   const bp = getBookProgressInfo(book.bookName);
-  if (!bp) return null; // no aggregator found
+  if (!bp) return null;
 
-  // 2) Attempt to find aggregator for the selected chapter
+  // Attempt to find aggregator for the selected chapter
   let cp = null;
   if (selectedChapter && bp.chapters) {
     cp = bp.chapters.find((c) => c.chapterName === selectedChapter.chapterName);
   }
-
-  // 3) If we haven't found cp, but we do have a subchapter selected, auto-detect
+  // Or deduce from subchapter
   if (!cp && selectedSubChapter && bp.chapters) {
     for (const chapterAgg of bp.chapters) {
       const foundSub = chapterAgg.subChapters.find(
@@ -127,53 +111,70 @@ function BookProgress({
     }
   }
 
-  // 4) Determine subchapter proficiency => show just "Proficiency:" in color
-  let subChapterLabel = "";
+  // Subchapter proficiency
   let subChapterColor = "red";
+  let subChapterText = "Not Read";
   if (selectedSubChapter) {
     if (selectedSubChapter.proficiency === "proficient") {
-      subChapterLabel = "Read and Proficient";
+      subChapterText = "Read & Prof.";
       subChapterColor = "blue";
     } else if (selectedSubChapter.proficiency === "read") {
-      subChapterLabel = "Just Read";
+      subChapterText = "Just Read";
       subChapterColor = "green";
-    } else {
-      subChapterLabel = "Not Read";
-      subChapterColor = "red";
     }
   }
 
+  // We'll layout everything in a single horizontal row:
+  // [Book Column] [Chapter Column if any] [Subchapter Proficiency]
+  const outerStyle = {
+    display: "flex",
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: "20px",
+    backgroundColor: "rgba(255,255,255,0.1)",
+    backdropFilter: "blur(6px)",
+    padding: "15px",
+    borderRadius: "6px",
+    marginBottom: "20px",
+    fontSize: "0.85rem",
+  };
+
+  const columnStyle = {
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+    alignItems: "flex-start",
+  };
+
   return (
-    <div style={panelStyle}>
-      <h2 style={sectionTitleStyle}>Progress</h2>
+    <div style={outerStyle}>
+      {/* BOOK column */}
+      <div style={columnStyle}>
+        <CombinedProgressBar
+          label="Book Progress"
+          readOrProficientWords={bp.totalWordsReadOrProficient}
+          proficientWords={bp.totalWordsProficient}
+          totalWords={bp.totalWords}
+        />
+      </div>
 
-      {/* ===== Book-Level Combined Bar ===== */}
-      <h3 style={{ marginTop: "0.5rem" }}>Book: {book.bookName}</h3>
-      <CombinedProgressBar
-        label="Combined Progress"
-        readOrProficientWords={bp.totalWordsReadOrProficient}
-        proficientWords={bp.totalWordsProficient}
-        totalWords={bp.totalWords}
-      />
-
-      {/* ===== Chapter-Level Combined Bar (if found) ===== */}
+      {/* CHAPTER column, if aggregator found */}
       {cp && (
-        <>
-          <h3 style={{ marginTop: "1.5rem" }}>Chapter: {cp.chapterName}</h3>
+        <div style={columnStyle}>
           <CombinedProgressBar
-            label="Combined Progress"
+            label="Chapter Progress"
             readOrProficientWords={cp.totalWordsReadOrProficient}
             proficientWords={cp.totalWordsProficient}
             totalWords={cp.totalWords}
           />
-        </>
+        </div>
       )}
 
-      {/* ===== Subchapter-Level Proficiency ===== */}
+      {/* SUBCHAPTER: Just the proficiency color label */}
       {selectedSubChapter && (
-        <div style={{ marginTop: "1rem" }}>
-          <strong>Proficiency:</strong>{" "}
-          <span style={{ color: subChapterColor }}>{subChapterLabel}</span>
+        <div style={columnStyle}>
+          <strong>Subchapter Status:</strong>
+          <span style={{ color: subChapterColor }}>{subChapterText}</span>
         </div>
       )}
     </div>

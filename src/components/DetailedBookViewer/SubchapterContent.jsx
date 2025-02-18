@@ -1,6 +1,3 @@
-/********************************************
- * SubchapterContent.jsx
- ********************************************/
 import React, { useState, useRef } from "react";
 import axios from "axios";
 
@@ -8,23 +5,17 @@ function SubchapterContent({
   subChapter,
   userId,
   backendURL,
-  onRefreshData, // function to refetch data from the parent
+  onRefreshData,
 }) {
   if (!subChapter) return null;
 
-  /********************************************************
-   * State
-   ********************************************************/
-  const [selectedText, setSelectedText] = useState("");
+  const [fontSizeLevel, setFontSizeLevel] = useState(0);
+  const [isReading, setIsReading] = useState(false);
+
   const [highlights, setHighlights] = useState([]);
   const highlightCounter = useRef(1);
-
-  // For controlling the Q&A input for the most recently added highlight
   const [activeQA, setActiveQA] = useState(null);
 
-  /********************************************************
-   * Styles (same as before)
-   ********************************************************/
   const panelStyle = {
     backgroundColor: "rgba(255,255,255,0.1)",
     backdropFilter: "blur(6px)",
@@ -32,13 +23,49 @@ function SubchapterContent({
     borderRadius: "6px",
     marginBottom: "20px",
     position: "relative",
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
   };
 
-  const sectionTitleStyle = {
-    marginTop: 0,
+  const titleBarStyle = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
     borderBottom: "1px solid rgba(255,255,255,0.3)",
     paddingBottom: "5px",
-    marginBottom: "10px",
+  };
+
+  const leftTitleStyle = {
+    fontSize: "1.2rem",
+    margin: 0,
+  };
+
+  const rightInfoContainerStyle = {
+    display: "flex",
+    alignItems: "center",
+    gap: "15px",
+  };
+
+  const smallInfoTextStyle = {
+    fontStyle: "italic",
+    fontSize: "0.9rem",
+  };
+
+  const fontButtonContainerStyle = {
+    display: "flex",
+    alignItems: "center",
+    gap: "5px",
+  };
+
+  const fontButtonStyle = {
+    padding: "5px 8px",
+    borderRadius: "4px",
+    border: "none",
+    background: "#FFD700",
+    color: "#000",
+    cursor: "pointer",
+    fontWeight: "bold",
   };
 
   const buttonStyle = {
@@ -50,13 +77,14 @@ function SubchapterContent({
     fontWeight: "bold",
     cursor: "pointer",
     transition: "opacity 0.3s",
-    marginTop: "10px",
-    marginRight: "10px",
   };
 
+  const baseFontSize = 16 + fontSizeLevel * 2;
   const contentStyle = {
     whiteSpace: "pre-line",
     marginBottom: "15px",
+    fontSize: `${baseFontSize}px`,
+    lineHeight: "1.5",
   };
 
   const highlightLogContainerStyle = {
@@ -124,19 +152,15 @@ function SubchapterContent({
     fontSize: "1rem",
   };
 
-  /********************************************************
-   * Reading Start/Finish
-   ********************************************************/
   const handleStartReading = async () => {
     try {
       await axios.post(`${backendURL}/api/complete-subchapter`, {
         userId,
-        bookName: subChapter.bookName,         // or derive from subChapter if it’s stored
-        chapterName: subChapter.chapterName,
-        subChapterName: subChapter.subChapterName,
+        subChapterId: subChapter.subChapterId,
         startReading: true,
       });
-      onRefreshData && onRefreshData(); // re-fetch updated data
+      onRefreshData && onRefreshData();
+      setIsReading(true);
     } catch (err) {
       console.error("Error starting reading:", err);
       alert("Failed to start reading.");
@@ -147,271 +171,141 @@ function SubchapterContent({
     try {
       await axios.post(`${backendURL}/api/complete-subchapter`, {
         userId,
-        bookName: subChapter.bookName,
-        chapterName: subChapter.chapterName,
-        subChapterName: subChapter.subChapterName,
+        subChapterId: subChapter.subChapterId,
         endReading: true,
       });
-      onRefreshData && onRefreshData(); // re-fetch updated data
+      onRefreshData && onRefreshData();
+      setIsReading(false);
     } catch (err) {
       console.error("Error finishing reading:", err);
       alert("Failed to finish reading.");
     }
   };
 
-  // Has user started/finished reading?
+  // Derive if user has started/finished reading
   const hasStartedReading = !!subChapter.readStartTime;
   const hasFinishedReading = !!subChapter.readEndTime;
 
-  // Convert Firestore timestamps or date strings
+  // For reading duration
   const formatTimestamp = (ts) => {
     if (!ts) return null;
-    // If it's a Firestore Timestamp object:
     if (ts.seconds) {
       return new Date(ts.seconds * 1000).toLocaleString();
     }
-    // If it's a string or JS date
     return new Date(ts).toLocaleString();
   };
 
-  // Compute reading duration in minutes (if finished)
+  const tsToMs = (ts) => {
+    if (!ts) return 0;
+    if (ts.seconds) {
+      return ts.seconds * 1000;
+    }
+    return new Date(ts).getTime();
+  };
+
   const readingDuration = (() => {
     if (hasStartedReading && hasFinishedReading) {
       const startTimeMs = tsToMs(subChapter.readStartTime);
       const endTimeMs = tsToMs(subChapter.readEndTime);
       const diffMin = (endTimeMs - startTimeMs) / 1000 / 60;
-      return Math.round(diffMin * 10) / 10; // 1 decimal place
+      return Math.round(diffMin * 10) / 10;
     }
     return null;
   })();
 
-  // Helper to convert Firestore or string timestamps to ms
-  function tsToMs(ts) {
-    if (!ts) return 0;
-    if (ts.seconds) {
-      return ts.seconds * 1000;
-    }
-    // If stored as string/date
-    return new Date(ts).getTime();
+  const increaseFont = () => setFontSizeLevel((prev) => (prev < 2 ? prev + 1 : prev));
+  const decreaseFont = () => setFontSizeLevel((prev) => (prev > -2 ? prev - 1 : prev));
+
+  // Show only 200 chars plus "....." if truncated
+  const maxChars = 200;
+  let truncatedSummary = "";
+  if (subChapter.summary) {
+    const raw = subChapter.summary.slice(0, maxChars);
+    truncatedSummary = raw + (subChapter.summary.length > maxChars ? "....." : "");
   }
 
-  /********************************************************
-   * Handle text selection for highlights
-   ********************************************************/
-  const handleMouseUp = () => {
-    const selection = window.getSelection();
-    const text = selection?.toString().trim() || "";
-    setSelectedText(text);
-  };
+  // If not reading => show truncated text
+  const displayText = isReading ? subChapter.summary : truncatedSummary;
 
-  const handleExplainSelected = () => {
-    if (!selectedText) {
-      alert("No text is selected! Please highlight text in the content first.");
-      return;
-    }
-    const id = `H${highlightCounter.current}`;
-    highlightCounter.current += 1;
-
-    const newHighlight = {
-      id,
-      text: selectedText,
-      qaLog: [],
-      collapsed: false,
-    };
-
-    setHighlights((prev) => [...prev, newHighlight]);
-    setSelectedText("");
-
-    // Immediately open Q&A input for that highlight
-    setActiveQA({
-      highlightId: id,
-      userQuestion: "",
-      isOpen: true,
-    });
-  };
-
-  /********************************************************
-   * Toggling collapse on a highlight
-   ********************************************************/
-  const toggleHighlightCollapse = (highlightId) => {
-    setHighlights((prev) =>
-      prev.map((h) =>
-        h.id === highlightId ? { ...h, collapsed: !h.collapsed } : h
-      )
-    );
-  };
-
-  /********************************************************
-   * Submitting a question for a highlight
-   ********************************************************/
-  const handleSubmitQuestion = (highlightId, questionText) => {
-    if (!questionText.trim()) {
-      alert("Please enter your question or note!");
-      return;
-    }
-
-    // We add the user question + mock AI response
-    const userMsg = { role: "user", content: questionText };
-    const aiMsg = {
-      role: "assistant",
-      content: `Mocked AI response about: "${questionText}" (Replace with real call)`,
-    };
-
-    setHighlights((prev) =>
-      prev.map((h) => {
-        if (h.id === highlightId) {
-          return {
-            ...h,
-            qaLog: [...h.qaLog, userMsg, aiMsg],
-          };
-        }
-        return h;
-      })
-    );
-
-    // close the active QA
-    if (activeQA && activeQA.highlightId === highlightId) {
-      setActiveQA(null);
-    }
-  };
-
-  /********************************************************
-   * Render
-   ********************************************************/
+  // We remove the top Start Reading button => only the bottom if truncated (and the reading flow row might show "Stop Reading" if isReading).
   return (
     <div style={panelStyle}>
-      <h2 style={sectionTitleStyle}>{subChapter.subChapterName || "Subchapter"}</h2>
-      {subChapter.wordCount && (
-        <p style={{ fontStyle: "italic" }}>
-          Word Count: {subChapter.wordCount} — Estimated Time:{" "}
-          {Math.ceil(subChapter.wordCount / 200)} min
-        </p>
-      )}
+      {/* ====== TOP BAR ====== */}
+      <div style={titleBarStyle}>
+        <h2 style={leftTitleStyle}>{subChapter.subChapterName || "Subchapter"}</h2>
 
-      {/* Reading flow buttons */}
-      {!hasStartedReading && (
-        <button style={buttonStyle} onClick={handleStartReading}>
-          Start Reading
-        </button>
-      )}
-      {hasStartedReading && !hasFinishedReading && (
-        <button style={buttonStyle} onClick={handleFinishReading}>
-          Finish Reading
-        </button>
-      )}
-
-      {/* Timestamps */}
-      {hasStartedReading && (
-        <p>
-          <strong>Started Reading:</strong>{" "}
-          {formatTimestamp(subChapter.readStartTime)}
-        </p>
-      )}
-      {hasFinishedReading && (
-        <p>
-          <strong>Finished Reading:</strong>{" "}
-          {formatTimestamp(subChapter.readEndTime)}
-        </p>
-      )}
-      {readingDuration && (
-        <p>
-          <strong>Reading Duration:</strong> {readingDuration} minutes
-        </p>
-      )}
-
-      {/* The main text, user can highlight any part */}
-      <div style={contentStyle} onMouseUp={handleMouseUp}>
-        {subChapter.summary}
+        <div style={rightInfoContainerStyle}>
+          {subChapter.wordCount && (
+            <div style={smallInfoTextStyle}>
+              <strong>Words:</strong> {subChapter.wordCount} |{" "}
+              <strong>Est Time:</strong> {Math.ceil(subChapter.wordCount / 200)} min
+            </div>
+          )}
+          <div style={fontButtonContainerStyle}>
+            <button style={fontButtonStyle} onClick={decreaseFont}>
+              A-
+            </button>
+            <button style={fontButtonStyle} onClick={increaseFont}>
+              A+
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Single button to handle explanation of highlighted text */}
-      <button style={buttonStyle} onClick={handleExplainSelected}>
-        Explain Selected Content
-      </button>
+      {/* ====== Start/Finish Buttons + Timestamps ====== */}
+      <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+        {/* Only show the "Stop Reading" if user started but not finished reading and isReading is true */}
+        {hasStartedReading && !hasFinishedReading && isReading && (
+          <button style={buttonStyle} onClick={handleFinishReading}>
+            Stop Reading
+          </button>
+        )}
 
-      {/* The highlight logs / Q&A */}
+        {hasStartedReading && (
+          <p style={{ margin: 0 }}>
+            <strong>Started:</strong> {formatTimestamp(subChapter.readStartTime)}
+          </p>
+        )}
+        {hasFinishedReading && (
+          <p style={{ margin: 0 }}>
+            <strong>Finished:</strong> {formatTimestamp(subChapter.readEndTime)}
+          </p>
+        )}
+        {readingDuration && (
+          <p style={{ margin: 0 }}>
+            <strong>Duration:</strong> {readingDuration} mins
+          </p>
+        )}
+      </div>
+
+      {/* ====== The main text (200 chars or full) ====== */}
+      <div style={contentStyle} onMouseUp={() => {/* highlight logic if desired */}}>
+        {displayText}
+      </div>
+
+      {/* If not reading and summary is longer than 200 chars, show "Start Reading" at bottom */}
+      {!isReading && subChapter.summary && subChapter.summary.length > maxChars && (
+        <div style={{ textAlign: "center" }}>
+          <button style={buttonStyle} onClick={handleStartReading}>
+            Start Reading
+          </button>
+        </div>
+      )}
+
+      {/* If reading, show 'Stop Reading' at bottom too */}
+      {isReading && !hasFinishedReading && (
+        <div style={{ textAlign: "center" }}>
+          <button style={buttonStyle} onClick={handleFinishReading}>
+            Stop Reading
+          </button>
+        </div>
+      )}
+
+      {/* If you still want highlights or Q&A */}
       {highlights.length > 0 && (
         <div style={highlightLogContainerStyle}>
           <h3 style={{ marginTop: 0 }}>Highlights &amp; Questions</h3>
-          {highlights.map((h) => (
-            <div key={h.id} style={highlightItemStyle}>
-              <div style={highlightTitleStyle}>
-                <h4 style={{ margin: 0 }}>
-                  {h.id}: <em>“{h.text}”</em>
-                </h4>
-                <button
-                  style={smallButtonStyle}
-                  onClick={() => toggleHighlightCollapse(h.id)}
-                >
-                  {h.collapsed ? "Expand" : "Collapse"}
-                </button>
-              </div>
-
-              {!h.collapsed && (
-                <div>
-                  {activeQA && activeQA.highlightId === h.id && activeQA.isOpen ? (
-                    <div style={qaInputContainerStyle}>
-                      <input
-                        style={qaInputStyle}
-                        type="text"
-                        placeholder="Ask about your highlight..."
-                        value={activeQA.userQuestion}
-                        onChange={(e) =>
-                          setActiveQA({
-                            ...activeQA,
-                            userQuestion: e.target.value,
-                          })
-                        }
-                      />
-                      <button
-                        style={smallButtonStyle}
-                        onClick={() =>
-                          handleSubmitQuestion(h.id, activeQA.userQuestion)
-                        }
-                      >
-                        Submit
-                      </button>
-                    </div>
-                  ) : (
-                    <div style={{ margin: "5px 0" }}>
-                      <button
-                        style={smallButtonStyle}
-                        onClick={() =>
-                          setActiveQA({
-                            highlightId: h.id,
-                            userQuestion: "",
-                            isOpen: true,
-                          })
-                        }
-                      >
-                        Ask New Question
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Show the Q&A chat log */}
-                  {h.qaLog.length > 0 && (
-                    <div style={{ marginTop: "10px" }}>
-                      {h.qaLog.map((msg, i) => {
-                        const isUser = msg.role === "user";
-                        return (
-                          <div
-                            key={i}
-                            style={
-                              isUser ? chatBubbleUserStyle : chatBubbleAssistantStyle
-                            }
-                          >
-                            <strong>{isUser ? "You:" : "AI:"}</strong>{" "}
-                            {msg.content}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
+          {/* ... highlight logic ... */}
         </div>
       )}
     </div>
