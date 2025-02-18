@@ -12,12 +12,10 @@ import QuizSection from "./QuizSection";
 import DoubtsSection from "./DoubtsSection";
 import DynamicTutorModal from "./DynamicTutorModal";
 import NavigationBar from "./NavigationBar";
+import ActivityLog from "./ActivityLog";
 
 // The custom hook with all your logic
 import { useBooksViewer } from "./hooks/useBooksViewer";
-
-// The ActivityLog component
-import ActivityLog from "./ActivityLog";
 
 function BooksViewer2() {
   // Extract state + methods from your hook
@@ -31,9 +29,7 @@ function BooksViewer2() {
     selectedChapter,
     selectedSubChapter,
 
-    // Single expanded book
     expandedBookName,
-    // Multi-chapter expansions
     expandedChapters,
 
     quizData,
@@ -46,15 +42,13 @@ function BooksViewer2() {
     doubtInput,
     showTutorModal,
 
-    // State setters or toggles
     setShowTutorModal,
     setCustomPrompt,
     setDoubtInput,
 
-    // Methods
     handleCategoryChange,
     toggleBookExpansion,
-    toggleChapterExpansion, // Now toggles an array, not just one
+    toggleChapterExpansion,
     handleBookClick,
     handleChapterClick,
     handleSubChapterClick,
@@ -98,7 +92,6 @@ function BooksViewer2() {
   // Debug logs
   console.log("DEBUG: userId =>", userId);
   console.log("DEBUG: selectedSubChapter =>", selectedSubChapter);
-  console.log("DEBUG: expandedChapters =>", expandedChapters);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
@@ -113,11 +106,9 @@ function BooksViewer2() {
           onCategoryChange={handleCategoryChange}
           booksData={booksData}
 
-          // Single expanded book
           expandedBookName={expandedBookName}
           toggleBookExpansion={toggleBookExpansion}
 
-          // Multi-chapter expansions
           expandedChapters={expandedChapters}
           toggleChapterExpansion={toggleChapterExpansion}
 
@@ -148,6 +139,8 @@ function BooksViewer2() {
           {selectedBook && (
             <BookProgress
               book={selectedBook}
+              selectedChapter={selectedChapter}
+              selectedSubChapter={selectedSubChapter}
               getBookProgressInfo={getBookProgressInfo}
             />
           )}

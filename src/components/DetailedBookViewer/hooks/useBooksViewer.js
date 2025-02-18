@@ -24,31 +24,37 @@ export function useBooksViewer() {
   // ----------------------------- State Variables -----------------------------
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(null);
+
+  // The raw "books" structure from /api/books
   const [booksData, setBooksData] = useState([]);
+  // The aggregator structure from /api/books-aggregated
   const [booksProgressData, setBooksProgressData] = useState([]);
 
   const [selectedBook, setSelectedBook] = useState(null);
   const [selectedChapter, setSelectedChapter] = useState(null);
-  // subChapter object with subChapterId, subChapterName, etc.
   const [selectedSubChapter, setSelectedSubChapter] = useState(null);
 
-  // Book-level expansion is still a single string (only one book can expand at a time).
+  // Book-level expansion is a single string (only one book can expand at a time).
   const [expandedBookName, setExpandedBookName] = useState(null);
 
-  // CHAPTERS: now we have an array of expanded chapters (so multiple can be open).
+  // CHAPTERS: an array so multiple can be open at once
   const [expandedChapters, setExpandedChapters] = useState([]);
 
+  // quiz states
   const [quizData, setQuizData] = useState([]);
   const [selectedAnswers, setSelectedAnswers] = useState({});
   const [quizSubmitted, setQuizSubmitted] = useState(false);
   const [score, setScore] = useState(null);
 
+  // Summaries / custom prompts
   const [summaryOutput, setSummaryOutput] = useState("");
   const [customPrompt, setCustomPrompt] = useState("");
 
+  // Doubts chat
   const [doubts, setDoubts] = useState([]);
   const [doubtInput, setDoubtInput] = useState("");
 
+  // Tutor Modal
   const [showTutorModal, setShowTutorModal] = useState(false);
 
   // --------------------------------------------
@@ -61,7 +67,7 @@ export function useBooksViewer() {
         if (res.data.success !== false) {
           const catData = res.data.data || res.data;
           setCategories(catData);
-          // If no category is selected, automatically pick the first
+          // If no category is selected, pick the first
           if (catData.length > 0) {
             setSelectedCategory(catData[0].categoryId);
           }
@@ -76,7 +82,7 @@ export function useBooksViewer() {
   }, [backendURL]);
 
   // --------------------------------------------
-  // 3) Only fetch books/progress if we have BOTH userId AND selectedCategory
+  // 3) Only fetch books/progress if userId + selectedCategory
   // --------------------------------------------
   useEffect(() => {
     if (!userId) return;
@@ -90,55 +96,16 @@ export function useBooksViewer() {
   // --------------------------------------------
   const fetchAllData = async () => {
     try {
-      // 1) Fetch Books for selectedCategory & user
+      // 1) /api/books to get raw book/chapter/subchapter structure
       const booksRes = await axios.get(
         `${backendURL}/api/books?categoryId=${selectedCategory}&userId=${userId}`
       );
-      const books = booksRes.data;
+      setBooksData(booksRes.data);
 
-      // 2) Fetch user progress
-      const progRes = await axios.get(
-        `${backendURL}/api/user-progress?userId=${userId}`
-      );
-      const progressData = progRes.data;
-
-      if (!progressData.success) {
-        console.error("Failed to fetch user progress:", progressData.error);
-        setBooksData(books);
-      } else {
-        // Merge user progress into books
-        const progressMap = new Map();
-        progressData.progress.forEach((p) => {
-          const key = `${p.bookName}||${p.chapterName}||${p.subChapterName}`;
-          progressMap.set(key, p);
-        });
-
-        const merged = books.map((book) => {
-          return {
-            ...book,
-            chapters: book.chapters.map((chap) => {
-              const updatedSubs = chap.subChapters.map((sc) => {
-                const subKey = `${book.bookName}||${chap.chapterName}||${sc.subChapterName}`;
-                const p = progressMap.get(subKey) || {};
-                return {
-                  ...sc,
-                  isDone: p.isDone || false,
-                  readStartTime: p.readStartTime || null,
-                  readEndTime: p.readEndTime || null,
-                };
-              });
-              return { ...chap, subChapters: updatedSubs };
-            }),
-          };
-        });
-
-        setBooksData(merged);
-      }
-
-      // 3) Fetch aggregator data
+      // 2) /api/books-aggregated for aggregator with "read"/"proficient"
       await fetchAggregatedData();
 
-      // 4) Reset subchapter selections
+      // 3) Reset subchapter selections
       resetSelections();
     } catch (err) {
       console.error("Error in fetchAllData:", err);
@@ -166,7 +133,6 @@ export function useBooksViewer() {
     setSelectedSubChapter(null);
     resetQuizState();
     setExpandedBookName(null);
-    // Clear out expandedChapters if you want to start fresh
     setExpandedChapters([]);
     setSummaryOutput("");
     setCustomPrompt("");
@@ -186,20 +152,17 @@ export function useBooksViewer() {
     setSelectedCategory(e.target.value);
   };
 
+  // Single expanded book
   const toggleBookExpansion = (bookName) => {
     setExpandedBookName((prev) => (prev === bookName ? null : bookName));
-    // If you want multiple books expanded at once, you'd do the same approach
-    // as expandedChapters for books. But let's keep the single approach for books.
   };
 
-  // Instead of a single expandedChapterName, we have an array. So we do:
+  // Multiple expanded chapters
   const toggleChapterExpansion = (chapterKey) => {
     setExpandedChapters((prev) => {
       if (prev.includes(chapterKey)) {
-        // remove it
         return prev.filter((item) => item !== chapterKey);
       } else {
-        // add it
         return [...prev, chapterKey];
       }
     });
@@ -221,7 +184,6 @@ export function useBooksViewer() {
   const handleSubChapterClick = async (subChapter) => {
     setSelectedSubChapter(subChapter);
     resetQuizState();
-
     if (selectedBook && selectedChapter && subChapter) {
       await fetchQuiz(
         selectedBook.bookName,
@@ -268,22 +230,11 @@ export function useBooksViewer() {
     setQuizSubmitted(true);
   };
 
-  // --------------------------- Subchapter Progress -----------------------------
+  // If you still want to toggle "done" for a subchapter, you can do so,
+  // but it won't change the aggregator if aggregator is using proficiency from subChapters_demo
   const handleToggleDone = async (subChapter) => {
-    try {
-      const newDoneState = !subChapter.isDone;
-      await axios.post(`${backendURL}/api/complete-subchapter`, {
-        userId,
-        bookName: selectedBook.bookName,
-        chapterName: selectedChapter.chapterName,
-        subChapterName: subChapter.subChapterName,
-        done: newDoneState,
-      });
-      await fetchAllData();
-    } catch (error) {
-      console.error("Error toggling done state:", error);
-      alert("Failed to update completion status.");
-    }
+    alert("handleToggleDone: Not implemented if aggregator uses 'proficiency' field only.");
+    // If you want to POST to /api/complete-subchapter => up to you
   };
 
   // ------------------------------ Summaries (Old) -----------------------------
@@ -294,10 +245,10 @@ export function useBooksViewer() {
         mockResponse = "This is a simple explanation for a 5-year-old level...";
         break;
       case "bulletPoints":
-        mockResponse = "- Point 1\n- Point 2\n- Point 3\nA quick bullet-style summary.";
+        mockResponse = "- Point 1\n- Point 2\n- Point 3";
         break;
       case "conciseSummary":
-        mockResponse = "This is a very concise summary, focusing on core ideas...";
+        mockResponse = "A concise summary focusing on core ideas...";
         break;
       default:
         mockResponse = "Unknown preset prompt. (Mocked response)";
@@ -310,7 +261,7 @@ export function useBooksViewer() {
       alert("Please enter a custom prompt first.");
       return;
     }
-    const mockResponse = `Mocked AI answer for your prompt:\n"${customPrompt}"\n(Replace with real API call logic.)`;
+    const mockResponse = `Mocked AI answer for your prompt:\n"${customPrompt}"`;
     setSummaryOutput(mockResponse);
   };
 
@@ -327,24 +278,25 @@ export function useBooksViewer() {
   };
 
   // ------------------------- Book Progress Helper ------------------------------
+  // aggregator returns object like { bookName, totalWords, totalWordsReadOrProficient, ... }
   const getBookProgressInfo = (bookName) => {
     return booksProgressData.find((b) => b.bookName === bookName);
   };
 
-  // 4) Return everything the parent might need
+  // 5) Return everything the parent might need
   return {
     // states
     userId,
     categories,
     selectedCategory,
-    booksData,
-    booksProgressData,
+    booksData,           // raw structure
+    booksProgressData,   // aggregator structure
     selectedBook,
     selectedChapter,
     selectedSubChapter,
     expandedBookName,
-    // The new array for multiple chapters
     expandedChapters,
+
     quizData,
     selectedAnswers,
     quizSubmitted,
@@ -369,7 +321,7 @@ export function useBooksViewer() {
     handleSubChapterClick,
     handleOptionSelect,
     handleSubmitQuiz,
-    handleToggleDone,
+    handleToggleDone,          // dummy or partial
     handleSummarizePreset,
     handleCustomPromptSubmit,
     handleSendDoubt,

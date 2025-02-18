@@ -1,5 +1,8 @@
 /********************************************
- * BooksSidebar.jsx (Multi-chapter expand/collapse + highlight)
+ * BooksSidebar.jsx (Multi-chapter expand/collapse)
+ * - The entire chapter row toggles expansion
+ * - Color/hover logic unchanged
+ * - "Plus/minus" icon is still shown but no longer has a separate onClick
  ********************************************/
 import React from "react";
 
@@ -9,19 +12,19 @@ function BooksSidebar({
   onCategoryChange,
   booksData,
 
-  // Single expanded book (if you want only one book at a time)
+  // Single expanded book
   expandedBookName,
   toggleBookExpansion,
 
   // Multi-chapter expansions
-  expandedChapters,         // an array of strings or IDs
-  toggleChapterExpansion,   // function that adds/removes the chapter from expandedChapters
+  expandedChapters,
+  toggleChapterExpansion,
 
-  // For selecting a subchapter
+  // For selecting a subchapter (unchanged)
   handleBookClick,
-  handleChapterClick,
   handleSubChapterClick,
 
+  // Currently selected subchapter (for highlight)
   selectedSubChapter,
 }) {
   // --------------- Styles ---------------
@@ -55,7 +58,6 @@ function BooksSidebar({
     color: "#fff",
   };
 
-  // We’ll manually create an expand/collapse icon or text for each chapter
   const chapterTitleContainerStyle = {
     display: "flex",
     alignItems: "center",
@@ -67,6 +69,7 @@ function BooksSidebar({
     fontSize: "0.95rem",
     transition: "background-color 0.3s",
     color: "#fff",
+    cursor: "pointer", // entire row is clickable
   };
 
   const subChapterTitleStyle = {
@@ -113,7 +116,6 @@ function BooksSidebar({
         <div style={listHeaderStyle}>Books</div>
 
         {booksData.map((book) => {
-          // If you want only one book expanded at a time, keep using expandedBookName logic:
           const isBookExpanded = expandedBookName === book.bookName;
 
           return (
@@ -122,89 +124,92 @@ function BooksSidebar({
               <div
                 style={bookTitleStyle}
                 onClick={() => {
-                  // Possibly set this book as "selectedBook"
+                  // Possibly set this book as "selectedBook" if you want
                   handleBookClick(book);
-                  // Expand/collapse the book
                   toggleBookExpansion(book.bookName);
                 }}
-                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)")}
-                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)";
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.backgroundColor = "transparent";
+                }}
               >
                 {book.bookName}
               </div>
 
-              {/* Chapters (only render if this book is expanded) */}
-              {isBookExpanded && book.chapters.map((chapter) => {
-                // Create a unique "key" for the chapter
-                // If you have a chapterId, you can use that instead
-                const chapterKey = `${book.bookName}||${chapter.chapterName}`;
+              {/* Chapters (if book expanded) */}
+              {isBookExpanded &&
+                book.chapters.map((chapter) => {
+                  const chapterKey = `${book.bookName}||${chapter.chapterName}`;
+                  const isChapterExpanded = expandedChapters.includes(chapterKey);
 
-                // Check if it's in expandedChapters
-                const isChapterExpanded = expandedChapters.includes(chapterKey);
+                  return (
+                    <div key={chapter.chapterName}>
+                      {/* Chapter Row: entire row toggles expansion */}
+                      <div
+                        style={chapterTitleContainerStyle}
+                        onMouseOver={(e) => {
+                          e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)";
+                        }}
+                        onMouseOut={(e) => {
+                          e.currentTarget.style.backgroundColor = "transparent";
+                        }}
 
-                return (
-                  <div key={chapter.chapterName}>
-                    {/* Chapter Title Row */}
-                    <div
-                      style={chapterTitleContainerStyle}
-                      onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)")}
-                      onMouseOut={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-                    >
-                      {/* Expand/Collapse icon */}
-                      <span
-                        style={{ cursor: "pointer", fontWeight: "bold" }}
-                        onClick={(e) => {
-                          e.stopPropagation(); // stop from triggering handleChapterClick
+                        // This is where you handle expand/collapse
+                        onClick={() => {
                           toggleChapterExpansion(chapterKey);
+                          // We are *only* focusing on expand/collapse for now
                         }}
                       >
-                        {isChapterExpanded ? "-" : "+"}
-                      </span>
+                        {/* The +/- icon is purely visual now */}
+                        <span style={{ fontWeight: "bold" }}>
+                          {isChapterExpanded ? "-" : "+"}
+                        </span>
 
-                      {/* Chapter name text (click to 'select' the chapter, if you want) */}
-                      <span
-                        style={{ cursor: "pointer", flex: 1 }}
-                        onClick={() => handleChapterClick(chapter)}
-                      >
-                        {chapter.chapterName}
-                      </span>
+                        <span style={{ flex: 1 }}>
+                          {chapter.chapterName}
+                        </span>
+                      </div>
+
+                      {/* SubChapters if expanded */}
+                      {isChapterExpanded &&
+                        chapter.subChapters.map((subChap) => {
+                          const isSelected =
+                            selectedSubChapter &&
+                            selectedSubChapter.subChapterId === subChap.subChapterId;
+
+                          const highlightStyle = {
+                            backgroundColor: isSelected ? "rgba(255,215,0,0.4)" : "transparent",
+                          };
+
+                          return (
+                            <div
+                              key={subChap.subChapterId || subChap.subChapterName}
+                              style={{ ...subChapterTitleStyle, ...highlightStyle }}
+                              onClick={() => {
+                                handleSubChapterClick(subChap);
+                                // No design changes, just picking subchapter
+                              }}
+                              onMouseOver={(e) => {
+                                if (!isSelected) {
+                                  e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)";
+                                }
+                              }}
+                              onMouseOut={(e) => {
+                                if (!isSelected) {
+                                  e.currentTarget.style.backgroundColor = "transparent";
+                                }
+                              }}
+                            >
+                              {subChap.subChapterName}
+                              {subChap.isDone && <span style={doneBadgeStyle}>(Done)</span>}
+                            </div>
+                          );
+                        })}
                     </div>
-
-                    {/* SubChapters - visible if isChapterExpanded */}
-                    {isChapterExpanded && chapter.subChapters.map((subChap) => {
-                      // Compare subChapterId to highlight if selected
-                      const isSelected =
-                        selectedSubChapter &&
-                        selectedSubChapter.subChapterId === subChap.subChapterId;
-
-                      const highlightStyle = {
-                        backgroundColor: isSelected ? "rgba(255,215,0,0.4)" : "transparent",
-                      };
-
-                      return (
-                        <div
-                          key={subChap.subChapterId || subChap.subChapterName}
-                          style={{ ...subChapterTitleStyle, ...highlightStyle }}
-                          onClick={() => handleSubChapterClick(subChap)}
-                          onMouseOver={(e) => {
-                            if (!isSelected) {
-                              e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)";
-                            }
-                          }}
-                          onMouseOut={(e) => {
-                            if (!isSelected) {
-                              e.currentTarget.style.backgroundColor = "transparent";
-                            }
-                          }}
-                        >
-                          {subChap.subChapterName}
-                          {subChap.isDone && <span style={doneBadgeStyle}>(Done)</span>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })}
+                  );
+                })}
             </div>
           );
         })}
