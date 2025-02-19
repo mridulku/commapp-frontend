@@ -262,6 +262,10 @@ function SubchapterContent({
         isOpen={showQuizModal}
         onClose={closeQuizModal}
         subChapterName={subChapter.subChapterName}
+        subChapterId={subChapter.subChapterId}      // <-- pass ID
+        subChapterContent={subChapter.summary} // or the expanded text, if you store it
+        userId={userId}
+        backendURL={import.meta.env.VITE_BACKEND_URL} // or whatever
       />
     </div>
   );
