@@ -1,35 +1,34 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 
-// 1) Import our new QuizModal
+// Existing child
 import QuizModal from "./QuizModal";
+import SummaryModal from "./SummaryModal";
+// New Doubts Modal
+import DoubtsModal from "./DoubtsModal";
+
+const openAIKey = import.meta.env.VITE_OPENAI_KEY;
 
 function SubchapterContent({
-  subChapter, // { subChapterId, proficiency, summary, wordCount, subChapterName, ... }
+  subChapter, // e.g. { subChapterId, proficiency, summary, wordCount, subChapterName, ... }
   userId,
   backendURL,
   onRefreshData,
 }) {
   if (!subChapter) return null;
 
-  // -----------------------------------------
+  // ------------------------------------------------
   // 1) Local proficiency (for optimistic UI)
-  // -----------------------------------------
+  // ------------------------------------------------
   const [localProficiency, setLocalProficiency] = useState(
     subChapter.proficiency || "empty"
   );
 
-  // -----------------------------------------
+  // ------------------------------------------------
   // 2) isExpanded logic
-  //    - We do NOT show expand/collapse button
-  //      if proficiency is "empty" or "reading".
-  //    - For "read"/"proficient", we show it.
-  //    - On initial load, if "reading" => expanded,
-  //      else => collapsed.
-  // -----------------------------------------
+  // ------------------------------------------------
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Whenever we switch to a new sub-chapter ID, reset localProficiency & isExpanded
   useEffect(() => {
     const initialProf = subChapter.proficiency || "empty";
     setLocalProficiency(initialProf);
@@ -41,24 +40,37 @@ function SubchapterContent({
     }
   }, [subChapter.subChapterId, subChapter.proficiency]);
 
-  // -----------------------------------------
+  // ------------------------------------------------
   // 3) Font size
-  // -----------------------------------------
+  // ------------------------------------------------
   const [fontSizeLevel, setFontSizeLevel] = useState(0);
   const increaseFont = () => setFontSizeLevel((prev) => (prev < 2 ? prev + 1 : prev));
   const decreaseFont = () => setFontSizeLevel((prev) => (prev > -2 ? prev - 1 : prev));
 
-  // -----------------------------------------
-  // 4) Quiz modal - replaced inline modal with <QuizModal />
-  // -----------------------------------------
+  // ------------------------------------------------
+  // 4) Quiz Modal
+  // ------------------------------------------------
   const [showQuizModal, setShowQuizModal] = useState(false);
   const openQuizModal = () => setShowQuizModal(true);
   const closeQuizModal = () => setShowQuizModal(false);
 
-  // -----------------------------------------
-  // 5) Reading Handlers
-  // -----------------------------------------
-  // "Start Reading" => proficiency="reading", text becomes expanded
+  // ------------------------------------------------
+  // 5) Summary Modal
+  // ------------------------------------------------
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const openSummaryModal = () => setShowSummaryModal(true);
+  const closeSummaryModal = () => setShowSummaryModal(false);
+
+  // ------------------------------------------------
+  // 6) Doubts Modal (new)
+  // ------------------------------------------------
+  const [showDoubtsModal, setShowDoubtsModal] = useState(false);
+  const openDoubtsModal = () => setShowDoubtsModal(true);
+  const closeDoubtsModal = () => setShowDoubtsModal(false);
+
+  // ------------------------------------------------
+  // 7) Reading Handlers
+  // ------------------------------------------------
   const handleStartReading = async () => {
     // Optimistic update
     setLocalProficiency("reading");
@@ -79,7 +91,6 @@ function SubchapterContent({
     }
   };
 
-  // "Stop Reading" => proficiency="read", remain expanded
   const handleStopReading = async () => {
     // Optimistic update
     setLocalProficiency("read");
@@ -100,9 +111,9 @@ function SubchapterContent({
     }
   };
 
-  // -----------------------------------------
-  // 6) Displayed text logic
-  // -----------------------------------------
+  // ------------------------------------------------
+  // 8) Displayed text logic (truncation)
+  // ------------------------------------------------
   const maxChars = 200;
   const rawText = subChapter.summary || "";
   const truncatedText =
@@ -118,18 +129,17 @@ function SubchapterContent({
     displayedText = isExpanded ? rawText : truncatedText;
   }
 
-  // -----------------------------------------
-  // 7) Expand/Collapse button logic
-  // -----------------------------------------
-  // Only "read" or "proficient" => show expand/collapse
+  // ------------------------------------------------
+  // 9) Expand/Collapse logic
+  // ------------------------------------------------
   const canShowExpandCollapse =
     localProficiency === "read" || localProficiency === "proficient";
 
   const toggleExpand = () => setIsExpanded((prev) => !prev);
 
-  // -----------------------------------------
-  // 8) Styles
-  // -----------------------------------------
+  // ------------------------------------------------
+  // Styles
+  // ------------------------------------------------
   const panelStyle = {
     backgroundColor: "rgba(255,255,255,0.1)",
     backdropFilter: "blur(6px)",
@@ -148,6 +158,12 @@ function SubchapterContent({
     justifyContent: "space-between",
     borderBottom: "1px solid rgba(255,255,255,0.3)",
     paddingBottom: "5px",
+  };
+
+  const leftSectionStyle = {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px", // spacing between subchapter name + Summarize + Ask Doubt
   };
 
   const leftTitleStyle = {
@@ -212,17 +228,31 @@ function SubchapterContent({
     marginTop: "20px",
   };
 
-  // -----------------------------------------
+  // ------------------------------------------------
   // Render
-  // -----------------------------------------
+  // ------------------------------------------------
   return (
     <div style={panelStyle}>
       {/* ---------- TOP BAR ---------- */}
       <div style={titleBarStyle}>
-        <h2 style={leftTitleStyle}>
-          {subChapter.subChapterName || "Subchapter"}
-        </h2>
+        {/* Left side: Subchapter name + Summarize + Ask Doubt button */}
+        <div style={leftSectionStyle}>
+          <h2 style={leftTitleStyle}>
+            {subChapter.subChapterName || "Subchapter"}
+          </h2>
 
+          {/* Summarize button */}
+          <button style={primaryButtonStyle} onClick={openSummaryModal}>
+            Summarize
+          </button>
+
+          {/* Ask Doubt button (new) */}
+          <button style={primaryButtonStyle} onClick={openDoubtsModal}>
+            Ask Doubt
+          </button>
+        </div>
+
+        {/* Right side: word count + font size */}
         <div style={rightInfoContainerStyle}>
           {subChapter.wordCount && (
             <div style={smallInfoTextStyle}>
@@ -246,10 +276,8 @@ function SubchapterContent({
 
       {/* ---------- BOTTOM BUTTONS ---------- */}
       <div style={bottomCenterStyle}>
-        {/* The proficiency-specific section */}
         {renderActionButtons(localProficiency)}
 
-        {/* Expand/Collapse if "read" or "proficient" */}
         {canShowExpandCollapse && (
           <button style={secondaryButtonStyle} onClick={toggleExpand}>
             {isExpanded ? "Collapse Content" : "Expand Content"}
@@ -257,23 +285,42 @@ function SubchapterContent({
         )}
       </div>
 
-      {/* ---------- QUIZ MODAL (now external) ---------- */}
+      {/* ---------- QUIZ MODAL ---------- */}
       <QuizModal
         isOpen={showQuizModal}
         onClose={closeQuizModal}
         subChapterName={subChapter.subChapterName}
-        subChapterId={subChapter.subChapterId}      // <-- pass ID
-        subChapterContent={subChapter.summary} // or the expanded text, if you store it
+        subChapterId={subChapter.subChapterId}
+        subChapterContent={subChapter.summary}
         userId={userId}
-        backendURL={import.meta.env.VITE_BACKEND_URL} // or whatever
+        backendURL={backendURL}
       />
+
+      {/* ---------- SUMMARY MODAL ---------- */}
+      <SummaryModal
+        isOpen={showSummaryModal}
+        onClose={closeSummaryModal}
+        subChapterName={subChapter.subChapterName}
+        subChapterContent={subChapter.summary}
+      />
+
+      {/* ---------- DOUBTS MODAL (New) ---------- */}
+      <DoubtsModal
+       isOpen={showDoubtsModal}
+       onClose={closeDoubtsModal}
+       subChapterName={subChapter.subChapterName}
+       subChapterId={subChapter.subChapterId}
+       subChapterContent={subChapter.summary}
+       userId={userId}
+       backendURL={backendURL}
+       openAIKey={import.meta.env.VITE_OPENAI_KEY}
+/>
     </div>
   );
 
-  // -----------------------------------------
-  // Helper: Return the single or multiple buttons
-  // based on proficiency
-  // -----------------------------------------
+  // ----------------------------------------------
+  // Helper to render the correct reading/quiz button
+  // ----------------------------------------------
   function renderActionButtons(prof) {
     switch (prof) {
       case "empty":

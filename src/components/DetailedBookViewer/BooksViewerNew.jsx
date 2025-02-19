@@ -7,12 +7,8 @@ import React from "react";
 import BooksSidebar from "./BooksSidebar";
 import BookProgress from "./BookProgress";
 import SubchapterContent from "./SubchapterContent";
-import SummarizeSection from "./SummarizeSection";
-import QuizSection from "./QuizSection";
-import DoubtsSection from "./DoubtsSection";
 import DynamicTutorModal from "./DynamicTutorModal";
 import NavigationBar from "./NavigationBar";
-import ActivityLog from "./ActivityLog";
 
 // The custom hook with all your logic
 import { useBooksViewer } from "./hooks/useBooksViewer";
@@ -32,19 +28,9 @@ function BooksViewer2() {
     expandedBookName,
     expandedChapters,
 
-    quizData,
-    selectedAnswers,
-    quizSubmitted,
-    score,
-    summaryOutput,
-    customPrompt,
-    doubts,
-    doubtInput,
     showTutorModal,
 
     setShowTutorModal,
-    setCustomPrompt,
-    setDoubtInput,
 
     handleCategoryChange,
     toggleBookExpansion,
@@ -52,12 +38,7 @@ function BooksViewer2() {
     handleBookClick,
     handleChapterClick,
     handleSubChapterClick,
-    handleOptionSelect,
-    handleSubmitQuiz,
     handleToggleDone,
-    handleSummarizePreset,
-    handleCustomPromptSubmit,
-    handleSendDoubt,
     getBookProgressInfo,
     fetchAllData,
   } = useBooksViewer();
@@ -105,13 +86,10 @@ function BooksViewer2() {
           selectedSubChapter={selectedSubChapter}
           onCategoryChange={handleCategoryChange}
           booksData={booksData}
-
           expandedBookName={expandedBookName}
           toggleBookExpansion={toggleBookExpansion}
-
           expandedChapters={expandedChapters}
           toggleChapterExpansion={toggleChapterExpansion}
-
           handleBookClick={handleBookClick}
           handleChapterClick={handleChapterClick}
           handleSubChapterClick={handleSubChapterClick}
@@ -170,49 +148,14 @@ function BooksViewer2() {
             </div>
           )}
 
-          {/* If a subchapter is selected, show content & quiz & doubts */}
+          {/* If a subchapter is selected, show its content */}
           {selectedSubChapter && (
-            <>
-              <SubchapterContent
-                subChapter={selectedSubChapter}
-                onToggleDone={handleToggleDone}
-                userId={userId}
-                backendURL={import.meta.env.VITE_BACKEND_URL}
-                onRefreshData={fetchAllData}
-              />
-
-              <SummarizeSection
-                summaryOutput={summaryOutput}
-                customPrompt={customPrompt}
-                setCustomPrompt={setCustomPrompt}
-                handleSummarizePreset={handleSummarizePreset}
-                handleCustomPromptSubmit={handleCustomPromptSubmit}
-              />
-
-              <QuizSection
-                quizData={quizData}
-                selectedAnswers={selectedAnswers}
-                quizSubmitted={quizSubmitted}
-                score={score}
-                handleOptionSelect={handleOptionSelect}
-                handleSubmitQuiz={handleSubmitQuiz}
-              />
-
-              <DoubtsSection
-                doubts={doubts}
-                doubtInput={doubtInput}
-                setDoubtInput={setDoubtInput}
-                handleSendDoubt={handleSendDoubt}
-              />
-            </>
-          )}
-
-          {/* Activity Log at the bottom, for the current user and selected subchapter */}
-          {userId && selectedSubChapter && selectedSubChapter.subChapterId && (
-            <ActivityLog
+            <SubchapterContent
+              subChapter={selectedSubChapter}
+              onToggleDone={handleToggleDone}
               userId={userId}
-              subChapterId={selectedSubChapter.subChapterId}
               backendURL={import.meta.env.VITE_BACKEND_URL}
+              onRefreshData={fetchAllData}
             />
           )}
 
