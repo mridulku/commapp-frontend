@@ -10,78 +10,152 @@ import DynamicTutorModal from "./DynamicTutorModal";
 
 const openAIKey = import.meta.env.VITE_OPENAI_KEY;
 
+// Helper to format seconds -> "MM:SS"
+function formatTime(totalSeconds) {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
 function SubchapterContent({
-  subChapter, // e.g. { subChapterId, proficiency, summary, wordCount, subChapterName, ... }
+  subChapter, // e.g. { subChapterId, proficiency, summary, wordCount, subChapterName, readStartTime, readEndTime, ... }
   userId,
   backendURL,
   onRefreshData,
 }) {
   if (!subChapter) return null;
 
-  // ----------------------------------------------
-  // 1) Local proficiency (optimistic UI)
-  // ----------------------------------------------
+  // --------------------------------------------------------------------------------
+  // 1) Local Proficiency (optimistic UI)
+  // --------------------------------------------------------------------------------
   const [localProficiency, setLocalProficiency] = useState(
     subChapter.proficiency || "empty"
   );
 
-  // ----------------------------------------------
-  // 2) Expanded/collapsed text
-  // ----------------------------------------------
+  // --------------------------------------------------------------------------------
+  // 2) Expanded/Collapsed text
+  // --------------------------------------------------------------------------------
   const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
     const initialProf = subChapter.proficiency || "empty";
     setLocalProficiency(initialProf);
-
-    if (initialProf === "reading") {
-      setIsExpanded(true);
-    } else {
-      setIsExpanded(false);
-    }
+    setIsExpanded(initialProf === "reading");
   }, [subChapter.subChapterId, subChapter.proficiency]);
 
-  // ----------------------------------------------
+  // --------------------------------------------------------------------------------
   // 3) Font size
-  // ----------------------------------------------
+  // --------------------------------------------------------------------------------
   const [fontSizeLevel, setFontSizeLevel] = useState(0);
   const increaseFont = () => setFontSizeLevel((prev) => (prev < 2 ? prev + 1 : prev));
   const decreaseFont = () => setFontSizeLevel((prev) => (prev > -2 ? prev - 1 : prev));
 
-  // ----------------------------------------------
-  // 4) Quiz Modal
-  // ----------------------------------------------
+  // --------------------------------------------------------------------------------
+  // 4) Local Reading Times (start/end)
+  // --------------------------------------------------------------------------------
+  const [localStartMs, setLocalStartMs] = useState(null);
+  const [localEndMs, setLocalEndMs] = useState(null);
+
+  // We'll keep track of the ticking seconds while "reading"
+  const [readingSeconds, setReadingSeconds] = useState(0);
+
+  // And if they've finished reading, we display a finalReadingTime in MM:SS
+  const [finalReadingTime, setFinalReadingTime] = useState(null);
+
+  // --------------------------------------------------------------------------------
+  // 5) On mount or subChapter changes: Initialize local times from doc if available
+  // --------------------------------------------------------------------------------
+  useEffect(() => {
+    // Reset
+    setReadingSeconds(0);
+    setFinalReadingTime(null);
+
+    const prof = subChapter.proficiency || "empty";
+    setLocalProficiency(prof);
+
+    // readStartTime & readEndTime from the doc
+    let sMs = null;
+    if (subChapter.readStartTime) {
+      sMs = new Date(subChapter.readStartTime).getTime();
+    }
+    let eMs = null;
+    if (subChapter.readEndTime) {
+      eMs = new Date(subChapter.readEndTime).getTime();
+    }
+    setLocalStartMs(sMs);
+    setLocalEndMs(eMs);
+
+    // If "read" & we have both start + end, compute final time
+    if (prof === "read" && sMs && eMs && eMs > sMs) {
+      const totalSec = Math.floor((eMs - sMs) / 1000);
+      setFinalReadingTime(formatTime(totalSec));
+    } else if (prof === "reading") {
+      setIsExpanded(true);
+    } else {
+      setIsExpanded(false);
+    }
+  }, [subChapter]);
+
+  // --------------------------------------------------------------------------------
+  // 6) Timer effect for live reading
+  // --------------------------------------------------------------------------------
+  useEffect(() => {
+    if (localProficiency === "reading" && localStartMs && !localEndMs) {
+      const tick = () => {
+        const now = Date.now();
+        const diff = now - localStartMs;
+        setReadingSeconds(diff > 0 ? Math.floor(diff / 1000) : 0);
+      };
+      tick(); // immediate
+      const timerId = setInterval(tick, 1000);
+      return () => clearInterval(timerId);
+    } else {
+      // not reading or we have an end time => no live timer
+      setReadingSeconds(0);
+    }
+  }, [localProficiency, localStartMs, localEndMs]);
+
+  // --------------------------------------------------------------------------------
+  // 7) If proficiency === "read" and we have start/end, compute final time
+  // --------------------------------------------------------------------------------
+  useEffect(() => {
+    if (localProficiency === "read" && localStartMs && localEndMs) {
+      const totalSec = Math.floor((localEndMs - localStartMs) / 1000);
+      if (totalSec > 0) {
+        setFinalReadingTime(formatTime(totalSec));
+      }
+    }
+  }, [localProficiency, localStartMs, localEndMs]);
+
+  // --------------------------------------------------------------------------------
+  // 8) Modals: Quiz, Summary, Doubts, Tutor
+  // --------------------------------------------------------------------------------
   const [showQuizModal, setShowQuizModal] = useState(false);
   const openQuizModal = () => setShowQuizModal(true);
   const closeQuizModal = () => setShowQuizModal(false);
 
-  // ----------------------------------------------
-  // 5) Summary Modal
-  // ----------------------------------------------
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const openSummaryModal = () => setShowSummaryModal(true);
   const closeSummaryModal = () => setShowSummaryModal(false);
 
-  // ----------------------------------------------
-  // 6) Doubts Modal
-  // ----------------------------------------------
   const [showDoubtsModal, setShowDoubtsModal] = useState(false);
   const openDoubtsModal = () => setShowDoubtsModal(true);
   const closeDoubtsModal = () => setShowDoubtsModal(false);
 
-  // ----------------------------------------------
-  // 7) Dynamic Tutor Modal (New)
-  // ----------------------------------------------
   const [showTutorModal, setShowTutorModal] = useState(false);
   const openTutorModal = () => setShowTutorModal(true);
   const closeTutorModal = () => setShowTutorModal(false);
 
-  // ----------------------------------------------
-  // 8) Reading Handlers
-  // ----------------------------------------------
+  // --------------------------------------------------------------------------------
+  // 9) Reading Handlers (start/stop)
+  // --------------------------------------------------------------------------------
   const handleStartReading = async () => {
     setLocalProficiency("reading");
     setIsExpanded(true);
+    const nowMs = Date.now();
+    setLocalStartMs(nowMs);
+    setLocalEndMs(null);
+
     try {
       await axios.post(`${backendURL}/api/complete-subchapter`, {
         userId,
@@ -92,15 +166,20 @@ function SubchapterContent({
     } catch (error) {
       console.error("Error starting reading:", error);
       alert("Failed to start reading.");
-      // revert
+
+      // revert local states
       setLocalProficiency("empty");
       setIsExpanded(false);
+      setLocalStartMs(null);
     }
   };
 
   const handleStopReading = async () => {
     setLocalProficiency("read");
     setIsExpanded(true);
+    const nowMs = Date.now();
+    setLocalEndMs(nowMs);
+
     try {
       await axios.post(`${backendURL}/api/complete-subchapter`, {
         userId,
@@ -111,15 +190,17 @@ function SubchapterContent({
     } catch (error) {
       console.error("Error stopping reading:", error);
       alert("Failed to stop reading.");
-      // revert
+
+      // revert local states
       setLocalProficiency("reading");
       setIsExpanded(true);
+      setLocalEndMs(null);
     }
   };
 
-  // ----------------------------------------------
-  // 9) Displayed text logic
-  // ----------------------------------------------
+  // --------------------------------------------------------------------------------
+  // 10) Text display logic
+  // --------------------------------------------------------------------------------
   const maxChars = 200;
   const rawText = subChapter.summary || "";
   const truncatedText =
@@ -138,9 +219,19 @@ function SubchapterContent({
     localProficiency === "read" || localProficiency === "proficient";
   const toggleExpand = () => setIsExpanded((prev) => !prev);
 
-  // ----------------------------------------------
+  // --------------------------------------------------------------------------------
+  // 11) Timer / Reading Info
+  // --------------------------------------------------------------------------------
+  let readingTimeDisplay = null;
+  if (localProficiency === "reading" && localStartMs && !localEndMs) {
+    readingTimeDisplay = `Reading Time: ${formatTime(readingSeconds)}`;
+  } else if (localProficiency === "read" && finalReadingTime) {
+    readingTimeDisplay = `Total Reading: ${finalReadingTime}`;
+  }
+
+  // --------------------------------------------------------------------------------
   // Styles
-  // ----------------------------------------------
+  // --------------------------------------------------------------------------------
   const panelStyle = {
     backgroundColor: "rgba(255,255,255,0.1)",
     backdropFilter: "blur(6px)",
@@ -164,7 +255,7 @@ function SubchapterContent({
   const leftSectionStyle = {
     display: "flex",
     alignItems: "center",
-    gap: "10px", // spacing between subchapter name + Summarize + Ask Doubt + Tutor
+    gap: "10px",
   };
 
   const leftTitleStyle = {
@@ -193,7 +284,7 @@ function SubchapterContent({
     padding: "10px 20px",
     borderRadius: "4px",
     border: "none",
-    background: "#FFD700", // bright yellow
+    background: "#FFD700",
     color: "#000",
     fontWeight: "bold",
     cursor: "pointer",
@@ -205,7 +296,7 @@ function SubchapterContent({
     padding: "10px 20px",
     borderRadius: "4px",
     border: "none",
-    background: "#aaa", // dull gray
+    background: "#aaa",
     color: "#000",
     fontWeight: "normal",
     cursor: "pointer",
@@ -229,9 +320,9 @@ function SubchapterContent({
     marginTop: "20px",
   };
 
-  // ----------------------------------------------
+  // --------------------------------------------------------------------------------
   // Render
-  // ----------------------------------------------
+  // --------------------------------------------------------------------------------
   return (
     <div style={panelStyle}>
       {/* ---------- TOP BAR ---------- */}
@@ -252,20 +343,29 @@ function SubchapterContent({
             Ask Doubt
           </button>
 
-          {/* Dynamic Tutor button (new) */}
+          {/* Dynamic Tutor button */}
           <button style={primaryButtonStyle} onClick={openTutorModal}>
             Dynamic Tutor
           </button>
         </div>
 
-        {/* Right side: word count + font size */}
+        {/* Right side: word count + font size + Timer */}
         <div style={rightInfoContainerStyle}>
           {subChapter.wordCount && (
             <div style={smallInfoTextStyle}>
               <strong>Words:</strong> {subChapter.wordCount} |{" "}
-              <strong>Est Time:</strong> {Math.ceil(subChapter.wordCount / 200)} min
+              <strong>Est Time:</strong>{" "}
+              {Math.ceil(subChapter.wordCount / 200)} min
             </div>
           )}
+
+          {/* Timer or total reading display */}
+          {readingTimeDisplay && (
+            <div style={smallInfoTextStyle}>
+              <strong>{readingTimeDisplay}</strong>
+            </div>
+          )}
+
           <div style={fontButtonContainerStyle}>
             <button style={primaryButtonStyle} onClick={decreaseFont}>
               A-
@@ -291,7 +391,7 @@ function SubchapterContent({
         )}
       </div>
 
-      {/* ---------- QUIZ MODAL ---------- */}
+      {/* ========== QUIZ MODAL ========== */}
       <QuizModal
         isOpen={showQuizModal}
         onClose={closeQuizModal}
@@ -302,7 +402,7 @@ function SubchapterContent({
         backendURL={backendURL}
       />
 
-      {/* ---------- SUMMARY MODAL ---------- */}
+      {/* ========== SUMMARY MODAL ========== */}
       <SummaryModal
         isOpen={showSummaryModal}
         onClose={closeSummaryModal}
@@ -310,7 +410,7 @@ function SubchapterContent({
         subChapterContent={subChapter.summary}
       />
 
-      {/* ---------- DOUBTS MODAL ---------- */}
+      {/* ========== DOUBTS MODAL ========== */}
       <DoubtsModal
         isOpen={showDoubtsModal}
         onClose={closeDoubtsModal}
@@ -322,21 +422,21 @@ function SubchapterContent({
         openAIKey={openAIKey}
       />
 
-      {/* ---------- DYNAMIC TUTOR MODAL (New) ---------- */}
+      {/* ========== DYNAMIC TUTOR MODAL ========== */}
       <DynamicTutorModal
         isOpen={showTutorModal}
         onClose={closeTutorModal}
         subChapterName={subChapter.subChapterName}
         subChapterContent={subChapter.summary}
         userId={userId}
-        // Pass any other needed props, e.g. subChapterId, backendURL, openAIKey if required
+        // Pass any other needed props
       />
     </div>
   );
 
-  // ----------------------------------------------
+  // --------------------------------------------------------------------------------
   // Renders the correct reading/quiz button
-  // ----------------------------------------------
+  // --------------------------------------------------------------------------------
   function renderActionButtons(prof) {
     switch (prof) {
       case "empty":
