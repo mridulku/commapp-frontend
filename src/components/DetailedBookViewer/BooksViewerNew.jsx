@@ -1,10 +1,11 @@
 /********************************************
- * BookViewer2.jsx (Parent Container)
+ * BooksViewerNew.jsx (Parent Container)
  ********************************************/
 import React from "react";
 
 // Child components
 import BooksSidebar from "./BooksSidebar";
+import AdaptiveSidebar from "./AdaptiveSidebar"; // <-- new adaptive component
 import BookProgress from "./BookProgress";
 import SubchapterContent from "./SubchapterContent";
 import DynamicTutorModal from "./DynamicTutorModal";
@@ -19,24 +20,17 @@ function BooksViewer2() {
     userId,
     categories,
     selectedCategory,
-    // Instead of raw booksData, we will also use a function that returns
-    // either the full data or the adaptive subset:
     getFilteredBooksData,
-
     booksProgressData,
     selectedBook,
     selectedChapter,
     selectedSubChapter,
-
     expandedBookName,
     expandedChapters,
     showTutorModal,
-
     viewMode,        // "library" or "adaptive"
     setViewMode,     // function to update viewMode
-
     setShowTutorModal,
-
     handleCategoryChange,
     toggleBookExpansion,
     toggleChapterExpansion,
@@ -79,8 +73,7 @@ function BooksViewer2() {
   console.log("DEBUG: userId =>", userId);
   console.log("DEBUG: selectedSubChapter =>", selectedSubChapter);
 
-  // Instead of passing raw booksData, 
-  // we pass the "filtered" version based on viewMode.
+  // Depending on "library" or "adaptive", we filter or not
   const displayedBooksData = getFilteredBooksData();
 
   return (
@@ -89,25 +82,37 @@ function BooksViewer2() {
 
       <div style={containerStyle}>
         {/* =========== SIDEBAR =========== */}
-        <BooksSidebar
-          categories={categories}
-          selectedCategory={selectedCategory}
-          selectedSubChapter={selectedSubChapter}
-          onCategoryChange={handleCategoryChange}
-
-          booksData={displayedBooksData} // <--- pass the filtered data
-          expandedBookName={expandedBookName}
-          toggleBookExpansion={toggleBookExpansion}
-          expandedChapters={expandedChapters}
-          toggleChapterExpansion={toggleChapterExpansion}
-          handleBookClick={handleBookClick}
-          handleChapterClick={handleChapterClick}
-          handleSubChapterClick={handleSubChapterClick}
-
-          // Pass down the mode state + setter if you want the sidebar to show toggle buttons
-          viewMode={viewMode}
-          setViewMode={setViewMode}
-        />
+        {viewMode === "library" ? (
+          <BooksSidebar
+            // Library mode props
+            categories={categories}
+            selectedCategory={selectedCategory}
+            selectedSubChapter={selectedSubChapter}
+            onCategoryChange={handleCategoryChange}
+            booksData={displayedBooksData}
+            expandedBookName={expandedBookName}
+            toggleBookExpansion={toggleBookExpansion}
+            expandedChapters={expandedChapters}
+            toggleChapterExpansion={toggleChapterExpansion}
+            handleBookClick={handleBookClick}
+            handleChapterClick={handleChapterClick}
+            handleSubChapterClick={handleSubChapterClick}
+            viewMode={viewMode}
+            setViewMode={setViewMode}
+          />
+        ) : (
+          <AdaptiveSidebar
+            // Adaptive mode props
+            categories={categories}
+            selectedCategory={selectedCategory}
+            onCategoryChange={handleCategoryChange}
+            booksData={displayedBooksData} // grouped by session inside the component
+            selectedSubChapter={selectedSubChapter}
+            handleSubChapterClick={handleSubChapterClick}
+            viewMode={viewMode}
+            setViewMode={setViewMode}
+          />
+        )}
 
         {/* =========== MAIN CONTENT =========== */}
         <div style={mainContentStyle}>
@@ -137,7 +142,7 @@ function BooksViewer2() {
             />
           )}
 
-          {/* If no subchapter is selected, show placeholder */}
+          {/* If no subchapter is selected, show a placeholder */}
           {!selectedSubChapter && (
             <div
               style={{

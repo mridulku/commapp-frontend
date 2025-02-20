@@ -88,7 +88,7 @@ export function useBooksViewer() {
   // --------------------------------------------
   const fetchAllData = async (shouldReset = false) => {
     try {
-      // 1) /api/books to get raw book/chapter/subchapter structure
+      // 1) /api/books to get raw book/chapter/subchapter structure (including session)
       const booksRes = await axios.get(
         `${backendURL}/api/books?categoryId=${selectedCategory}&userId=${userId}`
       );
