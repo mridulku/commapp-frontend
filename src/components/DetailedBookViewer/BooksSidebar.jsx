@@ -1,8 +1,5 @@
 /********************************************
- * BooksSidebar.jsx (Multi-chapter expand/collapse)
- * - The entire chapter row toggles expansion
- * - Color/hover logic unchanged
- * - "Plus/minus" icon is still shown but no longer has a separate onClick
+ * BooksSidebar.jsx (Multi-chapter expand/collapse + View Mode Toggle)
  ********************************************/
 import React from "react";
 
@@ -26,6 +23,10 @@ function BooksSidebar({
 
   // Currently selected subchapter (for highlight)
   selectedSubChapter,
+
+  // NEW PROPS for view mode
+  viewMode,       // "library" or "adaptive"
+  setViewMode,    // function to change mode
 }) {
   // --------------- Styles ---------------
   const sidebarStyle = {
@@ -36,6 +37,23 @@ function BooksSidebar({
     borderRight: "2px solid rgba(255,255,255,0.2)",
     overflowY: "auto",
   };
+
+  const modeToggleContainerStyle = {
+    display: "flex",
+    gap: "10px",
+    marginBottom: "20px",
+  };
+
+  const toggleButtonStyle = (active) => ({
+    padding: "8px 16px",
+    borderRadius: "4px",
+    border: "none",
+    cursor: "pointer",
+    fontWeight: "bold",
+    background: active ? "#FFD700" : "transparent",
+    color: active ? "#000" : "#fff",
+    transition: "background-color 0.3s",
+  });
 
   const dropdownContainerStyle = { marginBottom: "20px" };
 
@@ -92,7 +110,23 @@ function BooksSidebar({
   // --------------- Render ---------------
   return (
     <div style={sidebarStyle}>
-      {/* Category Dropdown */}
+      {/* 1) Mode Toggle: Library vs. Adaptive */}
+      <div style={modeToggleContainerStyle}>
+        <button
+          style={toggleButtonStyle(viewMode === "library")}
+          onClick={() => setViewMode("library")}
+        >
+          Library
+        </button>
+        <button
+          style={toggleButtonStyle(viewMode === "adaptive")}
+          onClick={() => setViewMode("adaptive")}
+        >
+          Adaptive
+        </button>
+      </div>
+
+      {/* 2) Category Dropdown */}
       <div style={dropdownContainerStyle}>
         <label htmlFor="categorySelect" style={{ marginRight: "10px", color: "#fff" }}>
           Select Category:
@@ -111,7 +145,7 @@ function BooksSidebar({
         </select>
       </div>
 
-      {/* Books */}
+      {/* 3) Books (and chapters/subchapters) */}
       <div>
         <div style={listHeaderStyle}>Books</div>
 
@@ -124,7 +158,6 @@ function BooksSidebar({
               <div
                 style={bookTitleStyle}
                 onClick={() => {
-                  // Possibly set this book as "selectedBook" if you want
                   handleBookClick(book);
                   toggleBookExpansion(book.bookName);
                 }}
@@ -155,11 +188,8 @@ function BooksSidebar({
                         onMouseOut={(e) => {
                           e.currentTarget.style.backgroundColor = "transparent";
                         }}
-
-                        // This is where you handle expand/collapse
                         onClick={() => {
                           toggleChapterExpansion(chapterKey);
-                          // We are *only* focusing on expand/collapse for now
                         }}
                       >
                         {/* The +/- icon is purely visual now */}
@@ -189,7 +219,6 @@ function BooksSidebar({
                               style={{ ...subChapterTitleStyle, ...highlightStyle }}
                               onClick={() => {
                                 handleSubChapterClick(subChap);
-                                // No design changes, just picking subchapter
                               }}
                               onMouseOver={(e) => {
                                 if (!isSelected) {

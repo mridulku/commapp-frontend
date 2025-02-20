@@ -1,5 +1,5 @@
 /********************************************
- * BooksViewer2.jsx (Parent Container)
+ * BookViewer2.jsx (Parent Container)
  ********************************************/
 import React from "react";
 
@@ -19,7 +19,10 @@ function BooksViewer2() {
     userId,
     categories,
     selectedCategory,
-    booksData,
+    // Instead of raw booksData, we will also use a function that returns
+    // either the full data or the adaptive subset:
+    getFilteredBooksData,
+
     booksProgressData,
     selectedBook,
     selectedChapter,
@@ -27,8 +30,10 @@ function BooksViewer2() {
 
     expandedBookName,
     expandedChapters,
-
     showTutorModal,
+
+    viewMode,        // "library" or "adaptive"
+    setViewMode,     // function to update viewMode
 
     setShowTutorModal,
 
@@ -74,6 +79,10 @@ function BooksViewer2() {
   console.log("DEBUG: userId =>", userId);
   console.log("DEBUG: selectedSubChapter =>", selectedSubChapter);
 
+  // Instead of passing raw booksData, 
+  // we pass the "filtered" version based on viewMode.
+  const displayedBooksData = getFilteredBooksData();
+
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
       <NavigationBar />
@@ -85,7 +94,8 @@ function BooksViewer2() {
           selectedCategory={selectedCategory}
           selectedSubChapter={selectedSubChapter}
           onCategoryChange={handleCategoryChange}
-          booksData={booksData}
+
+          booksData={displayedBooksData} // <--- pass the filtered data
           expandedBookName={expandedBookName}
           toggleBookExpansion={toggleBookExpansion}
           expandedChapters={expandedChapters}
@@ -93,6 +103,10 @@ function BooksViewer2() {
           handleBookClick={handleBookClick}
           handleChapterClick={handleChapterClick}
           handleSubChapterClick={handleSubChapterClick}
+
+          // Pass down the mode state + setter if you want the sidebar to show toggle buttons
+          viewMode={viewMode}
+          setViewMode={setViewMode}
         />
 
         {/* =========== MAIN CONTENT =========== */}

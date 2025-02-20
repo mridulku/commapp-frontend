@@ -43,6 +43,9 @@ export function useBooksViewer() {
   // Tutor Modal
   const [showTutorModal, setShowTutorModal] = useState(false);
 
+  // --- NEW: View Mode (library or adaptive) ---
+  const [viewMode, setViewMode] = useState("library");
+
   // --------------------------------------------
   // 2) Fetch categories immediately (no userId needed)
   // --------------------------------------------
@@ -175,12 +178,41 @@ export function useBooksViewer() {
     return booksProgressData.find((b) => b.bookName === bookName);
   };
 
+  // ------------------------- Adaptive Filtering ------------------------------
+  // Helper to filter out subChapters that are not "adaptive: true"
+  function filterAdaptiveData(allBooks) {
+    return allBooks
+      .map((book) => {
+        const filteredChapters = book.chapters
+          .map((chap) => {
+            const filteredSubChapters = chap.subChapters.filter(
+              (sub) => sub.adaptive === true
+            );
+            return { ...chap, subChapters: filteredSubChapters };
+          })
+          .filter((c) => c.subChapters.length > 0);
+
+        return { ...book, chapters: filteredChapters };
+      })
+      .filter((b) => b.chapters.length > 0);
+  }
+
+  // We'll expose a function that gives either the full booksData or the filtered subset
+  const getFilteredBooksData = () => {
+    if (viewMode === "library") {
+      return booksData;
+    } else {
+      // "adaptive"
+      return filterAdaptiveData(booksData);
+    }
+  };
+
   return {
     // states
     userId,
     categories,
     selectedCategory,
-    booksData,
+    booksData, // raw data if you need it
     booksProgressData,
     selectedBook,
     selectedChapter,
@@ -188,6 +220,10 @@ export function useBooksViewer() {
     expandedBookName,
     expandedChapters,
     showTutorModal,
+
+    // NEW: mode
+    viewMode,
+    setViewMode,
 
     // set-states / toggles
     setShowTutorModal,
@@ -205,5 +241,8 @@ export function useBooksViewer() {
     // main fetch methods
     fetchAllData,
     fetchAggregatedData,
+
+    // new helper for library vs. adaptive
+    getFilteredBooksData,
   };
 }
