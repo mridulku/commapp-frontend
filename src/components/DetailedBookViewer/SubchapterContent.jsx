@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 
-// Existing child
+// Existing child modals
 import QuizModal from "./QuizModal";
 import SummaryModal from "./SummaryModal";
-// New Doubts Modal
 import DoubtsModal from "./DoubtsModal";
+// New DynamicTutorModal
+import DynamicTutorModal from "./DynamicTutorModal";
 
 const openAIKey = import.meta.env.VITE_OPENAI_KEY;
 
@@ -17,16 +18,16 @@ function SubchapterContent({
 }) {
   if (!subChapter) return null;
 
-  // ------------------------------------------------
-  // 1) Local proficiency (for optimistic UI)
-  // ------------------------------------------------
+  // ----------------------------------------------
+  // 1) Local proficiency (optimistic UI)
+  // ----------------------------------------------
   const [localProficiency, setLocalProficiency] = useState(
     subChapter.proficiency || "empty"
   );
 
-  // ------------------------------------------------
-  // 2) isExpanded logic
-  // ------------------------------------------------
+  // ----------------------------------------------
+  // 2) Expanded/collapsed text
+  // ----------------------------------------------
   const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
@@ -40,39 +41,45 @@ function SubchapterContent({
     }
   }, [subChapter.subChapterId, subChapter.proficiency]);
 
-  // ------------------------------------------------
+  // ----------------------------------------------
   // 3) Font size
-  // ------------------------------------------------
+  // ----------------------------------------------
   const [fontSizeLevel, setFontSizeLevel] = useState(0);
   const increaseFont = () => setFontSizeLevel((prev) => (prev < 2 ? prev + 1 : prev));
   const decreaseFont = () => setFontSizeLevel((prev) => (prev > -2 ? prev - 1 : prev));
 
-  // ------------------------------------------------
+  // ----------------------------------------------
   // 4) Quiz Modal
-  // ------------------------------------------------
+  // ----------------------------------------------
   const [showQuizModal, setShowQuizModal] = useState(false);
   const openQuizModal = () => setShowQuizModal(true);
   const closeQuizModal = () => setShowQuizModal(false);
 
-  // ------------------------------------------------
+  // ----------------------------------------------
   // 5) Summary Modal
-  // ------------------------------------------------
+  // ----------------------------------------------
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const openSummaryModal = () => setShowSummaryModal(true);
   const closeSummaryModal = () => setShowSummaryModal(false);
 
-  // ------------------------------------------------
-  // 6) Doubts Modal (new)
-  // ------------------------------------------------
+  // ----------------------------------------------
+  // 6) Doubts Modal
+  // ----------------------------------------------
   const [showDoubtsModal, setShowDoubtsModal] = useState(false);
   const openDoubtsModal = () => setShowDoubtsModal(true);
   const closeDoubtsModal = () => setShowDoubtsModal(false);
 
-  // ------------------------------------------------
-  // 7) Reading Handlers
-  // ------------------------------------------------
+  // ----------------------------------------------
+  // 7) Dynamic Tutor Modal (New)
+  // ----------------------------------------------
+  const [showTutorModal, setShowTutorModal] = useState(false);
+  const openTutorModal = () => setShowTutorModal(true);
+  const closeTutorModal = () => setShowTutorModal(false);
+
+  // ----------------------------------------------
+  // 8) Reading Handlers
+  // ----------------------------------------------
   const handleStartReading = async () => {
-    // Optimistic update
     setLocalProficiency("reading");
     setIsExpanded(true);
     try {
@@ -92,7 +99,6 @@ function SubchapterContent({
   };
 
   const handleStopReading = async () => {
-    // Optimistic update
     setLocalProficiency("read");
     setIsExpanded(true);
     try {
@@ -111,9 +117,9 @@ function SubchapterContent({
     }
   };
 
-  // ------------------------------------------------
-  // 8) Displayed text logic (truncation)
-  // ------------------------------------------------
+  // ----------------------------------------------
+  // 9) Displayed text logic
+  // ----------------------------------------------
   const maxChars = 200;
   const rawText = subChapter.summary || "";
   const truncatedText =
@@ -125,21 +131,16 @@ function SubchapterContent({
   } else if (localProficiency === "reading") {
     displayedText = rawText;
   } else {
-    // "read" or "proficient"
     displayedText = isExpanded ? rawText : truncatedText;
   }
 
-  // ------------------------------------------------
-  // 9) Expand/Collapse logic
-  // ------------------------------------------------
   const canShowExpandCollapse =
     localProficiency === "read" || localProficiency === "proficient";
-
   const toggleExpand = () => setIsExpanded((prev) => !prev);
 
-  // ------------------------------------------------
+  // ----------------------------------------------
   // Styles
-  // ------------------------------------------------
+  // ----------------------------------------------
   const panelStyle = {
     backgroundColor: "rgba(255,255,255,0.1)",
     backdropFilter: "blur(6px)",
@@ -163,7 +164,7 @@ function SubchapterContent({
   const leftSectionStyle = {
     display: "flex",
     alignItems: "center",
-    gap: "10px", // spacing between subchapter name + Summarize + Ask Doubt
+    gap: "10px", // spacing between subchapter name + Summarize + Ask Doubt + Tutor
   };
 
   const leftTitleStyle = {
@@ -228,14 +229,14 @@ function SubchapterContent({
     marginTop: "20px",
   };
 
-  // ------------------------------------------------
+  // ----------------------------------------------
   // Render
-  // ------------------------------------------------
+  // ----------------------------------------------
   return (
     <div style={panelStyle}>
       {/* ---------- TOP BAR ---------- */}
       <div style={titleBarStyle}>
-        {/* Left side: Subchapter name + Summarize + Ask Doubt button */}
+        {/* Left side: Subchapter name + Summarize + Ask Doubt + Tutor */}
         <div style={leftSectionStyle}>
           <h2 style={leftTitleStyle}>
             {subChapter.subChapterName || "Subchapter"}
@@ -246,9 +247,14 @@ function SubchapterContent({
             Summarize
           </button>
 
-          {/* Ask Doubt button (new) */}
+          {/* Ask Doubt button */}
           <button style={primaryButtonStyle} onClick={openDoubtsModal}>
             Ask Doubt
+          </button>
+
+          {/* Dynamic Tutor button (new) */}
+          <button style={primaryButtonStyle} onClick={openTutorModal}>
+            Dynamic Tutor
           </button>
         </div>
 
@@ -304,22 +310,32 @@ function SubchapterContent({
         subChapterContent={subChapter.summary}
       />
 
-      {/* ---------- DOUBTS MODAL (New) ---------- */}
+      {/* ---------- DOUBTS MODAL ---------- */}
       <DoubtsModal
-       isOpen={showDoubtsModal}
-       onClose={closeDoubtsModal}
-       subChapterName={subChapter.subChapterName}
-       subChapterId={subChapter.subChapterId}
-       subChapterContent={subChapter.summary}
-       userId={userId}
-       backendURL={backendURL}
-       openAIKey={import.meta.env.VITE_OPENAI_KEY}
-/>
+        isOpen={showDoubtsModal}
+        onClose={closeDoubtsModal}
+        subChapterName={subChapter.subChapterName}
+        subChapterId={subChapter.subChapterId}
+        subChapterContent={subChapter.summary}
+        userId={userId}
+        backendURL={backendURL}
+        openAIKey={openAIKey}
+      />
+
+      {/* ---------- DYNAMIC TUTOR MODAL (New) ---------- */}
+      <DynamicTutorModal
+        isOpen={showTutorModal}
+        onClose={closeTutorModal}
+        subChapterName={subChapter.subChapterName}
+        subChapterContent={subChapter.summary}
+        userId={userId}
+        // Pass any other needed props, e.g. subChapterId, backendURL, openAIKey if required
+      />
     </div>
   );
 
   // ----------------------------------------------
-  // Helper to render the correct reading/quiz button
+  // Renders the correct reading/quiz button
   // ----------------------------------------------
   function renderActionButtons(prof) {
     switch (prof) {
@@ -329,28 +345,24 @@ function SubchapterContent({
             Start Reading
           </button>
         );
-
       case "reading":
         return (
           <button style={primaryButtonStyle} onClick={handleStopReading}>
             Stop Reading
           </button>
         );
-
       case "read":
         return (
           <button style={primaryButtonStyle} onClick={openQuizModal}>
             Take Quiz
           </button>
         );
-
       case "proficient":
         return (
           <button style={primaryButtonStyle} onClick={openQuizModal}>
             Take Another Quiz
           </button>
         );
-
       default:
         return null;
     }
