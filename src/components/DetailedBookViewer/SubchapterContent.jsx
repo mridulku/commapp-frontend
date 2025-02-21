@@ -18,7 +18,7 @@ function formatTime(totalSeconds) {
 }
 
 function SubchapterContent({
-  subChapter, // e.g. { subChapterId, proficiency, summary, wordCount, subChapterName, readStartTime, readEndTime, ... }
+  subChapter, // e.g. { subChapterId, proficiency, quizScore, summary, wordCount, subChapterName, readStartTime, readEndTime, ... }
   userId,
   backendURL,
   onRefreshData,
@@ -229,6 +229,10 @@ function SubchapterContent({
     readingTimeDisplay = `Total Reading: ${finalReadingTime}`;
   }
 
+  // We'll also show quizScore if it exists and is not null
+  const { quizScore } = subChapter; // from the API route
+  const quizDisplay = quizScore !== null ? `Quiz Score: ${quizScore}` : null;
+
   // --------------------------------------------------------------------------------
   // Styles
   // --------------------------------------------------------------------------------
@@ -349,7 +353,7 @@ function SubchapterContent({
           </button>
         </div>
 
-        {/* Right side: word count + font size + Timer */}
+        {/* Right side: word count + font size + Timer + Quiz Score */}
         <div style={rightInfoContainerStyle}>
           {subChapter.wordCount && (
             <div style={smallInfoTextStyle}>
@@ -366,6 +370,14 @@ function SubchapterContent({
             </div>
           )}
 
+          {/* Quiz score if exists */}
+          {quizDisplay && (
+            <div style={smallInfoTextStyle}>
+              <strong>{quizDisplay}</strong>
+            </div>
+          )}
+
+          {/* Font size controls */}
           <div style={fontButtonContainerStyle}>
             <button style={primaryButtonStyle} onClick={decreaseFont}>
               A-
@@ -429,7 +441,6 @@ function SubchapterContent({
         subChapterName={subChapter.subChapterName}
         subChapterContent={subChapter.summary}
         userId={userId}
-        // Pass any other needed props
       />
     </div>
   );

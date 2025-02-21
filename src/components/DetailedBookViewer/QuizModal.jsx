@@ -25,7 +25,7 @@ function QuizModal({
   isOpen,
   onClose,
   userId,
-  subChapterId,        // We'll need these to check if a quiz doc exists
+  subChapterId,
   subChapterName,
   subChapterContent,
   backendURL
@@ -40,17 +40,14 @@ function QuizModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // For the quiz data:
+  // For quiz data:
   const [questions, setQuestions] = useState([]);
   const [selectedAnswers, setSelectedAnswers] = useState({});
   const [score, setScore] = useState(null);
 
-  // Whether the quiz is read-only (already taken) or new
+  // readOnly => user sees the final quiz w/o ability to change
   const [readOnly, setReadOnly] = useState(false);
 
-  // On open, we do 2 steps:
-  // 1) check if a quiz doc for userId + subChapterId already exists
-  // 2) if not found => generate from GPT
   useEffect(() => {
     if (!isOpen) return;
 
@@ -61,7 +58,6 @@ function QuizModal({
     setScore(null);
     setReadOnly(false);
 
-    // 1) Try to fetch existing quiz from /api/quizzes
     if (!userId || !subChapterId) {
       setError("Missing userId or subChapterId");
       setLoading(false);
@@ -71,14 +67,19 @@ function QuizModal({
     fetchExistingQuiz(userId, subChapterId)
       .then((existingQuiz) => {
         if (existingQuiz) {
-          // Found an existing quiz => show read-only
-          setQuestions(existingQuiz.questions || []);
-          setSelectedAnswers(existingQuiz.selectedAnswers || {});
-          setScore(existingQuiz.score ?? null);
-          setReadOnly(true); // This indicates user already took the quiz
-          setLoading(false);
+          // If an existing quiz doc has score === 3, show it in read-only mode
+          if (existingQuiz.score === 3) {
+            setQuestions(existingQuiz.questions || []);
+            setSelectedAnswers(existingQuiz.selectedAnswers || {});
+            setScore(existingQuiz.score ?? null);
+            setReadOnly(true);
+            setLoading(false);
+          } else {
+            // If score < 3, we IGNORE this doc => fetch a new quiz from GPT
+            fetchQuizFromGPT();
+          }
         } else {
-          // No existing quiz => call GPT to generate new
+          // No doc found => generate from GPT
           fetchQuizFromGPT();
         }
       })
@@ -87,10 +88,9 @@ function QuizModal({
         setError(err.message);
         setLoading(false);
       });
-    // eslint-disable-next-line
   }, [isOpen]);
 
-  // Step 1: fetch existing quiz doc if it exists
+  // Step 1) fetch existing quiz doc if it exists (the MOST RECENT doc)
   const fetchExistingQuiz = async (userId, subChapterId) => {
     try {
       const url = `${backendURL}/api/quizzes?userId=${userId}&subChapterId=${subChapterId}`;
@@ -99,10 +99,10 @@ function QuizModal({
       
       const data = await resp.json();
       if (data.success && data.data) {
-        // doc found
-        return data.data; // Return the doc data => { userId, subChapterId, questions, ...}
+        // data.data => { userId, subChapterId, questions, score, selectedAnswers, ... }
+        return data.data; 
       } else {
-        // no quiz found or success=false
+        // success=false or no doc => return null
         return null;
       }
     } catch (error) {
@@ -110,10 +110,10 @@ function QuizModal({
     }
   };
 
-  // Step 2: fetch new quiz from GPT if none existed
+  // Step 2) GPT fetch if no doc or doc.score <3
   const fetchQuizFromGPT = async () => {
     if (!apiKey) {
-      setError("No OpenAI API key found in environment!");
+      setError("No OpenAI API key found!");
       setLoading(false);
       return;
     }
@@ -162,13 +162,11 @@ function QuizModal({
     }
   };
 
-  // user picks an answer
   const handleOptionChange = (qIndex, optIndex) => {
-    if (readOnly) return; // do nothing if read-only
+    if (readOnly) return; 
     setSelectedAnswers((prev) => ({ ...prev, [qIndex]: optIndex }));
   };
 
-  // user clicks Submit => compute score => store doc
   const handleSubmit = async () => {
     if (!questions.length) return;
     let correctCount = 0;
@@ -200,11 +198,10 @@ function QuizModal({
       setError(err.message);
     }
 
-    // set read-only after submission
     setReadOnly(true);
   };
 
-  // store doc
+  // store doc => presumably the back end does a .add(...) or .set(...) with new doc ID
   const saveQuizToServer = async ({
     userId,
     subChapterId,
@@ -312,7 +309,7 @@ function QuizModal({
                           type="radio"
                           name={`q-${qIndex}`}
                           value={opt}
-                          disabled={readOnly} // disable if read-only
+                          disabled={readOnly}
                           checked={checked}
                           onChange={() => handleOptionChange(qIndex, optIndex)}
                         />
@@ -331,7 +328,7 @@ function QuizModal({
               </div>
             )}
 
-            {/* If read-only or we have a score, hide submit */}
+            {/* If readOnly or we've already got a score, hide submit */}
             {!readOnly && score === null && (
               <button style={primaryButtonStyle} onClick={handleSubmit}>
                 Submit
@@ -340,7 +337,7 @@ function QuizModal({
           </div>
         )}
 
-        {/* If we have no quiz from GPT and not loading/error */}
+        {/* If no quiz from GPT and not loading/error */}
         {!loading && !error && questions.length === 0 && (
           <p>No questions available.</p>
         )}
