@@ -25,6 +25,25 @@ function SubchapterContent({
 }) {
   if (!subChapter) return null;
 
+
+  // ----------------------------------------------
+  // POST to /api/user-activities
+  // ----------------------------------------------
+  async function postUserActivity(eventType) {
+    try {
+      await axios.post(`${backendURL}/api/user-activities`, {
+        userId,
+        subChapterId: subChapter.subChapterId,
+        eventType,
+        // Optionally pass a client-side timestamp if you want:
+        timestamp: new Date().toISOString()
+      });
+    } catch (err) {
+      console.error("Error posting user activity:", err);
+      // Not blocking, just log or show a warning
+    }
+  }
+
   // --------------------------------------------------------------------------------
   // 1) Local Proficiency (optimistic UI)
   // --------------------------------------------------------------------------------
@@ -162,6 +181,10 @@ function SubchapterContent({
         subChapterId: subChapter.subChapterId,
         startReading: true,
       });
+
+      // 2) Also post to the new /api/user-activities
+      await postUserActivity("startReading");
+
       onRefreshData && onRefreshData();
     } catch (error) {
       console.error("Error starting reading:", error);
@@ -186,6 +209,10 @@ function SubchapterContent({
         subChapterId: subChapter.subChapterId,
         endReading: true,
       });
+
+      // 2) Also post to the new /api/user-activities
+      await postUserActivity("stopReading");
+
       onRefreshData && onRefreshData();
     } catch (error) {
       console.error("Error stopping reading:", error);

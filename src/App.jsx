@@ -30,11 +30,8 @@ import SubchapterNameUploader from "./components/AdminDashboard/SubchapterNameUp
 import PlatformIntro from "./components/Onboarding/PlatformIntro";
 import PersonalizationProgress from "./components/Onboarding/PersonalizationProgress";
 
-import BrowserPage from "./components/HomePage/BrowserPage";
-import AcademicHomePage from "./components/HomePage/AcademicHomePage";
-import VocationalHomePage from "./components/HomePage/VocationalHomePage";
-import CasualHomePage from "./components/HomePage/CasualHomePage";
-import CompetitiveHomePage from "./components/HomePage/CompetitiveHomePage";
+import Home from "./components/HomePage/Home";
+
 
 
 import LearnerPersonaForm from "./components/Onboarding/LearnerPersonaForm";
@@ -206,15 +203,7 @@ function App() {
         />
 
 
-        {/* 9. BrowserPage */}
-        <Route
-          path="/main"
-          element={
-            <PrivateRoute>
-              <BrowserPage />
-            </PrivateRoute>
-          }
-        />
+        
 
         {/* 10. Learner Persona */}
         <Route
@@ -272,44 +261,16 @@ function App() {
 
         {/* 15. Academic Home Page */}
         <Route
-          path="/academichomepage"
+          path="/home"
           element={
             <PrivateRoute>
-              <AcademicHomePage />
+              <Home />
             </PrivateRoute>
           }
         />
 
 
-        {/* 15. Casual Home Page */}
-                <Route
-          path="/casualhomepage"
-          element={
-            <PrivateRoute>
-              <CasualHomePage />
-            </PrivateRoute>
-          }
-        />
-
-        {/* 15. COmpetitive Home Page */}
-        <Route
-          path="/competitivehomepage"
-          element={
-            <PrivateRoute>
-              <CompetitiveHomePage />
-            </PrivateRoute>
-          }
-        />
-
-        {/* 15. Vocational Home Page */}
-        <Route
-          path="/vocationalhomepage"
-          element={
-            <PrivateRoute>
-              <VocationalHomePage />
-            </PrivateRoute>
-          }
-        />
+        
 
 
         {/* 15. Vocational Home Page */}

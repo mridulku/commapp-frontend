@@ -32,7 +32,7 @@ function NavigationBar() {
   return (
     <nav style={navContainerStyle}>
       {/* Dummy routes (replace with real paths/routes in your app) */}
-      <NavLink to="/academichomepage" style={({ isActive }) => getLinkStyle(isActive)}>
+      <NavLink to="/home" style={({ isActive }) => getLinkStyle(isActive)}>
         Home
       </NavLink>
       <NavLink to="/userprofileanalytics" style={({ isActive }) => getLinkStyle(isActive)}>

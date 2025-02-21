@@ -1,509 +1,191 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import NavigationBar from "../DetailedBookViewer/NavigationBar";
+// If you have your firebase.js in "../../firebase", adjust as needed:
+import { auth } from "../../firebase";
+import axios from "axios";
 
 /**
- * UserProfileAnalytics.jsx
- * Enhanced to show how each metric influences the AI-driven adaptive learning.
+ * UserProfileAnalytics.jsx (Single-file approach)
+ * 1) Grabs userId from Firebase Auth
+ * 2) Fetches user activities from a backend API ("/api/user-activities?userId=xxx")
+ * 3) Displays them in a simple list
+ * No direct Firestore usage, so no need for "db" import here.
  */
 function UserProfileAnalytics() {
-  // =====================================================
-  // State: expanded to include new data from your list
-  // =====================================================
-  const [userStats, setUserStats] = useState({
-    userName: "John Doe",
-    age: 25,
-    educationalBackground: "Undergraduate",
-    languagePreference: "English",
-    readingSpeedWpm: 280, // words per minute
-    totalWordsRead: 45000,
-    subchaptersCompleted: 18,
-    totalSubchapters: 25,
-    averageQuizScore: 82, // in percentage
+  // 1) Local state: userId from Auth
+  const [userId, setUserId] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
-    // Difficulty aptitude
-    difficultyAptitude: {
-      highDifficultyScore: 75,
-      mediumDifficultyScore: 85,
-      lowDifficultyScore: 90,
-    },
+  // 2) Activity log states
+  const [activityLog, setActivityLog] = useState([]);
+  const [loadingActivities, setLoadingActivities] = useState(false);
+  const [error, setError] = useState(null);
 
-    // Engagement
-    engagement: {
-      totalTimeSpentMinutes: 360, // total minutes across platform
-      frequencyOfVisits: "Daily",
-      averageSessionLengthMinutes: 15,
-    },
+  // We'll assume your backend URL is in an env variable, or you can hard-code:
+  const backendURL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
 
-    // Mastery in different subjects
-    masteryBySubject: {
-      math: 80,
-      biology: 72,
-      physics: 94,
-    },
+  // ==============================
+  // Step A: Listen to auth state
+  // ==============================
+  useEffect(() => {
+    // Listen for Firebase Auth changes:
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (user) {
+        setUserId(user.uid);
+      } else {
+        setUserId(null);
+      }
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
 
-    // Learning style
-    learningStyle: {
-      explanationMode: "Video", // e.g. "Text", "Video", "Analogy"...
-      stepByStepPreference: true,
-    },
-
-    // Session history
-    sessionHistory: [
-      { date: "2023-08-01", wordsRead: 1200, minutesSpent: 10, quizScore: 70 },
-      { date: "2023-08-02", wordsRead: 2000, minutesSpent: 15, quizScore: 85 },
-      { date: "2023-08-03", wordsRead: 2200, minutesSpent: 18, quizScore: 90 },
-      { date: "2023-08-04", wordsRead: 1000, minutesSpent: 8, quizScore: 95 },
-    ],
-  });
-
-  // =====================================================
-  // Handlers / Computation Helpers
-  // =====================================================
-  const handleUpdateReadingSpeed = () => {
-    const newSpeed = prompt("Enter new reading speed (WPM):", userStats.readingSpeedWpm);
-    if (newSpeed && !isNaN(newSpeed)) {
-      setUserStats((prev) => ({
-        ...prev,
-        readingSpeedWpm: parseInt(newSpeed),
-      }));
+  // ==============================
+  // Step B: Fetch user activities
+  // ==============================
+  useEffect(() => {
+    if (authLoading) return; // Wait for auth to finish
+    if (!userId) {
+      // If no user is logged in, we won't fetch
+      setActivityLog([]);
+      return;
     }
-  };
 
-  const handleUpdateAge = () => {
-    const newAge = prompt("Enter your age:", userStats.age);
-    if (newAge && !isNaN(newAge)) {
-      setUserStats((prev) => ({
-        ...prev,
-        age: parseInt(newAge),
-      }));
-    }
-  };
+    // Otherwise, fetch from your Express API
+    const fetchActivities = async () => {
+      setLoadingActivities(true);
+      setError(null);
+      try {
+        // e.g. GET /api/user-activities?userId=acbhbtiODoPPcks2CP6Z
+        const url = `${backendURL}/api/user-activities?userId=${userId}`;
+        const response = await axios.get(url);
+        if (response.data.success) {
+          setActivityLog(response.data.data); // array of events
+        } else {
+          setError("Failed to fetch user activities.");
+        }
+      } catch (err) {
+        console.error("Error fetching user activities:", err);
+        setError(err.message);
+      } finally {
+        setLoadingActivities(false);
+      }
+    };
 
-  const getSubchapterProgressPct = () => {
-    if (userStats.totalSubchapters === 0) return 0;
-    return (userStats.subchaptersCompleted / userStats.totalSubchapters) * 100;
-  };
+    fetchActivities();
+  }, [userId, authLoading, backendURL]);
 
-  const totalHoursSpent = (userStats.engagement.totalTimeSpentMinutes / 60).toFixed(1);
-
-  // =====================================================
-  // Helper: color-coded difficulty or performance
-  // Could do more sophisticated logic here
-  // =====================================================
-  const getColorByScore = (score) => {
-    if (score >= 80) return "#4CAF50"; // green
-    if (score >= 60) return "#FFC107"; // yellow
-    return "#F44336"; // red
-  };
-
+  // ==============================
+  // Rendering
+  // ==============================
   return (
-    <div style={containerStyle}>
-      {/* ============ Sidebar ============ */}
-      <aside style={sidebarStyle}>
-        <h3 style={{ marginTop: 0 }}>Menu</h3>
-        <button style={sidebarButtonStyle} onClick={() => alert("View Profile clicked")}>
-          View Profile
-        </button>
-        <button style={sidebarButtonStyle} onClick={() => alert("Analytics clicked")}>
-          Analytics
-        </button>
-        <button style={sidebarButtonStyle} onClick={() => alert("Settings clicked")}>
-          Settings
-        </button>
-      </aside>
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+      {/* Reuse your existing NavigationBar */}
+      <NavigationBar />
 
-      {/* ============ Main Content ============ */}
-      <main style={{ flex: 1, padding: "30px" }}>
-        <h1 style={{ marginBottom: "20px" }}>User Profile & Analytics</h1>
+      <div
+        style={{
+          flex: 1,
+          background: "linear-gradient(135deg, #0F2027, #203A43, #2C5364)",
+          color: "#fff",
+          fontFamily: "'Open Sans', sans-serif",
+          padding: "20px",
+          overflowY: "auto",
+        }}
+      >
+        <h2>User Profile & Activity</h2>
 
-        {/* =====================================
-            Global User Profile & Demographics
-           ===================================== */}
-        <div style={cardStyle}>
-          <h2 style={cardTitleStyle}>Global User Profile</h2>
-          <div style={{ display: "flex", gap: "30px", flexWrap: "wrap" }}>
-            <div>
-              <p style={infoLineStyle}>
-                <strong>Name:</strong> {userStats.userName}
-              </p>
-              <p style={infoLineStyle}>
-                <strong>Age:</strong> {userStats.age}{" "}
-                <button style={inlineButtonStyle} onClick={handleUpdateAge}>
-                  Update
-                </button>
-              </p>
-              <p style={infoLineStyle}>
-                <strong>Educational Background:</strong>{" "}
-                {userStats.educationalBackground}
-              </p>
-              <p style={infoLineStyle}>
-                <strong>Language Preference:</strong> {userStats.languagePreference}
-              </p>
-            </div>
-            <div>
-              <p style={infoLineStyle}>
-                <strong>Preferred Explanation Mode:</strong>{" "}
-                {userStats.learningStyle.explanationMode}{" "}
-                <span style={{ fontSize: "0.8rem", color: "#FFD700" }}>
-                  (AI Impact: We prioritize {userStats.learningStyle.explanationMode.toLowerCase()} content 
-                  in lessons & quizzes.)
-                </span>
-              </p>
-              <p style={infoLineStyle}>
-                <strong>Step-by-step Preference:</strong>{" "}
-                {userStats.learningStyle.stepByStepPreference ? "Yes" : "No"}{" "}
-                <span style={{ fontSize: "0.8rem", color: "#FFD700" }}>
-                  (AI Impact: Explanations given in smaller, sequential chunks.)
-                </span>
-              </p>
-              <p style={infoLineStyle}>
-                <strong>Reading Speed (WPM):</strong> {userStats.readingSpeedWpm}{" "}
-                <button style={inlineButtonStyle} onClick={handleUpdateReadingSpeed}>
-                  Update
-                </button>
-                <br />
-                <span style={{ fontSize: "0.8rem", color: "#FFD700" }}>
-                  (AI Impact: Study plans & quiz length adapt to this speed 
-                  in real-time.)
-                </span>
-              </p>
-              <p style={infoLineStyle}>
-                <strong>Total Words Read:</strong> {userStats.totalWordsRead}
-              </p>
-            </div>
-          </div>
-        </div>
+        {/* If Auth is still loading */}
+        {authLoading && <p>Checking sign-in status...</p>}
 
-        {/* =====================================
-            Reading & Subchapter Progress
-           ===================================== */}
-        <div style={cardStyle}>
-          <h2 style={cardTitleStyle}>Reading & Subchapter Progress</h2>
-          <div style={{ display: "flex", gap: "30px", flexWrap: "wrap" }}>
-            <div>
-              <p style={infoLineStyle}>
-                <strong>Subchapters Completed:</strong>{" "}
-                {userStats.subchaptersCompleted} / {userStats.totalSubchapters}{" "}
-                <span style={{ fontSize: "0.8rem", color: "#FFD700" }}>
-                  (AI sees you're {getSubchapterProgressPct().toFixed(1)}% done 
-                  and adjusts next content accordingly.)
-                </span>
-              </p>
-              {/* Subchapter Completion Progress Bar */}
-              <div style={{ marginTop: "15px", maxWidth: "250px" }}>
-                <label style={labelStyle}>Subchapter Completion:</label>
-                <div style={progressBarContainerStyle}>
-                  <div
-                    style={{
-                      ...progressBarFillStyle,
-                      width: `${getSubchapterProgressPct()}%`,
-                    }}
-                  />
-                </div>
-                <p style={progressTextStyle}>
-                  {getSubchapterProgressPct().toFixed(1)}% Completed
-                </p>
-              </div>
-            </div>
-            <div>
-              <p style={{ fontSize: "0.9rem", marginTop: "5px" }}>
-                <strong>Adaptive Content Delivery:</strong> 
-                <br />
-                {getSubchapterProgressPct() > 70
-                  ? "You are progressing quickly! AI is preparing more advanced topics. ✅"
-                  : "You still have subchapters to go—AI will reinforce key concepts to ensure full understanding. 🔄"}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* =====================================
-            Quiz Performance & Mastery
-           ===================================== */}
-        <div style={cardStyle}>
-          <h2 style={cardTitleStyle}>Quiz Performance & Mastery</h2>
-          <p style={{ margin: "5px 0" }}>
-            <strong>Average Quiz Score:</strong>{" "}
-            <span style={{ color: getColorByScore(userStats.averageQuizScore) }}>
-              {userStats.averageQuizScore}%
-            </span>{" "}
-            <span style={{ fontSize: "0.8rem", color: "#FFD700" }}>
-              (AI Impact: If consistently high, AI raises difficulty to challenge you. 
-              If low, AI provides extra practice & simpler explanations.)
-            </span>
+        {/* If user is not logged in after auth loading finishes */}
+        {!authLoading && !userId && (
+          <p style={{ color: "red" }}>
+            No user is currently logged in. Please sign in to view profile/activity.
           </p>
+        )}
 
-          {/* Mastery by Subject */}
-          <div style={{ marginTop: "20px" }}>
-            <h4 style={{ marginBottom: "10px" }}>Mastery by Subject</h4>
-            <div style={{ display: "flex", gap: "30px" }}>
-              {Object.entries(userStats.masteryBySubject).map(([subject, score]) => (
-                <div key={subject}>
-                  <p style={infoLineStyle}>
-                    <strong>{subject.toUpperCase()}:</strong>{" "}
-                    <span style={{ color: getColorByScore(score) }}>{score}%</span>
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <p style={{ fontSize: "0.9rem", fontStyle: "italic", marginTop: "10px" }}>
-            *Subject mastery updates after each quiz. AI uses these levels to
-            select next modules & question difficulty.
-          </p>
-        </div>
-
-        {/* =====================================
-            Difficulty Aptitude
-           ===================================== */}
-        <div style={cardStyle}>
-          <h2 style={cardTitleStyle}>Difficulty Aptitude</h2>
-          <div style={{ display: "flex", gap: "40px", flexWrap: "wrap" }}>
-            <div>
-              <p style={{ ...infoLineStyle, color: getColorByScore(userStats.difficultyAptitude.highDifficultyScore) }}>
-                <strong>High Difficulty Score:</strong>{" "}
-                {userStats.difficultyAptitude.highDifficultyScore}%
+        {/* If user is logged in, we can show something about them + activity */}
+        {!authLoading && userId && (
+          <>
+            {/* Minimal user info */}
+            <div
+              style={{
+                backgroundColor: "rgba(255,255,255,0.1)",
+                borderRadius: "8px",
+                padding: "20px",
+                marginBottom: "20px",
+              }}
+            >
+              <h3 style={{ marginTop: 0 }}>Global User Profile</h3>
+              <p>
+                <strong>User ID:</strong> {userId}
               </p>
-              <p style={{ ...infoLineStyle, color: getColorByScore(userStats.difficultyAptitude.mediumDifficultyScore) }}>
-                <strong>Medium Difficulty Score:</strong>{" "}
-                {userStats.difficultyAptitude.mediumDifficultyScore}%
-              </p>
-              <p style={{ ...infoLineStyle, color: getColorByScore(userStats.difficultyAptitude.lowDifficultyScore) }}>
-                <strong>Low Difficulty Score:</strong>{" "}
-                {userStats.difficultyAptitude.lowDifficultyScore}%
+              <p>
+                (You could fetch more info about the user from /api/users or a Firestore doc.)
               </p>
             </div>
-            <div>
-              <p style={{ fontSize: "0.9rem" }}>
-                <strong>AI Difficulty Scaling:</strong>
-                <br />
-                {userStats.difficultyAptitude.highDifficultyScore >= 70
-                  ? "You excel at high difficulty—AI adds advanced questions. 📈"
-                  : "AI is balancing difficulty levels to keep you challenged but not overwhelmed. 🔄"}
-              </p>
-            </div>
-          </div>
-        </div>
 
-        {/* =====================================
-            Engagement Metrics
-           ===================================== */}
-        <div style={cardStyle}>
-          <h2 style={cardTitleStyle}>Engagement & AI Study Optimization</h2>
-          <div style={{ display: "flex", gap: "40px", flexWrap: "wrap" }}>
-            <div>
-              <p style={infoLineStyle}>
-                <strong>Total Time on Platform:</strong> {totalHoursSpent} hours
-              </p>
-              <p style={infoLineStyle}>
-                <strong>Visit Frequency:</strong> {userStats.engagement.frequencyOfVisits}
-              </p>
-              <p style={infoLineStyle}>
-                <strong>Average Session Length:</strong>{" "}
-                {userStats.engagement.averageSessionLengthMinutes} minutes
-              </p>
-            </div>
-            <div style={{ fontSize: "0.9rem" }}>
-              <strong>AI Insights:</strong>
-              <ul style={{ marginTop: "5px", paddingLeft: "18px" }}>
-                {userStats.engagement.averageSessionLengthMinutes < 15 ? (
-                  <li>
-                    Your sessions are short! AI suggests short, frequent study bursts 
-                    for better retention. ⏳
-                  </li>
-                ) : (
-                  <li>
-                    Good session length—AI will maintain standard chunk sizes. ✅
-                  </li>
-                )}
-                {userStats.engagement.frequencyOfVisits === "Daily" ? (
-                  <li>
-                    You're logging in daily—AI is scheduling spaced-repetition reviews. 🔔
-                  </li>
-                ) : (
-                  <li>
-                    Less frequent visits—AI may group content to match your schedule. ⚖️
-                  </li>
-                )}
-              </ul>
-            </div>
-          </div>
-        </div>
+            {/* Activity Log */}
+            <div
+              style={{
+                backgroundColor: "rgba(255,255,255,0.1)",
+                borderRadius: "8px",
+                padding: "20px",
+              }}
+            >
+              <h3 style={{ marginTop: 0 }}>Activity Log</h3>
+              {loadingActivities && <p>Loading user activities...</p>}
+              {error && <p style={{ color: "red" }}>Error: {error}</p>}
 
-        {/* =====================================
-            Session History
-           ===================================== */}
-        <div style={cardStyle}>
-          <h2 style={cardTitleStyle}>Session History</h2>
-          {userStats.sessionHistory.length === 0 ? (
-            <p style={{ fontStyle: "italic" }}>No session data available.</p>
-          ) : (
-            <table style={tableStyle}>
-              <thead>
-                <tr>
-                  <th style={thTdStyle}>Date</th>
-                  <th style={thTdStyle}>Words Read</th>
-                  <th style={thTdStyle}>Time Spent (min)</th>
-                  <th style={thTdStyle}>Quiz Score (%)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {userStats.sessionHistory.map((session, index) => (
-                  <tr key={index}>
-                    <td style={thTdStyle}>{session.date}</td>
-                    <td style={thTdStyle}>{session.wordsRead}</td>
-                    <td style={thTdStyle}>{session.minutesSpent}</td>
-                    <td
-                      style={{
-                        ...thTdStyle,
-                        color: getColorByScore(session.quizScore),
-                      }}
-                    >
-                      {session.quizScore}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+              {!loadingActivities && !error && activityLog.length === 0 && (
+                <p style={{ fontStyle: "italic" }}>No recent activity found.</p>
+              )}
 
-        {/* =====================================
-            AI Suggestions or Next Steps
-           ===================================== */}
-        <div style={cardStyle}>
-          <h2 style={cardTitleStyle}>AI Suggestions & Next Steps</h2>
-          <p style={{ margin: "8px 0" }}>
-            <strong>Based on Your Current Data, the AI Recommends:</strong>
-          </p>
-          <ul style={{ listStyleType: "circle", paddingLeft: "20px" }}>
-            {/* Example logic-driven suggestions */}
-            {userStats.averageQuizScore < 80 && (
-              <li>
-                Revisit subchapters with lower quiz scores to boost comprehension.
-              </li>
-            )}
-            {userStats.difficultyAptitude.highDifficultyScore > 70 && (
-              <li>
-                AI will introduce advanced-level tasks next. Keep up the great work!
-              </li>
-            )}
-            {getSubchapterProgressPct() < 50 && (
-              <li>
-                Complete more subchapters to unlock additional practice quizzes.
-              </li>
-            )}
-            <li>
-              Maintain your daily login streak to enable deeper spaced-repetition
-              strategies.
-            </li>
-          </ul>
-          <p style={{ fontSize: "0.9rem", fontStyle: "italic", marginTop: "5px" }}>
-            These suggestions update automatically as your stats change.
-          </p>
-        </div>
-      </main>
+              {!loadingActivities && !error && activityLog.length > 0 && (
+                <ul style={{ listStyleType: "none", paddingLeft: 0 }}>
+                  {activityLog.map((item) => (
+                    <li key={item._id || item.id} style={logItemStyle}>
+                      <div style={logDateStyle}>
+                        {item.timestamp
+                          ? new Date(item.timestamp).toLocaleString()
+                          : "No timestamp"}
+                      </div>
+                      <div style={logContentStyle}>
+                        <strong>{item.eventType}</strong>{" "}
+                        {item.subChapterId && (
+                          <>
+                            on subChapter <em>{item.subChapterId}</em>
+                          </>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
 
-/****************************************
- * Reusable Style Objects
- ****************************************/
-const containerStyle = {
-  display: "flex",
-  minHeight: "100vh",
-  background: "linear-gradient(135deg, #0F2027, #203A43, #2C5364)",
-  fontFamily: "'Open Sans', sans-serif",
-  color: "#fff",
+// Some inline style objects
+const logItemStyle = {
+  marginBottom: "15px",
+  paddingLeft: "10px",
+  borderLeft: "2px solid #FFD700",
 };
 
-const sidebarStyle = {
-  width: "220px",
-  backgroundColor: "rgba(255,255,255,0.1)",
-  backdropFilter: "blur(8px)",
-  padding: "20px",
-  display: "flex",
-  flexDirection: "column",
-  gap: "15px",
+const logDateStyle = {
+  fontSize: "0.85rem",
+  fontStyle: "italic",
+  marginBottom: "2px",
 };
 
-const sidebarButtonStyle = {
-  background: "none",
-  border: "1px solid #FFD700",
-  borderRadius: "4px",
-  padding: "10px",
-  color: "#FFD700",
-  fontWeight: "bold",
-  cursor: "pointer",
-  transition: "background 0.2s",
-  textAlign: "left",
-};
-
-const cardStyle = {
-  backgroundColor: "rgba(255,255,255,0.1)",
-  borderRadius: "10px",
-  padding: "20px",
-  marginBottom: "30px",
-};
-
-const cardTitleStyle = {
-  marginTop: 0,
-  marginBottom: "10px",
-  borderBottom: "1px solid rgba(255,255,255,0.3)",
-  paddingBottom: "5px",
-};
-
-const infoLineStyle = {
-  margin: "5px 0",
-};
-
-const inlineButtonStyle = {
-  marginLeft: "10px",
-  background: "#FFD700",
-  color: "#000",
-  border: "none",
-  borderRadius: "4px",
-  padding: "4px 8px",
-  fontWeight: "bold",
-  cursor: "pointer",
-};
-
-const labelStyle = {
-  display: "block",
-  marginBottom: "5px",
-};
-
-const progressBarContainerStyle = {
-  backgroundColor: "rgba(255,255,255,0.3)",
-  borderRadius: "6px",
-  overflow: "hidden",
-  height: "10px",
-  width: "100%",
-};
-
-const progressBarFillStyle = {
-  height: "100%",
-  background: "#FFD700",
-  transition: "width 0.3s",
-};
-
-const progressTextStyle = {
-  fontSize: "0.9rem",
-  marginTop: "5px",
-};
-
-const tableStyle = {
-  width: "100%",
-  borderCollapse: "collapse",
-  marginTop: "10px",
-};
-
-const thTdStyle = {
-  border: "1px solid rgba(255,255,255,0.3)",
-  padding: "8px",
-  textAlign: "center",
-  fontSize: "0.9rem",
+const logContentStyle = {
+  fontSize: "0.95rem",
 };
 
 export default UserProfileAnalytics;
