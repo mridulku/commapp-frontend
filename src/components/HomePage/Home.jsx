@@ -3,69 +3,105 @@ import NavigationBar from "../DetailedBookViewer/NavigationBar";
 import { useHomeData } from "./useHomeData";
 
 function Home() {
-  // 1) Pull data from our new hook
-  const { book, userId, loadingBook, error } = useHomeData();
+  // Pull data from our custom hook
+  const {
+    // Book
+    book,
+    loadingBook,
+    bookError,
 
-  // 2) We'll dynamically update the step detail for "Upload a Book"
-  //    If there's a book, show that name. If no book, maybe keep it locked or "start".
-  //    For example:
+    // Goal
+    goal,
+    loadingGoal,
+    goalError,
 
-  // Decide step status for #1
+    // Reading Speed
+    readingSpeed,
+    loadingSpeed,
+    speedError,
+  } = useHomeData();
+
+  // ====================== STEP #1: UPLOAD A BOOK ======================
   let uploadBookStepStatus = "start";
   let uploadBookDetail = "No book uploaded yet.";
 
   if (loadingBook) {
     uploadBookDetail = "(Loading your book...)";
-  } else if (error) {
-    // If there's an error, show error message
-    uploadBookDetail = `Error loading book: ${error}`;
+  } else if (bookError) {
+    uploadBookDetail = `Error loading book: ${bookError}`;
   } else if (book) {
-    // We have a book, so "done"
     uploadBookStepStatus = "done";
     uploadBookDetail = `You uploaded: ${book.name}`;
   }
 
-  // The rest of your steps
+  // ====================== STEP #2: SET YOUR LEARNING GOAL ======================
+  let goalStepStatus = "start";
+  let goalStepDetail = "No goal set yet.";
+
+  if (loadingGoal) {
+    goalStepDetail = "(Loading your goal...)";
+  } else if (goalError) {
+    goalStepDetail = `Error loading goal: ${goalError}`;
+  } else if (goal) {
+    goalStepStatus = "done";
+    goalStepDetail = `Goal: ${goal}`;
+  }
+
+  // ====================== STEP #3: CONFIRM READING SPEED ======================
+  let readingSpeedStepStatus = "start";
+  let readingSpeedDetail = "Reading speed not set yet.";
+
+  if (loadingSpeed) {
+    readingSpeedDetail = "(Loading reading speed...)";
+  } else if (speedError) {
+    readingSpeedDetail = `Error loading speed: ${speedError}`;
+  } else if (readingSpeed) {
+    // We have an integer readingSpeed => "done"
+    readingSpeedStepStatus = "done";
+    readingSpeedDetail = `${readingSpeed} WPM`;
+  }
+
+  // ====================== BUILD THE ONBOARDING STEPS ======================
   const onboardingSteps = [
     {
       id: 1,
       label: "Upload a Book",
       detail: uploadBookDetail,
-      status: uploadBookStepStatus
+      status: uploadBookStepStatus,
     },
     {
       id: 2,
       label: "Set Your Learning Goal",
-      detail: "Goal: Achieve Mastery",
-      status: "done"
+      detail: goalStepDetail,
+      status: goalStepStatus,
     },
     {
       id: 3,
       label: "Confirm Reading Speed",
-      detail: "200 WPM",
-      status: "done"
+      detail: readingSpeedDetail,
+      status: readingSpeedStepStatus,
     },
     {
       id: 4,
       label: "Read Your First Subchapter",
       detail: null,
-      status: "start"
+      status: "start",
     },
     {
       id: 5,
       label: "Take Your First Quiz",
       detail: null,
-      status: "locked"
+      status: "locked",
     },
     {
       id: 6,
       label: "Complete Your First Study Session",
       detail: null,
-      status: "locked"
-    }
+      status: "locked",
+    },
   ];
 
-  // The rest remains basically the same
+  // Calculate the progress bar
   const totalSteps = onboardingSteps.length;
   const doneCount = onboardingSteps.filter((s) => s.status === "done").length;
   const completionPercent = Math.round((doneCount / totalSteps) * 100);
@@ -80,7 +116,7 @@ function Home() {
           background: "linear-gradient(135deg, #0F2027, #203A43, #2C5364)",
           color: "#fff",
           padding: "20px",
-          overflowY: "auto"
+          overflowY: "auto",
         }}
       >
         {/* Combined "Welcome" + "Getting Started" */}
@@ -89,7 +125,7 @@ function Home() {
             backgroundColor: "rgba(255,255,255,0.1)",
             borderRadius: "8px",
             padding: "20px",
-            marginBottom: "20px"
+            marginBottom: "20px",
           }}
         >
           <h2 style={{ marginTop: 0 }}>Welcome to the Adaptive Learning Platform</h2>
@@ -110,7 +146,7 @@ function Home() {
               style={{
                 height: "10px",
                 backgroundColor: "#444",
-                borderRadius: "6px"
+                borderRadius: "6px",
               }}
             >
               <div
@@ -119,7 +155,7 @@ function Home() {
                   backgroundColor: "#FFD700",
                   height: "100%",
                   borderRadius: "6px",
-                  transition: "width 0.3s"
+                  transition: "width 0.3s",
                 }}
               />
             </div>
@@ -139,7 +175,7 @@ function Home() {
                   marginBottom: "10px",
                   padding: "8px",
                   borderRadius: "6px",
-                  backgroundColor: "rgba(255,255,255,0.2)"
+                  backgroundColor: "rgba(255,255,255,0.2)",
                 }}
               >
                 {/* Icon */}
@@ -154,7 +190,7 @@ function Home() {
                         borderRadius: "4px",
                         textAlign: "center",
                         color: "#000",
-                        fontWeight: "bold"
+                        fontWeight: "bold",
                       }}
                     >
                       ✓
@@ -167,7 +203,7 @@ function Home() {
                         height: "20px",
                         backgroundColor: "#ccc",
                         borderRadius: "4px",
-                        textAlign: "center"
+                        textAlign: "center",
                       }}
                     >
                       🔒
@@ -182,7 +218,7 @@ function Home() {
                         borderRadius: "4px",
                         textAlign: "center",
                         color: "#000",
-                        fontWeight: "bold"
+                        fontWeight: "bold",
                       }}
                     >
                       →
@@ -194,7 +230,7 @@ function Home() {
                         width: "20px",
                         height: "20px",
                         backgroundColor: "#aaa",
-                        borderRadius: "4px"
+                        borderRadius: "4px",
                       }}
                     />
                   )}
@@ -221,7 +257,7 @@ function Home() {
                       color: "#000",
                       cursor: "pointer",
                       fontWeight: "bold",
-                      fontSize: "0.85rem"
+                      fontSize: "0.85rem",
                     }}
                     onClick={() => alert(`Starting: ${step.label}`)}
                   >
@@ -233,7 +269,7 @@ function Home() {
           </div>
         </div>
 
-        {/* Today’s Plan + 3-card row remain the same */}
+        {/* (2) Today’s Plan + (3) 3-card row remain the same below */}
         {/* ... the rest of your Home content ... */}
       </div>
     </div>
