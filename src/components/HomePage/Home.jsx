@@ -19,6 +19,16 @@ function Home() {
     readingSpeed,
     loadingSpeed,
     speedError,
+
+    // Step #4: Has user read at least one subchapter?
+    hasReadSubchapter,
+    loadingReadSubchapter,
+    readSubchapterError,
+
+    // Step #5: Has user completed at least one quiz?
+    hasCompletedQuiz,
+    loadingQuizCompleted,
+    quizError,
   } = useHomeData();
 
   // ====================== STEP #1: UPLOAD A BOOK ======================
@@ -56,9 +66,46 @@ function Home() {
   } else if (speedError) {
     readingSpeedDetail = `Error loading speed: ${speedError}`;
   } else if (readingSpeed) {
-    // We have an integer readingSpeed => "done"
     readingSpeedStepStatus = "done";
     readingSpeedDetail = `${readingSpeed} WPM`;
+  }
+
+  // ====================== STEP #4: READ YOUR FIRST SUBCHAPTER ======================
+  let readSubchapterStepStatus = "start";
+  let readSubchapterStepDetail = "No subchapters read yet.";
+
+  if (loadingReadSubchapter) {
+    readSubchapterStepDetail = "(Checking if you've read a subchapter...)";
+  } else if (readSubchapterError) {
+    readSubchapterStepDetail = `Error: ${readSubchapterError}`;
+  } else if (hasReadSubchapter) {
+    readSubchapterStepStatus = "done";
+    readSubchapterStepDetail = "You finished reading at least one subchapter!";
+  }
+
+  // ====================== STEP #5: TAKE YOUR FIRST QUIZ ======================
+  let quizStepStatus = "locked";
+  let quizStepDetail = "You haven't taken any quiz yet.";
+
+  if (loadingQuizCompleted) {
+    quizStepDetail = "(Checking if you completed a quiz...)";
+  } else if (quizError) {
+    quizStepDetail = `Error: ${quizError}`;
+  } else if (hasCompletedQuiz) {
+    quizStepStatus = "done";
+    quizStepDetail = "You have completed at least one quiz!";
+  } else {
+    // We skip the "start" button. 
+    // If they haven't read subchapter or done a quiz, it stays locked until user meets your requirement.
+    // If you want it auto-unlocked, remove the check below:
+    if (hasReadSubchapter) {
+      // If you prefer to show it unlocked but no Start button:
+      // quizStepStatus = "start";
+      // quizStepDetail = "Ready to attempt your first quiz!";
+      // but no button is rendered, so it's basically unlocked but no action.
+      quizStepStatus = "start";
+      quizStepDetail = "Ready to attempt your first quiz!";
+    }
   }
 
   // ====================== BUILD THE ONBOARDING STEPS ======================
@@ -84,20 +131,14 @@ function Home() {
     {
       id: 4,
       label: "Read Your First Subchapter",
-      detail: null,
-      status: "start",
+      detail: readSubchapterStepDetail,
+      status: readSubchapterStepStatus,
     },
     {
       id: 5,
       label: "Take Your First Quiz",
-      detail: null,
-      status: "locked",
-    },
-    {
-      id: 6,
-      label: "Complete Your First Study Session",
-      detail: null,
-      status: "locked",
+      detail: quizStepDetail,
+      status: quizStepStatus,
     },
   ];
 
@@ -224,6 +265,7 @@ function Home() {
                       →
                     </span>
                   ) : (
+                    // fallback if we ever have a different status
                     <span
                       style={{
                         display: "inline-block",
@@ -246,31 +288,13 @@ function Home() {
                   )}
                 </div>
 
-                {/* "Start" Button if "start" */}
-                {step.status === "start" && (
-                  <button
-                    style={{
-                      padding: "6px 10px",
-                      border: "none",
-                      borderRadius: "4px",
-                      backgroundColor: "#FFD700",
-                      color: "#000",
-                      cursor: "pointer",
-                      fontWeight: "bold",
-                      fontSize: "0.85rem",
-                    }}
-                    onClick={() => alert(`Starting: ${step.label}`)}
-                  >
-                    Start
-                  </button>
-                )}
+                {/* We are removing the "Start" button for Step #5, so no button here */}
               </div>
             ))}
           </div>
         </div>
 
-        {/* (2) Today’s Plan + (3) 3-card row remain the same below */}
-        {/* ... the rest of your Home content ... */}
+        {/* Additional homepage content (Today’s Plan, 3-card row, etc.) */}
       </div>
     </div>
   );

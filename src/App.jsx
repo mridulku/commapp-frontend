@@ -9,6 +9,11 @@ import BooksOverview from "./components/BooksOverview/BooksOverview";
 import ReadingPlan from "./components/BooksOverview/ReadingPlan";
 
 
+import AdaptiveStatsDashboard from "./components/AdaptiveStatsDashboard";
+
+
+
+
 import GptQuestionGenerator from "./components/Quiz/GptQuestionGenerator";
 
 
@@ -344,6 +349,19 @@ function App() {
             </PrivateRoute>
           }
         />
+
+
+        {/* 15. Academic Home Page */}
+        <Route
+          path="/adaptivestatsdashboard"
+          element={
+            <PrivateRoute>
+              <AdaptiveStatsDashboard />
+            </PrivateRoute>
+          }
+        />
+
+
 
 
 
