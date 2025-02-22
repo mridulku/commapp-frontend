@@ -1,14 +1,12 @@
 // src/components/DetailedBookViewer/hooks/useBooksViewer.js
 import { useState, useEffect } from "react";
 import axios from "axios";
-import { auth } from "../../../firebase"; // Adjust if your Firebase import is different
+import { auth } from "../../../firebase";
 
 export function useBooksViewer() {
   const backendURL = import.meta.env.VITE_BACKEND_URL;
 
-  // --------------------------------------------
-  // 1) Handle userId via onAuthStateChanged
-  // --------------------------------------------
+  // -------------------------- 1) userId from Firebase Auth --------------------------
   const [userId, setUserId] = useState(null);
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
@@ -21,35 +19,59 @@ export function useBooksViewer() {
     return () => unsubscribe();
   }, []);
 
-  // ----------------------------- State Variables -----------------------------
+  // -------------------------- 2) "isOnboarded" Flag --------------------------
+  const [isOnboarded, setIsOnboarded] = useState(false);
+
+  useEffect(() => {
+    // If no user, reset isOnboarded => false
+    if (!userId) {
+      setIsOnboarded(false);
+      return;
+    }
+
+    // If we have a user, fetch the learnerPersonas doc
+    const fetchIsOnboarded = async () => {
+      try {
+        const res = await axios.get(`${backendURL}/api/learner-personas`, {
+          params: { userId },
+        });
+
+        if (res.data.success) {
+          const { isOnboarded } = res.data.data;
+          setIsOnboarded(!!isOnboarded); // ensure boolean
+        } else {
+          console.error("Failed to fetch isOnboarded:", res.data.error);
+          setIsOnboarded(false);
+        }
+      } catch (err) {
+        console.error("Error fetching isOnboarded:", err);
+        setIsOnboarded(false);
+      }
+    };
+
+    fetchIsOnboarded();
+  }, [userId, backendURL]);
+
+  // -------------------------- 3) Existing State Variables --------------------------
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(null);
 
-  // The raw "books" structure from /api/books
-  const [booksData, setBooksData] = useState([]);
-  // The aggregator structure from /api/books-aggregated
-  const [booksProgressData, setBooksProgressData] = useState([]);
+  const [booksData, setBooksData] = useState([]);         // raw
+  const [booksProgressData, setBooksProgressData] = useState([]); // aggregator
 
   const [selectedBook, setSelectedBook] = useState(null);
   const [selectedChapter, setSelectedChapter] = useState(null);
   const [selectedSubChapter, setSelectedSubChapter] = useState(null);
 
-  // Book-level expansion is a single string (only one book can expand at a time).
   const [expandedBookName, setExpandedBookName] = useState(null);
-
-  // Chapters: an array so multiple can be open at once.
   const [expandedChapters, setExpandedChapters] = useState([]);
 
-  // Tutor Modal
   const [showTutorModal, setShowTutorModal] = useState(false);
 
-  // --- NEW: View Mode (library, adaptive, overview, profile) ---
-  // Default to "overview" instead of "library"
+  // The default viewMode is "overview"
   const [viewMode, setViewMode] = useState("overview");
 
-  // --------------------------------------------
-  // 2) Fetch categories immediately (no userId needed)
-  // --------------------------------------------
+  // -------------------------- 4) Fetch Categories Immediately --------------------------
   useEffect(() => {
     const fetchCategories = async () => {
       try {
@@ -57,8 +79,6 @@ export function useBooksViewer() {
         if (res.data.success !== false) {
           const catData = res.data.data || res.data;
           setCategories(catData);
-
-          // If no category is selected, pick the first
           if (catData.length > 0) {
             setSelectedCategory(catData[0].categoryId);
           }
@@ -72,33 +92,28 @@ export function useBooksViewer() {
     fetchCategories();
   }, [backendURL]);
 
-  // --------------------------------------------
-  // 3) Only fetch books/progress if userId + selectedCategory
-  // --------------------------------------------
+  // -------------------------- 5) Fetch Books/Progress if userId + selectedCategory --------------------------
   useEffect(() => {
     if (!userId) return;
     if (!selectedCategory) return;
 
-    // Fetch data with reset when user changes category or logs in
     fetchAllData(true);
     // eslint-disable-next-line
   }, [userId, selectedCategory]);
 
-  // --------------------------------------------
-  // 4) Fetch All Data (with optional reset)
-  // --------------------------------------------
+  // -------------------------- 6) Fetch All Data --------------------------
   const fetchAllData = async (shouldReset = false) => {
     try {
-      // 1) /api/books to get raw book/chapter/subchapter structure
+      // 1) Raw structure
       const booksRes = await axios.get(
         `${backendURL}/api/books?categoryId=${selectedCategory}&userId=${userId}`
       );
       setBooksData(booksRes.data);
 
-      // 2) /api/books-aggregated for aggregator
+      // 2) Aggregated
       await fetchAggregatedData();
 
-      // 3) Optionally reset subchapter selections
+      // 3) Optionally reset selections
       if (shouldReset) {
         resetSelections();
       }
@@ -121,7 +136,7 @@ export function useBooksViewer() {
     }
   };
 
-  // ----------------------------- Reset Selections -----------------------------
+  // -------------------------- 7) Reset Selections --------------------------
   const resetSelections = () => {
     setSelectedBook(null);
     setSelectedChapter(null);
@@ -130,25 +145,21 @@ export function useBooksViewer() {
     setExpandedChapters([]);
   };
 
-  // --------------------------- Sidebar Handlers -------------------------------
+  // -------------------------- 8) Handlers --------------------------
   const handleCategoryChange = (e) => {
     setSelectedCategory(e.target.value);
   };
 
-  // Single expanded book
   const toggleBookExpansion = (bookName) => {
     setExpandedBookName((prev) => (prev === bookName ? null : bookName));
   };
 
-  // Multiple expanded chapters
   const toggleChapterExpansion = (chapterKey) => {
-    setExpandedChapters((prev) => {
-      if (prev.includes(chapterKey)) {
-        return prev.filter((item) => item !== chapterKey);
-      } else {
-        return [...prev, chapterKey];
-      }
-    });
+    setExpandedChapters((prev) =>
+      prev.includes(chapterKey)
+        ? prev.filter((item) => item !== chapterKey)
+        : [...prev, chapterKey]
+    );
   };
 
   const handleBookClick = (book) => {
@@ -166,49 +177,46 @@ export function useBooksViewer() {
     setSelectedSubChapter(subChapter);
   };
 
-  // If you want to toggle "done" for a subchapter
   const handleToggleDone = async (subChapter) => {
-    alert(
-      "handleToggleDone: Not implemented. Typically you'd update user progress in Firestore or your DB."
-    );
+    alert("handleToggleDone: Not implemented yet.");
   };
 
-  // ------------------------- Book Progress Helper ------------------------------
+  // -------------------------- 9) Book Progress Helper --------------------------
   const getBookProgressInfo = (bookName) => {
     return booksProgressData.find((b) => b.bookName === bookName);
   };
 
-  // ------------------------- Adaptive Filtering ------------------------------
+  // -------------------------- 10) Adaptive Filtering --------------------------
   function filterAdaptiveData(allBooks) {
     return allBooks
       .map((book) => {
         const filteredChapters = book.chapters
           .map((chap) => {
-            const filteredSubChapters = chap.subChapters.filter(
-              (sub) => sub.adaptive === true
-            );
+            const filteredSubChapters = chap.subChapters.filter((sub) => sub.adaptive === true);
             return { ...chap, subChapters: filteredSubChapters };
           })
           .filter((c) => c.subChapters.length > 0);
-
         return { ...book, chapters: filteredChapters };
       })
       .filter((b) => b.chapters.length > 0);
   }
 
+  // -------------------------- 11) Filtering by viewMode --------------------------
   const getFilteredBooksData = () => {
     if (viewMode === "library") {
       return booksData;
     } else if (viewMode === "adaptive") {
       return filterAdaptiveData(booksData);
     }
-    // For "overview" or "profile" or any other mode, return all by default
+    // For overview/profile/others => return all
     return booksData;
   };
 
+  // Return everything needed by your components
   return {
     // states
     userId,
+    isOnboarded, // <-- new flag
     categories,
     selectedCategory,
     booksData,
@@ -224,7 +232,7 @@ export function useBooksViewer() {
     viewMode,
     setViewMode,
 
-    // set-states / toggles
+    // toggles
     setShowTutorModal,
 
     // methods
@@ -237,11 +245,11 @@ export function useBooksViewer() {
     handleToggleDone,
     getBookProgressInfo,
 
-    // main fetch methods
+    // fetch
     fetchAllData,
     fetchAggregatedData,
 
-    // new helper for library vs. adaptive (and possibly overview)
+    // library vs. adaptive
     getFilteredBooksData,
   };
 }

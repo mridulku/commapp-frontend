@@ -1,4 +1,5 @@
 // src/components/DetailedBookViewer/BooksViewer2.jsx
+
 import React from "react";
 import { useBooksViewer } from "./hooks/useBooksViewer";
 
@@ -9,14 +10,19 @@ import UnifiedSidebar from "./UnifiedSidebar";
 import BookProgress from "./BookProgress";
 import SubchapterContent from "./SubchapterContent";
 import DynamicTutorModal from "./DynamicTutorModal";
-import OverviewContent from "./OverviewContent"; // optional
-
-// NEW: The user profile analytics component
+import OverviewContent from "./OverviewContent"; 
 import UserProfileAnalytics from "./UserProfileAnalytics";
+
+// For the 2x2 grid, we create 4 separate panel components
+import PanelA from "./PanelA";
+import PanelB from "./PanelB";
+import PanelC from "./PanelC";
+import PanelD from "./PanelD";
 
 function BooksViewer2() {
   const {
     userId,
+    isOnboarded, // <-- new flag from the hook
     categories,
     selectedCategory,
     getFilteredBooksData,
@@ -73,9 +79,28 @@ function BooksViewer2() {
   // Decide main content
   let mainContent;
   if (viewMode === "overview") {
-    mainContent = <OverviewContent />;
+    if (!isOnboarded) {
+      // If user is NOT onboarded, show the old "OverviewContent" (onboarding, etc.)
+      mainContent = <OverviewContent />;
+    } else {
+      // If user IS onboarded, show a 2x2 grid of the four separate panels
+      mainContent = (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "20px",
+          }}
+        >
+          <PanelA />
+          <PanelB />
+          <PanelC />
+          <PanelD />
+        </div>
+      );
+    }
   } else if (viewMode === "profile") {
-    // RENDER the new user profile analytics component here
+    // Render the new user profile analytics component here
     mainContent = <UserProfileAnalytics />;
   } else {
     // library or adaptive
