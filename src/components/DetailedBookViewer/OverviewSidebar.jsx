@@ -5,11 +5,11 @@ function OverviewSidebar({
   categories,
   selectedCategory,
   onCategoryChange,
-  viewMode,
-  setViewMode,
 }) {
   // --------------- Styles ---------------
-  const sidebarStyle = {
+  const containerStyle = {
+    // You can keep or rename this style object
+    // and remove the modeToggleContainerStyle if you like
     width: "300px",
     backgroundColor: "rgba(255, 255, 255, 0.1)",
     backdropFilter: "blur(8px)",
@@ -17,23 +17,6 @@ function OverviewSidebar({
     borderRight: "2px solid rgba(255,255,255,0.2)",
     overflowY: "auto",
   };
-
-  const modeToggleContainerStyle = {
-    display: "flex",
-    gap: "10px",
-    marginBottom: "20px",
-  };
-
-  const toggleButtonStyle = (active) => ({
-    padding: "8px 16px",
-    borderRadius: "4px",
-    border: "none",
-    cursor: "pointer",
-    fontWeight: "bold",
-    background: active ? "#FFD700" : "transparent",
-    color: active ? "#000" : "#fff",
-    transition: "background-color 0.3s",
-  });
 
   const dropdownContainerStyle = { marginBottom: "20px" };
 
@@ -47,30 +30,8 @@ function OverviewSidebar({
   };
 
   return (
-    <div style={sidebarStyle}>
-      {/* 1) Mode Toggle */}
-      <div style={modeToggleContainerStyle}>
-        <button
-          style={toggleButtonStyle(viewMode === "library")}
-          onClick={() => setViewMode("library")}
-        >
-          Library
-        </button>
-        <button
-          style={toggleButtonStyle(viewMode === "adaptive")}
-          onClick={() => setViewMode("adaptive")}
-        >
-          Adaptive
-        </button>
-        <button
-          style={toggleButtonStyle(viewMode === "overview")}
-          onClick={() => setViewMode("overview")}
-        >
-          Overview
-        </button>
-      </div>
-
-      {/* 2) Category Dropdown */}
+    <div style={containerStyle}>
+      {/* 1) Category Dropdown */}
       <div style={dropdownContainerStyle}>
         <label htmlFor="categorySelect" style={{ marginRight: "10px", color: "#fff" }}>
           Select Category:
@@ -89,12 +50,12 @@ function OverviewSidebar({
         </select>
       </div>
 
-      {/* 3) Some heading for your overview */}
+      {/* 2) Overview Section */}
       <div style={headingStyle}>Overview</div>
       <p style={{ color: "#fff" }}>
         This is where you can display your custom “overview” content on the sidebar.
       </p>
-      {/* You can expand this to show stats, summaries, etc. */}
+      {/* Possibly add stats, summaries, etc. here */}
     </div>
   );
 }

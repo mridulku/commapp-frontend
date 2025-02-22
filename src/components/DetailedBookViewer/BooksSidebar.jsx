@@ -16,13 +16,9 @@ function BooksSidebar({
   handleBookClick,
   handleSubChapterClick,
   selectedSubChapter,
-
-  // NEW: we have "overview" as a possible mode
-  viewMode,
-  setViewMode,
 }) {
   // --------------- Styles ---------------
-  const sidebarStyle = {
+  const containerStyle = {
     width: "300px",
     backgroundColor: "rgba(255, 255, 255, 0.1)",
     backdropFilter: "blur(8px)",
@@ -30,23 +26,6 @@ function BooksSidebar({
     borderRight: "2px solid rgba(255,255,255,0.2)",
     overflowY: "auto",
   };
-
-  const modeToggleContainerStyle = {
-    display: "flex",
-    gap: "10px",
-    marginBottom: "20px",
-  };
-
-  const toggleButtonStyle = (active) => ({
-    padding: "8px 16px",
-    borderRadius: "4px",
-    border: "none",
-    cursor: "pointer",
-    fontWeight: "bold",
-    background: active ? "#FFD700" : "transparent",
-    color: active ? "#000" : "#fff",
-    transition: "background-color 0.3s",
-  });
 
   const dropdownContainerStyle = { marginBottom: "20px" };
 
@@ -80,7 +59,7 @@ function BooksSidebar({
     fontSize: "0.95rem",
     transition: "background-color 0.3s",
     color: "#fff",
-    cursor: "pointer", // entire row is clickable
+    cursor: "pointer",
   };
 
   const subChapterTitleStyle = {
@@ -102,33 +81,8 @@ function BooksSidebar({
 
   // --------------- Render ---------------
   return (
-    <div style={sidebarStyle}>
-      {/* 1) Mode Toggle: Library vs. Adaptive vs. Overview */}
-      <div style={modeToggleContainerStyle}>
-        <button
-          style={toggleButtonStyle(viewMode === "library")}
-          onClick={() => setViewMode("library")}
-        >
-          Library
-        </button>
-
-        <button
-          style={toggleButtonStyle(viewMode === "adaptive")}
-          onClick={() => setViewMode("adaptive")}
-        >
-          Adaptive
-        </button>
-
-        {/* NEW BUTTON: Overview */}
-        <button
-          style={toggleButtonStyle(viewMode === "overview")}
-          onClick={() => setViewMode("overview")}
-        >
-          Overview
-        </button>
-      </div>
-
-      {/* 2) Category Dropdown */}
+    <div style={containerStyle}>
+      {/* 1) Category Dropdown */}
       <div style={dropdownContainerStyle}>
         <label htmlFor="categorySelect" style={{ marginRight: "10px", color: "#fff" }}>
           Select Category:
@@ -147,7 +101,7 @@ function BooksSidebar({
         </select>
       </div>
 
-      {/* 3) Books (and chapters/subchapters) */}
+      {/* 2) Books List */}
       <div>
         <div style={listHeaderStyle}>Books</div>
 
@@ -181,7 +135,6 @@ function BooksSidebar({
 
                   return (
                     <div key={chapter.chapterName}>
-                      {/* Chapter Row: entire row toggles expansion */}
                       <div
                         style={chapterTitleContainerStyle}
                         onMouseOver={(e) => {
@@ -198,7 +151,6 @@ function BooksSidebar({
                         <span style={{ fontWeight: "bold" }}>
                           {isChapterExpanded ? "-" : "+"}
                         </span>
-
                         <span style={{ flex: 1 }}>{chapter.chapterName}</span>
                       </div>
 

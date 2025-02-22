@@ -1,0 +1,136 @@
+// src/components/DetailedBookViewer/UnifiedSidebar.jsx
+import React from "react";
+
+// Import the 4 specialized sidebars:
+import OverviewSidebar from "./OverviewSidebar";
+import AdaptiveSidebar from "./AdaptiveSidebar";
+import BooksSidebar from "./BooksSidebar";
+import ProfileSidebar from "./ProfileSidebar";
+
+function UnifiedSidebar({
+  // We'll pass in these props from BooksViewer2
+  viewMode,
+  setViewMode,
+
+  // shared props for the sidebars
+  categories,
+  selectedCategory,
+  onCategoryChange,
+
+  // Only needed by some sidebars:
+  booksData,
+  expandedBookName,
+  toggleBookExpansion,
+  expandedChapters,
+  toggleChapterExpansion,
+  handleBookClick,
+  handleSubChapterClick,
+  selectedSubChapter,
+}) {
+  // Styling for the top-level container of the entire sidebar
+  const sidebarContainerStyle = {
+    width: "300px",
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    backdropFilter: "blur(8px)",
+    padding: "20px",
+    borderRight: "2px solid rgba(255,255,255,0.2)",
+    overflowY: "auto",
+  };
+
+  // We'll create a small section for the mode buttons
+  const modeToggleContainerStyle = {
+    display: "flex",
+    gap: "10px",
+    marginBottom: "20px",
+    flexWrap: "wrap",
+  };
+
+  const toggleButtonStyle = (active) => ({
+    padding: "8px 16px",
+    borderRadius: "4px",
+    border: "none",
+    cursor: "pointer",
+    fontWeight: "bold",
+    background: active ? "#FFD700" : "transparent",
+    color: active ? "#000" : "#fff",
+    transition: "background-color 0.3s",
+  });
+
+  // Decide which specialized content to show below the buttons
+  let content;
+  if (viewMode === "overview") {
+    content = (
+      <OverviewSidebar
+        categories={categories}
+        selectedCategory={selectedCategory}
+        onCategoryChange={onCategoryChange}
+      />
+    );
+  } else if (viewMode === "adaptive") {
+    content = (
+      <AdaptiveSidebar
+        categories={categories}
+        selectedCategory={selectedCategory}
+        onCategoryChange={onCategoryChange}
+        booksData={booksData}
+        handleSubChapterClick={handleSubChapterClick}
+        selectedSubChapter={selectedSubChapter}
+      />
+    );
+  } else if (viewMode === "library") {
+    content = (
+      <BooksSidebar
+        categories={categories}
+        selectedCategory={selectedCategory}
+        onCategoryChange={onCategoryChange}
+        booksData={booksData}
+        expandedBookName={expandedBookName}
+        toggleBookExpansion={toggleBookExpansion}
+        expandedChapters={expandedChapters}
+        toggleChapterExpansion={toggleChapterExpansion}
+        handleBookClick={handleBookClick}
+        handleSubChapterClick={handleSubChapterClick}
+        selectedSubChapter={selectedSubChapter}
+      />
+    );
+  } else if (viewMode === "profile") {
+    content = <ProfileSidebar />;
+  }
+
+  return (
+    <div style={sidebarContainerStyle}>
+      {/* 1) Mode Buttons at the top */}
+      <div style={modeToggleContainerStyle}>
+        <button
+          style={toggleButtonStyle(viewMode === "overview")}
+          onClick={() => setViewMode("overview")}
+        >
+          Overview
+        </button>
+        <button
+          style={toggleButtonStyle(viewMode === "adaptive")}
+          onClick={() => setViewMode("adaptive")}
+        >
+          Adaptive
+        </button>
+        <button
+          style={toggleButtonStyle(viewMode === "library")}
+          onClick={() => setViewMode("library")}
+        >
+          Library
+        </button>
+        <button
+          style={toggleButtonStyle(viewMode === "profile")}
+          onClick={() => setViewMode("profile")}
+        >
+          Profile
+        </button>
+      </div>
+
+      {/* 2) Render whichever specialized sidebar is appropriate */}
+      {content}
+    </div>
+  );
+}
+
+export default UnifiedSidebar;

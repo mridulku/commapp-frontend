@@ -43,9 +43,9 @@ export function useBooksViewer() {
   // Tutor Modal
   const [showTutorModal, setShowTutorModal] = useState(false);
 
-  // --- NEW: View Mode (library, adaptive, or overview) ---
-  const [viewMode, setViewMode] = useState("library"); 
-  // You can switch to "overview" by calling setViewMode("overview").
+  // --- NEW: View Mode (library, adaptive, overview, profile) ---
+  // Default to "overview" instead of "library"
+  const [viewMode, setViewMode] = useState("overview");
 
   // --------------------------------------------
   // 2) Fetch categories immediately (no userId needed)
@@ -202,8 +202,7 @@ export function useBooksViewer() {
     } else if (viewMode === "adaptive") {
       return filterAdaptiveData(booksData);
     }
-    // For "overview" or any other mode, you might just return booksData,
-    // or some specialized subset if you like:
+    // For "overview" or "profile" or any other mode, return all by default
     return booksData;
   };
 

@@ -9,14 +9,11 @@ function AdaptiveSidebar({
 
   handleSubChapterClick,
   selectedSubChapter,
-
-  viewMode,
-  setViewMode,
 }) {
   const [expandedSessions, setExpandedSessions] = useState([]);
 
   // ---------- STYLES ----------
-  const sidebarStyle = {
+  const containerStyle = {
     width: "300px",
     backgroundColor: "rgba(255, 255, 255, 0.1)",
     backdropFilter: "blur(8px)",
@@ -24,23 +21,6 @@ function AdaptiveSidebar({
     borderRight: "2px solid rgba(255,255,255,0.2)",
     overflowY: "auto",
   };
-
-  const modeToggleContainerStyle = {
-    display: "flex",
-    gap: "10px",
-    marginBottom: "20px",
-  };
-
-  const toggleButtonStyle = (active) => ({
-    padding: "8px 16px",
-    borderRadius: "4px",
-    border: "none",
-    cursor: "pointer",
-    fontWeight: "bold",
-    background: active ? "#FFD700" : "transparent",
-    color: active ? "#000" : "#fff",
-    transition: "background-color 0.3s",
-  });
 
   const dropdownContainerStyle = { marginBottom: "20px" };
 
@@ -106,30 +86,8 @@ function AdaptiveSidebar({
   const sessionsMap = groupBySessionBookChapter(booksData);
 
   return (
-    <div style={sidebarStyle}>
-      {/* 1) Mode Toggle: Library/Adaptive/Overview */}
-      <div style={modeToggleContainerStyle}>
-        <button
-          style={toggleButtonStyle(viewMode === "library")}
-          onClick={() => setViewMode("library")}
-        >
-          Library
-        </button>
-        <button
-          style={toggleButtonStyle(viewMode === "adaptive")}
-          onClick={() => setViewMode("adaptive")}
-        >
-          Adaptive
-        </button>
-        <button
-          style={toggleButtonStyle(viewMode === "overview")}
-          onClick={() => setViewMode("overview")}
-        >
-          Overview
-        </button>
-      </div>
-
-      {/* 2) Category Dropdown */}
+    <div style={containerStyle}>
+      {/* 1) Category Dropdown */}
       <div style={dropdownContainerStyle}>
         <label htmlFor="categorySelect" style={{ marginRight: "10px", color: "#fff" }}>
           Select Category:
@@ -148,10 +106,10 @@ function AdaptiveSidebar({
         </select>
       </div>
 
-      {/* 3) Heading for "Adaptive Sessions" */}
+      {/* 2) Heading for "Adaptive Sessions" */}
       <div style={headingStyle}>Adaptive Sessions</div>
 
-      {/* 4) Render each Session as an expandable panel */}
+      {/* 3) Render each Session as an expandable panel */}
       {Object.keys(sessionsMap)
         .sort((a, b) => sortSessionKeys(a, b))
         .map((sessionKey) => {
@@ -174,7 +132,7 @@ function AdaptiveSidebar({
                 {sessionKey}
               </div>
 
-              {/* If expanded, show the Books -> Chapters -> Subchapters */}
+              {/* If expanded, show Books -> Chapters -> SubChapters */}
               {isExpanded && renderSessionContent(sessionsMap[sessionKey])}
             </div>
           );
@@ -258,6 +216,7 @@ function AdaptiveSidebar({
   }
 }
 
+// ----- helper functions -----
 function getProficiencyInfo(proficiency) {
   if (!proficiency || proficiency.trim() === "") {
     return {
