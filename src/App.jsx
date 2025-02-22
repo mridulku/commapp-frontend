@@ -49,7 +49,6 @@ import TestView from "./components/Testing/TestView";
 import GamificationDashboard from "./components/Gamification/GamificationDashboard";
 import MaterialUploadWizard from "./components/AddedFunctions/MaterialUploadWizard";
 import CoursesMaterialManager from "./components/AddedFunctions/CoursesMaterialManager";
-import UserProfileAnalytics from "./components/AddedFunctions/UserProfileAnalytics";
 
 
 
@@ -288,15 +287,6 @@ function App() {
           }
         />
 
-        {/* 15. Academic Home Page */}
-        <Route
-          path="/userprofileanalytics"
-          element={
-            <PrivateRoute>
-              <UserProfileAnalytics />
-            </PrivateRoute>
-          }
-        />
 
 
         {/* 15. Academic Home Page */}

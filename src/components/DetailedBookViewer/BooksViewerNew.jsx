@@ -2,13 +2,17 @@
 import React from "react";
 import { useBooksViewer } from "./hooks/useBooksViewer";
 
-// Our new single sidebar:
+// Our single unified sidebar:
 import UnifiedSidebar from "./UnifiedSidebar";
 
+// Existing components
 import BookProgress from "./BookProgress";
 import SubchapterContent from "./SubchapterContent";
 import DynamicTutorModal from "./DynamicTutorModal";
 import OverviewContent from "./OverviewContent"; // optional
+
+// NEW: The user profile analytics component
+import UserProfileAnalytics from "./UserProfileAnalytics";
 
 function BooksViewer2() {
   const {
@@ -71,12 +75,8 @@ function BooksViewer2() {
   if (viewMode === "overview") {
     mainContent = <OverviewContent />;
   } else if (viewMode === "profile") {
-    mainContent = (
-      <div>
-        <h2>Profile Section</h2>
-        <p>Display user profile details or settings here.</p>
-      </div>
-    );
+    // RENDER the new user profile analytics component here
+    mainContent = <UserProfileAnalytics />;
   } else {
     // library or adaptive
     mainContent = (
