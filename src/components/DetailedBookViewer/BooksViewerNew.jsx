@@ -1,11 +1,11 @@
-/********************************************
- * BooksViewerNew.jsx (Parent Container)
- ********************************************/
+// src/components/DetailedBookViewer/BooksViewer2.jsx
 import React from "react";
 
 // Child components
 import BooksSidebar from "./BooksSidebar";
-import AdaptiveSidebar from "./AdaptiveSidebar"; // <-- new adaptive component
+import AdaptiveSidebar from "./AdaptiveSidebar";
+import OverviewSidebar from "./OverviewSidebar"; // NEW
+
 import BookProgress from "./BookProgress";
 import SubchapterContent from "./SubchapterContent";
 import DynamicTutorModal from "./DynamicTutorModal";
@@ -13,23 +13,22 @@ import NavigationBar from "./NavigationBar";
 
 // The custom hook with all your logic
 import { useBooksViewer } from "./hooks/useBooksViewer";
+import OverviewContent from "./OverviewContent"; // NEW
 
 function BooksViewer2() {
-  // Extract state + methods from your hook
   const {
     userId,
     categories,
     selectedCategory,
     getFilteredBooksData,
-    booksProgressData,
     selectedBook,
     selectedChapter,
     selectedSubChapter,
     expandedBookName,
     expandedChapters,
     showTutorModal,
-    viewMode,        // "library" or "adaptive"
-    setViewMode,     // function to update viewMode
+    viewMode, // "library" or "adaptive" or "overview"
+    setViewMode,
     setShowTutorModal,
     handleCategoryChange,
     toggleBookExpansion,
@@ -69,11 +68,7 @@ function BooksViewer2() {
     marginTop: "10px",
   };
 
-  // Debug logs
-  console.log("DEBUG: userId =>", userId);
-  console.log("DEBUG: selectedSubChapter =>", selectedSubChapter);
-
-  // Depending on "library" or "adaptive", we filter or not
+  // Depending on "library" or "adaptive" or "overview", we filter or not:
   const displayedBooksData = getFilteredBooksData();
 
   return (
@@ -84,7 +79,6 @@ function BooksViewer2() {
         {/* =========== SIDEBAR =========== */}
         {viewMode === "library" ? (
           <BooksSidebar
-            // Library mode props
             categories={categories}
             selectedCategory={selectedCategory}
             selectedSubChapter={selectedSubChapter}
@@ -100,15 +94,23 @@ function BooksViewer2() {
             viewMode={viewMode}
             setViewMode={setViewMode}
           />
-        ) : (
+        ) : viewMode === "adaptive" ? (
           <AdaptiveSidebar
-            // Adaptive mode props
             categories={categories}
             selectedCategory={selectedCategory}
             onCategoryChange={handleCategoryChange}
-            booksData={displayedBooksData} // grouped by session inside the component
+            booksData={displayedBooksData}
             selectedSubChapter={selectedSubChapter}
             handleSubChapterClick={handleSubChapterClick}
+            viewMode={viewMode}
+            setViewMode={setViewMode}
+          />
+        ) : (
+          // ================= OVERVIEW ====================
+          <OverviewSidebar
+            categories={categories}
+            selectedCategory={selectedCategory}
+            onCategoryChange={handleCategoryChange}
             viewMode={viewMode}
             setViewMode={setViewMode}
           />
@@ -116,76 +118,84 @@ function BooksViewer2() {
 
         {/* =========== MAIN CONTENT =========== */}
         <div style={mainContentStyle}>
-          {/* Tutor Modal button */}
-          {selectedBook && (
-            <button
-              style={{
-                ...buttonStyle,
-                position: "absolute",
-                top: "20px",
-                right: "20px",
-                zIndex: 10,
-              }}
-              onClick={() => setShowTutorModal(true)}
-            >
-              Learn Through Dynamic Tutor
-            </button>
-          )}
+          {viewMode === "overview" ? (
+            // If in OVERVIEW mode, display the new component
+            <OverviewContent />
+          ) : (
+            // Otherwise, keep the existing logic for library/adaptive
+            <>
+              {/* Tutor Modal button (only if a book is selected) */}
+              {selectedBook && (
+                <button
+                  style={{
+                    ...buttonStyle,
+                    position: "absolute",
+                    top: "20px",
+                    right: "20px",
+                    zIndex: 10,
+                  }}
+                  onClick={() => setShowTutorModal(true)}
+                >
+                  Learn Through Dynamic Tutor
+                </button>
+              )}
 
-          {/* Book Progress */}
-          {selectedBook && (
-            <BookProgress
-              book={selectedBook}
-              selectedChapter={selectedChapter}
-              selectedSubChapter={selectedSubChapter}
-              getBookProgressInfo={getBookProgressInfo}
-            />
-          )}
+              {/* Book Progress */}
+              {selectedBook && (
+                <BookProgress
+                  book={selectedBook}
+                  selectedChapter={selectedChapter}
+                  selectedSubChapter={selectedSubChapter}
+                  getBookProgressInfo={getBookProgressInfo}
+                />
+              )}
 
-          {/* If no subchapter is selected, show a placeholder */}
-          {!selectedSubChapter && (
-            <div
-              style={{
-                backgroundColor: "rgba(255,255,255,0.1)",
-                backdropFilter: "blur(6px)",
-                padding: "15px",
-                borderRadius: "6px",
-                marginBottom: "20px",
-              }}
-            >
-              <h2
-                style={{
-                  marginTop: 0,
-                  borderBottom: "1px solid rgba(255,255,255,0.3)",
-                  paddingBottom: "5px",
-                  marginBottom: "10px",
-                }}
-              >
-                No Subchapter Selected
-              </h2>
-              <p>Please select a subchapter from the sidebar to see its content.</p>
-            </div>
-          )}
+              {/* If no subchapter is selected, show a placeholder */}
+              {!selectedSubChapter && (
+                <div
+                  style={{
+                    backgroundColor: "rgba(255,255,255,0.1)",
+                    backdropFilter: "blur(6px)",
+                    padding: "15px",
+                    borderRadius: "6px",
+                    marginBottom: "20px",
+                  }}
+                >
+                  <h2
+                    style={{
+                      marginTop: 0,
+                      borderBottom: "1px solid rgba(255,255,255,0.3)",
+                      paddingBottom: "5px",
+                      marginBottom: "10px",
+                    }}
+                  >
+                    No Subchapter Selected
+                  </h2>
+                  <p>Please select a subchapter from the sidebar to see its content.</p>
+                </div>
+              )}
 
-          {/* If a subchapter is selected, show its content */}
-          {selectedSubChapter && (
-            <SubchapterContent
-              subChapter={selectedSubChapter}
-              onToggleDone={handleToggleDone}
-              userId={userId}
-              backendURL={import.meta.env.VITE_BACKEND_URL}
-              onRefreshData={fetchAllData}
-            />
-          )}
+              {/* If a subchapter is selected, show its content */}
+              {selectedSubChapter && (
+                <SubchapterContent
+                  subChapter={selectedSubChapter}
+                  onToggleDone={handleToggleDone}
+                  userId={userId}
+                  backendURL={import.meta.env.VITE_BACKEND_URL}
+                  onRefreshData={fetchAllData}
+                />
+              )}
 
-          {/* Dynamic Tutor Modal */}
-          {showTutorModal && (
-            <DynamicTutorModal
-              book={selectedBook}
-              chapter={selectedChapter}
-              subChapter={selectedSubChapter}
-              onClose={() => setShowTutorModal(false)}
-            />
+              {/* Dynamic Tutor Modal */}
+              {showTutorModal && (
+                <DynamicTutorModal
+                  book={selectedBook}
+                  chapter={selectedChapter}
+                  subChapter={selectedSubChapter}
+                  onClose={() => setShowTutorModal(false)}
+                />
+              )}
+            </>
           )}
         </div>
       </div>

@@ -1,6 +1,4 @@
-/********************************************
- * BooksSidebar.jsx (Multi-chapter expand/collapse + View Mode Toggle)
- ********************************************/
+// src/components/DetailedBookViewer/BooksSidebar.jsx
 import React from "react";
 
 function BooksSidebar({
@@ -9,24 +7,19 @@ function BooksSidebar({
   onCategoryChange,
   booksData,
 
-  // Single expanded book
   expandedBookName,
   toggleBookExpansion,
 
-  // Multi-chapter expansions
   expandedChapters,
   toggleChapterExpansion,
 
-  // For selecting a subchapter (unchanged)
   handleBookClick,
   handleSubChapterClick,
-
-  // Currently selected subchapter (for highlight)
   selectedSubChapter,
 
-  // NEW PROPS for view mode
-  viewMode,       // "library" or "adaptive"
-  setViewMode,    // function to change mode
+  // NEW: we have "overview" as a possible mode
+  viewMode,
+  setViewMode,
 }) {
   // --------------- Styles ---------------
   const sidebarStyle = {
@@ -110,7 +103,7 @@ function BooksSidebar({
   // --------------- Render ---------------
   return (
     <div style={sidebarStyle}>
-      {/* 1) Mode Toggle: Library vs. Adaptive */}
+      {/* 1) Mode Toggle: Library vs. Adaptive vs. Overview */}
       <div style={modeToggleContainerStyle}>
         <button
           style={toggleButtonStyle(viewMode === "library")}
@@ -118,11 +111,20 @@ function BooksSidebar({
         >
           Library
         </button>
+
         <button
           style={toggleButtonStyle(viewMode === "adaptive")}
           onClick={() => setViewMode("adaptive")}
         >
           Adaptive
+        </button>
+
+        {/* NEW BUTTON: Overview */}
+        <button
+          style={toggleButtonStyle(viewMode === "overview")}
+          onClick={() => setViewMode("overview")}
+        >
+          Overview
         </button>
       </div>
 
@@ -197,9 +199,7 @@ function BooksSidebar({
                           {isChapterExpanded ? "-" : "+"}
                         </span>
 
-                        <span style={{ flex: 1 }}>
-                          {chapter.chapterName}
-                        </span>
+                        <span style={{ flex: 1 }}>{chapter.chapterName}</span>
                       </div>
 
                       {/* SubChapters if expanded */}
@@ -210,7 +210,9 @@ function BooksSidebar({
                             selectedSubChapter.subChapterId === subChap.subChapterId;
 
                           const highlightStyle = {
-                            backgroundColor: isSelected ? "rgba(255,215,0,0.4)" : "transparent",
+                            backgroundColor: isSelected
+                              ? "rgba(255,215,0,0.4)"
+                              : "transparent",
                           };
 
                           return (
@@ -222,7 +224,8 @@ function BooksSidebar({
                               }}
                               onMouseOver={(e) => {
                                 if (!isSelected) {
-                                  e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)";
+                                  e.currentTarget.style.backgroundColor =
+                                    "rgba(255,255,255,0.2)";
                                 }
                               }}
                               onMouseOut={(e) => {

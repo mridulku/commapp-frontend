@@ -1,30 +1,18 @@
-/********************************************
- * AdaptiveSidebar.jsx
- * - Shows the same "Library"/"Adaptive" toggle at the top.
- * - Groups subchapters by session => book => chapter.
- * - Allows expand/collapse at the session level.
- * - Displays proficiency status as a small colored block to the right.
- ********************************************/
+// src/components/DetailedBookViewer/AdaptiveSidebar.jsx
 import React, { useState } from "react";
 
 function AdaptiveSidebar({
-  // Same top-level props as your BooksSidebar
   categories,
   selectedCategory,
   onCategoryChange,
-
-  // The "adaptive" subset of data. Usually you'd pass the filtered data here.
   booksData,
 
-  // For highlighting or selecting a subchapter
   handleSubChapterClick,
   selectedSubChapter,
 
-  // Mode + setter so we can switch back to library
   viewMode,
   setViewMode,
 }) {
-  // ---------- Local state for expand/collapse of sessions ----------
   const [expandedSessions, setExpandedSessions] = useState([]);
 
   // ---------- STYLES ----------
@@ -101,10 +89,9 @@ function AdaptiveSidebar({
     marginTop: "2px",
     display: "flex",
     alignItems: "center",
-    justifyContent: "space-between", // so status block can be on the right
+    justifyContent: "space-between",
   };
 
-  // A little style for the subchapter's proficiency block
   const profBlockBase = {
     display: "inline-block",
     marginLeft: "8px",
@@ -112,7 +99,7 @@ function AdaptiveSidebar({
     borderRadius: "4px",
     fontSize: "0.8rem",
     fontWeight: "bold",
-    color: "#000", // since we might use bright backgrounds
+    color: "#000",
   };
 
   // ---------- Build the Session → Book → Chapter groupings ----------
@@ -120,7 +107,7 @@ function AdaptiveSidebar({
 
   return (
     <div style={sidebarStyle}>
-      {/* 1) Mode Toggle: let user go back to library */}
+      {/* 1) Mode Toggle: Library/Adaptive/Overview */}
       <div style={modeToggleContainerStyle}>
         <button
           style={toggleButtonStyle(viewMode === "library")}
@@ -133,6 +120,12 @@ function AdaptiveSidebar({
           onClick={() => setViewMode("adaptive")}
         >
           Adaptive
+        </button>
+        <button
+          style={toggleButtonStyle(viewMode === "overview")}
+          onClick={() => setViewMode("overview")}
+        >
+          Overview
         </button>
       </div>
 
@@ -177,9 +170,7 @@ function AdaptiveSidebar({
                   e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.15)";
                 }}
               >
-                <span style={{ marginRight: "8px" }}>
-                  {isExpanded ? "-" : "+"}
-                </span>
+                <span style={{ marginRight: "8px" }}>{isExpanded ? "-" : "+"}</span>
                 {sessionKey}
               </div>
 
@@ -202,7 +193,6 @@ function AdaptiveSidebar({
   }
 
   function renderSessionContent(sessionData) {
-    // sessionData => { bookName: { chapterName: [subChapters...] } }
     return Object.keys(sessionData).map((bookName) => {
       const chaptersObj = sessionData[bookName];
 
@@ -215,7 +205,6 @@ function AdaptiveSidebar({
               <div key={chapterName}>
                 <div style={chapterTitleStyle}>{chapterName}</div>
                 {subChaps.map((subChap) => {
-                  // highlight if selected
                   const isSelected =
                     selectedSubChapter &&
                     selectedSubChapter.subChapterId === subChap.subChapterId;
@@ -226,10 +215,8 @@ function AdaptiveSidebar({
                       : "transparent",
                   };
 
-                  // We create a style for the subchapter container
                   const containerStyle = { ...subChapterTitleStyle, ...highlightStyle };
 
-                  // Render the proficiency block
                   const { label: profLabel, bgColor } = getProficiencyInfo(subChap.proficiency);
 
                   return (
@@ -239,8 +226,7 @@ function AdaptiveSidebar({
                       onClick={() => handleSubChapterClick(subChap)}
                       onMouseOver={(e) => {
                         if (!isSelected) {
-                          e.currentTarget.style.backgroundColor =
-                            "rgba(255,255,255,0.2)";
+                          e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)";
                         }
                       }}
                       onMouseOut={(e) => {
@@ -272,19 +258,13 @@ function AdaptiveSidebar({
   }
 }
 
-/** 
- * Returns an object with label + bgColor 
- * for the given proficiency value.
- */
 function getProficiencyInfo(proficiency) {
-  // If it is null or empty => "unread"
   if (!proficiency || proficiency.trim() === "") {
     return {
       label: "Unread",
       bgColor: "red",
     };
   }
-
   switch (proficiency) {
     case "reading":
       return {
@@ -309,23 +289,12 @@ function getProficiencyInfo(proficiency) {
   }
 }
 
-/**
- * Groups the `booksData` into a structure:
- * {
- *   [sessionKey]: {
- *      [bookName]: {
- *         [chapterName]: [array of subchapters]
- *      }
- *   }
- * }
- */
 function groupBySessionBookChapter(booksData) {
   const sessionsMap = {};
 
   booksData.forEach((book) => {
     book.chapters.forEach((chapter) => {
       chapter.subChapters.forEach((sub) => {
-        // e.g. sub.session = 1 => "Session 1"
         const sessionVal = sub.session ? `Session ${sub.session}` : "Session: None";
 
         if (!sessionsMap[sessionVal]) {
@@ -345,9 +314,6 @@ function groupBySessionBookChapter(booksData) {
   return sessionsMap;
 }
 
-/**
- * Example sorting function for session keys like "Session 1"
- */
 function sortSessionKeys(a, b) {
   const numA = parseInt(a.replace(/\D+/g, ""), 10) || 0;
   const numB = parseInt(b.replace(/\D+/g, ""), 10) || 0;

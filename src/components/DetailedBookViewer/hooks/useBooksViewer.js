@@ -43,8 +43,9 @@ export function useBooksViewer() {
   // Tutor Modal
   const [showTutorModal, setShowTutorModal] = useState(false);
 
-  // --- NEW: View Mode (library or adaptive) ---
-  const [viewMode, setViewMode] = useState("library");
+  // --- NEW: View Mode (library, adaptive, or overview) ---
+  const [viewMode, setViewMode] = useState("library"); 
+  // You can switch to "overview" by calling setViewMode("overview").
 
   // --------------------------------------------
   // 2) Fetch categories immediately (no userId needed)
@@ -88,13 +89,13 @@ export function useBooksViewer() {
   // --------------------------------------------
   const fetchAllData = async (shouldReset = false) => {
     try {
-      // 1) /api/books to get raw book/chapter/subchapter structure (including session)
+      // 1) /api/books to get raw book/chapter/subchapter structure
       const booksRes = await axios.get(
         `${backendURL}/api/books?categoryId=${selectedCategory}&userId=${userId}`
       );
       setBooksData(booksRes.data);
 
-      // 2) /api/books-aggregated for aggregator with "read"/"proficient"
+      // 2) /api/books-aggregated for aggregator
       await fetchAggregatedData();
 
       // 3) Optionally reset subchapter selections
@@ -168,18 +169,16 @@ export function useBooksViewer() {
   // If you want to toggle "done" for a subchapter
   const handleToggleDone = async (subChapter) => {
     alert(
-      "handleToggleDone: Not implemented. If aggregator uses 'proficiency' in subChapters_demo, you'd update that doc or user_progress_demo here."
+      "handleToggleDone: Not implemented. Typically you'd update user progress in Firestore or your DB."
     );
   };
 
   // ------------------------- Book Progress Helper ------------------------------
-  // aggregator returns object like { bookName, totalWords, totalWordsReadOrProficient, ... }
   const getBookProgressInfo = (bookName) => {
     return booksProgressData.find((b) => b.bookName === bookName);
   };
 
   // ------------------------- Adaptive Filtering ------------------------------
-  // Helper to filter out subChapters that are not "adaptive: true"
   function filterAdaptiveData(allBooks) {
     return allBooks
       .map((book) => {
@@ -197,14 +196,15 @@ export function useBooksViewer() {
       .filter((b) => b.chapters.length > 0);
   }
 
-  // We'll expose a function that gives either the full booksData or the filtered subset
   const getFilteredBooksData = () => {
     if (viewMode === "library") {
       return booksData;
-    } else {
-      // "adaptive"
+    } else if (viewMode === "adaptive") {
       return filterAdaptiveData(booksData);
     }
+    // For "overview" or any other mode, you might just return booksData,
+    // or some specialized subset if you like:
+    return booksData;
   };
 
   return {
@@ -212,7 +212,7 @@ export function useBooksViewer() {
     userId,
     categories,
     selectedCategory,
-    booksData, // raw data if you need it
+    booksData,
     booksProgressData,
     selectedBook,
     selectedChapter,
@@ -221,7 +221,7 @@ export function useBooksViewer() {
     expandedChapters,
     showTutorModal,
 
-    // NEW: mode
+    // mode
     viewMode,
     setViewMode,
 
@@ -242,7 +242,7 @@ export function useBooksViewer() {
     fetchAllData,
     fetchAggregatedData,
 
-    // new helper for library vs. adaptive
+    // new helper for library vs. adaptive (and possibly overview)
     getFilteredBooksData,
   };
 }
