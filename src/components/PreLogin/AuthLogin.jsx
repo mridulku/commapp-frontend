@@ -37,9 +37,9 @@ function AuthLogin() {
 
         // 5) Check onboarding
         if (response.data.user.onboardingComplete) {
-          navigate("/books2");
+          navigate("/dashboard");
         } else {
-          navigate("/platformintro");
+          navigate("/dashboard");
         }
       } else {
         alert(response.data.error || "Login failed");

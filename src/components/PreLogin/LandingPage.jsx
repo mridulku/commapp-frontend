@@ -8,7 +8,7 @@ function LandingPage() {
   useEffect(() => {
     // If a user is already logged in, skip the landing page
     if (token) {
-      navigate("/books2");
+      navigate("/dashboard");
     }
   }, [token, navigate]);
 

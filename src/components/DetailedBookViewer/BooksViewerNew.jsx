@@ -1,5 +1,4 @@
 // src/components/DetailedBookViewer/BooksViewer2.jsx
-
 import React from "react";
 import { useBooksViewer } from "./hooks/useBooksViewer";
 
@@ -13,11 +12,14 @@ import DynamicTutorModal from "./DynamicTutorModal";
 import OverviewContent from "./OverviewContent"; 
 import UserProfileAnalytics from "./UserProfileAnalytics";
 
-// For the 2x2 grid, we create 4 separate panel components
+// 2x2 grid panels
 import PanelA from "./PanelA";
 import PanelB from "./PanelB";
 import PanelC from "./PanelC";
 import PanelD from "./PanelD";
+
+// NEW STATS PANEL (horizontal bar)
+import StatsPanel from "./StatsPanel";
 
 function BooksViewer2() {
   const {
@@ -83,20 +85,34 @@ function BooksViewer2() {
       // If user is NOT onboarded, show the old "OverviewContent" (onboarding, etc.)
       mainContent = <OverviewContent />;
     } else {
-      // If user IS onboarded, show a 2x2 grid of the four separate panels
+      // If user IS onboarded, show:
+      // 1) A horizontal stats panel at the top
+      // 2) Then the 2x2 grid below
       mainContent = (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "20px",
-          }}
-        >
-          <PanelA />
-          <PanelB />
-          <PanelC />
-          <PanelD />
-        </div>
+        <>
+          {/* Horizontal stats bar */}
+          <StatsPanel />
+
+          {/* The 2x2 grid of separate panels */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: "20px",
+            }}
+          >
+            <PanelB />
+            <PanelA />
+            <PanelC />
+            <PanelD
+            categories={categories}
+            selectedCategory={selectedCategory}
+            onCategoryChange={handleCategoryChange}
+            booksData={displayedBooksData}       // <-- Make sure this is provided!
+            handleSubChapterClick={handleSubChapterClick}
+            selectedSubChapter={selectedSubChapter}
+/>          </div>
+        </>
       );
     }
   } else if (viewMode === "profile") {

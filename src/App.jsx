@@ -255,7 +255,7 @@ function App() {
 
         {/* 14. NEW Protected BooksViewer Route */}
         <Route
-          path="/books2"
+          path="/dashboard"
           element={
             <PrivateRoute>
               <BooksViewer2 />
