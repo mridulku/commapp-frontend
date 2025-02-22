@@ -8,8 +8,7 @@ import UnifiedSidebar from "./UnifiedSidebar";
 // Existing components
 import BookProgress from "./BookProgress";
 import SubchapterContent from "./SubchapterContent";
-import DynamicTutorModal from "./DynamicTutorModal";
-import OverviewContent from "./OverviewContent"; 
+import OverviewContent from "./OverviewContent";
 import UserProfileAnalytics from "./UserProfileAnalytics";
 
 // 2x2 grid panels
@@ -18,13 +17,18 @@ import PanelB from "./PanelB";
 import PanelC from "./PanelC";
 import PanelD from "./PanelD";
 
-// NEW STATS PANEL (horizontal bar)
+// Stats & Summaries
 import StatsPanel from "./StatsPanel";
+import BookSummary from "./BookSummary";
+
+// NEW: Separate library & adaptive home components
+import LibraryHome from "./LibraryHome";
+import AdaptiveHome from "./AdaptiveHome";
 
 function BooksViewer2() {
   const {
     userId,
-    isOnboarded, // <-- new flag from the hook
+    isOnboarded,
     categories,
     selectedCategory,
     getFilteredBooksData,
@@ -33,10 +37,8 @@ function BooksViewer2() {
     selectedSubChapter,
     expandedBookName,
     expandedChapters,
-    showTutorModal,
     viewMode,
     setViewMode,
-    setShowTutorModal,
     handleCategoryChange,
     toggleBookExpansion,
     toggleChapterExpansion,
@@ -63,133 +65,118 @@ function BooksViewer2() {
     position: "relative",
   };
 
-  const buttonStyle = {
-    padding: "10px 20px",
-    borderRadius: "4px",
-    border: "none",
-    background: "#FFD700",
-    color: "#000",
-    fontWeight: "bold",
-    cursor: "pointer",
-    transition: "opacity 0.3s",
-    marginTop: "10px",
-  };
-
-  // Filter books data for library/adaptive
+  // Filtered data depending on "library", "adaptive", or "overview"
   const displayedBooksData = getFilteredBooksData();
 
   // Decide main content
   let mainContent;
   if (viewMode === "overview") {
+    // 1) If not onboarded, show onboarding
     if (!isOnboarded) {
-      // If user is NOT onboarded, show the old "OverviewContent" (onboarding, etc.)
       mainContent = <OverviewContent />;
     } else {
-      // If user IS onboarded, show:
-      // 1) A horizontal stats panel at the top
-      // 2) Then the 2x2 grid below
+      // 2) Otherwise, show stats panel + 2x2 grid
       mainContent = (
         <>
-          {/* Horizontal stats bar */}
           <StatsPanel />
-
-          {/* The 2x2 grid of separate panels */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: "20px",
-            }}
-          >
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
             <PanelB />
             <PanelA />
             <PanelC />
             <PanelD
-            categories={categories}
-            selectedCategory={selectedCategory}
-            onCategoryChange={handleCategoryChange}
-            booksData={displayedBooksData}       // <-- Make sure this is provided!
-            handleSubChapterClick={handleSubChapterClick}
-            selectedSubChapter={selectedSubChapter}
-/>          </div>
+              categories={categories}
+              selectedCategory={selectedCategory}
+              onCategoryChange={handleCategoryChange}
+              booksData={displayedBooksData}
+              handleSubChapterClick={handleSubChapterClick}
+              selectedSubChapter={selectedSubChapter}
+            />
+          </div>
         </>
       );
     }
   } else if (viewMode === "profile") {
-    // Render the new user profile analytics component here
     mainContent = <UserProfileAnalytics />;
-  } else {
-    // library or adaptive
-    mainContent = (
-      <>
-        {selectedBook && (
-          <button
-            style={{
-              ...buttonStyle,
-              position: "absolute",
-              top: "20px",
-              right: "20px",
-              zIndex: 10,
-            }}
-            onClick={() => setShowTutorModal(true)}
-          >
-            Learn Through Dynamic Tutor
-          </button>
-        )}
+  } else if (viewMode === "library") {
+    // If in library mode:
+    if (!selectedBook) {
+      // No book => show LibraryHome
+      mainContent = <LibraryHome booksData={displayedBooksData} />;
+    } else {
+      // Show BookSummary or SubchapterContent
+      mainContent = (
+        <>
+          {/* Show BookProgress only if a subchapter is selected */}
+          {selectedSubChapter && (
+            <BookProgress
+              book={selectedBook}
+              selectedChapter={selectedChapter}
+              selectedSubChapter={selectedSubChapter}
+              getBookProgressInfo={getBookProgressInfo}
+            />
+          )}
 
-        {selectedBook && (
-          <BookProgress
-            book={selectedBook}
-            selectedChapter={selectedChapter}
-            selectedSubChapter={selectedSubChapter}
-            getBookProgressInfo={getBookProgressInfo}
-          />
-        )}
+          {/* BookSummary if we have a book but no subchapter */}
+          {selectedBook && !selectedSubChapter && (
+            <BookSummary
+              book={selectedBook}
+              getBookProgressInfo={getBookProgressInfo}
+            />
+          )}
 
-        {!selectedSubChapter && (
-          <div
-            style={{
-              backgroundColor: "rgba(255,255,255,0.1)",
-              backdropFilter: "blur(6px)",
-              padding: "15px",
-              borderRadius: "6px",
-              marginBottom: "20px",
-            }}
-          >
-            <h2
-              style={{
-                marginTop: 0,
-                borderBottom: "1px solid rgba(255,255,255,0.3)",
-                paddingBottom: "5px",
-                marginBottom: "10px",
-              }}
-            >
-              No Subchapter Selected
-            </h2>
-            <p>Please select a subchapter from the sidebar to see its content.</p>
-          </div>
-        )}
+          {/* If a subchapter is selected => subchapter content */}
+          {selectedSubChapter && (
+            <SubchapterContent
+              subChapter={selectedSubChapter}
+              onToggleDone={handleToggleDone}
+              userId={userId}
+              backendURL={import.meta.env.VITE_BACKEND_URL}
+              onRefreshData={fetchAllData}
+            />
+          )}
+        </>
+      );
+    }
+  } else if (viewMode === "adaptive") {
+    // If in adaptive mode:
+    if (!selectedBook) {
+      // No book => show AdaptiveHome
+      mainContent = <AdaptiveHome booksData={displayedBooksData} />;
+    } else {
+      // Show BookSummary or SubchapterContent
+      mainContent = (
+        <>
+          {/* Show BookProgress only if a subchapter is selected */}
+          {selectedSubChapter && (
+            <BookProgress
+              book={selectedBook}
+              selectedChapter={selectedChapter}
+              selectedSubChapter={selectedSubChapter}
+              getBookProgressInfo={getBookProgressInfo}
+            />
+          )}
 
-        {selectedSubChapter && (
-          <SubchapterContent
-            subChapter={selectedSubChapter}
-            onToggleDone={handleToggleDone}
-            userId={userId}
-            backendURL={import.meta.env.VITE_BACKEND_URL}
-            onRefreshData={fetchAllData}
-          />
-        )}
+          {/* BookSummary if we have a book but no subchapter */}
+          {selectedBook && !selectedSubChapter && (
+            <BookSummary
+              book={selectedBook}
+              getBookProgressInfo={getBookProgressInfo}
+            />
+          )}
 
-        {showTutorModal && (
-          <DynamicTutorModal
-            book={selectedBook}
-            chapter={selectedChapter}
-            subChapter={selectedSubChapter}
-            onClose={() => setShowTutorModal(false)}
-          />
-        )}
-      </>
-    );
+          {/* If a subchapter is selected => subchapter content */}
+          {selectedSubChapter && (
+            <SubchapterContent
+              subChapter={selectedSubChapter}
+              onToggleDone={handleToggleDone}
+              userId={userId}
+              backendURL={import.meta.env.VITE_BACKEND_URL}
+              onRefreshData={fetchAllData}
+            />
+          )}
+        </>
+      );
+    }
   }
 
   return (
