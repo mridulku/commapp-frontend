@@ -1,98 +1,134 @@
-import React, { useState, useRef } from "react";
+import React, { useState } from 'react';
+import axios from 'axios';
 
-/**
- * A complete chat interface with:
- * - User input at the bottom
- * - Chat bubbles for user and system messages
- * - A typing animation for system responses
- * 
- * Updated to better match a page's existing theme:
- * - No fixed width or centered margin
- * - No forced background gradient
- * - Inherits parent text colors by default
- */
+const backendURL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
 
-export default function FullChatInterface() {
-  const [messages, setMessages] = useState([]);
-  const [userInput, setUserInput] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
-  const [typingText, setTypingText] = useState("");
 
-  // A ref to cancel intervals if component unmounts (cleanup).
-  const typingIntervalRef = useRef(null);
+export default function MultiStageChatWithOptions() {
+  const [messages, setMessages] = useState([
+    { role: 'system', text: "Hello! Let's start your onboarding. What's your name?" }
+  ]);
 
-  async function handleSendMessage(event) {
-    event.preventDefault();
-    const trimmedInput = userInput.trim();
-    if (!trimmedInput) return;
+  // Our multi-step questions
+  // type = "text" => user types
+  // type = "options" => user picks from an array of options
+  const steps = [
+    { field: 'name', question: "What's your name?", type: 'text' },
+    { 
+      field: 'exam', 
+      question: "Which exam are you preparing for?", 
+      type: 'options',
+      options: ["IIT JEE", "UPSC"],
+    },
+    { field: 'age', question: 'How old are you?', type: 'text' },
+    { field: 'school', question: 'Which school do you go to?', type: 'text' },
+  ];
 
-    // 1) Add the user's message
-    const newUserMessage = { role: "user", text: trimmedInput };
-    setMessages((prev) => [...prev, newUserMessage]);
-    setUserInput("");
+  // We'll store the user's answers here
+  const [formData, setFormData] = useState({ name: '', exam: '', age: '', school: '' });
 
-    // 2) Simulate AI response
-    await simulateAIResponse(trimmedInput);
-  }
+  // Track which step (0-based) we are on
+  const [currentStep, setCurrentStep] = useState(0);
 
-  async function simulateAIResponse(userMessage) {
-    const dummyResponse = generateDummyResponse(userMessage);
+  // Once the user finishes all steps, we mark onboarding complete
+  const [onboardingComplete, setOnboardingComplete] = useState(false);
 
-    // Artificial delay
-    setIsTyping(true);
-    setTypingText("");
-    await sleep(500);
+  // The user's typed input
+  const [userInput, setUserInput] = useState('');
 
-    if (typingIntervalRef.current) {
-      clearInterval(typingIntervalRef.current);
-    }
+  // Helper to append a message to the chat
+  const addMessage = (role, text) => {
+    setMessages((prev) => [...prev, { role, text }]);
+  };
 
-    let charIndex = 0;
-    typingIntervalRef.current = setInterval(() => {
-      charIndex++;
-      setTypingText(dummyResponse.slice(0, charIndex));
+  /**
+   * Handle normal typed input (for "text" steps)
+   */
+  const handleSend = async (e) => {
+    e.preventDefault();
+    const trimmed = userInput.trim();
+    if (!trimmed) return;
 
-      if (charIndex === dummyResponse.length) {
-        clearInterval(typingIntervalRef.current);
-        typingIntervalRef.current = null;
+    // Show the user's message in chat
+    addMessage('user', trimmed);
+    setUserInput('');
 
-        setMessages((prev) => [
-          ...prev,
-          { role: "system", text: dummyResponse },
-        ]);
+    // Capture the input for the current step
+    const currentField = steps[currentStep].field;
+    setFormData((prev) => ({ ...prev, [currentField]: trimmed }));
 
-        setIsTyping(false);
-        setTypingText("");
+    await moveToNextStep(trimmed);
+  };
+
+  /**
+   * Handle clicking an option (for "options" steps)
+   */
+  const handleOptionClick = async (optionValue) => {
+    // Show the user selection in chat
+    addMessage('user', optionValue);
+
+    // Store the user's response
+    const currentField = steps[currentStep].field;
+    setFormData((prev) => ({ ...prev, [currentField]: optionValue }));
+
+    await moveToNextStep(optionValue);
+  };
+
+  /**
+   * Move to the next step or finalize onboarding
+   */
+  const moveToNextStep = async (answer) => {
+    const nextStepIndex = currentStep + 1;
+    // If there's another step, ask the next question
+    if (nextStepIndex < steps.length) {
+      setCurrentStep(nextStepIndex);
+      addMessage('system', steps[nextStepIndex].question);
+    } else {
+      // All steps answered: submit
+      addMessage('system', 'Great! Submitting your data...');
+
+      try {
+        const response = await axios.post(`${import.meta.env.VITE_BACKEND_URL}/api/onboard`, {
+          name: currentStep === 0 ? answer : formData.name,
+          exam: currentStep === 1 ? answer : formData.exam,
+          age: currentStep === 2 ? answer : formData.age,
+          school: currentStep === 3 ? answer : formData.school,
+        });
+
+        if (response.data.success) {
+          addMessage('system', 'Thanks for completing the onboarding!');
+          setOnboardingComplete(true);
+        } else {
+          addMessage('system', 'Hmm, something went wrong. Please try again.');
+        }
+      } catch (error) {
+        console.error('Error finalizing onboarding:', error);
+        addMessage('system', 'Error occurred while onboarding. Check console for details.');
       }
-    }, 40); // typing speed
-  }
+    }
+  };
 
-  function generateDummyResponse(userText) {
-    return `I hear you said: "${userText}". This is a dummy AI response.`;
-  }
-
-  function sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
+  // Determine if the current step is an "options" step
+  const isOptionsStep = !onboardingComplete && steps[currentStep]?.type === 'options';
+  // If it's an options step, we disable the text input
+  const disableTextInput = isOptionsStep || onboardingComplete;
 
   return (
-    <div style={outerContainerStyle}>
-      {/* Optional heading; will inherit page text color */}
-      <h2>Full Chat Interface</h2>
+    <div style={containerStyle}>
+      <h2>Multi-Step Chat Onboarding (with Options)</h2>
 
-      {/* Chat Bubbles Container */}
-      <div style={chatContainerStyle}>
-        {messages.map((msg, index) => {
-          const isSystem = msg.role === "system";
+      <div style={chatBoxStyle}>
+        {messages.map((msg, idx) => {
+          const isSystem = (msg.role === 'system');
           return (
             <div
-              key={index}
+              key={idx}
               style={{
                 ...bubbleStyle,
-                alignSelf: isSystem ? "flex-start" : "flex-end",
+                alignSelf: isSystem ? 'flex-start' : 'flex-end',
                 backgroundColor: isSystem
-                  ? "rgba(255, 255, 255, 0.2)"
-                  : "#0084FF",
+                  ? 'rgba(255,255,255,0.2)'
+                  : '#0084FF'
               }}
             >
               {msg.text}
@@ -100,30 +136,43 @@ export default function FullChatInterface() {
           );
         })}
 
-        {/* Show the "typing" bubble if AI is typing */}
-        {isTyping && (
-          <div
-            style={{
-              ...bubbleStyle,
-              alignSelf: "flex-start",
-              backgroundColor: "rgba(255, 255, 255, 0.2)",
-            }}
-          >
-            {typingText}
+        {/* If it's an options step, show clickable buttons for each option */}
+        {isOptionsStep && (
+          <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+            {steps[currentStep].options.map((opt) => (
+              <button
+                key={opt}
+                onClick={() => handleOptionClick(opt)}
+                style={optionButtonStyle}
+              >
+                {opt}
+              </button>
+            ))}
           </div>
         )}
       </div>
 
-      {/* User Input Form */}
-      <form style={formStyle} onSubmit={handleSendMessage}>
+      {/* Normal text input form, disabled if it's an options step or if onboarding is complete */}
+      <form onSubmit={handleSend} style={formStyle}>
         <input
-          style={inputStyle}
           type="text"
-          placeholder="Type your message..."
+          disabled={disableTextInput}
+          style={inputStyle}
+          placeholder={
+            onboardingComplete
+              ? 'Onboarding finished...'
+              : isOptionsStep
+              ? 'Please select an option above.'
+              : 'Type your response...'
+          }
           value={userInput}
           onChange={(e) => setUserInput(e.target.value)}
         />
-        <button style={buttonStyle} type="submit">
+        <button
+          style={buttonStyle}
+          type="submit"
+          disabled={disableTextInput}
+        >
           Send
         </button>
       </form>
@@ -131,72 +180,63 @@ export default function FullChatInterface() {
   );
 }
 
-/* --- STYLES --- */
-
-// Now it simply takes up available space and inherits background.
-const outerContainerStyle = {
-  padding: "10px",
-  borderRadius: "8px",
-  // Remove forced background and width
-  // background: "transparent",
-  // width: "400px",
-  // margin: "40px auto",
-  // Let the parent's styling and theme come through
-  fontFamily: "sans-serif", // Remove if you'd rather inherit the page's font.
+/** Minimal styling */
+const containerStyle = {
+  width: '400px',
+  margin: '40px auto',
+  backgroundColor: 'rgba(0,0,0,0.3)',
+  padding: '20px',
+  borderRadius: '8px',
+  color: '#fff',
+  fontFamily: 'sans-serif',
 };
 
-// Chat area scrolls if content grows too tall
-const chatContainerStyle = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "8px",
-  maxHeight: "400px",
-  overflowY: "auto",
-  padding: "10px 0",
-  marginBottom: "10px",
+const chatBoxStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '8px',
+  maxHeight: '300px',
+  overflowY: 'auto',
+  marginBottom: '10px',
+  position: 'relative',
 };
 
-// Basic bubble styling, color is set dynamically for system/user
 const bubbleStyle = {
-  maxWidth: "70%",
-  padding: "8px 12px",
-  borderRadius: "8px",
-  color: "#fff",            // Keep white text for clarity on dark/colored backgrounds
-  animation: "fadeIn 0.3s ease-in",
-  WebkitAnimation: "fadeIn 0.3s ease-in",
-  margin: "4px 0",
-  whiteSpace: "pre-wrap",
+  maxWidth: '70%',
+  padding: '8px 12px',
+  borderRadius: '6px',
+  color: '#fff',
+  margin: '4px 0',
+  wordWrap: 'break-word'
 };
 
-// Input form layout
 const formStyle = {
-  display: "flex",
-  gap: "8px",
+  display: 'flex',
+  gap: '8px',
 };
 
-// Text field styling
 const inputStyle = {
   flex: 1,
-  padding: "8px",
-  borderRadius: "4px",
-  border: "none",
-  outline: "none",
+  padding: '8px',
+  borderRadius: '4px',
+  border: 'none',
+  outline: 'none',
 };
 
-// Send button styling
 const buttonStyle = {
-  backgroundColor: "#0084FF",
-  border: "none",
-  padding: "8px 12px",
-  borderRadius: "4px",
-  color: "#fff",
-  cursor: "pointer",
+  backgroundColor: '#0084FF',
+  border: 'none',
+  padding: '8px 16px',
+  borderRadius: '4px',
+  color: '#fff',
+  cursor: 'pointer',
 };
 
-// Optional fadeIn keyframes
-const fadeInKeyframes = `
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to   { opacity: 1; }
-  }
-`;
+const optionButtonStyle = {
+  backgroundColor: '#333',
+  color: '#fff',
+  border: 'none',
+  padding: '8px 12px',
+  borderRadius: '4px',
+  cursor: 'pointer',
+};
