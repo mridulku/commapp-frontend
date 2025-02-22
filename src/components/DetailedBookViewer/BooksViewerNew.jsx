@@ -9,7 +9,9 @@ import OverviewSidebar from "./OverviewSidebar"; // NEW
 import BookProgress from "./BookProgress";
 import SubchapterContent from "./SubchapterContent";
 import DynamicTutorModal from "./DynamicTutorModal";
-import NavigationBar from "./NavigationBar";
+
+// Removed the NavigationBar import
+// import NavigationBar from "./NavigationBar";
 
 // The custom hook with all your logic
 import { useBooksViewer } from "./hooks/useBooksViewer";
@@ -73,7 +75,7 @@ function BooksViewer2() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
-      <NavigationBar />
+      {/* NavigationBar removed */}
 
       <div style={containerStyle}>
         {/* =========== SIDEBAR =========== */}
