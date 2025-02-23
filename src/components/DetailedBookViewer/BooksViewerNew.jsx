@@ -1,28 +1,20 @@
-import React, { useState, useEffect } from "react";
-import Joyride, { STATUS } from "react-joyride";
-
+// src/components/DetailedBookViewer/BooksViewer2.jsx
+import React, { useState } from "react";
 import { useBooksViewer } from "./hooks/useBooksViewer";
-
-// Our single unified sidebar:
 import UnifiedSidebar from "./UnifiedSidebar";
+import ToursManager from "./ToursManager";
 
-// Existing components
+// Existing components...
 import BookProgress from "./BookProgress";
 import SubchapterContent from "./SubchapterContent";
 import OverviewContent from "./OverviewContent";
 import UserProfileAnalytics from "./UserProfileAnalytics";
-
-// 2x2 grid panels
 import PanelA from "./PanelA";
 import PanelB from "./PanelB";
 import PanelC from "./PanelC";
 import PanelD from "./PanelD";
-
-// Stats & Summaries
 import StatsPanel from "./StatsPanel";
 import BookSummary from "./BookSummary";
-
-// NEW: Separate library & adaptive home components
 import LibraryHome from "./LibraryHome";
 import AdaptiveHome from "./AdaptiveHome";
 
@@ -51,6 +43,9 @@ function BooksViewer2() {
     fetchAllData,
   } = useBooksViewer();
 
+  // 1) We track if the user clicked the "Start Tour" button
+  const [triggerTour, setTriggerTour] = useState(false);
+
   // Layout styling
   const containerStyle = {
     display: "flex",
@@ -66,50 +61,29 @@ function BooksViewer2() {
     position: "relative",
   };
 
-  // ========== Joyride Setup ==========
-
-  const [runTour, setRunTour] = useState(false);
-
-  // Steps referencing IDs in LibraryHome
-  const tourSteps = [
-    {
-      target: "#libraryHomeTitle",
-      content: "This is the main title for your library page.",
-    },
-    {
-      target: "#libraryNoBooks",
-      content: "This message appears if no books are found in your library.",
-    },
-    {
-      target: "#libraryHomeGrid",
-      content: "Here you see a grid of your books.",
-    },
-  ];
-
-  // Callback
-  const handleJoyrideCallback = (data) => {
-    console.log("Joyride callback =>", data);
-    const { status } = data;
-    if ([STATUS.FINISHED, STATUS.SKIPPED].includes(status)) {
-      setRunTour(false);
-    }
+  // A little style for the floating question-mark button
+  const floatButtonStyle = {
+    position: "fixed",
+    bottom: "20px",
+    left: "20px",
+    width: "50px",
+    height: "50px",
+    borderRadius: "50%",
+    backgroundColor: "#444",
+    color: "#fff",
+    fontSize: "1.5rem",
+    border: "none",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 9999, // ensure it floats on top
   };
 
-  // **Use an effect to start Joyride only in Library mode with no selected book**:
-  useEffect(() => {
-    // If we're in library mode and no book is selected, we know LibraryHome is displayed
-    if (viewMode === "library" && !selectedBook) {
-      console.log(">>> Enabling Joyride for LibraryHome");
-      setRunTour(true);
-    } else {
-      setRunTour(false);
-    }
-  }, [viewMode, selectedBook]);
-
-  // Filtered data depending on "library", "adaptive", or "overview"
+  // Filtered data for library/adaptive
   const displayedBooksData = getFilteredBooksData();
 
-  // Decide main content
+  // Decide main content (unchanged logic)
   let mainContent;
   if (viewMode === "overview") {
     if (!isOnboarded) {
@@ -219,24 +193,21 @@ function BooksViewer2() {
         <div style={mainContentStyle}>{mainContent}</div>
       </div>
 
-      {/* Joyride for library home */}
-      <Joyride
-        steps={tourSteps}
-        run={runTour}
-        continuous
-        showSkipButton
-        showProgress
-        callback={handleJoyrideCallback}
-        spotlightPadding={8}
-        styles={{
-          options: {
-            arrowColor: "#fff",
-            backgroundColor: "#fff",
-            textColor: "#333",
-            overlayColor: "rgba(0,0,0,0.5)",
-            primaryColor: "#0084FF",
-          },
-        }}
+      {/* 2) A floating "?" button to start the tour at any time */}
+      <button
+        style={floatButtonStyle}
+        onClick={() => setTriggerTour(true)}
+        title="Start Tour"
+      >
+        ?
+      </button>
+
+      {/* 3) Our ToursManager handles the actual React Tour logic */}
+      <ToursManager
+        viewMode={viewMode}
+        selectedBook={selectedBook}
+        triggerTour={triggerTour}
+        onTourDone={() => setTriggerTour(false)}
       />
     </div>
   );

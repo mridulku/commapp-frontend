@@ -47,18 +47,18 @@ function App() {
    * Load Usetiful script on startup.
    * Replace "YOUR_TOKEN_HERE" with your real Usetiful token from their dashboard.
    */
-  useEffect(() => {
+//  useEffect(() => {
     // 1) Load the script
-    loadUsetifulScript("b3760e26d861afa7fd68ec7a1fb6294f");
+//    loadUsetifulScript("b3760e26d861afa7fd68ec7a1fb6294f");
 
     // 2) (Optional) Identify a user
     // If you have user info available (from context/auth), you could pass it here
-    setUsetifulTags({
-      userId: "SOME_USER_ID", // Must be unique if you want to track user progress
-      firstName: "John",
-      lastName: "Doe",
-    });
-  }, []);
+//    setUsetifulTags({
+  //    userId: "SOME_USER_ID", // Must be unique if you want to track user progress
+    //  firstName: "John",
+      // lastName: "Doe",
+ //   });
+ // }, []);
 
   return (
     <Router>

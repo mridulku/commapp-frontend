@@ -23,6 +23,34 @@ function LibraryHome({ booksData = [] }) {
           ))}
         </div>
       )}
+
+      {/* === DUMMY ICONS for Tour Testing === */}
+      <div style={dummyIconsContainerStyle}>
+        <span
+          id="libraryHomeTitle"
+          role="img"
+          aria-label="Title icon"
+          style={dummyIconStyle}
+        >
+          📝
+        </span>
+        <span
+          id="libraryNoBooks"
+          role="img"
+          aria-label="No books icon"
+          style={dummyIconStyle}
+        >
+          ❌
+        </span>
+        <span
+          id="libraryHomeGrid"
+          role="img"
+          aria-label="Grid icon"
+          style={dummyIconStyle}
+        >
+          🔲
+        </span>
+      </div>
     </div>
   );
 }
@@ -71,6 +99,19 @@ const bookIconStyle = {
 const bookTitleStyle = {
   fontWeight: "bold",
   color: "#FFD700",
+};
+
+// New styles for dummy icons
+const dummyIconsContainerStyle = {
+  marginTop: "30px",
+  display: "flex",
+  gap: "20px",
+  justifyContent: "center",
+};
+
+const dummyIconStyle = {
+  fontSize: "2.5rem",
+  cursor: "pointer",
 };
 
 export default LibraryHome;
