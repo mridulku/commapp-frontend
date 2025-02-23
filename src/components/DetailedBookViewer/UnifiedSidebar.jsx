@@ -101,25 +101,28 @@ function UnifiedSidebar({
     <div style={sidebarContainerStyle}>
       {/* 1) Mode Buttons at the top */}
       <div style={modeToggleContainerStyle}>
-        <button
+        <button  id="overviewbutton"
           style={toggleButtonStyle(viewMode === "overview")}
           onClick={() => setViewMode("overview")}
         >
           Overview
         </button>
         <button
+             id="adaptivebutton"
           style={toggleButtonStyle(viewMode === "adaptive")}
           onClick={() => setViewMode("adaptive")}
         >
           Adaptive
         </button>
         <button
+             id="librarybutton"
           style={toggleButtonStyle(viewMode === "library")}
           onClick={() => setViewMode("library")}
         >
           Library
         </button>
         <button
+             id="profilebutton"
           style={toggleButtonStyle(viewMode === "profile")}
           onClick={() => setViewMode("profile")}
         >

@@ -365,17 +365,17 @@ function SubchapterContent({
           </h2>
 
           {/* Summarize button */}
-          <button style={primaryButtonStyle} onClick={openSummaryModal}>
+          <button  id="summarizebutton" style={primaryButtonStyle} onClick={openSummaryModal}>
             Summarize
           </button>
 
           {/* Ask Doubt button */}
-          <button style={primaryButtonStyle} onClick={openDoubtsModal}>
+          <button  id="startreadingbutton" style={primaryButtonStyle} onClick={openDoubtsModal }>
             Ask Doubt
           </button>
 
           {/* Dynamic Tutor button */}
-          <button style={primaryButtonStyle} onClick={openTutorModal}>
+          <button  id="dynamictutorbutton" style={primaryButtonStyle} onClick={openTutorModal}>
             Dynamic Tutor
           </button>
         </div>
@@ -406,7 +406,7 @@ function SubchapterContent({
 
           {/* Font size controls */}
           <div style={fontButtonContainerStyle}>
-            <button style={primaryButtonStyle} onClick={decreaseFont}>
+            <button  id="fontsizebutton" style={primaryButtonStyle} onClick={decreaseFont}>
               A-
             </button>
             <button style={primaryButtonStyle} onClick={increaseFont}>
@@ -479,25 +479,25 @@ function SubchapterContent({
     switch (prof) {
       case "empty":
         return (
-          <button style={primaryButtonStyle} onClick={handleStartReading}>
+          <button style={primaryButtonStyle} onClick={handleStartReading} id="startreadingbutton">
             Start Reading
           </button>
         );
       case "reading":
         return (
-          <button style={primaryButtonStyle} onClick={handleStopReading}>
+          <button  id="stopreadingbutton" style={primaryButtonStyle} onClick={handleStopReading}>
             Stop Reading
           </button>
         );
       case "read":
         return (
-          <button style={primaryButtonStyle} onClick={openQuizModal}>
+          <button  id="takequizbutton" style={primaryButtonStyle} onClick={openQuizModal}>
             Take Quiz
           </button>
         );
       case "proficient":
         return (
-          <button style={primaryButtonStyle} onClick={openQuizModal}>
+          <button  id="takeanotherquizbutton" style={primaryButtonStyle} onClick={openQuizModal}>
             Take Another Quiz
           </button>
         );

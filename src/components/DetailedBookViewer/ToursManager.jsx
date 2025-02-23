@@ -2,44 +2,115 @@
 import React, { useState, useEffect } from "react";
 import Tour from "reactour";
 
-function ToursManager({ viewMode, selectedBook, triggerTour, onTourDone }) {
+function ToursManager({
+  viewMode,
+  selectedBook,
+  selectedSubChapter,
+  triggerTour,
+  onTourDone,
+}) {
   const [isTourOpen, setIsTourOpen] = useState(false);
   const [steps, setSteps] = useState([]);
 
-  // Step arrays for each mode
+  // Step arrays for OVERVIEW
   const overviewSteps = [
     { selector: "#panelA", content: "Panel A in overview." },
     { selector: "#panelB", content: "Panel B in overview." },
+    // ...
   ];
 
-  const librarySteps = [
-    { selector: "#libraryHomeTitle", content: "Library Title..." },
-    { selector: "#libraryNoBooks", content: "No books found" },
-    { selector: "#libraryHomeGrid", content: "Books grid" },
+  // Step arrays for LIBRARY (three states)
+  const libraryNoBookSteps = [
+    { selector: "#libraryNoBookStart", content: "Welcome to Library (no book selected)." },
+    { selector: "#libraryNoBookGrid", content: "Here’s the grid of available books." },
   ];
 
+  const libraryBookSelectedSteps = [
+    { selector: "#libraryBookSelectedTitle", content: "You have selected a book." },
+    { selector: "#libraryBookOverview", content: "Check out the book details here." },
+  ];
+
+  const librarySubchapterSteps = [
+    { selector: "#summarizebutton", content: "Click here to get a summary of this subchapter's content." },
+    { selector: "#askdoubtbutton", content: "Have questions or doubts? Ask them here!" },
+    { selector: "#dynamictutorbutton", content: "Open the dynamic tutor for interactive learning and Q&A." },
+    { selector: "#fontsizebutton", content: "Adjust the font size for a comfortable reading experience." },
+    { selector: "#startreadingbutton", content: "If not yet reading, click here to start reading mode." },
+    { selector: "#stopreadingbutton", content: "Already reading? Use this to stop when you're done." },
+    { selector: "#takequizbutton", content: "Take a quiz to test your knowledge of this subchapter." },
+    { selector: "#takeanotherquizbutton", content: "You can retake or try another quiz for further practice." },
+  ];
+
+  // -------------------------------------------------------
+  // 1) Main effect: build steps array & open/close the tour
+  // -------------------------------------------------------
   useEffect(() => {
-    // 1) Decide which steps to load for the CURRENT mode
+    let newSteps = [];
+
+    // Decide which base steps to load
     if (viewMode === "overview") {
-      setSteps(overviewSteps);
-    } else if (viewMode === "library" && !selectedBook) {
-      setSteps(librarySteps);
+      newSteps = overviewSteps;
+    } else if (viewMode === "library") {
+      // No book selected
+      if (!selectedBook) {
+        newSteps = libraryNoBookSteps;
+
+      // Book selected but NO subchapter
+      } else if (selectedBook && !selectedSubChapter) {
+        newSteps = libraryBookSelectedSteps;
+
+      // Subchapter selected
+      } else if (selectedSubChapter) {
+        newSteps = librarySubchapterSteps;
+      }
     } else {
-      setSteps([]); 
+      // e.g. if mode=adaptive or profile => skip
+      newSteps = [];
     }
 
-    // 2) If user clicked the "?" button => open the tour if we have steps
-    if (triggerTour && steps.length > 0) {
+    // If user clicked the "?" button, filter out steps for missing DOM elements
+    let finalSteps = newSteps;
+    if (triggerTour) {
+      finalSteps = newSteps.filter((step) => {
+        const el = document.querySelector(step.selector);
+        return Boolean(el);
+      });
+    }
+
+    setSteps(finalSteps);
+
+    // Open tour if we have some steps left
+    if (triggerTour && finalSteps.length > 0) {
       setIsTourOpen(true);
     } else {
       setIsTourOpen(false);
     }
-  }, [viewMode, selectedBook, triggerTour, steps.length]);
+  }, [
+    viewMode,
+    selectedBook,
+    selectedSubChapter,
+    triggerTour,
+    overviewSteps,
+    libraryNoBookSteps,
+    libraryBookSelectedSteps,
+    librarySubchapterSteps,
+  ]);
 
-  // Called when the user closes the tour or it finishes
+  // ------------------------------------------------------------------------
+  // 2) Additional effect: force-close the tour if user changes viewMode
+  // ------------------------------------------------------------------------
+  // This ensures we don't keep old steps while UI transitions,
+  // avoiding "roundedStep" errors if the DOM changes drastically
+  useEffect(() => {
+    setIsTourOpen(false);
+    // If you need to reset triggerTour as well, you can do so from the parent or here:
+    // onTourDone && onTourDone();
+  }, [viewMode]);
+
+  // If the user manually closes the tour:
   function handleClose() {
     setIsTourOpen(false);
-    if (onTourDone) onTourDone(); // let parent know we're done
+    if (onTourDone) onTourDone();
   }
 
   return (

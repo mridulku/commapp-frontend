@@ -1,4 +1,5 @@
 // src/components/DetailedBookViewer/BooksViewer2.jsx
+
 import React, { useState } from "react";
 import { useBooksViewer } from "./hooks/useBooksViewer";
 import UnifiedSidebar from "./UnifiedSidebar";
@@ -17,6 +18,9 @@ import StatsPanel from "./StatsPanel";
 import BookSummary from "./BookSummary";
 import LibraryHome from "./LibraryHome";
 import AdaptiveHome from "./AdaptiveHome";
+
+// NEW: The cinematic "player" modal
+import AdaptivePlayerModal from "./AdaptivePlayerModal"; // <-- Adjust path as needed
 
 function BooksViewer2() {
   const {
@@ -43,8 +47,11 @@ function BooksViewer2() {
     fetchAllData,
   } = useBooksViewer();
 
-  // 1) We track if the user clicked the "Start Tour" button
+  // For the Joyride-based tour:
   const [triggerTour, setTriggerTour] = useState(false);
+
+  // For the cinematic "player" modal:
+  const [showPlayer, setShowPlayer] = useState(false);
 
   // Layout styling
   const containerStyle = {
@@ -61,8 +68,8 @@ function BooksViewer2() {
     position: "relative",
   };
 
-  // A little style for the floating question-mark button
-  const floatButtonStyle = {
+  // Floating question-mark button (bottom-left)
+  const floatTourButtonStyle = {
     position: "fixed",
     bottom: "20px",
     left: "20px",
@@ -80,10 +87,29 @@ function BooksViewer2() {
     zIndex: 9999, // ensure it floats on top
   };
 
-  // Filtered data for library/adaptive
+  // NEW: Floating “player” button (bottom-right)
+  const floatPlayerButtonStyle = {
+    position: "fixed",
+    bottom: "20px",
+    right: "20px",
+    width: "50px",
+    height: "50px",
+    borderRadius: "50%",
+    backgroundColor: "#ee4444",
+    color: "#fff",
+    fontSize: "1.3rem",
+    border: "none",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 9999,
+  };
+
+  // Filter the data based on library/adaptive/overview mode
   const displayedBooksData = getFilteredBooksData();
 
-  // Decide main content (unchanged logic)
+  // Decide main content for each viewMode
   let mainContent;
   if (viewMode === "overview") {
     if (!isOnboarded) {
@@ -125,7 +151,10 @@ function BooksViewer2() {
             />
           )}
           {selectedBook && !selectedSubChapter && (
-            <BookSummary book={selectedBook} getBookProgressInfo={getBookProgressInfo} />
+            <BookSummary
+              book={selectedBook}
+              getBookProgressInfo={getBookProgressInfo}
+            />
           )}
           {selectedSubChapter && (
             <SubchapterContent
@@ -154,7 +183,10 @@ function BooksViewer2() {
             />
           )}
           {selectedBook && !selectedSubChapter && (
-            <BookSummary book={selectedBook} getBookProgressInfo={getBookProgressInfo} />
+            <BookSummary
+              book={selectedBook}
+              getBookProgressInfo={getBookProgressInfo}
+            />
           )}
           {selectedSubChapter && (
             <SubchapterContent
@@ -193,21 +225,38 @@ function BooksViewer2() {
         <div style={mainContentStyle}>{mainContent}</div>
       </div>
 
-      {/* 2) A floating "?" button to start the tour at any time */}
+      {/* Floating "?" button to start the Joyride tour */}
       <button
-        style={floatButtonStyle}
+        style={floatTourButtonStyle}
         onClick={() => setTriggerTour(true)}
         title="Start Tour"
       >
         ?
       </button>
 
-      {/* 3) Our ToursManager handles the actual React Tour logic */}
+      {/* NEW Floating "player" button to open the cinematic learning modal */}
+      <button
+        style={floatPlayerButtonStyle}
+        onClick={() => setShowPlayer(true)}
+        title="Start Player"
+      >
+        ►
+      </button>
+
+      {/* ToursManager for Joyride-based tours */}
       <ToursManager
         viewMode={viewMode}
         selectedBook={selectedBook}
+        selectedSubChapter={selectedSubChapter}
         triggerTour={triggerTour}
         onTourDone={() => setTriggerTour(false)}
+      />
+
+      {/* The cinematic "player" modal */}
+      <AdaptivePlayerModal
+        isOpen={showPlayer}
+        onClose={() => setShowPlayer(false)}
+        userName="Jane Doe" // or pass dynamic name from context
       />
     </div>
   );
