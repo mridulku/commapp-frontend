@@ -167,7 +167,7 @@ function PanelA() {
   };
 
   return (
-    <div style={panelStyle}>
+    <div style={panelStyle} id="panelA">
       <h3 style={{ marginTop: 0 }}>Onboarding Steps</h3>
       <p style={{ fontSize: "0.9rem", marginTop: "5px" }}>
         A quick view of your onboarding progress:

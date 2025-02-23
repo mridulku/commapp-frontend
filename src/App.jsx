@@ -1,6 +1,9 @@
 // frontend/src/App.jsx
-import React from "react";
+import React, { useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+
+// 1) Import Usetiful methods
+import { loadUsetifulScript, setUsetifulTags } from "usetiful-sdk";
 
 // NEW: Landing Page (public)
 import LandingPage from "./components/PreLogin/LandingPage";
@@ -8,22 +11,13 @@ import LandingPage from "./components/PreLogin/LandingPage";
 import BooksOverview from "./components/BooksOverview/BooksOverview";
 import ReadingPlan from "./components/BooksOverview/ReadingPlan";
 
-
 import AdaptiveStatsDashboard from "./components/AdaptiveStatsDashboard";
-
-
-
-
 import GptQuestionGenerator from "./components/Quiz/GptQuestionGenerator";
-
-
 import BooksViewer3 from "./components/RevampViewer/BooksViewer3";
 
-
-// Existing components (unchanged)
 import AuthLogin from "./components/PreLogin/AuthLogin";
 import PrivateRoute from "./components/PreLogin/PrivateRoute";
-import Login from "./components/CommAppArchive/Login"; // The old "protected" page (rename if you'd like)
+import Login from "./components/CommAppArchive/Login";
 import ChatInterface from "./components/CommAppArchive/ChatInterface";
 import Onboarding from "./components/Archive/Onboarding";
 import PdfUploader from "./components/AdminDashboard/PdfUploader";
@@ -37,45 +31,35 @@ import PersonalizationProgress from "./components/Onboarding/PersonalizationProg
 
 import Home from "./components/HomePage/Home";
 
-
-
 import LearnerPersonaForm from "./components/Onboarding/LearnerPersonaForm";
 import OnboardingAssessment from "./components/Onboarding/OnboardingAssessment";
-
-
-
 
 import TestView from "./components/Testing/TestView";
 import GamificationDashboard from "./components/Gamification/GamificationDashboard";
 import MaterialUploadWizard from "./components/AddedFunctions/MaterialUploadWizard";
 import CoursesMaterialManager from "./components/AddedFunctions/CoursesMaterialManager";
 
-
-
-
-
-
-
-
-// NEW: Import your BooksViewer component
-import BooksViewer from "./components/Archive/BooksViewer"; 
-import BooksViewer2 from "./components/DetailedBookViewer/BooksViewerNew"; 
-
-
-
-
-
-
-
-
-/*
-import AcademicForm from "./components/Onboarding/AcademicForm";
-import CasualForm from "./components/Onboarding/CasualForm";
-import VocationalForm from "./components/Onboarding/VocationalForm";
-import CompetitiveForm from "./components/Onboarding/CompetitiveForm";
-*/
+import BooksViewer from "./components/Archive/BooksViewer";
+import BooksViewer2 from "./components/DetailedBookViewer/BooksViewerNew";
 
 function App() {
+  /**
+   * Load Usetiful script on startup.
+   * Replace "YOUR_TOKEN_HERE" with your real Usetiful token from their dashboard.
+   */
+  useEffect(() => {
+    // 1) Load the script
+    loadUsetifulScript("b3760e26d861afa7fd68ec7a1fb6294f");
+
+    // 2) (Optional) Identify a user
+    // If you have user info available (from context/auth), you could pass it here
+    setUsetifulTags({
+      userId: "SOME_USER_ID", // Must be unique if you want to track user progress
+      firstName: "John",
+      lastName: "Doe",
+    });
+  }, []);
+
   return (
     <Router>
       <Routes>
@@ -135,8 +119,8 @@ function App() {
           }
         />
 
-         {/* 7. Subchapters uploader */}
-         <Route
+        {/* 7. Subchapters uploader */}
+        <Route
           path="/subchapters-uploader"
           element={
             <PrivateRoute>
@@ -145,8 +129,8 @@ function App() {
           }
         />
 
-         {/* 7. Chapters uploader */}
-         <Route
+        {/* 7. Chapters uploader */}
+        <Route
           path="/chapters-uploader"
           element={
             <PrivateRoute>
@@ -155,7 +139,7 @@ function App() {
           }
         />
 
-        {/* 7. Chapters uploader */}
+        {/* 7. Book text viewer */}
         <Route
           path="/booktextviewer"
           element={
@@ -165,7 +149,7 @@ function App() {
           }
         />
 
-        {/* 8. Button Page */}
+        {/* 8. Admin Dashboard */}
         <Route
           path="/admindashboard"
           element={
@@ -185,8 +169,8 @@ function App() {
           }
         />
 
-         {/* 9. Platform Intro */}
-         <Route
+        {/* 9. Platform Intro */}
+        <Route
           path="/platformintro"
           element={
             <PrivateRoute>
@@ -194,7 +178,6 @@ function App() {
             </PrivateRoute>
           }
         />
-
 
         {/* 9. PersonalizationProgress */}
         <Route
@@ -206,9 +189,6 @@ function App() {
           }
         />
 
-
-        
-
         {/* 10. Learner Persona */}
         <Route
           path="/learnerpersona"
@@ -218,7 +198,6 @@ function App() {
             </PrivateRoute>
           }
         />
-
 
         {/* 11. Test View */}
         <Route
@@ -230,8 +209,7 @@ function App() {
           }
         />
 
-
-        {/* 12. Gamify */}
+        {/* 12. Gamification */}
         <Route
           path="/gamificationdashboard"
           element={
@@ -240,7 +218,6 @@ function App() {
             </PrivateRoute>
           }
         />
-
 
         {/* 13. Material Upload Wizard */}
         <Route
@@ -252,8 +229,7 @@ function App() {
           }
         />
 
-
-        {/* 14. NEW Protected BooksViewer Route */}
+        {/* 14. BooksViewer2 (Dashboard) */}
         <Route
           path="/dashboard"
           element={
@@ -263,7 +239,7 @@ function App() {
           }
         />
 
-        {/* 15. Academic Home Page */}
+        {/* 15. Home */}
         <Route
           path="/home"
           element={
@@ -272,10 +248,6 @@ function App() {
             </PrivateRoute>
           }
         />
-
-
-        
-
 
         {/* 15. Vocational Home Page */}
         <Route
@@ -287,9 +259,7 @@ function App() {
           }
         />
 
-
-
-        {/* 15. Academic Home Page */}
+        {/* 15. OnboardingAssessment */}
         <Route
           path="/onboardingassessment"
           element={
@@ -299,7 +269,7 @@ function App() {
           }
         />
 
-        {/* 15. Academic Home Page */}
+        {/* 15. BooksOverview */}
         <Route
           path="/booksoverview"
           element={
@@ -309,7 +279,7 @@ function App() {
           }
         />
 
-        {/* 15. Academic Home Page */}
+        {/* 15. ReadingPlan */}
         <Route
           path="/readingplan"
           element={
@@ -319,8 +289,7 @@ function App() {
           }
         />
 
-
-        {/* 15. Academic Home Page */}
+        {/* 15. GptQuestionGenerator */}
         <Route
           path="/gptquestiongenerator"
           element={
@@ -330,8 +299,8 @@ function App() {
           }
         />
 
-         {/* 15. Academic Home Page */}
-         <Route
+        {/* 15. BooksViewer3 */}
+        <Route
           path="/books3"
           element={
             <PrivateRoute>
@@ -340,8 +309,7 @@ function App() {
           }
         />
 
-
-        {/* 15. Academic Home Page */}
+        {/* 15. AdaptiveStatsDashboard */}
         <Route
           path="/adaptivestatsdashboard"
           element={
@@ -350,28 +318,6 @@ function App() {
             </PrivateRoute>
           }
         />
-
-
-
-
-
-
-
-        
-
-       
-
-
-
-
-
-
-
-
-
-
-
-
       </Routes>
     </Router>
   );

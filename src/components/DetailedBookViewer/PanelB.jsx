@@ -32,7 +32,7 @@ function PanelB() {
   };
 
   return (
-    <div style={containerStyle}>
+    <div style={containerStyle} id="panelB">
       <h2 style={{ marginTop: 0 }}>Dummy Chat Interface</h2>
 
       <div style={chatBoxStyle}>

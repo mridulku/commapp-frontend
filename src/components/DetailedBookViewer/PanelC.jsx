@@ -55,7 +55,7 @@ function PanelC() {
   }, [userId, authLoading, backendURL]);
 
   return (
-    <div style={panelStyle}>
+    <div style={panelStyle} id="panelC">
       <h3 style={{ marginTop: 0 }}>User Activity Log</h3>
 
       {authLoading && <p>Checking sign-in status...</p>}

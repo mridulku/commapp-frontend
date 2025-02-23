@@ -1,5 +1,6 @@
-// src/components/DetailedBookViewer/BooksViewer2.jsx
-import React from "react";
+import React, { useState, useEffect } from "react";
+import Joyride, { STATUS } from "react-joyride";
+
 import { useBooksViewer } from "./hooks/useBooksViewer";
 
 // Our single unified sidebar:
@@ -65,17 +66,55 @@ function BooksViewer2() {
     position: "relative",
   };
 
+  // ========== Joyride Setup ==========
+
+  const [runTour, setRunTour] = useState(false);
+
+  // Steps referencing IDs in LibraryHome
+  const tourSteps = [
+    {
+      target: "#libraryHomeTitle",
+      content: "This is the main title for your library page.",
+    },
+    {
+      target: "#libraryNoBooks",
+      content: "This message appears if no books are found in your library.",
+    },
+    {
+      target: "#libraryHomeGrid",
+      content: "Here you see a grid of your books.",
+    },
+  ];
+
+  // Callback
+  const handleJoyrideCallback = (data) => {
+    console.log("Joyride callback =>", data);
+    const { status } = data;
+    if ([STATUS.FINISHED, STATUS.SKIPPED].includes(status)) {
+      setRunTour(false);
+    }
+  };
+
+  // **Use an effect to start Joyride only in Library mode with no selected book**:
+  useEffect(() => {
+    // If we're in library mode and no book is selected, we know LibraryHome is displayed
+    if (viewMode === "library" && !selectedBook) {
+      console.log(">>> Enabling Joyride for LibraryHome");
+      setRunTour(true);
+    } else {
+      setRunTour(false);
+    }
+  }, [viewMode, selectedBook]);
+
   // Filtered data depending on "library", "adaptive", or "overview"
   const displayedBooksData = getFilteredBooksData();
 
   // Decide main content
   let mainContent;
   if (viewMode === "overview") {
-    // 1) If not onboarded, show onboarding
     if (!isOnboarded) {
       mainContent = <OverviewContent />;
     } else {
-      // 2) Otherwise, show stats panel + 2x2 grid
       mainContent = (
         <>
           <StatsPanel />
@@ -98,15 +137,11 @@ function BooksViewer2() {
   } else if (viewMode === "profile") {
     mainContent = <UserProfileAnalytics />;
   } else if (viewMode === "library") {
-    // If in library mode:
     if (!selectedBook) {
-      // No book => show LibraryHome
       mainContent = <LibraryHome booksData={displayedBooksData} />;
     } else {
-      // Show BookSummary or SubchapterContent
       mainContent = (
         <>
-          {/* Show BookProgress only if a subchapter is selected */}
           {selectedSubChapter && (
             <BookProgress
               book={selectedBook}
@@ -115,16 +150,9 @@ function BooksViewer2() {
               getBookProgressInfo={getBookProgressInfo}
             />
           )}
-
-          {/* BookSummary if we have a book but no subchapter */}
           {selectedBook && !selectedSubChapter && (
-            <BookSummary
-              book={selectedBook}
-              getBookProgressInfo={getBookProgressInfo}
-            />
+            <BookSummary book={selectedBook} getBookProgressInfo={getBookProgressInfo} />
           )}
-
-          {/* If a subchapter is selected => subchapter content */}
           {selectedSubChapter && (
             <SubchapterContent
               subChapter={selectedSubChapter}
@@ -138,15 +166,11 @@ function BooksViewer2() {
       );
     }
   } else if (viewMode === "adaptive") {
-    // If in adaptive mode:
     if (!selectedBook) {
-      // No book => show AdaptiveHome
       mainContent = <AdaptiveHome booksData={displayedBooksData} />;
     } else {
-      // Show BookSummary or SubchapterContent
       mainContent = (
         <>
-          {/* Show BookProgress only if a subchapter is selected */}
           {selectedSubChapter && (
             <BookProgress
               book={selectedBook}
@@ -155,16 +179,9 @@ function BooksViewer2() {
               getBookProgressInfo={getBookProgressInfo}
             />
           )}
-
-          {/* BookSummary if we have a book but no subchapter */}
           {selectedBook && !selectedSubChapter && (
-            <BookSummary
-              book={selectedBook}
-              getBookProgressInfo={getBookProgressInfo}
-            />
+            <BookSummary book={selectedBook} getBookProgressInfo={getBookProgressInfo} />
           )}
-
-          {/* If a subchapter is selected => subchapter content */}
           {selectedSubChapter && (
             <SubchapterContent
               subChapter={selectedSubChapter}
@@ -182,7 +199,6 @@ function BooksViewer2() {
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
       <div style={containerStyle}>
-        {/* The single unified sidebar with the mode toggles plus content */}
         <UnifiedSidebar
           viewMode={viewMode}
           setViewMode={setViewMode}
@@ -200,9 +216,28 @@ function BooksViewer2() {
           selectedSubChapter={selectedSubChapter}
         />
 
-        {/* Main content area */}
         <div style={mainContentStyle}>{mainContent}</div>
       </div>
+
+      {/* Joyride for library home */}
+      <Joyride
+        steps={tourSteps}
+        run={runTour}
+        continuous
+        showSkipButton
+        showProgress
+        callback={handleJoyrideCallback}
+        spotlightPadding={8}
+        styles={{
+          options: {
+            arrowColor: "#fff",
+            backgroundColor: "#fff",
+            textColor: "#333",
+            overlayColor: "rgba(0,0,0,0.5)",
+            primaryColor: "#0084FF",
+          },
+        }}
+      />
     </div>
   );
 }

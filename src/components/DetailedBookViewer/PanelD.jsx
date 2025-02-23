@@ -93,7 +93,7 @@ function PanelD({
   const sessionsMap = groupBySessionBookChapter(booksData);
 
   return (
-    <div style={panelStyle}>
+    <div style={panelStyle} id="panelD">
       <h3 style={{ marginTop: 0 }}>Next Session Overview</h3>
 
       {/* Category Dropdown (optional) */}
