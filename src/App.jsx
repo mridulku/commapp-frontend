@@ -8,39 +8,39 @@ import { loadUsetifulScript, setUsetifulTags } from "usetiful-sdk";
 // NEW: Landing Page (public)
 import LandingPage from "./components/PreLogin/LandingPage";
 
-import BooksOverview from "./components/BooksOverview/BooksOverview";
-import ReadingPlan from "./components/BooksOverview/ReadingPlan";
+import BooksOverview from "./components/Archive/Archive 4/BooksOverview";
+import ReadingPlan from "./components/Archive/Archive 4/ReadingPlan";
 
-import AdaptiveStatsDashboard from "./components/AdaptiveStatsDashboard";
-import GptQuestionGenerator from "./components/Quiz/GptQuestionGenerator";
-import BooksViewer3 from "./components/RevampViewer/BooksViewer3";
+import AdaptiveStatsDashboard from "./components/Archive/Archive 11/AdaptiveStatsDashboard";
+import GptQuestionGenerator from "./components/Archive/Archive 10/GptQuestionGenerator";
+import BooksViewer3 from "./components/Archive/Archive 9/BooksViewer3";
 
 import AuthLogin from "./components/PreLogin/AuthLogin";
 import PrivateRoute from "./components/PreLogin/PrivateRoute";
-import Login from "./components/CommAppArchive/Login";
-import ChatInterface from "./components/CommAppArchive/ChatInterface";
-import Onboarding from "./components/Archive/Onboarding";
-import PdfUploader from "./components/AdminDashboard/PdfUploader";
-import SubChaptersUploader from "./components/AdminDashboard/SubChaptersUploader";
-import ChaptersUploader from "./components/AdminDashboard/ChaptersUploader";
-import BookTextViewer from "./components/AdminDashboard/BookTextViewer";
-import AdminDashboard from "./components/AdminDashboard/AdminDashboard";
-import SubchapterNameUploader from "./components/AdminDashboard/SubchapterNameUploader";
-import PlatformIntro from "./components/Onboarding/PlatformIntro";
-import PersonalizationProgress from "./components/Onboarding/PersonalizationProgress";
+import Login from "./components/Archive/Archive 5/Login";
+import ChatInterface from "./components/Archive/Archive 5/ChatInterface";
+import Onboarding from "./components/Archive/Archive 1/Onboarding";
+import PdfUploader from "./components/Archive/Archive 2/PdfUploader";
+import SubChaptersUploader from "./components/Archive/Archive 2/SubChaptersUploader";
+import ChaptersUploader from "./components/Archive/Archive 2/ChaptersUploader";
+import BookTextViewer from "./components/Archive/Archive 2/BookTextViewer";
+import AdminDashboard from "./components/Archive/Archive 2/AdminDashboard";
+import SubchapterNameUploader from "./components/Archive/Archive 2/SubchapterNameUploader";
+import PlatformIntro from "./components/Archive/Archive 8/PlatformIntro";
+import PersonalizationProgress from "./components/Archive/Archive 8/PersonalizationProgress";
 
-import Home from "./components/HomePage/Home";
+import Home from "./components/Archive/Archive 7/Home";
 
-import LearnerPersonaForm from "./components/Onboarding/LearnerPersonaForm";
-import OnboardingAssessment from "./components/Onboarding/OnboardingAssessment";
+import LearnerPersonaForm from "./components/Archive/Archive 8/LearnerPersonaForm";
+import OnboardingAssessment from "./components/Archive/Archive 8/OnboardingAssessment";
 
-import TestView from "./components/Testing/TestView";
-import GamificationDashboard from "./components/Gamification/GamificationDashboard";
-import MaterialUploadWizard from "./components/AddedFunctions/MaterialUploadWizard";
-import CoursesMaterialManager from "./components/AddedFunctions/CoursesMaterialManager";
+import TestView from "./components/Archive/Archive 11/TestView";
+import GamificationDashboard from "./components/Archive/Archive 6/GamificationDashboard";
+import MaterialUploadWizard from "./components/Archive/Archive 3/MaterialUploadWizard";
+import CoursesMaterialManager from "./components/Archive/Archive 3/CoursesMaterialManager";
 
-import BooksViewer from "./components/Archive/BooksViewer";
-import BooksViewer2 from "./components/DetailedBookViewer/BooksViewerNew";
+import BooksViewer from "./components/Archive/Archive 1/BooksViewer";
+import BooksViewer2 from "./components/DetailedBookViewer/0.BooksViewerNew";
 
 function App() {
   /**

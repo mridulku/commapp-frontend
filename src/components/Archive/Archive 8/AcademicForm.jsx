@@ -12,7 +12,7 @@ import {
   uploadBytesResumable,
   getDownloadURL,
 } from "firebase/storage";
-import { storage, auth } from "../../firebase"; // your firebase.js file
+import { storage, auth } from "../../../firebase"; // your firebase.js file
 
 function AcademicForm(
   {

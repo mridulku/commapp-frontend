@@ -1,6 +1,6 @@
 // src/components/DetailedBookViewer/PanelC.jsx
 import React, { useState, useEffect } from "react";
-import { auth } from "../../firebase"; // Adjust path if needed
+import { auth } from "../../../firebase"; // Adjust path if needed
 import axios from "axios";
 
 function PanelC() {

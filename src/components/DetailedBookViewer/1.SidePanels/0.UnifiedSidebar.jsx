@@ -2,10 +2,10 @@
 import React from "react";
 
 // Import the 4 specialized sidebars:
-import OverviewSidebar from "./OverviewSidebar";
-import AdaptiveSidebar from "./AdaptiveSidebar";
-import BooksSidebar from "./BooksSidebar";
-import ProfileSidebar from "./ProfileSidebar";
+import OverviewSidebar from "./1.OverviewSidebar";
+import AdaptiveSidebar from "./3.AdaptiveSidebar";
+import BooksSidebar from "./2.BooksSidebar";
+import ProfileSidebar from "./4.ProfileSidebar";
 
 function UnifiedSidebar({
   // We'll pass in these props from BooksViewer2
@@ -69,6 +69,7 @@ function UnifiedSidebar({
   } else if (viewMode === "adaptive") {
     content = (
       <AdaptiveSidebar
+        planId="11duPwJWXVWT9flhwGCX"
         categories={categories}
         selectedCategory={selectedCategory}
         onCategoryChange={onCategoryChange}

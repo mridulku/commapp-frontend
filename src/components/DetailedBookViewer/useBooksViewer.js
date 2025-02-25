@@ -1,7 +1,7 @@
 // src/components/DetailedBookViewer/hooks/useBooksViewer.js
 import { useState, useEffect } from "react";
 import axios from "axios";
-import { auth } from "../../../firebase";
+import { auth } from "../../firebase";
 
 export function useBooksViewer() {
   const backendURL = import.meta.env.VITE_BACKEND_URL;

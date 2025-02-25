@@ -3,7 +3,7 @@
  ********************************************/
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { auth } from "../../firebase";
+import { auth } from "../../../firebase";
 
 // Our brand-new layout components
 import LibraryDrawer from "./LibraryDrawer";

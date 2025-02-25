@@ -1,6 +1,6 @@
 import React from "react";
-import NavigationBar from "../DetailedBookViewer/NavigationBar";
-import { useHomeData } from "../DetailedBookViewer/useHomeData";
+import NavigationBar from "../NavigationBar";
+import { useHomeData } from "../../DetailedBookViewer/2.1Overview/useHomeData";
 
 function Home() {
   // Pull data from our custom hook

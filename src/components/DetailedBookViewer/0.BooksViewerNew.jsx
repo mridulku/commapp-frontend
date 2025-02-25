@@ -1,26 +1,28 @@
 // src/components/DetailedBookViewer/BooksViewer2.jsx
 
 import React, { useState } from "react";
-import { useBooksViewer } from "./hooks/useBooksViewer";
-import UnifiedSidebar from "./UnifiedSidebar";
-import ToursManager from "./ToursManager";
+import { useBooksViewer } from "./useBooksViewer";
+import UnifiedSidebar from "./1.SidePanels/0.UnifiedSidebar";
+import ToursManager from "./0.1Tours/ToursManager";
 
 // Existing components...
-import BookProgress from "./BookProgress";
-import SubchapterContent from "./SubchapterContent";
-import OverviewContent from "./OverviewContent";
-import UserProfileAnalytics from "./UserProfileAnalytics";
-import PanelA from "./PanelA";
-import PanelB from "./PanelB";
-import PanelC from "./PanelC";
-import PanelD from "./PanelD";
-import StatsPanel from "./StatsPanel";
-import BookSummary from "./BookSummary";
-import LibraryHome from "./LibraryHome";
-import AdaptiveHome from "./AdaptiveHome";
+import BookProgress from "./2.2Library/BookProgress";
+import SubchapterContent from "./4.Subchapter Content/0.SubchapterContent";
+import OverviewContent from "./2.1Overview/0.OverviewContent";
+
+
+import UserProfileAnalytics from "./2.4Profile/UserProfileAnalytics";
+import PanelA from "./2.1Overview/2.PanelA";
+import PanelB from "./2.1Overview/3.PanelB";
+import PanelC from "./2.1Overview/4.PanelC";
+import PanelD from "./2.1Overview/5.PanelD";
+import StatsPanel from "./2.1Overview/1.StatsPanel";
+import BookSummary from "./2.2Library/BookSummary";
+import LibraryHome from "./2.2Library/LibraryHome";
+import AdaptiveHome from "./2.3Adaptive/AdaptiveHome";
 
 // NEW: The cinematic "player" modal
-import AdaptivePlayerModal from "./AdaptivePlayerModal"; // <-- Adjust path as needed
+import AdaptivePlayerModal from "./3.AdaptiveModal/AdaptivePlayerModal"; // <-- Adjust path as needed
 
 function BooksViewer2() {
   const {
@@ -253,11 +255,14 @@ function BooksViewer2() {
       />
 
       {/* The cinematic "player" modal */}
-      <AdaptivePlayerModal
-        isOpen={showPlayer}
-        onClose={() => setShowPlayer(false)}
-        userName="Jane Doe" // or pass dynamic name from context
-      />
+      
+      
+<AdaptivePlayerModal
+  isOpen={showPlayer}
+  onClose={() => setShowPlayer(false)}
+  userId={userId} 
+  planId="11duPwJWXVWT9flhwGCX"
+/>
     </div>
   );
 }

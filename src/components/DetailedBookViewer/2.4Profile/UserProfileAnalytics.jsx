@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 // If you do not want a top nav bar inside this component, remove NavigationBar import.
 // import NavigationBar from "../DetailedBookViewer/NavigationBar";
-import { auth } from "../../firebase"; // Adjust import path as needed
+import { auth } from "../../../firebase"; // Adjust import path as needed
 import axios from "axios";
 
 function UserProfileAnalytics() {

@@ -1,6 +1,6 @@
 // src/components/HomePage/useHomeData.js
 import { useState, useEffect } from "react";
-import { auth } from "../../firebase"; // adjust if needed
+import { auth } from "../../../firebase"; // adjust if needed
 import axios from "axios";
 
 export function useHomeData() {
