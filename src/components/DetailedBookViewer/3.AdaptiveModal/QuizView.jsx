@@ -27,7 +27,7 @@ export default function QuizView({
   subChapterName = "Untitled Subchapter",
   subChapterContent,
   userId,
-  backendURL = "http://localhost:3001",
+  backendURL = import.meta.env.VITE_BACKEND_URL
 }) {
   // ---------- State Variables ----------
   const [loading, setLoading] = useState(false);

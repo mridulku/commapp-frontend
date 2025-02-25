@@ -55,6 +55,8 @@ function BooksViewer2() {
   // For the cinematic "player" modal:
   const [showPlayer, setShowPlayer] = useState(false);
 
+  const [selectedHomeActivity, setSelectedHomeActivity] = useState(null);
+
   // Layout styling
   const containerStyle = {
     display: "flex",
@@ -202,7 +204,23 @@ function BooksViewer2() {
         </>
       );
     }
-  }
+  } else if (viewMode === "home") {
+       if (selectedHomeActivity) {
+         // Show filler content for now
+         mainContent = (
+           <div style={{ fontSize: "1.2rem", color: "lightcyan" }}>
+             Filler content for: <strong>{selectedHomeActivity?.subChapterName}</strong>
+           </div>
+         );
+       } else {
+         // If no activity has been clicked yet
+         mainContent = (
+           <div style={{ color: "#FFD700" }}>
+             Please select a day/activity in the <em>Home</em> sidebar.
+           </div>
+         );
+       }
+      }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
@@ -222,6 +240,8 @@ function BooksViewer2() {
           handleChapterClick={handleChapterClick}
           handleSubChapterClick={handleSubChapterClick}
           selectedSubChapter={selectedSubChapter}
+          homePlanId="wQvYSM1Xzl262djm5rYK" // or whichever doc ID you want
+         onHomeSelect={(act) => setSelectedHomeActivity(act)}
         />
 
         <div style={mainContentStyle}>{mainContent}</div>

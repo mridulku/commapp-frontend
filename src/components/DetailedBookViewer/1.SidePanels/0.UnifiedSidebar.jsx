@@ -6,6 +6,7 @@ import OverviewSidebar from "./1.OverviewSidebar";
 import AdaptiveSidebar from "./3.AdaptiveSidebar";
 import BooksSidebar from "./2.BooksSidebar";
 import ProfileSidebar from "./4.ProfileSidebar";
+import HomeSidebar from "./HomeSidebar"
 
 function UnifiedSidebar({
   // We'll pass in these props from BooksViewer2
@@ -16,6 +17,9 @@ function UnifiedSidebar({
   categories,
   selectedCategory,
   onCategoryChange,
+  
+  homePlanId,
+  onHomeSelect,
 
   // Only needed by some sidebars:
   booksData,
@@ -69,7 +73,7 @@ function UnifiedSidebar({
   } else if (viewMode === "adaptive") {
     content = (
       <AdaptiveSidebar
-        planId="11duPwJWXVWT9flhwGCX"
+        planId={homePlanId}
         categories={categories}
         selectedCategory={selectedCategory}
         onCategoryChange={onCategoryChange}
@@ -96,7 +100,17 @@ function UnifiedSidebar({
     );
   } else if (viewMode === "profile") {
     content = <ProfileSidebar />;
-  }
+  } else if (viewMode === "home") {
+    content = (
+        <HomeSidebar
+           planId={homePlanId}
+           backendURL={import.meta.env.VITE_BACKEND_URL}  // or your custom URL
+           onHomeSelect={onHomeSelect}  // callback for clicks
+         />
+        );
+      
+      }
+
 
   return (
     <div style={sidebarContainerStyle}>
@@ -129,6 +143,16 @@ function UnifiedSidebar({
         >
           Profile
         </button>
+
+        <button
+         style={toggleButtonStyle(viewMode === "home")}
+         onClick={() => setViewMode("home")}
+       >
+         Home
+       </button>
+
+
+
       </div>
 
       {/* 2) Render whichever specialized sidebar is appropriate */}
