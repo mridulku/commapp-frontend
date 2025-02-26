@@ -39,6 +39,7 @@ function BookProgress({ book, getBookProgressInfo }) {
 export default function ReadingView({
   selectedBook,
   selectedChapter,
+  level,
   selectedSubChapter,
   onToggleDone,
   getBookProgressInfo,
@@ -74,7 +75,7 @@ export default function ReadingView({
       {selectedSubChapter.wordCount && (
         <p style={{ fontStyle: "italic", opacity: 0.8 }}>
           Word Count: {selectedSubChapter.wordCount} (~
-          {Math.ceil(selectedSubChapter.wordCount / 200)} min read)
+          {Math.ceil(selectedSubChapter.wordCount / 200)} min read )
         </p>
       )}
 

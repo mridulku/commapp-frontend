@@ -13,6 +13,7 @@ import PanelA from "./2.1Overview/2.PanelA";
 import PanelB from "./2.1Overview/3.PanelB";
 import PanelC from "./2.1Overview/4.PanelC";
 import PanelD from "./2.1Overview/5.PanelD";
+import PanelE from "./2.1Overview/PanelE";
 import StatsPanel from "./2.1Overview/1.StatsPanel";
 import BookSummary from "./2.2Library/BookSummary";
 import LibraryHome from "./2.2Library/LibraryHome";
@@ -177,6 +178,7 @@ function BooksViewer2() {
             <PanelB />
             <PanelA />
             <PanelC />
+            <PanelE />
             <PanelD
               categories={categories}
               selectedCategory={selectedCategory}

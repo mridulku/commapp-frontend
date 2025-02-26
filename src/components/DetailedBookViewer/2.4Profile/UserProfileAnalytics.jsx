@@ -21,14 +21,16 @@ function UserProfileAnalytics({ colorScheme = {} }) {
   const [dailyReadingTime, setDailyReadingTime] = useState("");
   const [quizTime, setQuizTime] = useState("");
   const [reviseTime, setReviseTime] = useState("");
+  
+  // NEW: Mastery Level (e.g. "mastery", "revision", etc.)
+  const [masteryLevel, setMasteryLevel] = useState("");
 
-  // New fields for selecting books/chapters/subchapters (comma-separated)
+  // Fields for selecting books/chapters/subchapters (comma-separated)
   const [bookIdsString, setBookIdsString] = useState("");
   const [chapterIdsString, setChapterIdsString] = useState("");
   const [subchapterIdsString, setSubchapterIdsString] = useState("");
 
-  // We'll assume your usual backend or other APIs point to:
-  // This is the Cloud Run or Firebase Function URL
+  // URL to your Cloud Function or backend endpoint
   const generatePlanURL = "https://generateadaptiveplan-zfztjkkvva-uc.a.run.app";
 
   // ==============================
@@ -49,8 +51,6 @@ function UserProfileAnalytics({ colorScheme = {} }) {
   // ==============================
   // Step B: Fetch user activities
   // ==============================
-  // (This part is presumably your own custom logic to show activity logs, etc.)
-  // We'll assume you have a route: /api/user-activities?userId=XYZ
   const backendURL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
 
   useEffect(() => {
@@ -96,7 +96,7 @@ function UserProfileAnalytics({ colorScheme = {} }) {
       userId,
     };
 
-    // 1) Required: targetDate (or you can make it optional if desired)
+    // 1) Required targetDate
     if (targetDate) {
       requestBody.targetDate = targetDate;
     } else {
@@ -121,13 +121,17 @@ function UserProfileAnalytics({ colorScheme = {} }) {
       requestBody.reviseTime = Number(reviseTime);
     }
 
-    // 3) Optional Book/Chapter/Subchapter IDs
-    // If user typed "abc123, xyz456" => ["abc123", "xyz456"]
+    // 3) Mastery Level (e.g. "mastery", "revision", etc.)
+    if (masteryLevel.trim()) {
+      requestBody.level = masteryLevel.trim();
+    }
+
+    // 4) Optional Book/Chapter/Subchapter IDs
     if (bookIdsString.trim()) {
       const arrayOfBookIds = bookIdsString
         .split(",")
         .map((id) => id.trim())
-        .filter(Boolean); // remove empty
+        .filter(Boolean);
       requestBody.selectedBooks = arrayOfBookIds;
     }
     if (chapterIdsString.trim()) {
@@ -295,6 +299,18 @@ function UserProfileAnalytics({ colorScheme = {} }) {
                 />
               </div>
 
+              {/* Mastery Level (optional) */}
+              <div>
+                <label style={{ marginRight: "8px" }}>Mastery Level:</label>
+                <input
+                  type="text"
+                  value={masteryLevel}
+                  onChange={(e) => setMasteryLevel(e.target.value)}
+                  placeholder="e.g. 'mastery', 'revision'"
+                  style={{ padding: "4px", width: "80%" }}
+                />
+              </div>
+
               {/* Book IDs (optional, comma-separated) */}
               <div>
                 <label style={{ marginRight: "8px" }}>Book IDs (comma-separated):</label>
@@ -406,7 +422,7 @@ function UserProfileAnalytics({ colorScheme = {} }) {
   );
 }
 
-// Some inline style objects (slightly adjusted for a dark theme)
+// Some inline style objects
 const logItemStyle = (colorScheme) => ({
   marginBottom: "15px",
   paddingLeft: "10px",

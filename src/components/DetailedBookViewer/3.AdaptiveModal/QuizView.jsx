@@ -24,6 +24,7 @@ Just return valid JSON.
 
 export default function QuizView({
   subChapterId,
+  level,
   subChapterName = "Untitled Subchapter",
   subChapterContent,
   userId,

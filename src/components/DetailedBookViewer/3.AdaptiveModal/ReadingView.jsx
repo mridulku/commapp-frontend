@@ -25,6 +25,7 @@ function formatTime(totalSeconds) {
 export default function ReadingView({
   subChapterId,
   userId,
+  level,
   backendURL = "http://localhost:3001",
   onRefreshData,
 }) {

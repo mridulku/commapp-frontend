@@ -41,6 +41,8 @@ import CoursesMaterialManager from "./components/Archive/Archive 3/CoursesMateri
 
 import BooksViewer from "./components/Archive/Archive 1/BooksViewer";
 import BooksViewer2 from "./components/DetailedBookViewer/0.BooksViewerNew";
+import PlanBrowser from "./components/DetailedBookViewer/PlanBrowser";
+
 
 function App() {
   /**
@@ -318,7 +320,19 @@ function App() {
             </PrivateRoute>
           }
         />
+        {/* 15. AdaptiveStatsDashboard */}
+        <Route
+          path="/planbrowser"
+          element={
+            <PrivateRoute>
+              <PlanBrowser />
+            </PrivateRoute>
+          }
+        />
       </Routes>
+      
+
+
     </Router>
   );
 }

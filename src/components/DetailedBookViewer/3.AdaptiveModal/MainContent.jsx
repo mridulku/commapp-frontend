@@ -20,6 +20,7 @@ import ReviseView from "./ReviseView";
 export default function MainContent({
   currentItem,
   userId,
+  level,
   backendURL,
   onRefreshData,
 }) {
@@ -46,16 +47,17 @@ export default function MainContent({
           userId={userId}
           backendURL={backendURL}
           onRefreshData={onRefreshData}
+          level={currentItem.level}
         />
       );
 
     case "quiz":
       // You might pass subChapterId or quiz data to QuizView
-      return <QuizView subChapterId={subChapterId} userId={userId} />;
+      return <QuizView subChapterId={subChapterId} userId={userId} level={level} />;
 
     case "revise":
     case "revision":
-      return <ReviseView subChapterId={subChapterId} userId={userId} />;
+      return <ReviseView subChapterId={subChapterId} userId={userId} level={level} />;
 
     default:
       // Fallback for unknown types
