@@ -1,8 +1,10 @@
 // QuizView.jsx
 
 import React, { useState, useEffect } from "react";
+import axios from "axios";
 
-const BLOOMS_REMEMBER_UNDERSTAND_PROMPT = `You are a helpful assistant. Given the following text, generate 3 multiple-choice questions 
+// Two distinct prompts: 3 questions vs. 5 questions
+const PROMPT_3_QUESTIONS = `You are a helpful assistant. Given the following text, generate 3 multiple-choice questions 
 that test basic recall (Bloom's Remember/Understand). 
 Return ONLY valid JSON with the structure:
 
@@ -22,17 +24,47 @@ Do NOT wrap it in backticks.
 Just return valid JSON.
 `;
 
+const PROMPT_5_QUESTIONS = `You are a helpful assistant. Given the following text, generate 5 multiple-choice questions 
+that test deeper recall (Bloom's Remember/Understand). 
+Return ONLY valid JSON with the structure:
+
+{
+  "questions": [
+    {
+      "question": "...",
+      "options": [ "option text...", "..." ],
+      "answer": "the correct option text..."
+    },
+    ...
+  ]
+}
+
+Do NOT include any markdown formatting or extra commentary. 
+Do NOT wrap it in backticks. 
+Just return valid JSON.
+`;
+
+/**
+ * QuizView
+ *
+ * 1) Fetches subChapter data from /api/subchapters/:subChapterId
+ * 2) Checks if there's an existing quiz doc (score).
+ * 3) If none or score < 3 => calls GPT using the chosen prompt (3 or 5 Q's).
+ */
 export default function QuizView({
   subChapterId,
-  level,
+  level, // e.g. "mastery" => 5 Qs, else 3 Qs
   subChapterName = "Untitled Subchapter",
-  subChapterContent,
   userId,
-  backendURL = import.meta.env.VITE_BACKEND_URL
+  backendURL = import.meta.env.VITE_BACKEND_URL,
 }) {
   // ---------- State Variables ----------
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // subchapter content we fetch from server
+  const [subChapter, setSubChapter] = useState(null);
+
   const [questions, setQuestions] = useState([]);
   const [selectedAnswers, setSelectedAnswers] = useState({});
   const [score, setScore] = useState(null);
@@ -41,106 +73,121 @@ export default function QuizView({
   // API key for GPT
   const apiKey = import.meta.env.VITE_OPENAI_KEY;
 
-  // ---------- Logs to see incoming props ----------
-  console.log("QuizView mounted with:", {
+  console.log("QuizView props =>", {
     subChapterId,
-    subChapterName,
-    subChapterContent,
+    level,
     userId,
     backendURL,
     apiKeyExists: !!apiKey,
   });
 
+  // 1) On mount or when subChapterId changes, fetch subchapter data & then quiz logic
   useEffect(() => {
-    console.log("[QuizView] useEffect triggered (is mount or subChapterId changed).");
     if (!subChapterId || !userId) {
-      console.warn("[QuizView] Missing subChapterId or userId, cannot proceed.");
+      console.warn("[QuizView] Missing subChapterId or userId => cannot proceed.");
       setError("Missing subChapterId or userId. Quiz cannot be loaded.");
       return;
     }
 
+    // Reset states
     setLoading(true);
     setError(null);
+    setSubChapter(null);
     setQuestions([]);
     setSelectedAnswers({});
     setScore(null);
     setReadOnly(false);
 
-    // 1) Check existing quiz
-    console.log("[QuizView] Checking for existing quiz doc on server...");
-    fetchExistingQuiz(userId, subChapterId)
-      .then((existingQuiz) => {
-        console.log("[QuizView] existingQuiz result:", existingQuiz);
+    // A) Fetch subchapter from server
+    async function fetchSubchapterAndQuiz() {
+      try {
+        // 1) Fetch subchapter details
+        const subRes = await axios.get(`${backendURL}/api/subchapters/${subChapterId}`);
+        const subData = subRes.data;
+        console.log("[QuizView] fetched subchapter =>", subData);
+        setSubChapter(subData);
+
+        // 2) Check existing quiz doc
+        const existingQuiz = await fetchExistingQuiz(userId, subChapterId);
+        console.log("[QuizView] existingQuiz =>", existingQuiz);
+
         if (existingQuiz) {
           // If doc found
-          if (existingQuiz.score === 3) {
-            // Perfect score => read-only mode
-            console.log("[QuizView] Found existing quiz with score=3, set readOnly mode.");
+          if (existingQuiz.score === 3 || existingQuiz.score === 5) {
+            // Perfect score => readOnly mode
+            console.log("[QuizView] Perfect score => read-only mode.");
             setQuestions(existingQuiz.questions || []);
             setSelectedAnswers(existingQuiz.selectedAnswers || {});
             setScore(existingQuiz.score ?? null);
             setReadOnly(true);
             setLoading(false);
+            return;
           } else {
-            // Score < 3 => generate new quiz
-            console.log("[QuizView] Found existing quiz but score <3 => calling GPT.");
-            fetchQuizFromGPT();
+            console.log("[QuizView] found quiz doc but score < perfect => calling GPT again");
+            // we want a new quiz => call GPT
+            await fetchQuizFromGPT(subData.summary);
           }
         } else {
-          // No doc => generate from GPT
-          console.log("[QuizView] No existing quiz => calling GPT...");
-          fetchQuizFromGPT();
+          // no doc => new quiz from GPT
+          console.log("[QuizView] no quiz doc => calling GPT fresh.");
+          await fetchQuizFromGPT(subData.summary);
         }
-      })
-      .catch((err) => {
-        console.error("[QuizView] Error in fetchExistingQuiz:", err);
+      } catch (err) {
+        console.error("[QuizView] Error in fetchSubchapterAndQuiz =>", err);
         setError(err.message);
+      } finally {
         setLoading(false);
-      });
-  }, [subChapterId, userId]);
+      }
+    }
 
-  // ========================================================================
-  // A) fetchExistingQuiz => /api/quizzes?userId=&subChapterId=
-  // ========================================================================
+    fetchSubchapterAndQuiz();
+  }, [subChapterId, userId, backendURL]);
+
+  // ================ fetchExistingQuiz =================
   async function fetchExistingQuiz(userId, subChapterId) {
-    try {
-      const url = `${backendURL}/api/quizzes?userId=${userId}&subChapterId=${subChapterId}`;
-      console.log("[fetchExistingQuiz] GET =>", url);
-      const resp = await fetch(url);
-      if (!resp.ok) {
-        throw new Error(`[fetchExistingQuiz] HTTP ${resp.status}`);
-      }
-      const data = await resp.json();
-      console.log("[fetchExistingQuiz] response JSON:", data);
-      if (data.success && data.data) {
-        return data.data; // e.g. { userId, subChapterId, questions, score, ... }
-      } else {
-        console.log("[fetchExistingQuiz] no doc found in server => returning null");
-        return null;
-      }
-    } catch (error) {
-      console.error("[fetchExistingQuiz] error:", error);
-      throw error;
+    const url = `${backendURL}/api/quizzes?userId=${userId}&subChapterId=${subChapterId}`;
+    console.log("[fetchExistingQuiz] GET =>", url);
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      throw new Error(`[fetchExistingQuiz] HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    if (data.success && data.data) {
+      return data.data; // e.g. { userId, subChapterId, questions, score, ... }
+    } else {
+      return null;
     }
   }
 
-  // ========================================================================
-  // B) GPT fetch => If no doc found or doc.score<3
-  // ========================================================================
-  async function fetchQuizFromGPT() {
-    console.log("[fetchQuizFromGPT] start. subChapterContent length=", subChapterContent?.length);
+  // ================ GPT fetchQuizFromGPT =================
+  async function fetchQuizFromGPT(subChapterContent) {
     if (!apiKey) {
       console.error("[fetchQuizFromGPT] No OpenAI API key found!");
       setError("No OpenAI API key found!");
-      setLoading(false);
       return;
     }
-    if (!subChapterContent) {
-      console.warn("[fetchQuizFromGPT] subChapterContent is empty => GPT can't do much.");
+    // Pick the correct prompt based on level
+    let basePrompt;
+    if (level === "mastery") {
+      basePrompt = PROMPT_5_QUESTIONS;
+    } else {
+      basePrompt = PROMPT_3_QUESTIONS;
     }
+
+    // If summary is empty => GPT can't do much
+    if (!subChapterContent) {
+      console.warn("[fetchQuizFromGPT] subChapterContent is empty => GPT might produce bland quiz.");
+    }
+
+    console.log("[fetchQuizFromGPT] using prompt =>", level === "mastery" ? "5-question" : "3-question");
+
     try {
+      setLoading(true);
+      setError(null);
+
+      // Compose final GPT user prompt
       const fullPrompt = `
-        ${BLOOMS_REMEMBER_UNDERSTAND_PROMPT}
+        ${basePrompt}
         Text Content:
         ${subChapterContent}
       `;
@@ -193,9 +240,7 @@ export default function QuizView({
     }
   }
 
-  // ========================================================================
-  // C) handleOptionChange => track user’s radio selection
-  // ========================================================================
+  // ================ handleOptionChange =================
   function handleOptionChange(qIndex, optIndex) {
     if (readOnly) {
       console.log("[handleOptionChange] readOnly => ignoring input.");
@@ -205,9 +250,7 @@ export default function QuizView({
     setSelectedAnswers((prev) => ({ ...prev, [qIndex]: optIndex }));
   }
 
-  // ========================================================================
-  // D) handleSubmit => compute score & store doc
-  // ========================================================================
+  // ================ handleSubmit => compute score & store doc =================
   async function handleSubmit() {
     if (!questions.length) {
       console.warn("[handleSubmit] no questions => cannot submit");
@@ -233,7 +276,7 @@ export default function QuizView({
       await saveQuizToServer({
         userId,
         subChapterId,
-        subChapterName,
+        subChapterName: subChapter?.subChapterName || "Unknown",
         questions,
         selectedAnswers,
         score: finalScore,
@@ -248,9 +291,7 @@ export default function QuizView({
     setReadOnly(true);
   }
 
-  // ========================================================================
-  // E) saveQuizToServer => /api/quizzes (POST)
-  // ========================================================================
+  // ================ saveQuizToServer => /api/quizzes (POST) =================
   async function saveQuizToServer({
     userId,
     subChapterId,
@@ -284,11 +325,12 @@ export default function QuizView({
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   // RENDER UI
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  console.log("[QuizView] Render UI => loading=", loading, " error=", error, " questions.length=", questions.length);
+  console.log("[QuizView] render => loading=", loading, " error=", error, " questions.length=", questions.length);
 
   return (
     <div style={quizContainer}>
-      <h2>Quiz for: {subChapterName || subChapterId}</h2>
+      <h2>Quiz for SubChapter: {subChapter?.subChapterName || subChapterId}</h2>
+      {level && <p style={{ fontStyle: "italic" }}>Level: {level}</p>}
 
       {loading && <p>Loading quiz data...</p>}
 

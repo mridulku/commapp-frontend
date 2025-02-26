@@ -53,11 +53,15 @@ export default function MainContent({
 
     case "quiz":
       // You might pass subChapterId or quiz data to QuizView
-      return <QuizView subChapterId={subChapterId} userId={userId} level={level} />;
+      return <QuizView subChapterId={currentItem.subChapterId} userId={userId} level={currentItem.level} />;
+
+    
+
+
 
     case "revise":
     case "revision":
-      return <ReviseView subChapterId={subChapterId} userId={userId} level={level} />;
+      return <ReviseView subChapterId={subChapterId} userId={userId} level={currentItem.level} />;
 
     default:
       // Fallback for unknown types
