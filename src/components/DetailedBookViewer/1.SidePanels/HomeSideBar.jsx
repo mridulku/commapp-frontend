@@ -1,5 +1,3 @@
-// src/components/DetailedBookViewer/1.SidePanels/HomeSidebar.jsx
-
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { playlistPanelStyle } from "./styles";
@@ -7,27 +5,37 @@ import { playlistPanelStyle } from "./styles";
 /**
  * HomeSidebar
  *
- * A copy of your "LeftPanel" that fetches the same plan doc from
- * /api/adaptive-plan. It then shows Day-by-Day collapsible sessions.
+ * Shows a 4-level nested plan:
+ * 1) Session (Day X) -- expanded by default
+ * 2) Book (Book: X) -- expanded by default
+ * 3) Chapter (Chapter: X) -- expanded by default
+ * 4) Sub-Chapter (Sub-Chapter: X) -- collapsed by default (user must click)
  *
- * Instead of `onActivitySelect`, we’ll call it `onHomeSelect` to reflect
- * that this is for your "Home" mode.
+ * Props:
+ *  - planId: string (the Firestore doc ID)
+ *  - backendURL: string (default "http://localhost:3001")
+ *  - onHomeSelect: function(activity) => void
+ *  - onOpenPlayer: function(planId, activity) => void  // <-- NEW to open the AdaptivePlayer
+ *  - colorScheme: optional styling overrides
  */
 export default function HomeSidebar({
   planId,
   backendURL = "http://localhost:3001",
   onHomeSelect = () => {},
+  onOpenPlayer = () => {},   // NEW
   colorScheme = {},
 }) {
-  // Local state for fetched plan
   const [plan, setPlan] = useState(null);
 
-  // Track which session labels are expanded/collapsed
+  // State controlling expand/collapse for each hierarchy level
   const [expandedSessions, setExpandedSessions] = useState([]);
+  const [expandedBooks, setExpandedBooks] = useState([]);
+  const [expandedChapters, setExpandedChapters] = useState([]);
+  const [expandedSubs, setExpandedSubs] = useState([]); // sub-chapters collapsed by default
 
+  // 1) Fetch plan
   useEffect(() => {
     if (!planId) return;
-
     async function fetchPlanData() {
       try {
         const res = await axios.get(`${backendURL}/api/adaptive-plan`, {
@@ -42,13 +50,61 @@ export default function HomeSidebar({
         console.error("Error fetching plan:", err);
       }
     }
-
     fetchPlanData();
   }, [planId, backendURL]);
 
-  // Basic styling to match your black + gold design
+  // 2) Once we have plan, expand sessions, books, chapters by default
+  //    (sub-chapters remain collapsed)
+  useEffect(() => {
+    if (!plan) return;
+
+    const { sessions = [] } = plan;
+    const sessionKeys = [];
+    const bookKeys = [];
+    const chapterKeys = [];
+
+    for (const sess of sessions) {
+      const { sessionLabel, activities = [] } = sess;
+      const sKey = `S-${sessionLabel}`;
+      sessionKeys.push(sKey);
+
+      // Group by book
+      const bookMap = new Map();
+      for (const act of activities) {
+        if (!bookMap.has(act.bookId)) {
+          bookMap.set(act.bookId, []);
+        }
+        bookMap.get(act.bookId).push(act);
+      }
+
+      for (const [bookId, bookActs] of bookMap.entries()) {
+        const bKey = `S-${sessionLabel}-B-${bookId}`;
+        bookKeys.push(bKey);
+
+        // Group by chapter
+        const chapterMap = new Map();
+        for (const a of bookActs) {
+          if (!chapterMap.has(a.chapterId)) {
+            chapterMap.set(a.chapterId, []);
+          }
+          chapterMap.get(a.chapterId).push(a);
+        }
+        for (const [chapterId, chapActs] of chapterMap.entries()) {
+          const cKey = `S-${sessionLabel}-B-${bookId}-C-${chapterId}`;
+          chapterKeys.push(cKey);
+        }
+      }
+    }
+
+    setExpandedSessions(sessionKeys);
+    setExpandedBooks(bookKeys);
+    setExpandedChapters(chapterKeys);
+    // setExpandedSubs([]); // sub-chapters remain collapsed
+  }, [plan]);
+
+  // Basic styling
   const containerStyle = {
-    ...playlistPanelStyle, // your existing panel style
+    ...playlistPanelStyle,
     width: "300px",
     minWidth: "250px",
     backgroundColor: colorScheme.panelBg || "rgba(0, 0, 0, 0.9)",
@@ -65,18 +121,18 @@ export default function HomeSidebar({
     color: colorScheme.heading || "#FFD700",
   };
 
-  const sessionHeaderStyle = {
+  // Shared style for each expandable header level
+  const baseHeaderStyle = {
     cursor: "pointer",
-    padding: "10px",
-    borderRadius: "6px",
-    marginBottom: "6px",
+    padding: "8px",
+    borderRadius: "4px",
+    marginBottom: "4px",
     backgroundColor: "rgba(255,215,0,0.15)",
     color: "#fff",
     fontWeight: "bold",
     transition: "background-color 0.3s",
   };
 
-  // If plan not fetched yet, show loading
   if (!plan) {
     return (
       <div style={containerStyle}>
@@ -91,19 +147,23 @@ export default function HomeSidebar({
   return (
     <div style={containerStyle}>
       <h2 style={headingStyle}>Home Plan</h2>
-      {sessions.map((sess, sIndex) => {
+      {sessions.map((sess) => {
         const { sessionLabel, activities = [] } = sess;
-        const isExpanded = expandedSessions.includes(sessionLabel);
+        const sessionKey = `S-${sessionLabel}`;
+        const isSessionExpanded = expandedSessions.includes(sessionKey);
 
-        // Sum up time for display
+        // Sum up total time in this session
         const totalTime = activities.reduce((acc, a) => acc + (a.timeNeeded || 0), 0);
 
         return (
           <div key={sessionLabel} style={{ marginBottom: "10px" }}>
-            {/* Session header (Day X) */}
+            {/* Session header */}
             <div
-              style={sessionHeaderStyle}
-              onClick={() => toggleSession(sessionLabel)}
+              style={{
+                ...baseHeaderStyle,
+                backgroundColor: "rgba(255,215,0,0.15)",
+              }}
+              onClick={() => toggleSession(sessionKey)}
               onMouseOver={(e) => {
                 e.currentTarget.style.backgroundColor = "rgba(255,215,0,0.3)";
               }}
@@ -111,73 +171,249 @@ export default function HomeSidebar({
                 e.currentTarget.style.backgroundColor = "rgba(255,215,0,0.15)";
               }}
             >
-              {isExpanded ? "▾" : "▸"} Day {sessionLabel} — {totalTime} min
+              {isSessionExpanded ? "▾" : "▸"} Day {sessionLabel} — {totalTime} min
             </div>
 
-            {/* If expanded, render the activities */}
-            {isExpanded && renderActivities(activities, sIndex)}
+            {/* Render the books inside this session if expanded */}
+            {isSessionExpanded && renderBooksInSession(activities, sessionLabel)}
           </div>
         );
       })}
     </div>
   );
 
-  // Expand/Collapse helper
-  function toggleSession(label) {
+  // ============= TOGGLE HANDLERS ====================
+  function toggleSession(key) {
     setExpandedSessions((prev) =>
-      prev.includes(label)
-        ? prev.filter((x) => x !== label)
-        : [...prev, label]
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  }
+  function toggleBook(key) {
+    setExpandedBooks((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  }
+  function toggleChapter(key) {
+    setExpandedChapters((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  }
+  function toggleSub(key) {
+    setExpandedSubs((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
     );
   }
 
-  // Renders each activity for the given session
-  function renderActivities(activities, sessionIndex) {
-    return activities.map((act, idx) => {
-      const activityKey = `${sessionIndex}-${idx}`;
-      const { bgColor } = getActivityStyle(act.type);
+  // ********** 1) GROUP ACTIVITIES BY BOOK **********
+  function renderBooksInSession(activities, sessionLabel) {
+    const bookMap = new Map();
+    for (const act of activities) {
+      const bKey = act.bookId;
+      if (!bookMap.has(bKey)) {
+        bookMap.set(bKey, {
+          bookId: bKey,
+          bookName: act.bookName || `Book (${bKey})`,
+          items: [],
+        });
+      }
+      bookMap.get(bKey).items.push(act);
+    }
+
+    const bookGroups = Array.from(bookMap.values());
+    return bookGroups.map((bk) => {
+      const bookKey = `S-${sessionLabel}-B-${bk.bookId}`;
+      const isBookExpanded = expandedBooks.includes(bookKey);
+
+      // Compute total time for this book
+      const totalBookTime = bk.items.reduce((acc, a) => acc + (a.timeNeeded || 0), 0);
 
       return (
-        <div
-          key={activityKey}
-          style={{
-            marginLeft: "20px",
-            marginBottom: "4px",
-            padding: "6px",
-            borderRadius: "4px",
-            backgroundColor: bgColor,
-            color: "#000",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-          }}
-          // Instead of onActivitySelect, we’ll call onHomeSelect
-          onClick={() => onHomeSelect(act)}
-        >
-          <div style={{ fontWeight: "bold", marginRight: "8px" }}>
-            {act.type}:
+        <div key={bookKey} style={{ marginLeft: "20px", marginBottom: "8px" }}>
+          <div
+            style={{
+              ...baseHeaderStyle,
+              backgroundColor: "rgba(255,215,0,0.25)",
+            }}
+            onClick={() => toggleBook(bookKey)}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = "rgba(255,215,0,0.4)";
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = "rgba(255,215,0,0.25)";
+            }}
+          >
+            {isBookExpanded ? "▾" : "▸"} Book: {bk.bookName} — {totalBookTime} min
           </div>
-          <div>{act.subChapterName || act.subChapterId}</div>
-          <div style={{ marginLeft: "auto", fontSize: "0.85rem" }}>
-            {act.timeNeeded || 0} min
-          </div>
+
+          {isBookExpanded && renderChaptersInBook(bk.items, sessionLabel, bk.bookId)}
         </div>
       );
     });
   }
+
+  // ********** 2) GROUP ACTIVITIES BY CHAPTER **********
+  function renderChaptersInBook(activities, sessionLabel, bookId) {
+    const chapterMap = new Map();
+    for (const act of activities) {
+      const cKey = act.chapterId;
+      if (!chapterMap.has(cKey)) {
+        chapterMap.set(cKey, {
+          chapterId: cKey,
+          chapterName: act.chapterName || `Chapter (${cKey})`,
+          items: [],
+        });
+      }
+      chapterMap.get(cKey).items.push(act);
+    }
+
+    const chapterGroups = Array.from(chapterMap.values());
+    return chapterGroups.map((ch) => {
+      const chapterKey = `S-${sessionLabel}-B-${bookId}-C-${ch.chapterId}`;
+      const isChapterExpanded = expandedChapters.includes(chapterKey);
+
+      // Sum time for this chapter
+      const totalChapterTime = ch.items.reduce((acc, a) => acc + (a.timeNeeded || 0), 0);
+
+      return (
+        <div key={chapterKey} style={{ marginLeft: "20px", marginBottom: "8px" }}>
+          <div
+            style={{
+              ...baseHeaderStyle,
+              backgroundColor: "rgba(255,215,0,0.35)",
+            }}
+            onClick={() => toggleChapter(chapterKey)}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = "rgba(255,215,0,0.5)";
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = "rgba(255,215,0,0.35)";
+            }}
+          >
+            {isChapterExpanded ? "▾" : "▸"} Chapter: {ch.chapterName} — {totalChapterTime} min
+          </div>
+
+          {isChapterExpanded &&
+            renderSubChapters(ch.items, sessionLabel, bookId, ch.chapterId)}
+        </div>
+      );
+    });
+  }
+
+  // ********** 3) GROUP ACTIVITIES BY SUB-CHAPTER **********
+  function renderSubChapters(activities, sessionLabel, bookId, chapterId) {
+    const subMap = new Map();
+    for (const act of activities) {
+      const sKey = act.subChapterId;
+      if (!subMap.has(sKey)) {
+        subMap.set(sKey, {
+          subChapterId: sKey,
+          subChapterName: act.subChapterName || `Sub-Chapter (${sKey})`,
+          items: [],
+        });
+      }
+      subMap.get(sKey).items.push(act);
+    }
+
+    const subGroups = Array.from(subMap.values());
+
+    return subGroups.map((sb) => {
+      const subKey = `S-${sessionLabel}-B-${bookId}-C-${chapterId}-SUB-${sb.subChapterId}`;
+      const isSubExpanded = expandedSubs.includes(subKey);
+
+      // Sum time for sub-chapter
+      const totalSubTime = sb.items.reduce((acc, a) => acc + (a.timeNeeded || 0), 0);
+
+      return (
+        <div key={subKey} style={{ marginLeft: "20px", marginBottom: "8px" }}>
+          <div
+            style={{
+              ...baseHeaderStyle,
+              backgroundColor: "rgba(255,215,0,0.45)",
+            }}
+            onClick={() => toggleSub(subKey)}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = "rgba(255,215,0,0.6)";
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = "rgba(255,215,0,0.45)";
+            }}
+          >
+            {isSubExpanded ? "▾" : "▸"} Sub-Chapter: {sb.subChapterName} — {totalSubTime} min
+          </div>
+
+          {isSubExpanded && (
+            <div style={{ marginLeft: "20px" }}>
+              {sb.items.map((act, idx) => renderActivity(act, idx))}
+            </div>
+          )}
+        </div>
+      );
+    });
+  }
+
+  // ********** 4) ACTIVITY ITEMS (READ, QUIZ, REVISE) **********
+  function renderActivity(act, idx) {
+    const { bgColor } = getActivityStyle(act.type);
+    const key = `activity-${act.bookId}-${act.chapterId}-${act.subChapterId}-${idx}`;
+
+    return (
+      <div
+        key={key}
+        style={{
+          marginBottom: "4px",
+          padding: "6px",
+          borderRadius: "4px",
+          backgroundColor: bgColor,
+          color: "#000",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between", // so we can put a "Play" button on the right
+        }}
+      >
+        {/* Left side: click to do onHomeSelect */}
+        <div
+          style={{ cursor: "pointer", display: "flex", alignItems: "center" }}
+          onClick={() => onHomeSelect(act)}
+        >
+          <div style={{ fontWeight: "bold", marginRight: "8px" }}>{act.type}:</div>
+          <div>{act.subChapterName || act.subChapterId}</div>
+          <div style={{ marginLeft: "12px", fontSize: "0.85rem" }}>
+            {act.timeNeeded || 0} min
+          </div>
+        </div>
+
+        {/* Right side: "Play" button to open the modal */}
+        <button
+          style={{
+            backgroundColor: "#FFD700",
+            border: "none",
+            borderRadius: "4px",
+            padding: "4px 8px",
+            cursor: "pointer",
+            fontWeight: "bold",
+            marginLeft: "10px",
+          }}
+          onClick={(e) => {
+            e.stopPropagation(); // prevent the parent div's onClick
+            console.log("Play button clicked", planId, act); // <--- debug logging
+            onOpenPlayer(planId, act,"/api/adaptive-plan");
+          }}
+        >
+          Play
+        </button>
+      </div>
+    );
+  }
 }
 
-// Reuse the same color mapping
+// Utility: Decide background color by activity type
 function getActivityStyle(type) {
-  switch (type) {
+  switch (type?.toUpperCase()) {
     case "READ":
-    case "reading":
       return { bgColor: "lightblue" };
     case "QUIZ":
-    case "quiz":
       return { bgColor: "lightgreen" };
     case "REVISE":
-    case "revision":
       return { bgColor: "khaki" };
     default:
       return { bgColor: "#ccc" };

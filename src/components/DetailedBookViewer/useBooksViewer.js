@@ -19,17 +19,54 @@ export function useBooksViewer() {
     return () => unsubscribe();
   }, []);
 
+  // -------------------------- 1.5) Plan IDs from Firestore --------------------------
+  // We'll fetch these from your Express APIs: /api/home-plan-id and /api/adaptive-plan-id
+  const [homePlanId, setHomePlanId] = useState(null);
+  const [planId, setPlanId] = useState(null);
+
+  useEffect(() => {
+    if (!userId) {
+      // If user logs out, reset
+      setHomePlanId(null);
+      setPlanId(null);
+      return;
+    }
+
+    // If we have a user, fetch the plan IDs
+    const fetchPlanIds = async () => {
+      try {
+        // 1) homePlanId from adaptive_books
+        const homeRes = await axios.get(`${backendURL}/api/home-plan-id`, {
+          params: { userId },
+        });
+        if (homeRes.data?.success) {
+          setHomePlanId(homeRes.data.homePlanId);
+        }
+
+        // 2) planId from adaptive_demo
+        const planRes = await axios.get(`${backendURL}/api/adaptive-plan-id`, {
+          params: { userId },
+        });
+        if (planRes.data?.success) {
+          setPlanId(planRes.data.planId);
+        }
+      } catch (error) {
+        console.error("Error fetching plan IDs:", error);
+      }
+    };
+
+    fetchPlanIds();
+  }, [userId, backendURL]);
+
   // -------------------------- 2) "isOnboarded" Flag --------------------------
   const [isOnboarded, setIsOnboarded] = useState(false);
 
   useEffect(() => {
-    // If no user, reset isOnboarded => false
     if (!userId) {
       setIsOnboarded(false);
       return;
     }
 
-    // If we have a user, fetch the learnerPersonas doc
     const fetchIsOnboarded = async () => {
       try {
         const res = await axios.get(`${backendURL}/api/learner-personas`, {
@@ -68,7 +105,7 @@ export function useBooksViewer() {
 
   const [showTutorModal, setShowTutorModal] = useState(false);
 
-  // The default viewMode is "overview"
+  // The default viewMode is "adaptive"
   const [viewMode, setViewMode] = useState("overview");
 
   // -------------------------- 4) Fetch Categories Immediately --------------------------
@@ -212,11 +249,13 @@ export function useBooksViewer() {
     return booksData;
   };
 
-  // Return everything needed by your components
+  // -------------------------- 12) Return everything (including new plan IDs) --------------------------
   return {
     // states
     userId,
-    isOnboarded, // <-- new flag
+    homePlanId,    // NEW: from /api/home-plan-id
+    planId,        // NEW: from /api/adaptive-plan-id
+    isOnboarded,
     categories,
     selectedCategory,
     booksData,

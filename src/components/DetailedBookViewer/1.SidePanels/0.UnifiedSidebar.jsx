@@ -1,37 +1,30 @@
 // src/components/DetailedBookViewer/UnifiedSidebar.jsx
 import React from "react";
 
-// Import the 4 specialized sidebars:
+// Keep only the sidebars we actually use:
 import OverviewSidebar from "./1.OverviewSidebar";
-import AdaptiveSidebar from "./3.AdaptiveSidebar";
-import BooksSidebar from "./2.BooksSidebar";
 import ProfileSidebar from "./4.ProfileSidebar";
-import HomeSidebar from "./HomeSidebar"
+import HomeSidebar from "./HomeSidebar";
 
 function UnifiedSidebar({
-  // We'll pass in these props from BooksViewer2
-  viewMode,
-  setViewMode,
-
-  // shared props for the sidebars
+  // Props needed by OverviewSidebar
   categories,
   selectedCategory,
   onCategoryChange,
-  
+  planId,
+
+  // Props needed by HomeSidebar
   homePlanId,
   onHomeSelect,
 
-  // Only needed by some sidebars:
-  booksData,
-  expandedBookName,
-  toggleBookExpansion,
-  expandedChapters,
-  toggleChapterExpansion,
-  handleBookClick,
-  handleSubChapterClick,
-  selectedSubChapter,
+  // State management from parent
+  viewMode,
+  setViewMode,
+
+  // The parent's real callback: handleOpenPlayer(planId, activity, fetchUrl)
+  onOpenPlayer,
 }) {
-  // Styling for the top-level container of the entire sidebar
+  // Container style
   const sidebarContainerStyle = {
     width: "300px",
     backgroundColor: "rgba(255, 255, 255, 0.1)",
@@ -39,14 +32,22 @@ function UnifiedSidebar({
     padding: "20px",
     borderRight: "2px solid rgba(255,255,255,0.2)",
     overflowY: "auto",
+    position: "relative",
   };
 
-  // We'll create a small section for the mode buttons
+  // If user clicks "Play" in the OverviewSidebar, we want to pass planId, activity, and a custom fetchUrl
+  function handleOpenPlayerLocally(planId, activity, fetchUrl) {
+    console.log("UnifiedSidebar: handleOpenPlayerLocally =>", planId, activity, fetchUrl);
+    // Call the parent's function
+    onOpenPlayer(planId, activity, fetchUrl);
+  }
+
   const modeToggleContainerStyle = {
     display: "flex",
     gap: "10px",
     marginBottom: "20px",
     flexWrap: "wrap",
+    alignItems: "center",
   };
 
   const toggleButtonStyle = (active) => ({
@@ -60,7 +61,7 @@ function UnifiedSidebar({
     transition: "background-color 0.3s",
   });
 
-  // Decide which specialized content to show below the buttons
+  // Decide which specialized sidebar to render
   let content;
   if (viewMode === "overview") {
     content = (
@@ -68,94 +69,59 @@ function UnifiedSidebar({
         categories={categories}
         selectedCategory={selectedCategory}
         onCategoryChange={onCategoryChange}
+        planId={planId}
+        backendURL={import.meta.env.VITE_BACKEND_URL}
+        onHomeSelect={onHomeSelect}
+        // Use the local wrapper so we can pass a custom fetchUrl if desired
+        onOpenPlayer={handleOpenPlayerLocally}
       />
     );
-  } else if (viewMode === "adaptive") {
+  } else if (viewMode === "home") {
     content = (
-      <AdaptiveSidebar
+      <HomeSidebar
         planId={homePlanId}
-        categories={categories}
-        selectedCategory={selectedCategory}
-        onCategoryChange={onCategoryChange}
-        booksData={booksData}
-        handleSubChapterClick={handleSubChapterClick}
-        selectedSubChapter={selectedSubChapter}
-      />
-    );
-  } else if (viewMode === "library") {
-    content = (
-      <BooksSidebar
-        categories={categories}
-        selectedCategory={selectedCategory}
-        onCategoryChange={onCategoryChange}
-        booksData={booksData}
-        expandedBookName={expandedBookName}
-        toggleBookExpansion={toggleBookExpansion}
-        expandedChapters={expandedChapters}
-        toggleChapterExpansion={toggleChapterExpansion}
-        handleBookClick={handleBookClick}
-        handleSubChapterClick={handleSubChapterClick}
-        selectedSubChapter={selectedSubChapter}
+        backendURL={import.meta.env.VITE_BACKEND_URL}
+        onHomeSelect={onHomeSelect}
+        // Force a certain fetchUrl or let the child do default
+        // We'll pass a short arrow function that adds the third argument:
+        onOpenPlayer={(pId, act) => onOpenPlayer(pId, act, "/api/adaptive-plan")}
       />
     );
   } else if (viewMode === "profile") {
     content = <ProfileSidebar />;
-  } else if (viewMode === "home") {
-    content = (
-        <HomeSidebar
-           planId={homePlanId}
-           backendURL={import.meta.env.VITE_BACKEND_URL}  // or your custom URL
-           onHomeSelect={onHomeSelect}  // callback for clicks
-         />
-        );
-      
-      }
+  }
 
+  function switchMode(mode) {
+    setViewMode(mode);
+  }
 
   return (
     <div style={sidebarContainerStyle}>
-      {/* 1) Mode Buttons at the top */}
+      {/* TOP: Three buttons => OVERVIEW, HOME, PROFILE */}
       <div style={modeToggleContainerStyle}>
-        <button  id="overviewbutton"
+        <button
           style={toggleButtonStyle(viewMode === "overview")}
-          onClick={() => setViewMode("overview")}
+          onClick={() => switchMode("overview")}
         >
           Overview
         </button>
+
         <button
-             id="adaptivebutton"
-          style={toggleButtonStyle(viewMode === "adaptive")}
-          onClick={() => setViewMode("adaptive")}
+          style={toggleButtonStyle(viewMode === "home")}
+          onClick={() => switchMode("home")}
         >
-          Adaptive
+          Home
         </button>
+
         <button
-             id="librarybutton"
-          style={toggleButtonStyle(viewMode === "library")}
-          onClick={() => setViewMode("library")}
-        >
-          Library
-        </button>
-        <button
-             id="profilebutton"
           style={toggleButtonStyle(viewMode === "profile")}
-          onClick={() => setViewMode("profile")}
+          onClick={() => switchMode("profile")}
         >
           Profile
         </button>
-
-        <button
-         style={toggleButtonStyle(viewMode === "home")}
-         onClick={() => setViewMode("home")}
-       >
-         Home
-       </button>
-
-
-
       </div>
 
-      {/* 2) Render whichever specialized sidebar is appropriate */}
+      {/* Render the corresponding sidebar content */}
       {content}
     </div>
   );

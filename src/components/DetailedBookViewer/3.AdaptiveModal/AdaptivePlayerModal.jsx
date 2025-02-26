@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import TopBar from "./TopBar";
-import LeftPanel from "./LeftPanel";   // The new self-fetching LeftPanel
+import LeftPanel from "./LeftPanel";
 import MainContent from "./MainContent";
 import BottomBar from "./BottomBar";
 import ChatPanel from "./ChatPanel";
@@ -10,10 +10,9 @@ import ChatPanel from "./ChatPanel";
 // For demonstration, a no-op refreshData:
 function handleRefreshData() {
   console.log("Refreshing data...");
-  // You could call an API or do setState as needed
 }
 
-// Example styles (unchanged)
+// Styles (unchanged)
 import {
   overlayStyle,
   modalStyle,
@@ -22,37 +21,40 @@ import {
 } from "./styles";
 
 /**
- * AdaptiveSessionRoot
- * 
- * (Exported as AdaptivePlayerModal)
- * 
+ * AdaptivePlayerModal
+ *
  * A modal-like component that shows:
  *   - A top bar with timer/info
  *   - A left panel that fetches the plan & displays sessions/activities
  *   - A main content area for the selected activity (READ, QUIZ, etc.)
  *   - A bottom bar for progress
  *   - An optional chat panel
- * 
+ *
  * Props:
  *   - isOpen: boolean (whether to show)
  *   - onClose: function (close callback)
- *   - planId: string (the Firestore doc ID to fetch from 'adaptive_demo')
- *   - userName, sessionLength, daysUntilExam, etc.
+ *   - planId: string (the Firestore doc ID)
+ *   - userId: string (optional)
+ *   - initialActivityContext: { subChapterId, type } to auto-expand in LeftPanel
+ *   - sessionLength: number of minutes for the session timer (default 45)
+ *   - daysUntilExam: number for display (default 7)
+ *   - fetchUrl: optional string route for LeftPanel to fetch from
  */
 export default function AdaptivePlayerModal({
   isOpen,
   onClose,
   planId,
   userId,
+  initialActivityContext = null,
   sessionLength = 45,
   daysUntilExam = 7,
+  // NEW: pass a fetchUrl so LeftPanel can use it (default to "/api/adaptive-plan-total" or your choice)
+  fetchUrl = "/api/adaptive-plan",
 }) {
-  // 1) We don’t store a big "sessionItems" array. Instead,
-  //    the LeftPanel fetches the plan (by planId).
-  //    We just track the "selectedActivity" from that plan.
+  // 1) Track the currently selected activity (READ/QUIZ/etc.)
   const [selectedActivity, setSelectedActivity] = useState(null);
 
-  // 2) Timer logic (for the top bar countdown)
+  // 2) Timer logic
   const [secondsLeft, setSecondsLeft] = useState(sessionLength * 60);
   const timerRef = useRef(null);
 
@@ -76,35 +78,34 @@ export default function AdaptivePlayerModal({
     };
   }, [isOpen, sessionLength]);
 
-  // If not open, return nothing
+  // Don’t render anything if modal is not open
   if (!isOpen) return null;
 
-  // A local handleClose for the top bar “X” button
+  // Close button in the top bar
   const handleClose = () => {
     if (onClose) onClose();
   };
 
-  // 4) The user clicked an activity in the left panel
-  //    We store it in selectedActivity, so MainContent can render it
+  // Called whenever the user selects an activity from LeftPanel
   const handleActivitySelect = (index, activity) => {
     console.log("Clicked index=", index, "activity=", activity);
     setSelectedActivity(activity);
   };
 
-  // 5) Chat sending (just a small chat state)
+  // Simple chat send
   const handleChatSend = () => {
     if (!newMessage.trim()) return;
     setChatMessages((msgs) => [...msgs, { sender: "user", text: newMessage }]);
     setNewMessage("");
   };
 
-  // 6) stepPercent = for bottom bar (placeholder logic)
+  // Simple stepPercent for bottom bar
   const stepPercent = selectedActivity ? 50 : 0;
 
   return (
     <div style={overlayStyle}>
       <div style={modalStyle}>
-        {/* TOP BAR */}
+        {/* === TOP BAR === */}
         <TopBar
           daysUntilExam={daysUntilExam}
           sessionLength={sessionLength}
@@ -112,13 +113,16 @@ export default function AdaptivePlayerModal({
           onClose={handleClose}
         />
 
-        {/* MAIN AREA => LeftPanel + MainContent */}
+        {/* === MAIN AREA (LeftPanel + MainContent) === */}
         <div style={mainAreaStyle}>
           {/* The plan-based left panel */}
           <LeftPanel
-            planId={planId}          // the doc ID for your plan
+            planId={planId}
+            // If your left panel needs to fetch from a specific route:
+            fetchUrl={fetchUrl} 
+            backendURL={import.meta.env.VITE_BACKEND_URL}
             onActivitySelect={handleActivitySelect}
-            backendURL={import.meta.env.VITE_BACKEND_URL} // or another default
+            initialActivityContext={initialActivityContext}
           />
 
           {/* The right side => show the currently selected activity */}
@@ -127,11 +131,10 @@ export default function AdaptivePlayerModal({
             userId={userId}
             backendURL={import.meta.env.VITE_BACKEND_URL}
             onRefreshData={handleRefreshData}
-            // If you had quizAnswers, etc., pass them here
           />
         </div>
 
-        {/* BOTTOM BAR */}
+        {/* === BOTTOM BAR === */}
         <div style={bottomBarStyle}>
           <BottomBar
             stepPercent={stepPercent}
@@ -140,7 +143,7 @@ export default function AdaptivePlayerModal({
           />
         </div>
 
-        {/* CHAT PANEL */}
+        {/* === CHAT PANEL === */}
         <ChatPanel
           open={chatOpen}
           onToggle={() => setChatOpen((o) => !o)}

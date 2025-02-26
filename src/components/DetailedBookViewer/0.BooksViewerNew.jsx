@@ -1,5 +1,4 @@
 // src/components/DetailedBookViewer/BooksViewer2.jsx
-
 import React, { useState } from "react";
 import { useBooksViewer } from "./useBooksViewer";
 import UnifiedSidebar from "./1.SidePanels/0.UnifiedSidebar";
@@ -9,8 +8,6 @@ import ToursManager from "./0.1Tours/ToursManager";
 import BookProgress from "./2.2Library/BookProgress";
 import SubchapterContent from "./4.Subchapter Content/0.SubchapterContent";
 import OverviewContent from "./2.1Overview/0.OverviewContent";
-
-
 import UserProfileAnalytics from "./2.4Profile/UserProfileAnalytics";
 import PanelA from "./2.1Overview/2.PanelA";
 import PanelB from "./2.1Overview/3.PanelB";
@@ -21,13 +18,15 @@ import BookSummary from "./2.2Library/BookSummary";
 import LibraryHome from "./2.2Library/LibraryHome";
 import AdaptiveHome from "./2.3Adaptive/AdaptiveHome";
 
-// NEW: The cinematic "player" modal
+// The cinematic "player" modal
 import AdaptivePlayerModal from "./3.AdaptiveModal/AdaptivePlayerModal"; // <-- Adjust path as needed
 
 function BooksViewer2() {
   const {
     userId,
     isOnboarded,
+    homePlanId,
+    planId,
     categories,
     selectedCategory,
     getFilteredBooksData,
@@ -49,15 +48,46 @@ function BooksViewer2() {
     fetchAllData,
   } = useBooksViewer();
 
-  // For the Joyride-based tour:
+  // For Joyride tours
   const [triggerTour, setTriggerTour] = useState(false);
 
-  // For the cinematic "player" modal:
+  // For the cinematic player modal
   const [showPlayer, setShowPlayer] = useState(false);
+  const [currentModalPlanId, setCurrentModalPlanId] = useState(null);
+  const [initialActivityContext, setInitialActivityContext] = useState(null);
+  const [modalFetchUrl, setModalFetchUrl] = useState("/api/adaptive-plan-total");
 
+  // For “Home” filler content
   const [selectedHomeActivity, setSelectedHomeActivity] = useState(null);
 
-  // Layout styling
+  /**
+   * handleOpenPlayer => called by sidebars
+   * Accepts up to 3 arguments: planId, activity, fetchUrl
+   */
+  const handleOpenPlayer = (pId, activity, fetchUrl) => {
+    console.log("PARENT handleOpenPlayer =>", pId, activity, fetchUrl);
+
+    // 1) Plan ID for the modal
+    setCurrentModalPlanId(pId);
+
+    // 2) Subchapter context for auto-expansion
+    setInitialActivityContext({
+      subChapterId: activity?.subChapterId,
+      type: activity?.type,
+    });
+
+    // 3) If given, store a custom fetchUrl
+    if (fetchUrl) {
+      setModalFetchUrl(fetchUrl);
+    } else {
+      setModalFetchUrl("/api/adaptive-plan");
+    }
+
+    // 4) Show the modal
+    setShowPlayer(true);
+  };
+
+  // Layout styles
   const containerStyle = {
     display: "flex",
     flexDirection: "row",
@@ -65,14 +95,13 @@ function BooksViewer2() {
     background: "linear-gradient(135deg, #0F2027, #203A43, #2C5364)",
     color: "#fff",
   };
-
   const mainContentStyle = {
     flex: 1,
     padding: "20px",
     position: "relative",
   };
 
-  // Floating question-mark button (bottom-left)
+  // The floating question-mark & player buttons
   const floatTourButtonStyle = {
     position: "fixed",
     bottom: "20px",
@@ -88,10 +117,8 @@ function BooksViewer2() {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    zIndex: 9999, // ensure it floats on top
+    zIndex: 9999,
   };
-
-  // NEW: Floating “player” button (bottom-right)
   const floatPlayerButtonStyle = {
     position: "fixed",
     bottom: "20px",
@@ -110,7 +137,7 @@ function BooksViewer2() {
     zIndex: 9999,
   };
 
-  // Filter the data based on library/adaptive/overview mode
+  // Filter the data based on library/adaptive/overview
   const displayedBooksData = getFilteredBooksData();
 
   // Decide main content for each viewMode
@@ -155,10 +182,7 @@ function BooksViewer2() {
             />
           )}
           {selectedBook && !selectedSubChapter && (
-            <BookSummary
-              book={selectedBook}
-              getBookProgressInfo={getBookProgressInfo}
-            />
+            <BookSummary book={selectedBook} getBookProgressInfo={getBookProgressInfo} />
           )}
           {selectedSubChapter && (
             <SubchapterContent
@@ -187,10 +211,7 @@ function BooksViewer2() {
             />
           )}
           {selectedBook && !selectedSubChapter && (
-            <BookSummary
-              book={selectedBook}
-              getBookProgressInfo={getBookProgressInfo}
-            />
+            <BookSummary book={selectedBook} getBookProgressInfo={getBookProgressInfo} />
           )}
           {selectedSubChapter && (
             <SubchapterContent
@@ -205,25 +226,24 @@ function BooksViewer2() {
       );
     }
   } else if (viewMode === "home") {
-       if (selectedHomeActivity) {
-         // Show filler content for now
-         mainContent = (
-           <div style={{ fontSize: "1.2rem", color: "lightcyan" }}>
-             Filler content for: <strong>{selectedHomeActivity?.subChapterName}</strong>
-           </div>
-         );
-       } else {
-         // If no activity has been clicked yet
-         mainContent = (
-           <div style={{ color: "#FFD700" }}>
-             Please select a day/activity in the <em>Home</em> sidebar.
-           </div>
-         );
-       }
-      }
+    if (selectedHomeActivity) {
+      mainContent = (
+        <div style={{ fontSize: "1.2rem", color: "lightcyan" }}>
+          Filler content for: <strong>{selectedHomeActivity?.subChapterName}</strong>
+        </div>
+      );
+    } else {
+      mainContent = (
+        <div style={{ color: "#FFD700" }}>
+          Please select a day/activity in the <em>Home</em> sidebar.
+        </div>
+      );
+    }
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+      {/* Main container */}
       <div style={containerStyle}>
         <UnifiedSidebar
           viewMode={viewMode}
@@ -240,14 +260,20 @@ function BooksViewer2() {
           handleChapterClick={handleChapterClick}
           handleSubChapterClick={handleSubChapterClick}
           selectedSubChapter={selectedSubChapter}
-          homePlanId="wQvYSM1Xzl262djm5rYK" // or whichever doc ID you want
-         onHomeSelect={(act) => setSelectedHomeActivity(act)}
+          homePlanId={homePlanId}
+          planId={planId}
+
+          // If a user clicks an activity in the Home or Overview sidebars
+          onHomeSelect={(act) => setSelectedHomeActivity(act)}
+
+          // The parent's real "Play" callback (3-arg version)
+          onOpenPlayer={handleOpenPlayer}
         />
 
         <div style={mainContentStyle}>{mainContent}</div>
       </div>
 
-      {/* Floating "?" button to start the Joyride tour */}
+      {/* Floating "?" button => Start Joyride Tour */}
       <button
         style={floatTourButtonStyle}
         onClick={() => setTriggerTour(true)}
@@ -256,16 +282,21 @@ function BooksViewer2() {
         ?
       </button>
 
-      {/* NEW Floating "player" button to open the cinematic learning modal */}
+      {/* Floating "player" button => open modal with no subchapter */}
       <button
         style={floatPlayerButtonStyle}
-        onClick={() => setShowPlayer(true)}
+        onClick={() => {
+          setCurrentModalPlanId(planId);
+          setInitialActivityContext(null);
+          setModalFetchUrl("/api/adaptive-plan");
+          setShowPlayer(true);
+        }}
         title="Start Player"
       >
         ►
       </button>
 
-      {/* ToursManager for Joyride-based tours */}
+      {/* Joyride-based tours */}
       <ToursManager
         viewMode={viewMode}
         selectedBook={selectedBook}
@@ -275,14 +306,14 @@ function BooksViewer2() {
       />
 
       {/* The cinematic "player" modal */}
-      
-      
-<AdaptivePlayerModal
-  isOpen={showPlayer}
-  onClose={() => setShowPlayer(false)}
-  userId={userId} 
-  planId="11duPwJWXVWT9flhwGCX"
-/>
+      <AdaptivePlayerModal
+        isOpen={showPlayer}
+        onClose={() => setShowPlayer(false)}
+        userId={userId}
+        planId={currentModalPlanId}
+        initialActivityContext={initialActivityContext}
+        fetchUrl={modalFetchUrl}
+      />
     </div>
   );
 }
