@@ -65,6 +65,36 @@ function UserProfileAnalytics({ colorScheme = {} }) {
   }, [userId, authLoading, backendURL]);
 
   // ==============================
+  // Step C: Generate Plan Handler
+  // ==============================
+  const handleGeneratePlan = async () => {
+    if (!userId) {
+      alert("No user logged in.");
+      return;
+    }
+
+    // Hardcode a target date, or fetch it from a date picker/input
+    const targetDate = "2025-07-20";
+
+    try {
+      const res = await axios.get(
+        "https://generateadaptiveplan-zfztjkkvva-uc.a.run.app",
+        {
+          params: {
+            userId,
+            targetDate,
+          },
+        }
+      );
+      console.log("Generate Plan response:", res.data);
+      alert("Plan generated successfully!");
+    } catch (err) {
+      console.error("Error generating plan:", err);
+      alert("Failed to generate plan. Check console for details.");
+    }
+  };
+
+  // ==============================
   // Rendering
   // ==============================
   return (
@@ -110,6 +140,23 @@ function UserProfileAnalytics({ colorScheme = {} }) {
             <p>
               (You could fetch more info about the user from /api/users or Firestore.)
             </p>
+
+            {/* Generate Plan Button */}
+            <button
+              onClick={handleGeneratePlan}
+              style={{
+                padding: "8px 16px",
+                backgroundColor: colorScheme.accent || "#BB86FC",
+                color: "#000",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+                fontWeight: "bold",
+                marginTop: "10px",
+              }}
+            >
+              Generate Plan
+            </button>
           </div>
 
           {/* Activity Log */}
