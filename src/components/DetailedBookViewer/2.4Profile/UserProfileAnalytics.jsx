@@ -15,15 +15,20 @@ function UserProfileAnalytics({ colorScheme = {} }) {
   const [error, setError] = useState(null);
 
   // 3) Form fields for generating a plan
-  const [targetDate, setTargetDate] = useState("2025-07-20");  // default
-  const [maxDays, setMaxDays] = useState("");                  // blank => no override
-  const [wpm, setWpm] = useState("");                          // blank => use Firestore
+  const [targetDate, setTargetDate] = useState("2025-07-20");  // required by default
+  const [maxDays, setMaxDays] = useState("");
+  const [wpm, setWpm] = useState("");
   const [dailyReadingTime, setDailyReadingTime] = useState("");
   const [quizTime, setQuizTime] = useState("");
   const [reviseTime, setReviseTime] = useState("");
 
+  // New fields for selecting books/chapters/subchapters (comma-separated)
+  const [bookIdsString, setBookIdsString] = useState("");
+  const [chapterIdsString, setChapterIdsString] = useState("");
+  const [subchapterIdsString, setSubchapterIdsString] = useState("");
+
   // We'll assume your usual backend or other APIs point to:
-  const backendURL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
+  // This is the Cloud Run or Firebase Function URL
   const generatePlanURL = "https://generateadaptiveplan-zfztjkkvva-uc.a.run.app";
 
   // ==============================
@@ -44,6 +49,10 @@ function UserProfileAnalytics({ colorScheme = {} }) {
   // ==============================
   // Step B: Fetch user activities
   // ==============================
+  // (This part is presumably your own custom logic to show activity logs, etc.)
+  // We'll assume you have a route: /api/user-activities?userId=XYZ
+  const backendURL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
+
   useEffect(() => {
     if (authLoading) return; // Wait for auth to finish
     if (!userId) {
@@ -82,13 +91,12 @@ function UserProfileAnalytics({ colorScheme = {} }) {
       return;
     }
 
-    // Build the request body (JSON) conditionally
+    // Build the request body (JSON)
     const requestBody = {
       userId,
     };
 
-    // required: targetDate
-    // if you prefer to allow an empty targetDate, remove this check
+    // 1) Required: targetDate (or you can make it optional if desired)
     if (targetDate) {
       requestBody.targetDate = targetDate;
     } else {
@@ -96,7 +104,7 @@ function UserProfileAnalytics({ colorScheme = {} }) {
       return;
     }
 
-    // optional overrides
+    // 2) Optional overrides
     if (maxDays) {
       requestBody.maxDays = Number(maxDays);
     }
@@ -113,8 +121,32 @@ function UserProfileAnalytics({ colorScheme = {} }) {
       requestBody.reviseTime = Number(reviseTime);
     }
 
+    // 3) Optional Book/Chapter/Subchapter IDs
+    // If user typed "abc123, xyz456" => ["abc123", "xyz456"]
+    if (bookIdsString.trim()) {
+      const arrayOfBookIds = bookIdsString
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean); // remove empty
+      requestBody.selectedBooks = arrayOfBookIds;
+    }
+    if (chapterIdsString.trim()) {
+      const arrayOfChapterIds = chapterIdsString
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean);
+      requestBody.selectedChapters = arrayOfChapterIds;
+    }
+    if (subchapterIdsString.trim()) {
+      const arrayOfSubchapterIds = subchapterIdsString
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean);
+      requestBody.selectedSubChapters = arrayOfSubchapterIds;
+    }
+
+    // Now send POST to the Cloud Function
     try {
-      // Make a POST request
       const res = await axios.post(generatePlanURL, requestBody, {
         headers: { "Content-Type": "application/json" },
       });
@@ -138,7 +170,6 @@ function UserProfileAnalytics({ colorScheme = {} }) {
     <div
       style={{
         flex: 1,
-        // Match the same background color used in the main content area
         backgroundColor: colorScheme.mainBg || "#121212",
         color: colorScheme.textColor || "#FFFFFF",
         fontFamily: "'Open Sans', sans-serif",
@@ -176,7 +207,7 @@ function UserProfileAnalytics({ colorScheme = {} }) {
             <p>
               <strong>User ID:</strong> {userId}
             </p>
-            <p>(More user info could be displayed here.)</p>
+            <p>(Any additional user info here.)</p>
           </div>
 
           {/* Generate Plan Form */}
@@ -264,6 +295,47 @@ function UserProfileAnalytics({ colorScheme = {} }) {
                 />
               </div>
 
+              {/* Book IDs (optional, comma-separated) */}
+              <div>
+                <label style={{ marginRight: "8px" }}>Book IDs (comma-separated):</label>
+                <input
+                  type="text"
+                  value={bookIdsString}
+                  onChange={(e) => setBookIdsString(e.target.value)}
+                  placeholder="e.g. 'abcd123, efgh456'"
+                  style={{ padding: "4px", width: "80%" }}
+                />
+              </div>
+
+              {/* Chapter IDs (optional, comma-separated) */}
+              <div>
+                <label style={{ marginRight: "8px" }}>
+                  Chapter IDs (comma-separated):
+                </label>
+                <input
+                  type="text"
+                  value={chapterIdsString}
+                  onChange={(e) => setChapterIdsString(e.target.value)}
+                  placeholder="e.g. 'ch1, ch2'"
+                  style={{ padding: "4px", width: "80%" }}
+                />
+              </div>
+
+              {/* Subchapter IDs (optional, comma-separated) */}
+              <div>
+                <label style={{ marginRight: "8px" }}>
+                  Subchapter IDs (comma-separated):
+                </label>
+                <input
+                  type="text"
+                  value={subchapterIdsString}
+                  onChange={(e) => setSubchapterIdsString(e.target.value)}
+                  placeholder="e.g. 'subA, subB'"
+                  style={{ padding: "4px", width: "80%" }}
+                />
+              </div>
+
+              {/* Submit Button */}
               <button
                 onClick={handleGeneratePlan}
                 style={{
