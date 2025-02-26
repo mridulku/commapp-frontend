@@ -22,13 +22,14 @@ export function useBooksViewer() {
   // -------------------------- 1.5) Plan IDs from Firestore --------------------------
   // We'll fetch these from your Express APIs: /api/home-plan-id and /api/adaptive-plan-id
   const [homePlanId, setHomePlanId] = useState(null);
-  const [planId, setPlanId] = useState(null);
+  const [planIds, setPlanIds] = useState([]);
 
   useEffect(() => {
     if (!userId) {
       // If user logs out, reset
       setHomePlanId(null);
-      setPlanId(null);
+      setPlanIds([]);
+
       return;
     }
 
@@ -48,7 +49,8 @@ export function useBooksViewer() {
           params: { userId },
         });
         if (planRes.data?.success) {
-          setPlanId(planRes.data.planId);
+          setPlanIds(planRes.data.planIds || []);
+
         }
       } catch (error) {
         console.error("Error fetching plan IDs:", error);
@@ -254,7 +256,7 @@ export function useBooksViewer() {
     // states
     userId,
     homePlanId,    // NEW: from /api/home-plan-id
-    planId,        // NEW: from /api/adaptive-plan-id
+    planIds,        // NEW: from /api/adaptive-plan-id
     isOnboarded,
     categories,
     selectedCategory,

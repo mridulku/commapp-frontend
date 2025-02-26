@@ -26,7 +26,7 @@ function BooksViewer2() {
     userId,
     isOnboarded,
     homePlanId,
-    planId,
+    planIds,
     categories,
     selectedCategory,
     getFilteredBooksData,
@@ -87,30 +87,51 @@ function BooksViewer2() {
     setShowPlayer(true);
   };
 
-  // Layout styles
-  const containerStyle = {
-    display: "flex",
-    flexDirection: "row",
-    flex: 1,
-    background: "linear-gradient(135deg, #0F2027, #203A43, #2C5364)",
-    color: "#fff",
+  // -------------- THEME & STYLES --------------
+  // You can tweak these colors for a different accent, etc.
+  const themeColors = {
+    background: "#121212",        // Main page background
+    sidebarBg: "#1E1E1E",         // Sidebar background
+    accent: "#BB86FC",            // Accent color for buttons/highlights
+    textPrimary: "#FFFFFF",       // Main text color
+    textSecondary: "#CCCCCC",     // Lighter text color
+    borderColor: "#3A3A3A",
   };
+
+  const outerContainerStyle = {
+    width: "100vw",
+    height: "100vh",
+    overflow: "hidden",
+    margin: 0,
+    padding: 0,
+    display: "flex",
+    flexDirection: "column",
+    backgroundColor: themeColors.background,
+    color: themeColors.textPrimary,
+    fontFamily: "sans-serif",
+  };
+
+  const innerContentWrapper = {
+    display: "flex",
+    flex: 1,
+    overflow: "hidden",
+  };
+
   const mainContentStyle = {
     flex: 1,
     padding: "20px",
-    position: "relative",
+    overflowY: "auto",
+    backgroundColor: themeColors.background,
   };
 
   // The floating question-mark & player buttons
-  const floatTourButtonStyle = {
+  const floatBtnBase = {
     position: "fixed",
     bottom: "20px",
-    left: "20px",
     width: "50px",
     height: "50px",
     borderRadius: "50%",
-    backgroundColor: "#444",
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: "1.5rem",
     border: "none",
     cursor: "pointer",
@@ -118,23 +139,20 @@ function BooksViewer2() {
     alignItems: "center",
     justifyContent: "center",
     zIndex: 9999,
+    transition: "background-color 0.3s ease",
   };
+
+  const floatTourButtonStyle = {
+    ...floatBtnBase,
+    left: "20px",
+    backgroundColor: themeColors.accent,
+  };
+
   const floatPlayerButtonStyle = {
-    position: "fixed",
-    bottom: "20px",
+    ...floatBtnBase,
     right: "20px",
-    width: "50px",
-    height: "50px",
-    borderRadius: "50%",
-    backgroundColor: "#ee4444",
-    color: "#fff",
     fontSize: "1.3rem",
-    border: "none",
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 9999,
+    backgroundColor: "#CF6679", // a reddish accent for "player"
   };
 
   // Filter the data based on library/adaptive/overview
@@ -149,7 +167,13 @@ function BooksViewer2() {
       mainContent = (
         <>
           <StatsPanel />
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: "20px",
+            }}
+          >
             <PanelB />
             <PanelA />
             <PanelC />
@@ -182,7 +206,10 @@ function BooksViewer2() {
             />
           )}
           {selectedBook && !selectedSubChapter && (
-            <BookSummary book={selectedBook} getBookProgressInfo={getBookProgressInfo} />
+            <BookSummary
+              book={selectedBook}
+              getBookProgressInfo={getBookProgressInfo}
+            />
           )}
           {selectedSubChapter && (
             <SubchapterContent
@@ -211,7 +238,10 @@ function BooksViewer2() {
             />
           )}
           {selectedBook && !selectedSubChapter && (
-            <BookSummary book={selectedBook} getBookProgressInfo={getBookProgressInfo} />
+            <BookSummary
+              book={selectedBook}
+              getBookProgressInfo={getBookProgressInfo}
+            />
           )}
           {selectedSubChapter && (
             <SubchapterContent
@@ -228,13 +258,13 @@ function BooksViewer2() {
   } else if (viewMode === "home") {
     if (selectedHomeActivity) {
       mainContent = (
-        <div style={{ fontSize: "1.2rem", color: "lightcyan" }}>
+        <div style={{ fontSize: "1.2rem", color: themeColors.textSecondary }}>
           Filler content for: <strong>{selectedHomeActivity?.subChapterName}</strong>
         </div>
       );
     } else {
       mainContent = (
-        <div style={{ color: "#FFD700" }}>
+        <div style={{ color: themeColors.accent }}>
           Please select a day/activity in the <em>Home</em> sidebar.
         </div>
       );
@@ -242,10 +272,13 @@ function BooksViewer2() {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
-      {/* Main container */}
-      <div style={containerStyle}>
+    <div style={outerContainerStyle}>
+      {/* Top area (could place a header bar here if desired) */}
+
+      {/* Middle area => Sidebar + Main Content */}
+      <div style={innerContentWrapper}>
         <UnifiedSidebar
+          themeColors={themeColors}
           viewMode={viewMode}
           setViewMode={setViewMode}
           categories={categories}
@@ -261,11 +294,9 @@ function BooksViewer2() {
           handleSubChapterClick={handleSubChapterClick}
           selectedSubChapter={selectedSubChapter}
           homePlanId={homePlanId}
-          planId={planId}
-
+          planIds={planIds}   // pass the array
           // If a user clicks an activity in the Home or Overview sidebars
           onHomeSelect={(act) => setSelectedHomeActivity(act)}
-
           // The parent's real "Play" callback (3-arg version)
           onOpenPlayer={handleOpenPlayer}
         />
@@ -276,6 +307,8 @@ function BooksViewer2() {
       {/* Floating "?" button => Start Joyride Tour */}
       <button
         style={floatTourButtonStyle}
+        onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "#9852e8")}
+        onMouseOut={(e) => (e.currentTarget.style.backgroundColor = themeColors.accent)}
         onClick={() => setTriggerTour(true)}
         title="Start Tour"
       >
@@ -285,6 +318,8 @@ function BooksViewer2() {
       {/* Floating "player" button => open modal with no subchapter */}
       <button
         style={floatPlayerButtonStyle}
+        onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "#a85b61")}
+        onMouseOut={(e) => (e.currentTarget.style.backgroundColor = "#CF6679")}
         onClick={() => {
           setCurrentModalPlanId(planId);
           setInitialActivityContext(null);

@@ -7,11 +7,14 @@ import ProfileSidebar from "./4.ProfileSidebar";
 import HomeSidebar from "./HomeSidebar";
 
 function UnifiedSidebar({
+  // Theming
+  themeColors = {},
+
   // Props needed by OverviewSidebar
   categories,
   selectedCategory,
   onCategoryChange,
-  planId,
+  planIds = [],   // Now an array
 
   // Props needed by HomeSidebar
   homePlanId,
@@ -26,14 +29,31 @@ function UnifiedSidebar({
 }) {
   // Container style
   const sidebarContainerStyle = {
-    width: "300px",
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    backdropFilter: "blur(8px)",
+    width: "280px",
+    backgroundColor: themeColors.sidebarBg || "#1E1E1E",
     padding: "20px",
-    borderRight: "2px solid rgba(255,255,255,0.2)",
+    borderRight: `1px solid ${themeColors.borderColor || "#3A3A3A"}`,
     overflowY: "auto",
-    position: "relative",
   };
+
+  const modeToggleContainerStyle = {
+    display: "flex",
+    gap: "8px",
+    marginBottom: "20px",
+    flexWrap: "wrap",
+    alignItems: "center",
+  };
+
+  const toggleButtonStyle = (active) => ({
+    padding: "8px 12px",
+    borderRadius: "4px",
+    border: `1px solid ${themeColors.borderColor || "#3A3A3A"}`,
+    cursor: "pointer",
+    fontWeight: "bold",
+    backgroundColor: active ? themeColors.accent || "#BB86FC" : "transparent",
+    color: active ? "#000000" : themeColors.textPrimary || "#FFFFFF",
+    transition: "background-color 0.3s, color 0.3s",
+  });
 
   // If user clicks "Play" in the OverviewSidebar, we want to pass planId, activity, and a custom fetchUrl
   function handleOpenPlayerLocally(planId, activity, fetchUrl) {
@@ -42,38 +62,22 @@ function UnifiedSidebar({
     onOpenPlayer(planId, activity, fetchUrl);
   }
 
-  const modeToggleContainerStyle = {
-    display: "flex",
-    gap: "10px",
-    marginBottom: "20px",
-    flexWrap: "wrap",
-    alignItems: "center",
-  };
-
-  const toggleButtonStyle = (active) => ({
-    padding: "8px 16px",
-    borderRadius: "4px",
-    border: "none",
-    cursor: "pointer",
-    fontWeight: "bold",
-    background: active ? "#FFD700" : "transparent",
-    color: active ? "#000" : "#fff",
-    transition: "background-color 0.3s",
-  });
-
   // Decide which specialized sidebar to render
   let content;
   if (viewMode === "overview") {
     content = (
       <OverviewSidebar
-        categories={categories}
-        selectedCategory={selectedCategory}
-        onCategoryChange={onCategoryChange}
-        planId={planId}
-        backendURL={import.meta.env.VITE_BACKEND_URL}
-        onHomeSelect={onHomeSelect}
-        // Use the local wrapper so we can pass a custom fetchUrl if desired
+      planIds={planIds} // pass the array
+      backendURL={import.meta.env.VITE_BACKEND_URL}
+        onOverviewSelect={onHomeSelect}
         onOpenPlayer={handleOpenPlayerLocally}
+        // pass in the same theme
+        colorScheme={{
+          panelBg: themeColors.sidebarBg,
+          textColor: themeColors.textPrimary,
+          borderColor: themeColors.borderColor,
+          heading: themeColors.accent,
+        }}
       />
     );
   } else if (viewMode === "home") {
@@ -83,8 +87,9 @@ function UnifiedSidebar({
         backendURL={import.meta.env.VITE_BACKEND_URL}
         onHomeSelect={onHomeSelect}
         // Force a certain fetchUrl or let the child do default
-        // We'll pass a short arrow function that adds the third argument:
-        onOpenPlayer={(pId, act) => onOpenPlayer(pId, act, "/api/adaptive-plan")}
+        onOpenPlayer={(pId, act) =>
+          onOpenPlayer(pId, act, "/api/adaptive-plan")
+        }
       />
     );
   } else if (viewMode === "profile") {
@@ -121,7 +126,24 @@ function UnifiedSidebar({
         </button>
       </div>
 
-      {/* Render the corresponding sidebar content */}
+      {/* Example: If you have additional toggles for "library" or "adaptive" modes, add them here:
+      
+      <button
+        style={toggleButtonStyle(viewMode === "library")}
+        onClick={() => switchMode("library")}
+      >
+        Library
+      </button>
+      
+      <button
+        style={toggleButtonStyle(viewMode === "adaptive")}
+        onClick={() => switchMode("adaptive")}
+      >
+        Adaptive
+      </button>
+      
+      */}
+
       {content}
     </div>
   );

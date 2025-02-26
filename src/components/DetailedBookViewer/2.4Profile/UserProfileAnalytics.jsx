@@ -1,11 +1,10 @@
 // src/components/DetailedBookViewer/UserProfileAnalytics.jsx
-import React, { useState, useEffect } from "react";
-// If you do not want a top nav bar inside this component, remove NavigationBar import.
-// import NavigationBar from "../DetailedBookViewer/NavigationBar";
-import { auth } from "../../../firebase"; // Adjust import path as needed
-import axios from "axios";
 
-function UserProfileAnalytics() {
+import React, { useState, useEffect } from "react";
+import axios from "axios";
+import { auth } from "../../../firebase"; // Adjust import path as needed
+
+function UserProfileAnalytics({ colorScheme = {} }) {
   // 1) Local state: userId from Auth
   const [userId, setUserId] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -72,23 +71,20 @@ function UserProfileAnalytics() {
     <div
       style={{
         flex: 1,
-        background: "linear-gradient(135deg, #0F2027, #203A43, #2C5364)",
-        color: "#fff",
+        // Match the same background color used in the main content area
+        backgroundColor: colorScheme.mainBg || "#121212",
+        color: colorScheme.textColor || "#FFFFFF",
         fontFamily: "'Open Sans', sans-serif",
         padding: "20px",
         overflowY: "auto",
       }}
     >
-      {/* If you do want a nav bar inside profile, uncomment:
-      <NavigationBar />
-      */}
-
-      <h2>User Profile & Activity</h2>
+      <h2 style={{ color: colorScheme.heading || "#BB86FC" }}>User Profile & Activity</h2>
 
       {authLoading && <p>Checking sign-in status...</p>}
 
       {!authLoading && !userId && (
-        <p style={{ color: "red" }}>
+        <p style={{ color: colorScheme.errorColor || "#FF5555" }}>
           No user is currently logged in. Please sign in to view profile/activity.
         </p>
       )}
@@ -98,13 +94,16 @@ function UserProfileAnalytics() {
           {/* Minimal user info */}
           <div
             style={{
-              backgroundColor: "rgba(255,255,255,0.1)",
+              backgroundColor: colorScheme.cardBg || "#2F2F2F",
               borderRadius: "8px",
               padding: "20px",
               marginBottom: "20px",
+              border: `1px solid ${colorScheme.borderColor || "#3A3A3A"}`,
             }}
           >
-            <h3 style={{ marginTop: 0 }}>Global User Profile</h3>
+            <h3 style={{ marginTop: 0, color: colorScheme.textColor || "#FFFFFF" }}>
+              Global User Profile
+            </h3>
             <p>
               <strong>User ID:</strong> {userId}
             </p>
@@ -116,14 +115,21 @@ function UserProfileAnalytics() {
           {/* Activity Log */}
           <div
             style={{
-              backgroundColor: "rgba(255,255,255,0.1)",
+              backgroundColor: colorScheme.cardBg || "#2F2F2F",
               borderRadius: "8px",
               padding: "20px",
+              border: `1px solid ${colorScheme.borderColor || "#3A3A3A"}`,
             }}
           >
-            <h3 style={{ marginTop: 0 }}>Activity Log</h3>
+            <h3 style={{ marginTop: 0, color: colorScheme.textColor || "#FFFFFF" }}>
+              Activity Log
+            </h3>
             {loadingActivities && <p>Loading user activities...</p>}
-            {error && <p style={{ color: "red" }}>Error: {error}</p>}
+            {error && (
+              <p style={{ color: colorScheme.errorColor || "#FF5555" }}>
+                Error: {error}
+              </p>
+            )}
 
             {!loadingActivities && !error && activityLog.length === 0 && (
               <p style={{ fontStyle: "italic" }}>No recent activity found.</p>
@@ -132,7 +138,7 @@ function UserProfileAnalytics() {
             {!loadingActivities && !error && activityLog.length > 0 && (
               <ul style={{ listStyleType: "none", paddingLeft: 0 }}>
                 {activityLog.map((item) => (
-                  <li key={item._id || item.id} style={logItemStyle}>
+                  <li key={item._id || item.id} style={logItemStyle(colorScheme)}>
                     <div style={logDateStyle}>
                       {item.timestamp
                         ? new Date(item.timestamp).toLocaleString()
@@ -157,12 +163,12 @@ function UserProfileAnalytics() {
   );
 }
 
-// Some inline style objects
-const logItemStyle = {
+// Some inline style objects (slightly adjusted for a dark theme)
+const logItemStyle = (colorScheme) => ({
   marginBottom: "15px",
   paddingLeft: "10px",
-  borderLeft: "2px solid #FFD700",
-};
+  borderLeft: `2px solid ${colorScheme.accent || "#FFD700"}`,
+});
 
 const logDateStyle = {
   fontSize: "0.85rem",
