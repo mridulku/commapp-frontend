@@ -14,8 +14,17 @@ function UserProfileAnalytics({ colorScheme = {} }) {
   const [loadingActivities, setLoadingActivities] = useState(false);
   const [error, setError] = useState(null);
 
-  // We'll assume your backend URL is in an env variable
+  // 3) Form fields for generating a plan
+  const [targetDate, setTargetDate] = useState("2025-07-20");  // default
+  const [maxDays, setMaxDays] = useState("");                  // blank => no override
+  const [wpm, setWpm] = useState("");                          // blank => use Firestore
+  const [dailyReadingTime, setDailyReadingTime] = useState("");
+  const [quizTime, setQuizTime] = useState("");
+  const [reviseTime, setReviseTime] = useState("");
+
+  // We'll assume your usual backend or other APIs point to:
   const backendURL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
+  const generatePlanURL = "https://generateadaptiveplan-zfztjkkvva-uc.a.run.app";
 
   // ==============================
   // Step A: Listen to auth state
@@ -73,21 +82,49 @@ function UserProfileAnalytics({ colorScheme = {} }) {
       return;
     }
 
-    // Hardcode a target date, or fetch it from a date picker/input
-    const targetDate = "2025-07-20";
+    // Build the request body (JSON) conditionally
+    const requestBody = {
+      userId,
+    };
+
+    // required: targetDate
+    // if you prefer to allow an empty targetDate, remove this check
+    if (targetDate) {
+      requestBody.targetDate = targetDate;
+    } else {
+      alert("Target date is required!");
+      return;
+    }
+
+    // optional overrides
+    if (maxDays) {
+      requestBody.maxDays = Number(maxDays);
+    }
+    if (wpm) {
+      requestBody.wpm = Number(wpm);
+    }
+    if (dailyReadingTime) {
+      requestBody.dailyReadingTime = Number(dailyReadingTime);
+    }
+    if (quizTime) {
+      requestBody.quizTime = Number(quizTime);
+    }
+    if (reviseTime) {
+      requestBody.reviseTime = Number(reviseTime);
+    }
 
     try {
-      const res = await axios.get(
-        "https://generateadaptiveplan-zfztjkkvva-uc.a.run.app",
-        {
-          params: {
-            userId,
-            targetDate,
-          },
-        }
-      );
+      // Make a POST request
+      const res = await axios.post(generatePlanURL, requestBody, {
+        headers: { "Content-Type": "application/json" },
+      });
       console.log("Generate Plan response:", res.data);
-      alert("Plan generated successfully!");
+
+      if (res.status === 200) {
+        alert("Plan generated successfully!");
+      } else {
+        alert("Something went wrong generating plan.");
+      }
     } catch (err) {
       console.error("Error generating plan:", err);
       alert("Failed to generate plan. Check console for details.");
@@ -109,7 +146,9 @@ function UserProfileAnalytics({ colorScheme = {} }) {
         overflowY: "auto",
       }}
     >
-      <h2 style={{ color: colorScheme.heading || "#BB86FC" }}>User Profile & Activity</h2>
+      <h2 style={{ color: colorScheme.heading || "#BB86FC" }}>
+        User Profile & Activity
+      </h2>
 
       {authLoading && <p>Checking sign-in status...</p>}
 
@@ -137,26 +176,111 @@ function UserProfileAnalytics({ colorScheme = {} }) {
             <p>
               <strong>User ID:</strong> {userId}
             </p>
-            <p>
-              (You could fetch more info about the user from /api/users or Firestore.)
-            </p>
+            <p>(More user info could be displayed here.)</p>
+          </div>
 
-            {/* Generate Plan Button */}
-            <button
-              onClick={handleGeneratePlan}
-              style={{
-                padding: "8px 16px",
-                backgroundColor: colorScheme.accent || "#BB86FC",
-                color: "#000",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer",
-                fontWeight: "bold",
-                marginTop: "10px",
-              }}
-            >
-              Generate Plan
-            </button>
+          {/* Generate Plan Form */}
+          <div
+            style={{
+              backgroundColor: colorScheme.cardBg || "#2F2F2F",
+              borderRadius: "8px",
+              padding: "20px",
+              marginBottom: "20px",
+              border: `1px solid ${colorScheme.borderColor || "#3A3A3A"}`,
+            }}
+          >
+            <h3 style={{ marginTop: 0 }}>Generate Adaptive Plan</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {/* Target Date (required) */}
+              <div>
+                <label style={{ marginRight: "8px" }}>Target Date:</label>
+                <input
+                  type="date"
+                  value={targetDate}
+                  onChange={(e) => setTargetDate(e.target.value)}
+                  style={{ padding: "4px" }}
+                />
+              </div>
+
+              {/* maxDays (optional) */}
+              <div>
+                <label style={{ marginRight: "8px" }}>Max Days Override:</label>
+                <input
+                  type="number"
+                  value={maxDays}
+                  onChange={(e) => setMaxDays(e.target.value)}
+                  placeholder="(Leave blank for default)"
+                  style={{ padding: "4px" }}
+                />
+              </div>
+
+              {/* wpm (optional) */}
+              <div>
+                <label style={{ marginRight: "8px" }}>WPM Override:</label>
+                <input
+                  type="number"
+                  value={wpm}
+                  onChange={(e) => setWpm(e.target.value)}
+                  placeholder="(Leave blank for Firestore persona)"
+                  style={{ padding: "4px" }}
+                />
+              </div>
+
+              {/* dailyReadingTime (optional) */}
+              <div>
+                <label style={{ marginRight: "8px" }}>
+                  Daily Reading Time Override (mins):
+                </label>
+                <input
+                  type="number"
+                  value={dailyReadingTime}
+                  onChange={(e) => setDailyReadingTime(e.target.value)}
+                  placeholder="(Leave blank for Firestore persona)"
+                  style={{ padding: "4px" }}
+                />
+              </div>
+
+              {/* quizTime (optional) */}
+              <div>
+                <label style={{ marginRight: "8px" }}>Quiz Time (mins):</label>
+                <input
+                  type="number"
+                  value={quizTime}
+                  onChange={(e) => setQuizTime(e.target.value)}
+                  placeholder="(default 1)"
+                  style={{ padding: "4px" }}
+                />
+              </div>
+
+              {/* reviseTime (optional) */}
+              <div>
+                <label style={{ marginRight: "8px" }}>Revise Time (mins):</label>
+                <input
+                  type="number"
+                  value={reviseTime}
+                  onChange={(e) => setReviseTime(e.target.value)}
+                  placeholder="(default 1)"
+                  style={{ padding: "4px" }}
+                />
+              </div>
+
+              <button
+                onClick={handleGeneratePlan}
+                style={{
+                  marginTop: "10px",
+                  padding: "8px 16px",
+                  backgroundColor: colorScheme.accent || "#BB86FC",
+                  color: "#000",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                  width: "fit-content",
+                }}
+              >
+                Generate Plan
+              </button>
+            </div>
           </div>
 
           {/* Activity Log */}
