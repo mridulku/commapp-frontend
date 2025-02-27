@@ -1,6 +1,10 @@
 // src/components/DetailedBookViewer/BooksViewer2.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useBooksViewer } from "./useBooksViewer";
+import OnboardingModal from "./OnboardingModal";
+
+import MaterialsDashboard from "./1.SidePanels/MaterialsDashboard"; // Example new component
+
 import UnifiedSidebar from "./1.SidePanels/0.UnifiedSidebar";
 import ToursManager from "./0.1Tours/ToursManager";
 
@@ -13,14 +17,16 @@ import PanelA from "./2.1Overview/2.PanelA";
 import PanelB from "./2.1Overview/3.PanelB";
 import PanelC from "./2.1Overview/4.PanelC";
 import PanelD from "./2.1Overview/5.PanelD";
-import PanelE from "./2.1Overview/PanelE";
+import PanelAdaptiveProcess from "./2.1Overview/PanelAdaptiveProcess";
+
+import PanelE from "./2.1Overview/PanelE"; // Example new component
 import StatsPanel from "./2.1Overview/1.StatsPanel";
 import BookSummary from "./2.2Library/BookSummary";
 import LibraryHome from "./2.2Library/LibraryHome";
 import AdaptiveHome from "./2.3Adaptive/AdaptiveHome";
 
 // The cinematic "player" modal
-import AdaptivePlayerModal from "./3.AdaptiveModal/AdaptivePlayerModal"; // <-- Adjust path as needed
+import AdaptivePlayerModal from "./3.AdaptiveModal/AdaptivePlayerModal"; // Adjust path as needed
 
 function BooksViewer2() {
   const {
@@ -49,6 +55,8 @@ function BooksViewer2() {
     fetchAllData,
   } = useBooksViewer();
 
+  const [showOnboardingModal, setShowOnboardingModal] = useState(false);
+
   // For Joyride tours
   const [triggerTour, setTriggerTour] = useState(false);
 
@@ -58,7 +66,7 @@ function BooksViewer2() {
   const [initialActivityContext, setInitialActivityContext] = useState(null);
   const [modalFetchUrl, setModalFetchUrl] = useState("/api/adaptive-plan-total");
 
-  // For “Home” filler content
+  // For “Home” filler content (we won't use selectedHomeActivity if we're showing PanelE)
   const [selectedHomeActivity, setSelectedHomeActivity] = useState(null);
 
   /**
@@ -89,13 +97,12 @@ function BooksViewer2() {
   };
 
   // -------------- THEME & STYLES --------------
-  // You can tweak these colors for a different accent, etc.
   const themeColors = {
-    background: "#121212",        // Main page background
-    sidebarBg: "#1E1E1E",         // Sidebar background
-    accent: "#BB86FC",            // Accent color for buttons/highlights
-    textPrimary: "#FFFFFF",       // Main text color
-    textSecondary: "#CCCCCC",     // Lighter text color
+    background: "#121212",
+    sidebarBg: "#1E1E1E",
+    accent: "#BB86FC",
+    textPrimary: "#FFFFFF",
+    textSecondary: "#CCCCCC",
     borderColor: "#3A3A3A",
   };
 
@@ -153,18 +160,31 @@ function BooksViewer2() {
     ...floatBtnBase,
     right: "20px",
     fontSize: "1.3rem",
-    backgroundColor: "#CF6679", // a reddish accent for "player"
+    backgroundColor: "#CF6679",
   };
 
   // Filter the data based on library/adaptive/overview
   const displayedBooksData = getFilteredBooksData();
 
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Toggle function
+  const handleToggleSidebar = () => {
+    setIsSidebarCollapsed((prev) => !prev);
+  };
+
+  useEffect(() => {
+    // Only open the modal if we *know* isOnboarded = false
+    if (isOnboarded === false) {
+      setShowOnboardingModal(true);
+    } else {
+      setShowOnboardingModal(false);
+    }
+  }, [isOnboarded]);
+ 
   // Decide main content for each viewMode
   let mainContent;
   if (viewMode === "overview") {
-    if (!isOnboarded) {
-      mainContent = <OverviewContent />;
-    } else {
       mainContent = (
         <>
           <StatsPanel />
@@ -175,10 +195,7 @@ function BooksViewer2() {
               gap: "20px",
             }}
           >
-            <PanelB />
-            <PanelA />
             <PanelC />
-            <PanelE />
             <PanelD
               categories={categories}
               selectedCategory={selectedCategory}
@@ -187,10 +204,11 @@ function BooksViewer2() {
               handleSubChapterClick={handleSubChapterClick}
               selectedSubChapter={selectedSubChapter}
             />
+            <PanelAdaptiveProcess />
           </div>
         </>
       );
-    }
+    
   } else if (viewMode === "profile") {
     mainContent = <UserProfileAnalytics />;
   } else if (viewMode === "library") {
@@ -258,28 +276,17 @@ function BooksViewer2() {
       );
     }
   } else if (viewMode === "home") {
-    if (selectedHomeActivity) {
-      mainContent = (
-        <div style={{ fontSize: "1.2rem", color: themeColors.textSecondary }}>
-          Filler content for: <strong>{selectedHomeActivity?.subChapterName}</strong>
-        </div>
-      );
-    } else {
-      mainContent = (
-        <div style={{ color: themeColors.accent }}>
-          Please select a day/activity in the <em>Home</em> sidebar.
-        </div>
-      );
-    }
+    // ----- NEW: Show the new component (PanelE or whichever you want) ------
+    mainContent = <MaterialsDashboard />;
   }
 
   return (
     <div style={outerContainerStyle}>
-      {/* Top area (could place a header bar here if desired) */}
-
       {/* Middle area => Sidebar + Main Content */}
       <div style={innerContentWrapper}>
         <UnifiedSidebar
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={handleToggleSidebar}
           themeColors={themeColors}
           viewMode={viewMode}
           setViewMode={setViewMode}
@@ -296,10 +303,8 @@ function BooksViewer2() {
           handleSubChapterClick={handleSubChapterClick}
           selectedSubChapter={selectedSubChapter}
           homePlanId={homePlanId}
-          planIds={planIds}   // pass the array
-          // If a user clicks an activity in the Home or Overview sidebars
+          planIds={planIds}
           onHomeSelect={(act) => setSelectedHomeActivity(act)}
-          // The parent's real "Play" callback (3-arg version)
           onOpenPlayer={handleOpenPlayer}
         />
 
@@ -310,25 +315,24 @@ function BooksViewer2() {
       <button
         style={floatTourButtonStyle}
         onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "#9852e8")}
-        onMouseOut={(e) => (e.currentTarget.style.backgroundColor = themeColors.accent)}
+        onMouseOut={(e) =>
+          (e.currentTarget.style.backgroundColor = themeColors.accent)
+        }
         onClick={() => setTriggerTour(true)}
         title="Start Tour"
       >
         ?
       </button>
 
-      {/* Floating "player" button => open modal with no subchapter */}
+      {/* Floating "player" button => open OnboardingModal */}
       <button
         style={floatPlayerButtonStyle}
         onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "#a85b61")}
         onMouseOut={(e) => (e.currentTarget.style.backgroundColor = "#CF6679")}
         onClick={() => {
-          setCurrentModalPlanId(planId);
-          setInitialActivityContext(null);
-          setModalFetchUrl("/api/adaptive-plan");
-          setShowPlayer(true);
+          setShowOnboardingModal(true);
         }}
-        title="Start Player"
+        title="Open Onboarding"
       >
         ►
       </button>
@@ -350,6 +354,12 @@ function BooksViewer2() {
         planId={currentModalPlanId}
         initialActivityContext={initialActivityContext}
         fetchUrl={modalFetchUrl}
+      />
+
+      {/* The new Onboarding Modal (only shows if showOnboardingModal = true) */}
+      <OnboardingModal
+        open={showOnboardingModal}
+        onClose={() => setShowOnboardingModal(false)}
       />
     </div>
   );

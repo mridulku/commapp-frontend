@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   AppBar,
   Box,
@@ -19,6 +19,13 @@ import {
 import MenuIcon from '@mui/icons-material/Menu';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import Drawer from '@mui/material/Drawer';
+
+// --- Icons for the Features
+import AutoAwesomeMotionIcon from '@mui/icons-material/AutoAwesomeMotion'; // for Adaptive Lessons
+import ThumbUpIcon from '@mui/icons-material/ThumbUp'; // for Personalized Feedback
+import RocketLaunchIcon from '@mui/icons-material/RocketLaunch'; // for Engaging Content
+
+import { useNavigate } from 'react-router-dom'; // or your routing library
 
 /** ======================
  *  1) Create a custom Theme
@@ -60,9 +67,15 @@ const theme = createTheme({
 /** AppBar / Navbar */
 function LandingAppBar() {
   const [open, setOpen] = React.useState(false);
+  const navigate = useNavigate();
 
   const handleDrawerToggle = () => {
     setOpen(!open);
+  };
+
+  // Handle sign in click => /authlogin
+  const handleSignIn = () => {
+    navigate('/authlogin');
   };
 
   return (
@@ -70,19 +83,18 @@ function LandingAppBar() {
       <Toolbar sx={{ display: 'flex', justifyContent: 'space-between' }}>
         {/* Left side: Logo / Title */}
         <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-          MyBrand
+          TalkAI
         </Typography>
 
-        {/* Large screen Nav buttons */}
+        {/* Large screen: only Sign In */}
         <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 2 }}>
-          <Button color="inherit">Features</Button>
-          <Button color="inherit">Testimonials</Button>
-          <Button color="inherit">Pricing</Button>
-          <Button variant="outlined" color="primary" sx={{ borderColor: 'primary.main' }}>
+          <Button
+            variant="outlined"
+            color="primary"
+            sx={{ borderColor: 'primary.main' }}
+            onClick={handleSignIn}
+          >
             Sign In
-          </Button>
-          <Button variant="contained" color="primary">
-            Sign Up
           </Button>
         </Box>
 
@@ -95,7 +107,7 @@ function LandingAppBar() {
         </IconButton>
       </Toolbar>
 
-      {/* Mobile Drawer */}
+      {/* Mobile Drawer => only Sign In */}
       <Drawer anchor="top" open={open} onClose={handleDrawerToggle}>
         <Box sx={{ p: 2, bgcolor: 'background.default' }}>
           <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -104,21 +116,16 @@ function LandingAppBar() {
             </IconButton>
           </Box>
           <Stack spacing={2} sx={{ mt: 2 }}>
-            <Button color="inherit" onClick={handleDrawerToggle}>
-              Features
-            </Button>
-            <Button color="inherit" onClick={handleDrawerToggle}>
-              Testimonials
-            </Button>
-            <Button color="inherit" onClick={handleDrawerToggle}>
-              Pricing
-            </Button>
-            <Divider sx={{ my: 2 }} />
-            <Button variant="outlined" color="primary" onClick={handleDrawerToggle}>
+            <Divider sx={{ my: 1 }} />
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={() => {
+                handleDrawerToggle();
+                handleSignIn();
+              }}
+            >
               Sign In
-            </Button>
-            <Button variant="contained" color="primary" onClick={handleDrawerToggle}>
-              Sign Up
             </Button>
           </Stack>
         </Box>
@@ -129,6 +136,12 @@ function LandingAppBar() {
 
 /** Hero Section */
 function HeroSection() {
+  const navigate = useNavigate();
+  // Start Learning => /authlogin
+  const handleStartLearning = () => {
+    navigate('/authlogin');
+  };
+
   return (
     <Box
       sx={{
@@ -151,11 +164,14 @@ function HeroSection() {
           study plans, quizzes, and summaries based on your pace, ensuring efficient
           pathways to success!
         </Typography>
-        <Button variant="contained" color="primary" size="large" sx={{ mr: 2 }}>
+        <Button
+          variant="contained"
+          color="primary"
+          size="large"
+          sx={{ mr: 2 }}
+          onClick={handleStartLearning}
+        >
           Start Learning
-        </Button>
-        <Button variant="outlined" color="primary" size="large">
-          Learn More
         </Button>
       </Container>
     </Box>
@@ -166,16 +182,19 @@ function HeroSection() {
 function FeaturesSection() {
   const features = [
     {
+      icon: <AutoAwesomeMotionIcon sx={{ fontSize: 40, mb: 1, color: 'primary.main' }} />,
       title: 'Adaptive Lessons',
       description:
         'AI tracks your progress in real-time and adjusts the study plan dynamically, delivering a personalized path to mastery.',
     },
     {
+      icon: <ThumbUpIcon sx={{ fontSize: 40, mb: 1, color: 'primary.main' }} />,
       title: 'Personalized Feedback',
       description:
         'Identify learning gaps quickly with AI-driven insights, and get optimized strategies for efficient improvement.',
     },
     {
+      icon: <RocketLaunchIcon sx={{ fontSize: 40, mb: 1, color: 'primary.main' }} />,
       title: 'Engaging Content',
       description:
         'Interactive quizzes, AI-generated insights, and adaptive recommendations make learning fun and effective.',
@@ -193,8 +212,9 @@ function FeaturesSection() {
       <Grid container spacing={4}>
         {features.map((feature, idx) => (
           <Grid item xs={12} md={4} key={idx}>
-            <Card variant="outlined" sx={{ bgcolor: 'background.paper', height: '100%' }}>
+            <Card variant="outlined" sx={{ bgcolor: 'background.paper', height: '100%', textAlign: 'center' }}>
               <CardContent>
+                {feature.icon}
                 <Typography variant="h6" sx={{ color: 'primary.main', mb: 1 }}>
                   {feature.title}
                 </Typography>
@@ -212,12 +232,19 @@ function FeaturesSection() {
 
 /** CTA (Call to Action) Section */
 function CTASection() {
+  const navigate = useNavigate();
+
+  const handleGetStarted = () => {
+    navigate('/authlogin');
+  };
+
   return (
     <Box
       sx={{
         py: 6,
         textAlign: 'center',
-        background: '#203A43',
+        // remove the weird green background => just make it transparent/dark
+        background: '#1A1A1A', // or 'transparent'
       }}
     >
       <Container>
@@ -235,7 +262,7 @@ function CTASection() {
           Explore new interests or excel in competitive exams with our AI-driven
           platform that adapts to your unique goals, style, and pace.
         </Typography>
-        <Button variant="contained" color="primary" size="large">
+        <Button variant="contained" color="primary" size="large" onClick={handleGetStarted}>
           Get Started
         </Button>
       </Container>
@@ -249,7 +276,7 @@ function FooterSection() {
     <Box sx={{ py: 4, textAlign: 'center', bgcolor: '#000000' }}>
       <Container>
         <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
-          © {new Date().getFullYear()} MyBrand. All rights reserved.
+          © {new Date().getFullYear()} TalkAI. All rights reserved.
         </Typography>
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
           Terms | Privacy | Contact
@@ -260,9 +287,20 @@ function FooterSection() {
 }
 
 /** ======================
- *  3) Main LandingPage (Single File)
+ *  3) Main LandingPage
+ *     - If user has token => redirect /dashboard
  * ======================= */
 export default function LandingPage() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Example: if localStorage has "token", redirect
+    const token = localStorage.getItem('token');
+    if (token) {
+      navigate('/dashboard');
+    }
+  }, [navigate]);
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />

@@ -1,21 +1,20 @@
 // src/components/DetailedBookViewer/PanelB.jsx
+
 import React, { useState } from "react";
 
 function PanelB() {
-  // Keep track of chat messages
+  // Chat state
   const [messages, setMessages] = useState([
     { role: "system", text: "Hello! This is a dummy chat interface. Type anything below." },
   ]);
-
-  // User’s typed input
   const [userInput, setUserInput] = useState("");
 
-  // Add a new message (from user or system) to the chat array
+  // Add a new message
   const addMessage = (role, text) => {
     setMessages((prev) => [...prev, { role, text }]);
   };
 
-  // Handle form submission
+  // Handle sending
   const handleSend = (e) => {
     e.preventDefault();
     const trimmed = userInput.trim();
@@ -25,17 +24,17 @@ function PanelB() {
     addMessage("user", trimmed);
     setUserInput("");
 
-    // 2) Add a dummy system response
+    // 2) Dummy system response
     setTimeout(() => {
       addMessage("system", "I am a dummy response!");
-    }, 500);
+    }, 600);
   };
 
   return (
-    <div style={containerStyle} id="panelB">
-      <h2 style={{ marginTop: 0 }}>Dummy Chat Interface</h2>
+    <div style={panelContainer} id="panelB">
+      <h3 style={headingStyle}>Chat Interface</h3>
 
-      <div style={chatBoxStyle}>
+      <div style={chatBox}>
         {messages.map((msg, idx) => {
           const isSystem = msg.role === "system";
           return (
@@ -44,7 +43,9 @@ function PanelB() {
               style={{
                 ...bubbleStyle,
                 alignSelf: isSystem ? "flex-start" : "flex-end",
-                backgroundColor: isSystem ? "rgba(255,255,255,0.2)" : "#0084FF",
+                backgroundColor: isSystem
+                  ? "rgba(255,255,255,0.2)"
+                  : "rgba(0,132,255,0.7)",
               }}
             >
               {msg.text}
@@ -53,7 +54,6 @@ function PanelB() {
         })}
       </div>
 
-      {/* Text input + Send button */}
       <form style={formStyle} onSubmit={handleSend}>
         <input
           type="text"
@@ -62,7 +62,7 @@ function PanelB() {
           value={userInput}
           onChange={(e) => setUserInput(e.target.value)}
         />
-        <button type="submit" style={buttonStyle}>
+        <button type="submit" style={sendButton}>
           Send
         </button>
       </form>
@@ -70,27 +70,37 @@ function PanelB() {
   );
 }
 
-/** Reuse the style objects from your existing code */
-const containerStyle = {
-  width: "400px",
-  margin: "20px auto",
-  backgroundColor: "rgba(0,0,0,0.3)",
-  padding: "20px",
+// ---------- Styles -----------
+const panelContainer = {
+  // Make it consistent with your other “semi-transparent” panels
+  backgroundColor: "rgba(255, 255, 255, 0.1)",
   borderRadius: "8px",
+  padding: "20px",
   color: "#fff",
   fontFamily: "sans-serif",
+  maxHeight: "100%",    // so it doesn't overflow
+  display: "flex",
+  flexDirection: "column",
 };
 
-const chatBoxStyle = {
+const headingStyle = {
+  marginTop: 0,
+  marginBottom: "10px",
+  fontSize: "1.1rem",
+  borderBottom: "1px solid rgba(255,255,255,0.2)",
+  paddingBottom: "5px",
+};
+
+const chatBox = {
   display: "flex",
   flexDirection: "column",
   gap: "8px",
-  maxHeight: "300px",
   overflowY: "auto",
-  marginBottom: "10px",
-  border: "1px solid rgba(255,255,255,0.3)",
+  flex: 1, // expand to fill available vertical space
+  border: "1px solid rgba(255,255,255,0.2)",
   borderRadius: "6px",
   padding: "10px",
+  marginBottom: "10px",
 };
 
 const bubbleStyle = {
@@ -115,12 +125,13 @@ const inputStyle = {
   outline: "none",
 };
 
-const buttonStyle = {
-  backgroundColor: "#0084FF",
+const sendButton = {
+  backgroundColor: "rgba(0,132,255,0.7)",
   border: "none",
   padding: "8px 16px",
   borderRadius: "4px",
   color: "#fff",
+  fontWeight: "bold",
   cursor: "pointer",
 };
 

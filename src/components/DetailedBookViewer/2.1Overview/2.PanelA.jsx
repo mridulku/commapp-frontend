@@ -1,272 +1,169 @@
-// src/components/DetailedBookViewer/PanelA.jsx
-import React from "react";
-import { useHomeData } from "./useHomeData"; // adjust path as needed
+import React, { useRef } from "react";
 
-function PanelA() {
-  // Pull data from our custom hook
-  const {
-    // Book
-    book,
-    loadingBook,
-    bookError,
+/**
+ * Example props:
+ *   booksData: [{ id, title, author, coverUrl }, ...]
+ *   onUpload: function(file) => handles the file upload
+ */
+function LibraryPanel({ booksData = [], onUpload }) {
+  const hiddenFileInput = useRef(null);
 
-    // Goal
-    goal,
-    loadingGoal,
-    goalError,
+  // When user clicks "Upload Book" button
+  const handleUploadClick = () => {
+    // Programmatically open the hidden file input
+    hiddenFileInput.current.click();
+  };
 
-    // Reading Speed
-    readingSpeed,
-    loadingSpeed,
-    speedError,
-
-    // Step #4: Has user read at least one subchapter?
-    hasReadSubchapter,
-    loadingReadSubchapter,
-    readSubchapterError,
-
-    // Step #5: Has user completed at least one quiz?
-    hasCompletedQuiz,
-    loadingQuizCompleted,
-    quizError,
-  } = useHomeData();
-
-  // ====================== STEP #1: UPLOAD A BOOK ======================
-  let uploadBookStepStatus = "start";
-  let uploadBookDetail = "No book uploaded yet.";
-
-  if (loadingBook) {
-    uploadBookDetail = "(Loading your book...)";
-  } else if (bookError) {
-    uploadBookDetail = `Error loading book: ${bookError}`;
-  } else if (book) {
-    uploadBookStepStatus = "done";
-    uploadBookDetail = `You uploaded: ${book.name}`;
-  }
-
-  // ====================== STEP #2: SET YOUR LEARNING GOAL ======================
-  let goalStepStatus = "start";
-  let goalStepDetail = "No goal set yet.";
-
-  if (loadingGoal) {
-    goalStepDetail = "(Loading your goal...)";
-  } else if (goalError) {
-    goalStepDetail = `Error loading goal: ${goalError}`;
-  } else if (goal) {
-    goalStepStatus = "done";
-    goalStepDetail = `Goal: ${goal}`;
-  }
-
-  // ====================== STEP #3: CONFIRM READING SPEED ======================
-  let readingSpeedStepStatus = "start";
-  let readingSpeedDetail = "Reading speed not set yet.";
-
-  if (loadingSpeed) {
-    readingSpeedDetail = "(Loading reading speed...)";
-  } else if (speedError) {
-    readingSpeedDetail = `Error loading speed: ${speedError}`;
-  } else if (readingSpeed) {
-    readingSpeedStepStatus = "done";
-    readingSpeedDetail = `${readingSpeed} WPM`;
-  }
-
-  // ====================== STEP #4: READ YOUR FIRST SUBCHAPTER ======================
-  let readSubchapterStepStatus = "start";
-  let readSubchapterStepDetail = "No subchapters read yet.";
-
-  if (loadingReadSubchapter) {
-    readSubchapterStepDetail = "(Checking if you've read a subchapter...)";
-  } else if (readSubchapterError) {
-    readSubchapterStepDetail = `Error: ${readSubchapterError}`;
-  } else if (hasReadSubchapter) {
-    readSubchapterStepStatus = "done";
-    readSubchapterStepDetail = "You finished reading at least one subchapter!";
-  }
-
-  // ====================== STEP #5: TAKE YOUR FIRST QUIZ ======================
-  let quizStepStatus = "locked";
-  let quizStepDetail = "You haven't taken any quiz yet.";
-
-  if (loadingQuizCompleted) {
-    quizStepDetail = "(Checking if you completed a quiz...)";
-  } else if (quizError) {
-    quizStepDetail = `Error: ${quizError}`;
-  } else if (hasCompletedQuiz) {
-    quizStepStatus = "done";
-    quizStepDetail = "You have completed at least one quiz!";
-  } else {
-    // If user has read subchapter, we can unlock the quiz
-    if (hasReadSubchapter) {
-      quizStepStatus = "start";
-      quizStepDetail = "Ready to attempt your first quiz!";
+  // When the file input changes (user picks a file)
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file && onUpload) {
+      onUpload(file);
     }
-  }
-
-  // ====================== BUILD THE ONBOARDING STEPS ======================
-  const onboardingSteps = [
-    {
-      id: 1,
-      label: "Upload a Book",
-      detail: uploadBookDetail,
-      status: uploadBookStepStatus,
-    },
-    {
-      id: 2,
-      label: "Set Your Learning Goal",
-      detail: goalStepDetail,
-      status: goalStepStatus,
-    },
-    {
-      id: 3,
-      label: "Confirm Reading Speed",
-      detail: readingSpeedDetail,
-      status: readingSpeedStepStatus,
-    },
-    {
-      id: 4,
-      label: "Read Your First Subchapter",
-      detail: readSubchapterStepDetail,
-      status: readSubchapterStepStatus,
-    },
-    {
-      id: 5,
-      label: "Take Your First Quiz",
-      detail: quizStepDetail,
-      status: quizStepStatus,
-    },
-  ];
-
-  const totalSteps = onboardingSteps.length;
-  const doneCount = onboardingSteps.filter((s) => s.status === "done").length;
-  const completionPercent = Math.round((doneCount / totalSteps) * 100);
-
-  // ====================== PANEL STYLES ======================
-  const panelStyle = {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    borderRadius: "8px",
-    padding: "20px",
-    color: "#fff",
-    // adjust width or height to fit in your 2x2 grid
-    minWidth: "250px",
-    // You can also set maxHeight or make it scrollable, depending on your layout
   };
 
-  const progressBarContainerStyle = {
-    height: "10px",
-    backgroundColor: "#444",
-    borderRadius: "6px",
-    margin: "10px 0",
-  };
-
-  const progressBarStyle = {
-    width: `${completionPercent}%`,
-    backgroundColor: "#FFD700",
-    height: "100%",
-    borderRadius: "6px",
-    transition: "width 0.3s",
-  };
+  // Count how many books
+  const totalBooks = booksData.length;
 
   return (
-    <div style={panelStyle} id="panelA">
-      <h3 style={{ marginTop: 0 }}>Onboarding Steps</h3>
-      <p style={{ fontSize: "0.9rem", marginTop: "5px" }}>
-        A quick view of your onboarding progress:
-      </p>
-
-      {/* Progress bar */}
-      <div style={progressBarContainerStyle}>
-        <div style={progressBarStyle} />
+    <div style={containerStyle}>
+      <h2 style={headerStyle}>My Library</h2>
+      <div style={summaryStyle}>
+        You have <strong>{totalBooks}</strong> book{totalBooks !== 1 ? "s" : ""} in your library.
       </div>
-      <p style={{ margin: 0, fontSize: "0.85rem" }}>
-        {doneCount}/{totalSteps} steps completed ({completionPercent}%)
-      </p>
 
-      {/* Steps list */}
-      <div style={{ marginTop: "15px" }}>
-        {onboardingSteps.map((step) => (
-          <div
-            key={step.id}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              marginBottom: "10px",
-              padding: "8px",
-              borderRadius: "6px",
-              backgroundColor: "rgba(255,255,255,0.2)",
-            }}
-          >
-            {/* Icon */}
-            <div style={{ marginRight: "8px" }}>
-              {step.status === "done" ? (
-                <span
-                  style={{
-                    display: "inline-block",
-                    width: "20px",
-                    height: "20px",
-                    backgroundColor: "limegreen",
-                    borderRadius: "4px",
-                    textAlign: "center",
-                    color: "#000",
-                    fontWeight: "bold",
-                  }}
-                >
-                  ✓
-                </span>
-              ) : step.status === "locked" ? (
-                <span
-                  style={{
-                    display: "inline-block",
-                    width: "20px",
-                    height: "20px",
-                    backgroundColor: "#ccc",
-                    borderRadius: "4px",
-                    textAlign: "center",
-                  }}
-                >
-                  🔒
-                </span>
-              ) : step.status === "start" ? (
-                <span
-                  style={{
-                    display: "inline-block",
-                    width: "20px",
-                    height: "20px",
-                    backgroundColor: "#FFD700",
-                    borderRadius: "4px",
-                    textAlign: "center",
-                    color: "#000",
-                    fontWeight: "bold",
-                  }}
-                >
-                  →
-                </span>
-              ) : (
-                <span
-                  style={{
-                    display: "inline-block",
-                    width: "20px",
-                    height: "20px",
-                    backgroundColor: "#aaa",
-                    borderRadius: "4px",
-                  }}
+      <button style={uploadButtonStyle} onClick={handleUploadClick}>
+        Upload Book
+      </button>
+      <input
+        type="file"
+        accept="application/pdf"
+        ref={hiddenFileInput}
+        style={{ display: "none" }}
+        onChange={handleFileChange}
+      />
+
+      <div style={cardsContainerStyle}>
+        {booksData.length === 0 ? (
+          <div style={emptyStyle}>No books found. Please upload!</div>
+        ) : (
+          booksData.map((book) => (
+            <div key={book.id || book.title} style={cardStyle}>
+              {/* Cover image if available, else fallback */}
+              {book.coverUrl ? (
+                <img
+                  src={book.coverUrl}
+                  alt={book.title}
+                  style={coverImageStyle}
                 />
+              ) : (
+                <div style={noCoverStyle}>No Cover</div>
               )}
+              <div style={cardContentStyle}>
+                <h3 style={titleStyle}>{book.title}</h3>
+                {book.author && <p style={authorStyle}>by {book.author}</p>}
+              </div>
             </div>
-
-            {/* Step Label & Detail */}
-            <div style={{ flex: 1 }}>
-              <strong style={{ fontSize: "0.95rem" }}>{step.label}</strong>
-              {step.detail && (
-                <div style={{ fontSize: "0.8rem", marginTop: "2px" }}>
-                  {step.detail}
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );
 }
 
-export default PanelA;
+export default LibraryPanel;
+
+/** --- Inline Styles Below --- **/
+
+const containerStyle = {
+  backgroundColor: "#1E1E1E",
+  color: "#FFFFFF",
+  padding: "20px",
+  borderRadius: "8px",
+  fontFamily: "sans-serif",
+  margin: "20px auto",
+  maxWidth: "800px",
+};
+
+const headerStyle = {
+  margin: 0,
+  marginBottom: "10px",
+  textAlign: "center",
+  fontSize: "1.8rem",
+};
+
+const summaryStyle = {
+  textAlign: "center",
+  marginBottom: "20px",
+};
+
+const uploadButtonStyle = {
+  display: "block",
+  margin: "0 auto 20px auto",
+  backgroundColor: "#BB86FC",
+  color: "#000",
+  border: "none",
+  padding: "10px 20px",
+  borderRadius: "4px",
+  cursor: "pointer",
+  fontWeight: "bold",
+  fontSize: "1rem",
+};
+
+const cardsContainerStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
+  gap: "20px",
+};
+
+const cardStyle = {
+  backgroundColor: "#2D2D2D",
+  borderRadius: "8px",
+  overflow: "hidden",
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  padding: "10px",
+};
+
+const coverImageStyle = {
+  width: "100px",
+  height: "140px",
+  objectFit: "cover",
+  borderRadius: "4px",
+  marginBottom: "10px",
+};
+
+const noCoverStyle = {
+  width: "100px",
+  height: "140px",
+  backgroundColor: "#444",
+  borderRadius: "4px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: "#AAA",
+  marginBottom: "10px",
+};
+
+const cardContentStyle = {
+  textAlign: "center",
+};
+
+const titleStyle = {
+  fontSize: "1rem",
+  margin: "0 0 5px 0",
+};
+
+const authorStyle = {
+  margin: 0,
+  fontSize: "0.9rem",
+  color: "#CCC",
+};
+
+const emptyStyle = {
+  gridColumn: "1 / -1",
+  textAlign: "center",
+  color: "#CCC",
+  fontStyle: "italic",
+};

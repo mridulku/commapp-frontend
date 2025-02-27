@@ -61,35 +61,33 @@ export function useBooksViewer() {
   }, [userId, backendURL]);
 
   // -------------------------- 2) "isOnboarded" Flag --------------------------
-  const [isOnboarded, setIsOnboarded] = useState(false);
+  const [isOnboarded, setIsOnboarded] = useState(null);
 
-  useEffect(() => {
-    if (!userId) {
-      setIsOnboarded(false);
-      return;
-    }
+useEffect(() => {
+  if (!userId) {
+    setIsOnboarded(null);
+    return;
+  }
 
-    const fetchIsOnboarded = async () => {
-      try {
-        const res = await axios.get(`${backendURL}/api/learner-personas`, {
-          params: { userId },
-        });
+  const fetchIsOnboarded = async () => {
+    try {
+      const res = await axios.get(`${backendURL}/api/learner-personas`, {
+        params: { userId },
+      });
 
-        if (res.data.success) {
-          const { isOnboarded } = res.data.data;
-          setIsOnboarded(!!isOnboarded); // ensure boolean
-        } else {
-          console.error("Failed to fetch isOnboarded:", res.data.error);
-          setIsOnboarded(false);
-        }
-      } catch (err) {
-        console.error("Error fetching isOnboarded:", err);
+      if (res.data.success) {
+        const { isOnboarded } = res.data.data;
+        setIsOnboarded(!!isOnboarded); // now it's either true or false
+      } else {
         setIsOnboarded(false);
       }
-    };
+    } catch (err) {
+      setIsOnboarded(false);
+    }
+  };
 
-    fetchIsOnboarded();
-  }, [userId, backendURL]);
+  fetchIsOnboarded();
+}, [userId, backendURL]);
 
   // -------------------------- 3) Existing State Variables --------------------------
   const [categories, setCategories] = useState([]);

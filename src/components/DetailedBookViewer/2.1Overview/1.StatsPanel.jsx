@@ -1,9 +1,18 @@
+// src/components/DetailedBookViewer/StatsPanel.jsx
+
 import React from "react";
 
-// Optional icons. For now, we can use emoji or placeholder text
-// In a real project, you might use Font Awesome, Material Icons, or custom SVGs
-
+/**
+ * StatsPanel
+ *
+ * Four small “cards” in a row:
+ * 1) Total Materials
+ * 2) Plan Progress (with a small progress bar)
+ * 3) Daily Average
+ * 4) Days Until Next Deadline
+ */
 function StatsPanel() {
+  // Panel container styling
   const panelContainerStyle = {
     display: "flex",
     gap: "20px",
@@ -16,6 +25,7 @@ function StatsPanel() {
     justifyContent: "space-around",
   };
 
+  // Each stat card styling
   const statCardStyle = {
     display: "flex",
     flexDirection: "row",
@@ -25,6 +35,7 @@ function StatsPanel() {
     borderRadius: "8px",
     minWidth: "160px",
     justifyContent: "space-between",
+    color: "#fff",           // white text
   };
 
   const iconStyle = {
@@ -39,61 +50,84 @@ function StatsPanel() {
     flex: 1,
   };
 
+  // The main number or info
   const valueStyle = {
     fontWeight: "bold",
     fontSize: "1.1rem",
-    color: "#FFD700", // gold
+    color: "#FFD700", // gold accent
   };
 
   const labelStyle = {
     fontSize: "0.9rem",
-    color: "#fff",
-    opacity: 0.8,
+    opacity: 0.9,
+  };
+
+  // For the progress bar in the Plan Progress stat
+  // Example: 60% progress
+  const progressPercent = 60;
+
+  const progressBarContainer = {
+    marginTop: "4px",
+    width: "100%",
+    height: "6px",
+    backgroundColor: "rgba(255,255,255,0.3)",
+    borderRadius: "3px",
+  };
+
+  const progressBarFill = {
+    width: `${progressPercent}%`,
+    height: "100%",
+    backgroundColor: "#FFD700", // gold
+    borderRadius: "3px",
   };
 
   return (
     <div style={panelContainerStyle}>
-      {/* Stat #1: Books Uploaded */}
+      {/* Stat #1: Total Materials */}
       <div style={statCardStyle}>
-        <span role="img" aria-label="book" style={iconStyle}>
+        <span role="img" aria-label="materials" style={iconStyle}>
           📚
         </span>
         <div style={textContainerStyle}>
-          <span style={valueStyle}>5</span>
-          <span style={labelStyle}>Books Uploaded</span>
+          <span style={valueStyle}>8</span>
+          <span style={labelStyle}>Total Materials</span>
         </div>
       </div>
 
-      {/* Stat #2: Hours Studied */}
+      {/* Stat #2: Plan Progress (with progress bar) */}
+      <div style={statCardStyle}>
+        <span role="img" aria-label="progress" style={iconStyle}>
+          📈
+        </span>
+        <div style={textContainerStyle}>
+          <span style={valueStyle}>{progressPercent}%</span>
+          <span style={labelStyle}>Plan Progress</span>
+          {/* Small inline progress bar */}
+          <div style={progressBarContainer}>
+            <div style={progressBarFill} />
+          </div>
+        </div>
+      </div>
+
+      {/* Stat #3: Daily Average */}
       <div style={statCardStyle}>
         <span role="img" aria-label="time" style={iconStyle}>
           ⏰
         </span>
         <div style={textContainerStyle}>
-          <span style={valueStyle}>3h 30m</span>
-          <span style={labelStyle}>This Week</span>
+          <span style={valueStyle}>1h 30m</span>
+          <span style={labelStyle}>Daily Average</span>
         </div>
       </div>
 
-      {/* Stat #3: Subchapters Read */}
+      {/* Stat #4: Days Until Next Deadline */}
       <div style={statCardStyle}>
-        <span role="img" aria-label="read" style={iconStyle}>
-          ✅
+        <span role="img" aria-label="deadline" style={iconStyle}>
+          🚀
         </span>
         <div style={textContainerStyle}>
-          <span style={valueStyle}>12</span>
-          <span style={labelStyle}>Subchapters Read</span>
-        </div>
-      </div>
-
-      {/* Stat #4: Quizzes Done */}
-      <div style={statCardStyle}>
-        <span role="img" aria-label="quiz" style={iconStyle}>
-          ✍️
-        </span>
-        <div style={textContainerStyle}>
-          <span style={valueStyle}>2</span>
-          <span style={labelStyle}>Quizzes Completed</span>
+          <span style={valueStyle}>14</span>
+          <span style={labelStyle}>Days Until Deadline</span>
         </div>
       </div>
     </div>
