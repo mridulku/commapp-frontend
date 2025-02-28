@@ -277,7 +277,28 @@ function BooksViewer2() {
     }
   } else if (viewMode === "home") {
     // ----- NEW: Show the new component (PanelE or whichever you want) ------
-    mainContent = <MaterialsDashboard />;
+    mainContent = <MaterialsDashboard 
+    isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={handleToggleSidebar}
+          themeColors={themeColors}
+          viewMode={viewMode}
+          setViewMode={setViewMode}
+          categories={categories}
+          selectedCategory={selectedCategory}
+          onCategoryChange={handleCategoryChange}
+          booksData={displayedBooksData}
+          expandedBookName={expandedBookName}
+          toggleBookExpansion={toggleBookExpansion}
+          expandedChapters={expandedChapters}
+          toggleChapterExpansion={toggleChapterExpansion}
+          handleBookClick={handleBookClick}
+          handleChapterClick={handleChapterClick}
+          handleSubChapterClick={handleSubChapterClick}
+          selectedSubChapter={selectedSubChapter}
+          homePlanId={homePlanId}
+          planIds={planIds}
+          onHomeSelect={(act) => setSelectedHomeActivity(act)}
+          onOpenPlayer={handleOpenPlayer}/>;
   }
 
   return (

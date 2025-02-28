@@ -1,121 +1,37 @@
 // src/components/DetailedBookViewer/UnifiedSidebar.jsx
 import React, { useState } from "react";
 
-// Keep only the sidebars we actually use:
-import OverviewSidebar from "./1.OverviewSidebar";
-import ProfileSidebar from "./4.ProfileSidebar";
-import HomeSidebar from "./HomeSidebar";
-
 function UnifiedSidebar({
   // Theming
   themeColors = {},
-
-  // Props needed by OverviewSidebar
-  categories,
-  selectedCategory,
-  onCategoryChange,
-  planIds = [], // Now an array
-
-  // Props needed by HomeSidebar
-  homePlanId,
-  onHomeSelect,
-
-  // State management from parent
+  // Possibly still pass in any other props you need:
   viewMode,
   setViewMode,
-
-  // The parent's real callback: handleOpenPlayer(planId, activity, fetchUrl)
-  onOpenPlayer,
 }) {
-  /**
-   * Local state for collapsing/expanding the sidebar
-   */
-  const [collapsed, setCollapsed] = useState(false);
+  // 1) Start collapsed by default
+  const [collapsed, setCollapsed] = useState(true);
 
-  /**
-   * Handler to toggle collapse
-   */
+  // 2) Toggle collapse
   const handleToggleCollapse = () => {
     setCollapsed((prev) => !prev);
   };
 
-  // Decide which specialized sidebar to render
-  let content;
-  if (viewMode === "overview") {
-    content = (
-      <OverviewSidebar
-        planIds={planIds}
-        backendURL={import.meta.env.VITE_BACKEND_URL}
-        onOverviewSelect={onHomeSelect}
-        onOpenPlayer={onOpenPlayer} // pass it straight through
-        colorScheme={{
-          panelBg: themeColors.sidebarBg,
-          textColor: themeColors.textPrimary,
-          borderColor: themeColors.borderColor,
-          heading: themeColors.accent,
-        }}
-      />
-    );
-  } else if (viewMode === "home") {
-    content = (
-      <HomeSidebar
-        planId={homePlanId}
-        backendURL={import.meta.env.VITE_BACKEND_URL}
-        onHomeSelect={onHomeSelect}
-        // Force a certain fetchUrl or let the child do default
-        onOpenPlayer={(pId, act) => onOpenPlayer(pId, act, "/api/adaptive-plan")}
-      />
-    );
-  } else if (viewMode === "profile") {
-    content = <ProfileSidebar />;
-  }
-
-  /**
-   * Sidebar container styling.
-   * Note how we switch width and overflow based on `collapsed`.
-   */
+  // 3) Container style
   const sidebarContainerStyle = {
-    // If collapsed, narrower width; if expanded, original 280px.
-    width: collapsed ? "60px" : "280px",
+    // If collapsed => 60px, else => 140px (adjust if you need a bit more room)
+    width: collapsed ? "60px" : "140px",
     backgroundColor: themeColors.sidebarBg || "#1E1E1E",
     padding: "20px",
     borderRight: `1px solid ${themeColors.borderColor || "#3A3A3A"}`,
     overflowY: "auto",
     transition: "width 0.3s ease",
-  };
-
-  /**
-   * If collapsed, we might hide the text in the toggle buttons:
-   * We'll do that by conditionally rendering the label or using icons.
-   */
-  const modeToggleContainerStyle = {
+    // So items stack top to bottom
     display: "flex",
-    flexDirection: collapsed ? "column" : "row",
-    gap: "8px",
-    marginBottom: "20px",
-    flexWrap: "wrap",
+    flexDirection: "column",
     alignItems: "center",
   };
 
-  /**
-   * Button styling, highlighting the active view
-   */
-  const toggleButtonStyle = (active) => ({
-    padding: "8px 12px",
-    borderRadius: "4px",
-    border: `1px solid ${themeColors.borderColor || "#3A3A3A"}`,
-    cursor: "pointer",
-    fontWeight: "bold",
-    backgroundColor: active ? themeColors.accent || "#BB86FC" : "transparent",
-    color: active ? "#000000" : themeColors.textPrimary || "#FFFFFF",
-    transition: "background-color 0.3s, color 0.3s",
-    // If collapsed, reduce width & hide text label
-    ...(collapsed ? { width: "40px", textAlign: "center", padding: "8px" } : {}),
-  });
-
-  /**
-   * A small button to toggle the collapse
-   */
+  // 4) The collapse/expand button style
   const collapseButtonStyle = {
     marginBottom: "10px",
     padding: "6px 10px",
@@ -125,57 +41,93 @@ function UnifiedSidebar({
     cursor: "pointer",
     backgroundColor: themeColors.accent || "#BB86FC",
     color: "#000000",
-    width: collapsed ? "40px" : "auto",
+    // If collapsed => 40px wide, else => fill container width
+    width: collapsed ? "40px" : "100%",
     transition: "width 0.3s, background-color 0.3s",
   };
 
-  /**
-   * Switch view mode (Overview, Home, Profile, etc.)
-   */
+  // 5) Container for the mode-toggle buttons
+  //    Always stack vertically => flexDirection: "column"
+  const modeToggleContainerStyle = {
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+    width: "100%",
+    marginTop: "20px",
+  };
+
+  // 6) Each button style
+  const toggleButtonStyle = (active) => ({
+    // Let each button fill the available width
+    width: "100%",
+    padding: "8px 12px",
+    borderRadius: "4px",
+    border: `1px solid ${themeColors.borderColor || "#3A3A3A"}`,
+    cursor: "pointer",
+    fontWeight: "bold",
+    backgroundColor: active ? themeColors.accent || "#BB86FC" : "transparent",
+    color: active ? "#000000" : themeColors.textPrimary || "#FFFFFF",
+    transition: "background-color 0.3s, color 0.3s",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: collapsed ? "center" : "flex-start",
+    // Prevent text from wrapping
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  });
+
+  // 7) Helper to switch mode
   function switchMode(mode) {
-    setViewMode(mode);
+    setViewMode && setViewMode(mode);
   }
 
   return (
     <div style={sidebarContainerStyle}>
-      {/* Button to collapse/expand the sidebar */}
-      <button style={collapseButtonStyle} onClick={handleToggleCollapse} title="Toggle Sidebar">
+      {/* Collapse/expand button */}
+      <button
+        style={collapseButtonStyle}
+        onClick={handleToggleCollapse}
+        title="Toggle Sidebar"
+      >
+        {/* If collapsed, show » else « */}
         {collapsed ? "»" : "«"}
       </button>
 
-      {/* TOP: Three main buttons => OVERVIEW, HOME, PROFILE */}
+      {/* Mode toggle buttons stacked vertically */}
       <div style={modeToggleContainerStyle}>
+        {/* Overview */}
         <button
           style={toggleButtonStyle(viewMode === "overview")}
           onClick={() => switchMode("overview")}
+          title="Overview"
         >
-          {/* If collapsed, maybe show only an icon, else show full text */}
-          {collapsed ? "🏠" : "🏠 Overview"}
+          {collapsed ? "🏠" : <>🏠 Overview</>}
         </button>
 
+        {/* Home */}
         <button
           style={toggleButtonStyle(viewMode === "home")}
           onClick={() => switchMode("home")}
+          title="Home"
         >
-          {collapsed ? "📚" : "📚 Home"}
+          {collapsed ? "📚" : <>📚 Home</>}
         </button>
 
+        {/* Profile */}
         <button
           style={toggleButtonStyle(viewMode === "profile")}
           onClick={() => switchMode("profile")}
+          title="Profile"
         >
-          {collapsed ? "👤" : "👤 Profile"}
+          {collapsed ? "👤" : <>👤 Profile</>}
         </button>
       </div>
 
-      {/* For additional modes, add more buttons here if needed.
-         E.g. Library or Adaptive: 
-         {!collapsed ? "Library" : "L"} 
+      {/* 
+        If you do not want any specialized sidebars to show, 
+        simply do NOT render them here even if expanded. 
       */}
-
-      {/* Render the specialized sidebar content if not collapsed.
-          Or if you like, you could still render some minimal icons even when collapsed. */}
-      {!collapsed && content}
     </div>
   );
 }
