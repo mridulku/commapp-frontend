@@ -2,41 +2,76 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 
 /**
- * Child2
+ * Child2 - Updated per your request
  *
- * This is the “sorted plan” component originally from 1.OverviewSidebar.
+ * 1) Day selection remains via Tabs at the top.
+ * 2) If only one book in a day, skip the book layer entirely (show chapters directly).
+ * 3) Chapter expansions remain (collapsible).
+ * 4) Sub-chapters are displayed as small "cards" with up to 3 buttons (READ, QUIZ, REVISE).
+ * 5) If an activity type is missing for a sub-chapter, the corresponding button is disabled.
+ * 6) All styling remains on a dark background with gold text, easily customizable.
  *
  * Props:
- *  - userId: string (the user ID, e.g. from Firebase Auth)
- *  - planIds: string[] (array of plan IDs, e.g. from Firestore) [existing functionality]
+ *  - userId: string
+ *  - bookId: string
+ *  - planIds: string[]
  *  - onOverviewSelect: function(activity) => void
  *  - onOpenPlayer: function(planId, activity, fetchUrl) => void
- *  - colorScheme: optional styling overrides { panelBg, textColor, borderColor, heading }
+ *  - colorScheme: { panelBg, textColor, borderColor, heading }
  */
 export default function Child2({
   userId = null,
+  bookId = "",
   planIds = [],
   onOverviewSelect = () => {},
   onOpenPlayer = () => {},
   colorScheme = {},
 }) {
-  // ----------------------------------------------------------------------------------
-  // 1) NEW: Local planIds state + a Book ID text input
-  // ----------------------------------------------------------------------------------
-  const [localPlanIds, setLocalPlanIds] = useState(planIds); // default from props
-  const [bookId, setBookId] = useState("");
+  // ------------------------------------------
+  // 1) localPlanIds
+  // ------------------------------------------
+  const [localPlanIds, setLocalPlanIds] = useState(planIds);
 
-  // Whenever the parent prop "planIds" changes, update localPlanIds
   useEffect(() => {
     setLocalPlanIds(planIds);
   }, [planIds]);
 
-  // ----------------------------------------------------------------------------------
-  // 2) Existing: Which planId is currently selected
-  // ----------------------------------------------------------------------------------
-  const [selectedPlanId, setSelectedPlanId] = useState("");
+  // ------------------------------------------
+  // 2) Fetch plan IDs whenever bookId changes
+  // ------------------------------------------
+  useEffect(() => {
+    async function fetchPlansForBook() {
+      if (!userId || !bookId) {
+        setLocalPlanIds([]);
+        setSelectedPlanId("");
+        setPlan(null);
+        return;
+      }
 
-  // Whenever localPlanIds changes, pick the first one as default (if any)
+      try {
+        const url = `${import.meta.env.VITE_BACKEND_URL}/api/adaptive-plan-id`;
+        const res = await axios.get(url, { params: { userId, bookId } });
+        if (res.data && res.data.planIds) {
+          setLocalPlanIds(res.data.planIds);
+        } else {
+          console.warn("No planIds returned:", res.data);
+          setLocalPlanIds([]);
+        }
+      } catch (error) {
+        console.error("Error fetching plan IDs by bookId:", error);
+        setLocalPlanIds([]);
+      }
+    }
+
+    fetchPlansForBook();
+  }, [userId, bookId]);
+
+  // ------------------------------------------
+  // 3) Selected Plan & Fetched Plan
+  // ------------------------------------------
+  const [selectedPlanId, setSelectedPlanId] = useState("");
+  const [plan, setPlan] = useState(null);
+
   useEffect(() => {
     if (localPlanIds.length > 0) {
       setSelectedPlanId(localPlanIds[0]);
@@ -46,18 +81,13 @@ export default function Child2({
     }
   }, [localPlanIds]);
 
-  // ----------------------------------------------------------------------------------
-  // 3) Fetch plan data for the currently selected planId
-  // ----------------------------------------------------------------------------------
-  const [plan, setPlan] = useState(null);
-
   useEffect(() => {
     if (!selectedPlanId) {
       setPlan(null);
       return;
     }
 
-    async function fetchPlanData() {
+    async function fetchPlan() {
       try {
         const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/adaptive-plan`, {
           params: { planId: selectedPlanId },
@@ -74,198 +104,136 @@ export default function Child2({
       }
     }
 
-    fetchPlanData();
+    fetchPlan();
   }, [selectedPlanId]);
 
-  // ----------------------------------------------------------------------------------
-  // 4) Once plan is fetched, auto-expand sessions/books/chapters
-  // ----------------------------------------------------------------------------------
-  const [expandedSessions, setExpandedSessions] = useState([]);
-  const [expandedBooks, setExpandedBooks] = useState([]);
-  const [expandedChapters, setExpandedChapters] = useState([]);
-  const [expandedSubs, setExpandedSubs] = useState([]); // sub-chapters collapsed by default
+  // ------------------------------------------
+  // 4) Sessions => displayed as Tabs
+  // ------------------------------------------
+  const [activeSessionIndex, setActiveSessionIndex] = useState(0);
 
+  // Reset the active tab if the plan changes
   useEffect(() => {
-    if (!plan) return;
-
-    const { sessions = [] } = plan;
-    const sessionKeys = [];
-    const bookKeys = [];
-    const chapterKeys = [];
-
-    for (const sess of sessions) {
-      const { sessionLabel, activities = [] } = sess;
-      const sKey = `S-${sessionLabel}`;
-      sessionKeys.push(sKey);
-
-      // Group by book
-      const bookMap = new Map();
-      for (const act of activities) {
-        if (!bookMap.has(act.bookId)) {
-          bookMap.set(act.bookId, []);
-        }
-        bookMap.get(act.bookId).push(act);
-      }
-
-      for (const [bId, bActs] of bookMap.entries()) {
-        const bKey = `S-${sessionLabel}-B-${bId}`;
-        bookKeys.push(bKey);
-
-        // Group by chapter
-        const chapterMap = new Map();
-        for (const a of bActs) {
-          if (!chapterMap.has(a.chapterId)) {
-            chapterMap.set(a.chapterId, []);
-          }
-          chapterMap.get(a.chapterId).push(a);
-        }
-        for (const [cId] of chapterMap.entries()) {
-          const cKey = `S-${sessionLabel}-B-${bId}-C-${cId}`;
-          chapterKeys.push(cKey);
-        }
-      }
-    }
-
-    setExpandedSessions(sessionKeys);
-    setExpandedBooks(bookKeys);
-    setExpandedChapters(chapterKeys);
-    setExpandedSubs([]);
+    setActiveSessionIndex(0);
   }, [plan]);
 
-  // ----------------------------------------------------------------------------------
-  // 5) NEW: Handler to fetch planIds from `/api/home-plan-id?userId=xxx&bookId=yyy`
-  // ----------------------------------------------------------------------------------
-  const handleFetchPlansByBook = async () => {
-    if (!userId || !bookId) {
-      alert("Please enter both userId and bookId.");
-      return;
-    }
-    try {
-      const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/adaptive-plan-id`, {
-        params: {
-          userId,
-          bookId,
-        },
-      });
-      if (res.data && res.data.planIds) {
-        setLocalPlanIds(res.data.planIds); // Overwrite localPlanIds with the server result
-      } else {
-        console.warn("No planIds in response:", res.data);
-        setLocalPlanIds([]);
-      }
-    } catch (error) {
-      console.error("Error fetching plan IDs by book:", error);
-      setLocalPlanIds([]);
-    }
-  };
+  // ------------------------------------------
+  // 5) Expand/Collapse state for chapters
+  // ------------------------------------------
+  const [expandedChapters, setExpandedChapters] = useState([]);
 
-  // ----------------------------------------------------------------------------------
+  // Clear expansions whenever plan changes
+  useEffect(() => {
+    setExpandedChapters([]);
+  }, [plan]);
+
+  function toggleChapter(key) {
+    setExpandedChapters((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  }
+
+  // ------------------------------------------
   // 6) Styles
-  // ----------------------------------------------------------------------------------
+  // ------------------------------------------
   const containerStyle = {
     backgroundColor: colorScheme.panelBg || "#0D0D0D",
     color: colorScheme.textColor || "#FFD700",
     padding: "1rem",
+    minHeight: "100vh",
   };
 
   const headingStyle = {
     fontWeight: "bold",
     marginBottom: "15px",
-    fontSize: "1rem",
+    fontSize: "1.25rem",
     color: colorScheme.heading || "#FFD700",
   };
 
-  const baseHeaderStyle = {
-    width: "100%",
+  // Tabs (Days) style
+  const tabsContainerStyle = {
+    display: "flex",
+    marginBottom: "1rem",
+    borderBottom: `1px solid ${colorScheme.borderColor || "#FFD700"}`,
+  };
+
+  const tabStyle = (isActive) => ({
+    padding: "0.5rem 1rem",
     cursor: "pointer",
-    padding: "8px 10px",
-    marginBottom: "6px",
+    border: `1px solid ${colorScheme.borderColor || "#FFD700"}`,
+    borderBottom: isActive ? "none" : `1px solid ${colorScheme.borderColor || "#FFD700"}`,
+    borderRadius: "8px 8px 0 0",
+    marginRight: "5px",
+    backgroundColor: isActive ? "#2F2F2F" : "#3D3D3D",
+    color: colorScheme.textColor || "#FFD700",
+  });
+
+  // Collapsible chapter headers
+  const collapsibleHeaderStyle = {
+    cursor: "pointer",
+    padding: "8px 12px",
+    margin: "6px 0",
     backgroundColor: "#2F2F2F",
-    border: `1px solid ${colorScheme.borderColor || "#FFD700"}`,
     borderRadius: "4px",
-    color: colorScheme.textColor || "#FFD700",
-    transition: "background-color 0.3s ease",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
+    border: `1px solid ${colorScheme.borderColor || "#FFD700"}`,
+    fontWeight: "bold",
   };
 
-  const activityStyle = {
-    width: "100%",
-    marginBottom: "6px",
-    padding: "6px 10px",
-    borderRadius: "4px",
-    border: `1px solid ${colorScheme.borderColor || "#FFD700"}`,
+  // Sub-chapter "card" container
+  const subChapterCardStyle = {
     backgroundColor: "#3D3D3D",
-    color: colorScheme.textColor || "#FFD700",
+    border: `1px solid ${colorScheme.borderColor || "#FFD700"}`,
+    borderRadius: "6px",
+    padding: "1rem",
+    margin: "0.5rem 0",
+  };
+
+  const subChapterTitleStyle = {
+    fontSize: "0.95rem",
+    fontWeight: "bold",
+    marginBottom: "0.5rem",
+  };
+
+  // Buttons row
+  const activityButtonsRowStyle = {
     display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
+    gap: "1rem",
   };
 
-  const truncatedTextStyle = {
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-    maxWidth: "180px",
-  };
+  const activityButtonStyle = (isEnabled) => ({
+    backgroundColor: isEnabled ? (colorScheme.heading || "#FFD700") : "#777777",
+    color: isEnabled ? "#000" : "#ccc",
+    border: "none",
+    borderRadius: "4px",
+    padding: "6px 10px",
+    cursor: isEnabled ? "pointer" : "not-allowed",
+    fontWeight: "bold",
+    fontSize: "0.9rem",
+    minWidth: "75px",
+  });
 
-  // ----------------------------------------------------------------------------------
-  // 7) Render states
-  // ----------------------------------------------------------------------------------
-
-  // If we have no localPlanIds and no plan is loaded
+  // ------------------------------------------
+  // 7) Render
+  // ------------------------------------------
   if (localPlanIds.length === 0 && !plan) {
     return (
       <div style={containerStyle}>
         <h2 style={headingStyle}>Overview Plan</h2>
-
-        {/* (A) Book ID + "Fetch Plans" UI */}
-        <div style={{ marginBottom: "1rem" }}>
-          <label style={{ marginRight: 5 }}>Book ID:</label>
-          <input
-            type="text"
-            value={bookId}
-            onChange={(e) => setBookId(e.target.value)}
-            placeholder="Enter Book ID"
-            style={{ marginRight: 8 }}
-          />
-          <button onClick={handleFetchPlansByBook}>Fetch Plans by Book</button>
+        <div>
+          No plan IDs found for userId="{userId}" and bookId="{bookId}".
         </div>
-
-        <div>No Plan IDs provided. (Either pass via props or fetch by Book ID.)</div>
       </div>
     );
   }
 
-  // If we do have localPlanIds (or plan from the fallback scenario)
   return (
     <div style={containerStyle}>
       <h2 style={headingStyle}>Overview Plan</h2>
 
-      {/* (A) Book ID + "Fetch Plans" UI */}
-      <div style={{ marginBottom: "1rem" }}>
-        <label style={{ marginRight: 5 }}>Book ID:</label>
-        <input
-          type="text"
-          value={bookId}
-          onChange={(e) => setBookId(e.target.value)}
-          placeholder="Enter Book ID"
-          style={{ marginRight: 8 }}
-        />
-        <button onClick={handleFetchPlansByBook}>Fetch Plans by Book</button>
-      </div>
-
-      {/* (B) If we have plan IDs, show the dropdown */}
-      {localPlanIds.length > 0 && (
+      {/* If there's more than 1 plan ID, show the dropdown */}
+      {localPlanIds.length > 1 && (
         <div style={{ marginBottom: "1rem" }}>
-          <label style={{ marginRight: 5 }}>Plan ID:</label>
+          <label style={{ marginRight: 5 }}>Select Plan:</label>
           <select
             value={selectedPlanId}
             onChange={(e) => setSelectedPlanId(e.target.value)}
@@ -279,83 +247,61 @@ export default function Child2({
         </div>
       )}
 
-      {/* (C) Render "loading" or plan detail */}
+      {/* Plan content */}
       {!selectedPlanId ? (
         <div>No Plan ID selected.</div>
       ) : !plan ? (
         <div>Loading plan data...</div>
       ) : (
-        <div>
-          {/* 8) Now we have "plan" => Render the sessions/books/chapters exactly like before */}
-          {renderPlanStructure(plan)}
-        </div>
+        renderPlan(plan)
       )}
     </div>
   );
 
-  // ----------------------------------------------------------------------------------
-  // 8) The existing plan structure rendering (sessions -> books -> chapters -> subchapters)
-  // ----------------------------------------------------------------------------------
-  function renderPlanStructure(planObj) {
+  // ------------------------------------------
+  // renderPlan: show each "Day" (session) as a Tab
+  // ------------------------------------------
+  function renderPlan(planObj) {
     const { sessions = [] } = planObj;
+    if (sessions.length === 0) {
+      return <div>No sessions found in this plan.</div>;
+    }
 
-    return sessions.map((sess) => {
-      const { sessionLabel, activities = [] } = sess;
-      const sessionKey = `S-${sessionLabel}`;
-      const isSessionExpanded = expandedSessions.includes(sessionKey);
-
-      // Calculate total time in this session
-      const totalTime = activities.reduce((acc, a) => acc + (a.timeNeeded || 0), 0);
-      const sessionText = `Day ${sessionLabel} — ${totalTime} min`;
-
-      return (
-        <div key={sessionLabel}>
-          <div
-            style={baseHeaderStyle}
-            onClick={() => toggleSession(sessionKey)}
-            onMouseOver={(e) => {
-              e.currentTarget.style.backgroundColor = "#505050";
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.backgroundColor = "#2F2F2F";
-            }}
-            title={sessionText}
-          >
-            <span style={truncatedTextStyle}>
-              {isSessionExpanded ? "▾" : "▸"} {sessionText}
-            </span>
-          </div>
-
-          {isSessionExpanded && renderBooksInSession(activities, sessionLabel)}
+    return (
+      <>
+        {/* Tabs for each day */}
+        <div style={tabsContainerStyle}>
+          {sessions.map((sess, index) => {
+            const { sessionLabel, activities = [] } = sess;
+            const totalTime = activities.reduce((acc, a) => acc + (a.timeNeeded || 0), 0);
+            const label = `Day ${sessionLabel} (${totalTime} min)`;
+            const isActive = index === activeSessionIndex;
+            return (
+              <div
+                key={sessionLabel}
+                style={tabStyle(isActive)}
+                onClick={() => setActiveSessionIndex(index)}
+              >
+                {label}
+              </div>
+            );
+          })}
         </div>
-      );
-    });
-  }
 
-  // ----------------- TOGGLE HANDLERS -----------------
-  function toggleSession(key) {
-    setExpandedSessions((prev) =>
-      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
-    );
-  }
-  function toggleBook(key) {
-    setExpandedBooks((prev) =>
-      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
-    );
-  }
-  function toggleChapter(key) {
-    setExpandedChapters((prev) =>
-      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
-    );
-  }
-  function toggleSub(key) {
-    setExpandedSubs((prev) =>
-      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+        {/* Render the active day's content */}
+        {renderSessionContent(sessions[activeSessionIndex], activeSessionIndex)}
+      </>
     );
   }
 
-  // ----------------- RENDER HELPERS -----------------
-  function renderBooksInSession(activities, sessionLabel) {
+  // ------------------------------------------
+  // renderSessionContent: for the active day
+  // ------------------------------------------
+  function renderSessionContent(session, sessionIndex) {
+    if (!session) return null;
+    const { activities = [] } = session;
+
+    // Group by book
     const bookMap = new Map();
     for (const act of activities) {
       if (!bookMap.has(act.bookId)) {
@@ -364,40 +310,49 @@ export default function Child2({
       bookMap.get(act.bookId).push(act);
     }
 
-    return Array.from(bookMap.entries()).map(([bookId, bookActs]) => {
-      const bKey = `S-${sessionLabel}-B-${bookId}`;
-      const isBookExpanded = expandedBooks.includes(bKey);
+    const uniqueBooks = [...bookMap.keys()];
 
-      // Summation of time in this book group
-      const totalBookTime = bookActs.reduce((acc, a) => acc + (a.timeNeeded || 0), 0);
-      const bookName = bookActs[0]?.bookName || `Book (${bookId})`;
-      const bookText = `Book: ${bookName} — ${totalBookTime} min`;
+    // If there's only one book in this day, skip the book layer entirely
+    if (uniqueBooks.length === 1) {
+      const [singleBookId] = uniqueBooks;
+      const singleBookActivities = bookMap.get(singleBookId) || [];
+      return renderChaptersLayer(singleBookActivities, sessionIndex, singleBookId, true);
+    }
 
-      return (
-        <div key={bookId} style={{ marginLeft: "1rem" }}>
-          <div
-            style={baseHeaderStyle}
-            onClick={() => toggleBook(bKey)}
-            onMouseOver={(e) => {
-              e.currentTarget.style.backgroundColor = "#505050";
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.backgroundColor = "#2F2F2F";
-            }}
-            title={bookText}
-          >
-            <span style={truncatedTextStyle}>
-              {isBookExpanded ? "▾" : "▸"} {bookText}
-            </span>
-          </div>
+    // Otherwise, show each book as a collapsible (if you still want that).
+    // If you want to collapse at the book level, you could add expand/collapse states,
+    // but for now, let's just show them as headings.
+    return (
+      <div style={{ marginTop: "1rem" }}>
+        {uniqueBooks.map((bookId) => {
+          const acts = bookMap.get(bookId) || [];
 
-          {isBookExpanded && renderChaptersInBook(bookActs, sessionLabel, bookId)}
-        </div>
-      );
-    });
+          // We can show a heading for each book, or an h3, etc.
+          // Or we could add a collapsible, if desired.
+          const bookName = acts[0]?.bookName || `Book (${bookId})`;
+          const totalBookTime = acts.reduce((acc, a) => acc + (a.timeNeeded || 0), 0);
+
+          return (
+            <div key={bookId} style={{ marginBottom: "1rem" }}>
+              <h3 style={{ fontWeight: "bold", margin: "0.75rem 0 0.25rem" }}>
+                {bookName} ({totalBookTime} min)
+              </h3>
+              {renderChaptersLayer(acts, sessionIndex, bookId, false)}
+            </div>
+          );
+        })}
+      </div>
+    );
   }
 
-  function renderChaptersInBook(activities, sessionLabel, bookId) {
+  // ------------------------------------------
+  // renderChaptersLayer: group by chapter & show collapsibles
+  //
+  // "skipBookLayer" indicates whether we've already
+  // skipped the entire "book" UI (only one book).
+  // ------------------------------------------
+  function renderChaptersLayer(activities, sessionIndex, bookId, skipBookLayer) {
+    // Group by chapter
     const chapterMap = new Map();
     for (const act of activities) {
       if (!chapterMap.has(act.chapterId)) {
@@ -406,128 +361,111 @@ export default function Child2({
       chapterMap.get(act.chapterId).push(act);
     }
 
-    return Array.from(chapterMap.entries()).map(([chapterId, chapterActs]) => {
-      const cKey = `S-${sessionLabel}-B-${bookId}-C-${chapterId}`;
-      const isChapterExpanded = expandedChapters.includes(cKey);
+    return (
+      <div style={{ marginLeft: skipBookLayer ? 0 : "1rem" }}>
+        {[...chapterMap.entries()].map(([chapterId, cActs]) => {
+          const chapterKey = `sess${sessionIndex}-book${bookId}-chap${chapterId}`;
+          const isChapterOpen = expandedChapters.includes(chapterKey);
 
-      const totalChapterTime = chapterActs.reduce((acc, a) => acc + (a.timeNeeded || 0), 0);
-      const chapterName = chapterActs[0]?.chapterName || `Chapter (${chapterId})`;
-      const chapterText = `Chapter: ${chapterName} — ${totalChapterTime} min`;
+          const chapterName = cActs[0]?.chapterName || `Chapter (${chapterId})`;
+          const totalChapterTime = cActs.reduce((acc, a) => acc + (a.timeNeeded || 0), 0);
+          const chapterLabel = `${chapterName} (${totalChapterTime} min)`;
 
-      return (
-        <div key={chapterId} style={{ marginLeft: "1.5rem" }}>
-          <div
-            style={baseHeaderStyle}
-            onClick={() => toggleChapter(cKey)}
-            onMouseOver={(e) => {
-              e.currentTarget.style.backgroundColor = "#505050";
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.backgroundColor = "#2F2F2F";
-            }}
-            title={chapterText}
-          >
-            <span style={truncatedTextStyle}>
-              {isChapterExpanded ? "▾" : "▸"} {chapterText}
-            </span>
-          </div>
-
-          {isChapterExpanded &&
-            renderSubChapters(chapterActs, sessionLabel, bookId, chapterId)}
-        </div>
-      );
-    });
+          return (
+            <div key={chapterId} style={{ marginBottom: "1rem" }}>
+              <div style={collapsibleHeaderStyle} onClick={() => toggleChapter(chapterKey)}>
+                {isChapterOpen ? "▾" : "▸"} <span style={{ marginLeft: 5 }}>{chapterLabel}</span>
+              </div>
+              {isChapterOpen && renderSubChapterCards(cActs)}
+            </div>
+          );
+        })}
+      </div>
+    );
   }
 
-  function renderSubChapters(activities, sessionLabel, bookId, chapterId) {
+  // ------------------------------------------
+  // renderSubChapterCards: group by subChapterId,
+  // and for each sub-chapter, show a "card" with
+  // up to 3 buttons: READ, QUIZ, REVISE.
+  // ------------------------------------------
+  function renderSubChapterCards(chapterActivities) {
+    // Group by sub-chapter
     const subMap = new Map();
-    for (const act of activities) {
+    for (const act of chapterActivities) {
       if (!subMap.has(act.subChapterId)) {
         subMap.set(act.subChapterId, []);
       }
       subMap.get(act.subChapterId).push(act);
     }
 
-    return Array.from(subMap.entries()).map(([subId, subActs]) => {
-      const subKey = `S-${sessionLabel}-B-${bookId}-C-${chapterId}-SUB-${subId}`;
-      const isSubExpanded = expandedSubs.includes(subKey);
-
-      const totalSubTime = subActs.reduce((acc, a) => acc + (a.timeNeeded || 0), 0);
-      const subName = subActs[0]?.subChapterName || `Sub-Chapter (${subId})`;
-      const subText = `Sub-Chapter: ${subName} — ${totalSubTime} min`;
-
-      return (
-        <div key={subId} style={{ marginLeft: "2rem" }}>
-          <div
-            style={baseHeaderStyle}
-            onClick={() => toggleSub(subKey)}
-            onMouseOver={(e) => {
-              e.currentTarget.style.backgroundColor = "#505050";
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.backgroundColor = "#2F2F2F";
-            }}
-            title={subText}
-          >
-            <span style={truncatedTextStyle}>
-              {isSubExpanded ? "▾" : "▸"} {subText}
-            </span>
-          </div>
-
-          {isSubExpanded && (
-            <div style={{ marginLeft: "2.5rem" }}>
-              {subActs.map((act, idx) => renderActivity(act, idx))}
-            </div>
-          )}
-        </div>
-      );
-    });
-  }
-
-  function renderActivity(act, idx) {
-    const key = `activity-${act.bookId}-${act.chapterId}-${act.subChapterId}-${idx}`;
-    const label = `${act.type}: ${act.subChapterName || act.subChapterId} (${
-      act.timeNeeded || 0
-    } min)`;
-
     return (
-      <div key={key} style={activityStyle} title={label}>
-        {/* Left side: click => onOverviewSelect */}
-        <div
-          style={{
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            ...truncatedTextStyle,
-          }}
-          onClick={() => onOverviewSelect(act)}
-        >
-          <span style={{ fontWeight: "bold", marginRight: "6px" }}>{act.type}:</span>
-          <span>{act.subChapterName || act.subChapterId}</span>
-          <span style={{ marginLeft: "8px", fontSize: "0.8rem" }}>
-            {act.timeNeeded || 0} min
-          </span>
-        </div>
+      <div style={{ marginTop: "0.5rem", marginLeft: "1.5rem" }}>
+        {[...subMap.entries()].map(([subId, subActs]) => {
+          // We might find read, quiz, revise among these activities
+          const readAct = subActs.find((a) => a.type === "READ");
+          const quizAct = subActs.find((a) => a.type === "QUIZ");
+          const reviseAct = subActs.find((a) => a.type === "REVISE");
 
-        {/* Right side: "Play" button => call parent's onOpenPlayer */}
-        <button
-          style={{
-            backgroundColor: colorScheme.heading || "#FFD700",
-            color: "#000",
-            border: "none",
-            borderRadius: "4px",
-            padding: "4px 8px",
-            cursor: "pointer",
-            fontWeight: "bold",
-            marginLeft: "10px",
-          }}
-          onClick={(e) => {
-            e.stopPropagation(); // don’t trigger the onOverviewSelect
-            onOpenPlayer(selectedPlanId, act, "/api/adaptive-plan");
-          }}
-        >
-          Play
-        </button>
+          // We can show the sub-chapter name (from any activity)
+          const subName = subActs[0]?.subChapterName || `Sub-Chapter (${subId})`;
+
+          return (
+            <div key={subId} style={subChapterCardStyle}>
+              <div style={subChapterTitleStyle}>{subName}</div>
+              {/* If you want to sum time, you can do so individually or collectively */}
+              <div style={activityButtonsRowStyle}>
+                {/* READ Button */}
+                <button
+                  style={activityButtonStyle(!!readAct)}
+                  disabled={!readAct}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (readAct) {
+                      onOpenPlayer(selectedPlanId, readAct, "/api/adaptive-plan");
+                    }
+                  }}
+                >
+                  {readAct
+                    ? `Read (${readAct.timeNeeded || 0}m)`
+                    : "Read"}
+                </button>
+
+                {/* QUIZ Button */}
+                <button
+                  style={activityButtonStyle(!!quizAct)}
+                  disabled={!quizAct}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (quizAct) {
+                      onOpenPlayer(selectedPlanId, quizAct, "/api/adaptive-plan");
+                    }
+                  }}
+                >
+                  {quizAct
+                    ? `Quiz (${quizAct.timeNeeded || 0}m)`
+                    : "Quiz"}
+                </button>
+
+                {/* REVISE Button */}
+                <button
+                  style={activityButtonStyle(!!reviseAct)}
+                  disabled={!reviseAct}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (reviseAct) {
+                      onOpenPlayer(selectedPlanId, reviseAct, "/api/adaptive-plan");
+                    }
+                  }}
+                >
+                  {reviseAct
+                    ? `Revise (${reviseAct.timeNeeded || 0}m)`
+                    : "Revise"}
+                </button>
+              </div>
+            </div>
+          );
+        })}
       </div>
     );
   }

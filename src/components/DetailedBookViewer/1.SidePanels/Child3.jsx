@@ -4,156 +4,174 @@ import axios from "axios";
 /**
  * Child3 (HomeSidebar logic)
  *
- * Similar structure to OverviewSidebar, but it uses a single "planId"
- * instead of an array of planIds.
+ * Similar to Child2 but uses a "single plan" concept. Now it will:
+ * 1) Accept `userId` and `bookId` from the parent.
+ * 2) Whenever `bookId` changes (and we have a userId), fetch plan IDs from e.g. `/api/home-plan-id`.
+ * 3) Pick the first plan ID returned, set it as `planId`, and fetch the plan doc.
+ * 4) Render that single plan (sessions -> books -> chapters -> subs).
  *
  * Props:
- * - userId (string) <-- NEW: so we can fetch plan by (userId, bookId)
- * - planId (string) (still supported)
- * - backendURL (string) - e.g. import.meta.env.VITE_BACKEND_URL
- * - onHomeSelect(activity) => void
- * - onOpenPlayer(planId, activity, fetchUrl) => void
- * - colorScheme (object)
+ *  - userId (string)
+ *  - bookId (string)
+ *  - planId (string) (still supported if you want to manually override)
+ *  - backendURL (string) (the base for your API calls, default is something like "http://localhost:3001")
+ *  - onHomeSelect(activity) => void
+ *  - onOpenPlayer(planId, activity, fetchUrl) => void
+ *  - colorScheme (object) => styling
  */
 
 export default function Child3({
   userId = null,
-  planId: initialPlanId,         // renamed prop to avoid confusion with local planId
+  bookId = "",
+  planId: propPlanId,  // If a parent wants to forcibly specify a planId
   backendURL = "http://localhost:3001",
   onHomeSelect = () => {},
   onOpenPlayer = () => {},
   colorScheme = {},
 }) {
-  // -------------------------------------------------------------------------
-  // 1) NEW: We’ll keep a local planId, so we can either use the prop or override it
-  // -------------------------------------------------------------------------
-  const [planId, setPlanId] = useState(initialPlanId || "");
-
-  // For the new Book ID input
-  const [bookId, setBookId] = useState("");
-
-  // The fetched plan doc
+  // --------------------------------------------------------------------
+  // 1) Local states
+  // --------------------------------------------------------------------
+  // The planId we are currently displaying
+  const [planId, setPlanId] = useState(propPlanId || "");
+  // The actual plan document (with sessions, etc.)
   const [plan, setPlan] = useState(null);
 
-  // Expanded/collapsed states
+  // Expand/collapse states
   const [expandedSessions, setExpandedSessions] = useState([]);
   const [expandedBooks, setExpandedBooks] = useState([]);
   const [expandedChapters, setExpandedChapters] = useState([]);
   const [expandedSubs, setExpandedSubs] = useState([]);
 
-  // -------------------------------------------------------------------------
-  // 2) If the prop changes, update local planId
-  // -------------------------------------------------------------------------
+  // --------------------------------------------------------------------
+  // 2) If propPlanId changes, update our local planId
+  // --------------------------------------------------------------------
   useEffect(() => {
-    setPlanId(initialPlanId || "");
-  }, [initialPlanId]);
+    setPlanId(propPlanId || "");
+  }, [propPlanId]);
 
-  // -------------------------------------------------------------------------
-  // 3) Whenever we have a planId, fetch that single plan
-  // -------------------------------------------------------------------------
+  // --------------------------------------------------------------------
+  // 3) Whenever bookId changes, automatically fetch plan IDs & pick first
+  //    from e.g. /api/home-plan-id
+  // --------------------------------------------------------------------
   useEffect(() => {
-    if (!planId) {
+    // If user or book is missing, clear everything
+    if (!userId || !bookId) {
+      setPlanId("");
       setPlan(null);
       return;
     }
 
-    async function fetchPlanData() {
+    async function fetchPlanIdsForBook() {
       try {
-        const res = await axios.get(`${backendURL}/api/adaptive-plan`, {
-          params: { planId },
+        // Example: /api/home-plan-id?userId=xxx&bookId=yyy
+        const url = `${backendURL}/api/home-plan-id`;
+        const res = await axios.get(url, {
+          params: { userId, bookId },
         });
-        if (res.data && res.data.planDoc) {
-          setPlan(res.data.planDoc);
+
+        if (res.data && res.data.planIds && res.data.planIds.length > 0) {
+          // Just pick the *first* plan ID
+          setPlanId(res.data.planIds[0]);
         } else {
-          console.error("No planDoc in response:", res.data);
+          console.warn("[Child3] No planIds found for user/book =>", userId, bookId);
+          setPlanId("");
           setPlan(null);
         }
       } catch (err) {
-        console.error("Error fetching plan:", err);
+        console.error("[Child3] Error fetching plan IDs =>", err);
+        setPlanId("");
         setPlan(null);
       }
     }
-    fetchPlanData();
+
+    fetchPlanIdsForBook();
+  }, [userId, bookId, backendURL]);
+
+  // --------------------------------------------------------------------
+  // 4) Whenever planId changes, fetch the plan doc from /api/adaptive-plan?planId=...
+  // --------------------------------------------------------------------
+  useEffect(() => {
+    if (!planId) {
+      // If we have no planId to display, clear the plan
+      setPlan(null);
+      return;
+    }
+
+    async function fetchSinglePlan() {
+      try {
+        const url = `${backendURL}/api/adaptive-plan`;
+        const res = await axios.get(url, {
+          params: { planId },
+        });
+
+        if (res.data && res.data.planDoc) {
+          setPlan(res.data.planDoc);
+        } else {
+          console.warn("[Child3] No planDoc in response =>", res.data);
+          setPlan(null);
+        }
+      } catch (err) {
+        console.error("[Child3] Error fetching plan =>", err);
+        setPlan(null);
+      }
+    }
+
+    fetchSinglePlan();
   }, [planId, backendURL]);
 
-  // -------------------------------------------------------------------------
-  // 4) Auto-expand sessions/books/chapters (sub-chapters remain collapsed)
-  // -------------------------------------------------------------------------
+  // --------------------------------------------------------------------
+  // 5) Auto-expand sessions/books/chapters whenever "plan" changes
+  // --------------------------------------------------------------------
   useEffect(() => {
     if (!plan) return;
+
     const { sessions = [] } = plan;
-    const sessionKeys = [];
-    const bookKeys = [];
-    const chapterKeys = [];
+    const sKeys = [];
+    const bKeys = [];
+    const cKeys = [];
 
     for (const sess of sessions) {
-      const { sessionLabel, activities = [] } = sess;
-      const sKey = `S-${sessionLabel}`;
-      sessionKeys.push(sKey);
+      const sKey = `S-${sess.sessionLabel}`;
+      sKeys.push(sKey);
 
+      // group by book
       const bookMap = new Map();
-      for (const act of activities) {
+      for (const act of sess.activities || []) {
         if (!bookMap.has(act.bookId)) {
           bookMap.set(act.bookId, []);
         }
         bookMap.get(act.bookId).push(act);
       }
-      for (const [bId, bookActs] of bookMap.entries()) {
-        const bKey = `S-${sessionLabel}-B-${bId}`;
-        bookKeys.push(bKey);
 
+      for (const [bId, bActs] of bookMap.entries()) {
+        const bKey = `S-${sess.sessionLabel}-B-${bId}`;
+        bKeys.push(bKey);
+
+        // group by chapter
         const chapterMap = new Map();
-        for (const a of bookActs) {
+        for (const a of bActs) {
           if (!chapterMap.has(a.chapterId)) {
             chapterMap.set(a.chapterId, []);
           }
           chapterMap.get(a.chapterId).push(a);
         }
-        for (const [chapterId] of chapterMap.entries()) {
-          const cKey = `S-${sessionLabel}-B-${bId}-C-${chapterId}`;
-          chapterKeys.push(cKey);
+        for (const cId of chapterMap.keys()) {
+          const cKey = `S-${sess.sessionLabel}-B-${bId}-C-${cId}`;
+          cKeys.push(cKey);
         }
       }
     }
-    setExpandedSessions(sessionKeys);
-    setExpandedBooks(bookKeys);
-    setExpandedChapters(chapterKeys);
+
+    setExpandedSessions(sKeys);
+    setExpandedBooks(bKeys);
+    setExpandedChapters(cKeys);
     setExpandedSubs([]);
   }, [plan]);
 
-  // -------------------------------------------------------------------------
-  // 5) NEW: Handler to fetch a plan ID from `/api/adaptive-plan-id?userId=xxx&bookId=yyy`
-  // -------------------------------------------------------------------------
-  const handleFetchPlanIdByBook = async () => {
-    if (!userId || !bookId) {
-      alert("Please enter both userId and bookId.");
-      return;
-    }
-
-    try {
-      // This endpoint should return { success: true, planIds: [...] }
-      const url = `${backendURL}/api/home-plan-id`;
-      const res = await axios.get(url, {
-        params: { userId, bookId },
-      });
-      if (res.data && res.data.planIds && res.data.planIds.length > 0) {
-        // Just pick the *first* plan ID for Child3
-        setPlanId(res.data.planIds[0]);
-      } else {
-        console.warn("No planIds found for this user/book:", res.data);
-        setPlanId("");
-        setPlan(null);
-      }
-    } catch (error) {
-      console.error("Error fetching plan IDs by bookId:", error);
-      setPlanId("");
-      setPlan(null);
-    }
-  };
-
-  // -------------------------------------------------------------------------
-  // 6) Styles
-  // -------------------------------------------------------------------------
+  // --------------------------------------------------------------------
+  // 6) Styles (unchanged from your snippet)
+  // --------------------------------------------------------------------
   const containerStyle = {
     backgroundColor: colorScheme.panelBg || "#0D0D0D",
     color: colorScheme.textColor || "#FFFFFF",
@@ -210,53 +228,29 @@ export default function Child3({
     maxWidth: "180px",
   };
 
-  // -------------------------------------------------------------------------
+  // --------------------------------------------------------------------
   // 7) Render
-  // -------------------------------------------------------------------------
-  // If no planId yet, or user can override by fetching planId from bookId
+  // --------------------------------------------------------------------
+  // If we have no planId and no plan => likely no doc or user/book
   if (!planId && !plan) {
     return (
       <div style={containerStyle}>
         <h2 style={headingStyle}>Home Plan</h2>
-
-        {/* (A) Book ID + "Fetch Plan" UI */}
-        <div style={{ marginBottom: "1rem" }}>
-          <label style={{ marginRight: 5 }}>Book ID:</label>
-          <input
-            type="text"
-            value={bookId}
-            onChange={(e) => setBookId(e.target.value)}
-            placeholder="Enter Book ID"
-            style={{ marginRight: 8 }}
-          />
-          <button onClick={handleFetchPlanIdByBook}>Fetch Plan by Book</button>
-        </div>
-
-        <p>No planId provided, and no plan loaded.</p>
+        <p>
+          No plan selected (bookId="{bookId}") or data not found. 
+          <br />
+          Try selecting a book in Child1.
+        </p>
       </div>
     );
   }
 
-  // If we have a planId but plan is not loaded yet
+  // If we have a planId but plan is still loading => show "Loading..."
   if (planId && !plan) {
     return (
       <div style={containerStyle}>
         <h2 style={headingStyle}>Home Plan</h2>
-
-        {/* (A) Book ID + "Fetch Plan" UI */}
-        <div style={{ marginBottom: "1rem" }}>
-          <label style={{ marginRight: 5 }}>Book ID:</label>
-          <input
-            type="text"
-            value={bookId}
-            onChange={(e) => setBookId(e.target.value)}
-            placeholder="Enter Book ID"
-            style={{ marginRight: 8 }}
-          />
-          <button onClick={handleFetchPlanIdByBook}>Fetch Plan by Book</button>
-        </div>
-
-        <p>Loading plan data...</p>
+        <p>Loading plan data for planId="{planId}"...</p>
       </div>
     );
   }
@@ -268,25 +262,12 @@ export default function Child3({
     return (
       <div style={containerStyle}>
         <h2 style={headingStyle}>Home Plan</h2>
-
-        {/* (A) Book ID + "Fetch Plan" UI */}
-        <div style={{ marginBottom: "1rem" }}>
-          <label style={{ marginRight: 5 }}>Book ID:</label>
-          <input
-            type="text"
-            value={bookId}
-            onChange={(e) => setBookId(e.target.value)}
-            placeholder="Enter Book ID"
-            style={{ marginRight: 8 }}
-          />
-          <button onClick={handleFetchPlanIdByBook}>Fetch Plan by Book</button>
-        </div>
-
-        {/* Render the plan structure (sessions -> books -> chapters -> subchapters) */}
+        
         {sessions.map((sess) => {
           const { sessionLabel, activities = [] } = sess;
           const sessionKey = `S-${sessionLabel}`;
           const isSessionExpanded = expandedSessions.includes(sessionKey);
+
           const totalTime = activities.reduce((acc, a) => acc + (a.timeNeeded || 0), 0);
           const sessionText = `Day ${sessionLabel} — ${totalTime} min`;
 
@@ -295,12 +276,8 @@ export default function Child3({
               <div
                 style={baseHeaderStyle}
                 onClick={() => toggleSession(sessionKey)}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.backgroundColor = "#505050";
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.backgroundColor = "#2F2F2F";
-                }}
+                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "#505050")}
+                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = "#2F2F2F")}
                 title={sessionText}
               >
                 <span style={truncatedTextStyle}>
@@ -316,7 +293,7 @@ export default function Child3({
     );
   }
 
-  // Otherwise, default fallback (shouldn’t get here if all branches are covered)
+  // Fallback
   return (
     <div style={containerStyle}>
       <h2 style={headingStyle}>Home Plan</h2>
@@ -324,36 +301,33 @@ export default function Child3({
     </div>
   );
 
-  // -------------------------------------------------------------------------
+  // --------------------------------------------------------------------
   // Toggle Handlers
-  // -------------------------------------------------------------------------
+  // --------------------------------------------------------------------
   function toggleSession(key) {
     setExpandedSessions((prev) =>
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
     );
   }
-
   function toggleBook(key) {
     setExpandedBooks((prev) =>
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
     );
   }
-
   function toggleChapter(key) {
     setExpandedChapters((prev) =>
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
     );
   }
-
   function toggleSub(key) {
     setExpandedSubs((prev) =>
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
     );
   }
 
-  // -------------------------------------------------------------------------
+  // --------------------------------------------------------------------
   // Render Helpers
-  // -------------------------------------------------------------------------
+  // --------------------------------------------------------------------
   function renderBooksInSession(activities, sessionLabel) {
     const bookMap = new Map();
     for (const act of activities) {
@@ -363,25 +337,21 @@ export default function Child3({
       bookMap.get(act.bookId).push(act);
     }
 
-    return Array.from(bookMap.entries()).map(([bookId, bookActs]) => {
-      const bKey = `S-${sessionLabel}-B-${bookId}`;
+    return Array.from(bookMap.entries()).map(([bId, bActs]) => {
+      const bKey = `S-${sessionLabel}-B-${bId}`;
       const isBookExpanded = expandedBooks.includes(bKey);
 
-      const totalBookTime = bookActs.reduce((acc, a) => acc + (a.timeNeeded || 0), 0);
-      const bookName = bookActs[0]?.bookName || `Book (${bookId})`;
+      const totalBookTime = bActs.reduce((acc, a) => acc + (a.timeNeeded || 0), 0);
+      const bookName = bActs[0]?.bookName || `Book (${bId})`;
       const bookText = `Book: ${bookName} — ${totalBookTime} min`;
 
       return (
-        <div key={bookId} style={{ marginLeft: "1rem" }}>
+        <div key={bId} style={{ marginLeft: "1rem" }}>
           <div
             style={baseHeaderStyle}
             onClick={() => toggleBook(bKey)}
-            onMouseOver={(e) => {
-              e.currentTarget.style.backgroundColor = "#505050";
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.backgroundColor = "#2F2F2F";
-            }}
+            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "#505050")}
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = "#2F2F2F")}
             title={bookText}
           >
             <span style={truncatedTextStyle}>
@@ -389,7 +359,7 @@ export default function Child3({
             </span>
           </div>
 
-          {isBookExpanded && renderChaptersInBook(bookActs, sessionLabel, bookId)}
+          {isBookExpanded && renderChaptersInBook(bActs, sessionLabel, bId)}
         </div>
       );
     });
@@ -404,25 +374,21 @@ export default function Child3({
       chapterMap.get(act.chapterId).push(act);
     }
 
-    return Array.from(chapterMap.entries()).map(([chapterId, chapterActs]) => {
-      const cKey = `S-${sessionLabel}-B-${bookId}-C-${chapterId}`;
+    return Array.from(chapterMap.entries()).map(([cId, cActs]) => {
+      const cKey = `S-${sessionLabel}-B-${bookId}-C-${cId}`;
       const isChapterExpanded = expandedChapters.includes(cKey);
 
-      const totalChapterTime = chapterActs.reduce((acc, a) => acc + (a.timeNeeded || 0), 0);
-      const chapterName = chapterActs[0]?.chapterName || `Chapter (${chapterId})`;
+      const totalChapterTime = cActs.reduce((acc, a) => acc + (a.timeNeeded || 0), 0);
+      const chapterName = cActs[0]?.chapterName || `Chapter (${cId})`;
       const chapterText = `Chapter: ${chapterName} — ${totalChapterTime} min`;
 
       return (
-        <div key={chapterId} style={{ marginLeft: "1.5rem" }}>
+        <div key={cId} style={{ marginLeft: "1.5rem" }}>
           <div
             style={baseHeaderStyle}
             onClick={() => toggleChapter(cKey)}
-            onMouseOver={(e) => {
-              e.currentTarget.style.backgroundColor = "#505050";
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.backgroundColor = "#2F2F2F";
-            }}
+            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "#505050")}
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = "#2F2F2F")}
             title={chapterText}
           >
             <span style={truncatedTextStyle}>
@@ -430,8 +396,7 @@ export default function Child3({
             </span>
           </div>
 
-          {isChapterExpanded &&
-            renderSubChapters(chapterActs, sessionLabel, bookId, chapterId)}
+          {isChapterExpanded && renderSubChapters(cActs, sessionLabel, bookId, cId)}
         </div>
       );
     });
@@ -459,12 +424,8 @@ export default function Child3({
           <div
             style={baseHeaderStyle}
             onClick={() => toggleSub(subKey)}
-            onMouseOver={(e) => {
-              e.currentTarget.style.backgroundColor = "#505050";
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.backgroundColor = "#2F2F2F";
-            }}
+            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "#505050")}
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = "#2F2F2F")}
             title={subText}
           >
             <span style={truncatedTextStyle}>

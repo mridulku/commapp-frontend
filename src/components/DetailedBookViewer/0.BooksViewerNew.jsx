@@ -195,7 +195,8 @@ function BooksViewer2() {
               gap: "20px",
             }}
           >
-            <PanelC />
+            <PanelC 
+             userId={userId}/>
             <PanelD
               categories={categories}
               selectedCategory={selectedCategory}

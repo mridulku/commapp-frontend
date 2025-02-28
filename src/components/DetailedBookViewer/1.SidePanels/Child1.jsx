@@ -1,31 +1,73 @@
-// src/components/DetailedBookViewer/Child1.jsx
-import React, { useState } from "react";
-import { Box, Typography, Button, LinearProgress } from "@mui/material";
-import { useBooksViewer } from "../useBooksViewer"; // Update the path if needed
-import UploadMaterialModal from "./UploadMaterialModal"; // Update the path if needed
+import React, { useState, useEffect } from "react";
+import axios from "axios";
+import {
+  Box,
+  Typography,
+  Button,
+  LinearProgress,
+  IconButton,
+  Pagination,
+} from "@mui/material";
+import UploadMaterialModal from "./UploadMaterialModal";
+import AddIcon from "@mui/icons-material/Add"; // or any small icon for upload
 
 /**
- * This component encapsulates all the logic and UI previously found in the
- * MaterialsDashboard. It displays a list of books with progress bars, 
- * mastery info, "Add/Remove from Plan" toggles, and the upload modal.
+ * Child1
+ * A compact vertical list of books with:
+ *  - Icon
+ *  - Book title
+ *  - Small progress bar
+ *  - Pagination if there are more than 10 books
+ *
+ * Props:
+ *   - userId (string): the user's ID
+ *   - onBookSelect (function): callback(bookId)
  */
 
-// Helper function to map a book name to an emoji icon
+// optional helper function for icon-emoji
 function getBookIcon(bookName) {
   const lower = (bookName || "").toLowerCase();
   if (lower.includes("math")) return "📐";
   if (lower.includes("science")) return "🔬";
   if (lower.includes("history")) return "🏰";
   if (lower.includes("art")) return "🎨";
-  return "📚"; // Default icon
+  return "📚"; // Default
 }
 
-export default function Child1() {
-  // 1) Grab real data from your custom hook
-  const { booksData } = useBooksViewer();
+export default function Child1({ userId, onBookSelect = () => {} }) {
+  // Book data from /api/books-user
+  const [booksData, setBooksData] = useState([]);
+  // Which book is selected
+  const [selectedBookId, setSelectedBookId] = useState(null);
+  // Upload modal
+  const [uploadOpen, setUploadOpen] = useState(false);
+  // Pagination
+  const [page, setPage] = useState(1);
+  const booksPerPage = 10;
 
-  // 2) Aggregate stats (chapters, subChapters, etc.)
-  const bookStats = (booksData || []).map((book) => {
+  useEffect(() => {
+    if (!userId) return;
+    async function fetchBooks() {
+      try {
+        const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/books-user`, {
+          params: { userId },
+        });
+        if (res.data && res.data.success) {
+          setBooksData(res.data.data); // array of books
+        } else {
+          console.warn("No data or success=false fetching books:", res.data);
+          setBooksData([]);
+        }
+      } catch (err) {
+        console.error("Error fetching books:", err);
+        setBooksData([]);
+      }
+    }
+    fetchBooks();
+  }, [userId]);
+
+  // Transform data => stats for rendering
+  const bookStats = booksData.map((book) => {
     const chapters = book.chapters || [];
     let subChaptersCount = 0;
     let subChaptersCompleted = 0;
@@ -38,164 +80,157 @@ export default function Child1() {
       });
     });
 
-    // Basic progress calculation
     const totalSubs = subChaptersCount;
     const doneSubs = subChaptersCompleted;
-    const progressPercent = totalSubs > 0 ? Math.round((doneSubs / totalSubs) * 100) : 0;
+    const progressPercent =
+      totalSubs > 0 ? Math.round((doneSubs / totalSubs) * 100) : 0;
 
     return {
       bookId: book.bookId || book.id,
       bookName: book.bookName || "Untitled Book",
-      chaptersCount: chapters.length,
-      subChaptersCount: totalSubs,
-      subChaptersCompleted: doneSubs,
       progressPercent,
-      mastery: book.mastery || "N/A",
-      targetDate: book.targetDate || "",
     };
   });
 
-  // 3) Local "in plan" toggles
-  const [planState, setPlanState] = useState({});
-  const handleTogglePlan = (bookId) => {
-    setPlanState((prev) => ({
-      ...prev,
-      [bookId]: !prev[bookId],
-    }));
+  // Pagination slice
+  const startIndex = (page - 1) * booksPerPage;
+  const endIndex = startIndex + booksPerPage;
+  const pagedBooks = bookStats.slice(startIndex, endIndex);
+
+  // Handlers
+  const handleCardClick = (bookId) => {
+    setSelectedBookId(bookId);
+    onBookSelect(bookId);
   };
 
-  // 4) Upload Material modal
-  const [uploadOpen, setUploadOpen] = useState(false);
   const handleOpenUpload = () => setUploadOpen(true);
   const handleCloseUpload = () => setUploadOpen(false);
 
   const handleUploadMaterial = (data) => {
-    // e.g. data = { name: "...", file: ... }
     console.log("Received new upload data =>", data);
     alert("Material uploaded. (Demo, not storing anywhere.)");
   };
 
+  // Render
   return (
     <Box
       sx={{
-        minHeight: "100vh",
-        backgroundColor: "#000000",
-        color: "#FFFFFF",
-        p: 4,
+        // Remove large "minHeight" so it fits the parent's layout
+        backgroundColor: "#000",
+        color: "#FFF",
+        p: 2,
         display: "flex",
         flexDirection: "column",
+        gap: 2, // small spacing between sections
       }}
     >
-      {/* Top row: Title + Upload button on the right */}
+      {/* Top Row: Title + small Upload button */}
       <Box
         sx={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          mb: 3,
+          mb: 1,
         }}
       >
-        <Typography variant="h4" sx={{ fontWeight: "bold" }}>
-          My Learning Materials
+        <Typography variant="h6" sx={{ fontWeight: "bold" }}>
+          My Materials
         </Typography>
-        <Button variant="contained" sx={{ backgroundColor: "#4CAF50" }} onClick={handleOpenUpload}>
-          Upload Material
-        </Button>
+        <IconButton
+          onClick={handleOpenUpload}
+          sx={{ color: "#4CAF50" }}
+          title="Upload Material"
+        >
+          <AddIcon />
+        </IconButton>
       </Box>
 
-      {/* If no data, show a simple message */}
+      {/* Book List */}
       {bookStats.length === 0 ? (
-        <Typography variant="body1">
-          No books found. Possibly empty or user data not loaded.
+        <Typography variant="body2">
+          No books found for userId="{userId}".
         </Typography>
       ) : (
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))",
-            gap: 3,
-          }}
-        >
-          {bookStats.map((bs) => {
-            const isInPlan = !!planState[bs.bookId];
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+          {pagedBooks.map((bs) => {
+            const isSelected = bs.bookId === selectedBookId;
             const icon = getBookIcon(bs.bookName);
+
+            // List-item style
+            const itemStyles = {
+              display: "flex",
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 1.5,
+              p: 1,
+              borderRadius: 1,
+              cursor: "pointer",
+              backgroundColor: isSelected
+                ? "rgba(187,134,252, 0.3)"
+                : "rgba(255,255,255,0.06)",
+              border: isSelected
+                ? "2px solid #BB86FC"
+                : "1px solid rgba(255,255,255,0.15)",
+              transition: "background-color 0.3s",
+            };
 
             return (
               <Box
                 key={bs.bookId}
-                sx={{
-                  backgroundColor: "rgba(255,255,255,0.1)",
-                  borderRadius: 2,
-                  p: 2,
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "space-between",
-                  minHeight: "200px",
-                }}
+                sx={itemStyles}
+                onClick={() => handleCardClick(bs.bookId)}
               >
-                {/* Icon + Title */}
-                <Box>
-                  <Typography sx={{ fontSize: "2rem" }} mb={1}>
-                    {icon}
-                  </Typography>
-                  <Typography variant="h6" sx={{ fontWeight: "bold" }} gutterBottom>
+                {/* Left: Icon */}
+                <Box
+                  sx={{
+                    fontSize: "1.5rem",
+                    width: "2rem",
+                    textAlign: "center",
+                  }}
+                >
+                  {icon}
+                </Box>
+
+                {/* Middle: Book Name & Progress bar */}
+                <Box sx={{ flex: 1 }}>
+                  <Typography
+                    variant="body1"
+                    sx={{ fontWeight: "bold", lineHeight: 1.2 }}
+                  >
                     {bs.bookName}
                   </Typography>
-
-                  {/* Progress bar */}
                   <LinearProgress
                     variant="determinate"
                     value={bs.progressPercent}
                     sx={{
-                      height: 8,
-                      borderRadius: 5,
+                      height: 6,
+                      borderRadius: 1,
                       backgroundColor: "rgba(255,255,255,0.3)",
+                      mt: 0.5,
                       "& .MuiLinearProgress-bar": {
                         backgroundColor: "#FFD700",
                       },
                     }}
                   />
-                  <Typography variant="body2" sx={{ mt: 1, opacity: 0.8 }}>
+                  <Typography variant="caption" sx={{ opacity: 0.8 }}>
                     {bs.progressPercent}% complete
                   </Typography>
-                </Box>
-
-                {/* Mastery & Target Date */}
-                <Box sx={{ mt: 2 }}>
-                  <Typography variant="body2" sx={{ mb: 0.5 }}>
-                    Mastery: <strong>{bs.mastery}</strong>
-                  </Typography>
-                  <Typography variant="body2">
-                    Target Date: {bs.targetDate || "None"}
-                  </Typography>
-                </Box>
-
-                {/* "Add to Plan" / "Remove from Plan" button */}
-                <Box sx={{ textAlign: "right", mt: 2 }}>
-                  {isInPlan ? (
-                    <Button
-                      variant="outlined"
-                      sx={{ borderColor: "#BB86FC", color: "#BB86FC" }}
-                      onClick={() => handleTogglePlan(bs.bookId)}
-                    >
-                      Remove from Plan
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="contained"
-                      sx={{
-                        backgroundColor: "#BB86FC",
-                        ":hover": { backgroundColor: "#9f6cd9" },
-                      }}
-                      onClick={() => handleTogglePlan(bs.bookId)}
-                    >
-                      Add to Plan
-                    </Button>
-                  )}
                 </Box>
               </Box>
             );
           })}
+        </Box>
+      )}
+
+      {/* Pagination (only show if more books than page size) */}
+      {bookStats.length > booksPerPage && (
+        <Box sx={{ mt: 1, display: "flex", justifyContent: "center" }}>
+          <Pagination
+            count={Math.ceil(bookStats.length / booksPerPage)}
+            page={page}
+            onChange={(e, value) => setPage(value)}
+            color="primary"
+          />
         </Box>
       )}
 
@@ -207,4 +242,4 @@ export default function Child1() {
       />
     </Box>
   );
-}
+} 
