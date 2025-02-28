@@ -279,6 +279,7 @@ function BooksViewer2() {
     // ----- NEW: Show the new component (PanelE or whichever you want) ------
     mainContent = <MaterialsDashboard 
     isCollapsed={isSidebarCollapsed}
+    userId={userId}
           onToggleCollapse={handleToggleSidebar}
           themeColors={themeColors}
           viewMode={viewMode}

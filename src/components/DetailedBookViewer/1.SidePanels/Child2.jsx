@@ -1,5 +1,3 @@
-// src/components/DetailedBookViewer/Child2.jsx
-
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 
@@ -7,46 +5,52 @@ import axios from "axios";
  * Child2
  *
  * This is the “sorted plan” component originally from 1.OverviewSidebar.
- * 
+ *
  * Props:
- *  - planIds: string[] (array of plan IDs, e.g. from Firestore)
+ *  - userId: string (the user ID, e.g. from Firebase Auth)
+ *  - planIds: string[] (array of plan IDs, e.g. from Firestore) [existing functionality]
  *  - onOverviewSelect: function(activity) => void
  *  - onOpenPlayer: function(planId, activity, fetchUrl) => void
  *  - colorScheme: optional styling overrides { panelBg, textColor, borderColor, heading }
  */
 export default function Child2({
+  userId = null,
   planIds = [],
   onOverviewSelect = () => {},
   onOpenPlayer = () => {},
   colorScheme = {},
 }) {
-  // Track which planId from the array is currently selected
+  // ----------------------------------------------------------------------------------
+  // 1) NEW: Local planIds state + a Book ID text input
+  // ----------------------------------------------------------------------------------
+  const [localPlanIds, setLocalPlanIds] = useState(planIds); // default from props
+  const [bookId, setBookId] = useState("");
+
+  // Whenever the parent prop "planIds" changes, update localPlanIds
+  useEffect(() => {
+    setLocalPlanIds(planIds);
+  }, [planIds]);
+
+  // ----------------------------------------------------------------------------------
+  // 2) Existing: Which planId is currently selected
+  // ----------------------------------------------------------------------------------
   const [selectedPlanId, setSelectedPlanId] = useState("");
 
-  // Fetched plan data
-  const [plan, setPlan] = useState(null);
-
-  // Expanded/collapsed states
-  const [expandedSessions, setExpandedSessions] = useState([]);
-  const [expandedBooks, setExpandedBooks] = useState([]);
-  const [expandedChapters, setExpandedChapters] = useState([]);
-  const [expandedSubs, setExpandedSubs] = useState([]); // sub-chapters collapsed by default
-
-  /**
-   * Whenever planIds changes, pick the first one as the default selection (if any).
-   */
+  // Whenever localPlanIds changes, pick the first one as default (if any)
   useEffect(() => {
-    if (planIds.length > 0) {
-      setSelectedPlanId(planIds[0]);
+    if (localPlanIds.length > 0) {
+      setSelectedPlanId(localPlanIds[0]);
     } else {
       setSelectedPlanId("");
       setPlan(null);
     }
-  }, [planIds]);
+  }, [localPlanIds]);
 
-  /**
-   * Fetch plan data for the currently selected planId.
-   */
+  // ----------------------------------------------------------------------------------
+  // 3) Fetch plan data for the currently selected planId
+  // ----------------------------------------------------------------------------------
+  const [plan, setPlan] = useState(null);
+
   useEffect(() => {
     if (!selectedPlanId) {
       setPlan(null);
@@ -55,12 +59,9 @@ export default function Child2({
 
     async function fetchPlanData() {
       try {
-        const res = await axios.get(
-          `${import.meta.env.VITE_BACKEND_URL}/api/adaptive-plan`,
-          {
-            params: { planId: selectedPlanId },
-          }
-        );
+        const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/adaptive-plan`, {
+          params: { planId: selectedPlanId },
+        });
         if (res.data && res.data.planDoc) {
           setPlan(res.data.planDoc);
         } else {
@@ -72,12 +73,18 @@ export default function Child2({
         setPlan(null);
       }
     }
+
     fetchPlanData();
   }, [selectedPlanId]);
 
-  /**
-   * Once plan is fetched, auto-expand sessions/books/chapters.
-   */
+  // ----------------------------------------------------------------------------------
+  // 4) Once plan is fetched, auto-expand sessions/books/chapters
+  // ----------------------------------------------------------------------------------
+  const [expandedSessions, setExpandedSessions] = useState([]);
+  const [expandedBooks, setExpandedBooks] = useState([]);
+  const [expandedChapters, setExpandedChapters] = useState([]);
+  const [expandedSubs, setExpandedSubs] = useState([]); // sub-chapters collapsed by default
+
   useEffect(() => {
     if (!plan) return;
 
@@ -100,20 +107,20 @@ export default function Child2({
         bookMap.get(act.bookId).push(act);
       }
 
-      for (const [bookId, bookActs] of bookMap.entries()) {
-        const bKey = `S-${sessionLabel}-B-${bookId}`;
+      for (const [bId, bActs] of bookMap.entries()) {
+        const bKey = `S-${sessionLabel}-B-${bId}`;
         bookKeys.push(bKey);
 
         // Group by chapter
         const chapterMap = new Map();
-        for (const a of bookActs) {
+        for (const a of bActs) {
           if (!chapterMap.has(a.chapterId)) {
             chapterMap.set(a.chapterId, []);
           }
           chapterMap.get(a.chapterId).push(a);
         }
-        for (const [chapterId] of chapterMap.entries()) {
-          const cKey = `S-${sessionLabel}-B-${bookId}-C-${chapterId}`;
+        for (const [cId] of chapterMap.entries()) {
+          const cKey = `S-${sessionLabel}-B-${bId}-C-${cId}`;
           chapterKeys.push(cKey);
         }
       }
@@ -122,10 +129,39 @@ export default function Child2({
     setExpandedSessions(sessionKeys);
     setExpandedBooks(bookKeys);
     setExpandedChapters(chapterKeys);
-    setExpandedSubs([]); // reset sub-chapters
+    setExpandedSubs([]);
   }, [plan]);
 
-  // ---------- THEMING & STYLES ----------
+  // ----------------------------------------------------------------------------------
+  // 5) NEW: Handler to fetch planIds from `/api/home-plan-id?userId=xxx&bookId=yyy`
+  // ----------------------------------------------------------------------------------
+  const handleFetchPlansByBook = async () => {
+    if (!userId || !bookId) {
+      alert("Please enter both userId and bookId.");
+      return;
+    }
+    try {
+      const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/adaptive-plan-id`, {
+        params: {
+          userId,
+          bookId,
+        },
+      });
+      if (res.data && res.data.planIds) {
+        setLocalPlanIds(res.data.planIds); // Overwrite localPlanIds with the server result
+      } else {
+        console.warn("No planIds in response:", res.data);
+        setLocalPlanIds([]);
+      }
+    } catch (error) {
+      console.error("Error fetching plan IDs by book:", error);
+      setLocalPlanIds([]);
+    }
+  };
+
+  // ----------------------------------------------------------------------------------
+  // 6) Styles
+  // ----------------------------------------------------------------------------------
   const containerStyle = {
     backgroundColor: colorScheme.panelBg || "#0D0D0D",
     color: colorScheme.textColor || "#FFD700",
@@ -180,122 +216,121 @@ export default function Child2({
     maxWidth: "180px",
   };
 
-  // ================= MAIN RENDER =================
-  // 1) If no Plan IDs at all
-  if (planIds.length === 0) {
-    return (
-      <div style={containerStyle}>
-        <h2 style={headingStyle}>Overview Plan</h2>
-        <div>No Plan IDs provided.</div>
-      </div>
-    );
-  }
+  // ----------------------------------------------------------------------------------
+  // 7) Render states
+  // ----------------------------------------------------------------------------------
 
-  // 2) If we have planIds but no selection
-  if (!selectedPlanId) {
+  // If we have no localPlanIds and no plan is loaded
+  if (localPlanIds.length === 0 && !plan) {
     return (
       <div style={containerStyle}>
         <h2 style={headingStyle}>Overview Plan</h2>
 
-        {/* Plan ID dropdown */}
-        <div>
-          <select
-            value={selectedPlanId}
-            onChange={(e) => setSelectedPlanId(e.target.value)}
-          >
-            {planIds.map((pid) => (
-              <option key={pid} value={pid}>
-                {pid}
-              </option>
-            ))}
-          </select>
+        {/* (A) Book ID + "Fetch Plans" UI */}
+        <div style={{ marginBottom: "1rem" }}>
+          <label style={{ marginRight: 5 }}>Book ID:</label>
+          <input
+            type="text"
+            value={bookId}
+            onChange={(e) => setBookId(e.target.value)}
+            placeholder="Enter Book ID"
+            style={{ marginRight: 8 }}
+          />
+          <button onClick={handleFetchPlansByBook}>Fetch Plans by Book</button>
         </div>
 
-        <div style={{ marginTop: "1rem" }}>No Plan ID selected.</div>
+        <div>No Plan IDs provided. (Either pass via props or fetch by Book ID.)</div>
       </div>
     );
   }
 
-  // 3) If we have a selectedPlanId but no plan data => loading
-  if (!plan) {
-    return (
-      <div style={containerStyle}>
-        <h2 style={headingStyle}>Overview Plan</h2>
-
-        {/* Plan ID dropdown */}
-        <div>
-          <select
-            value={selectedPlanId}
-            onChange={(e) => setSelectedPlanId(e.target.value)}
-          >
-            {planIds.map((pid) => (
-              <option key={pid} value={pid}>
-                {pid}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div style={{ marginTop: "1rem" }}>Loading plan data...</div>
-      </div>
-    );
-  }
-
-  // 4) Finally, render plan structure
-  const { sessions = [] } = plan;
-
+  // If we do have localPlanIds (or plan from the fallback scenario)
   return (
     <div style={containerStyle}>
       <h2 style={headingStyle}>Overview Plan</h2>
 
-      {/* Plan ID dropdown */}
-      <div>
-        <select
-          value={selectedPlanId}
-          onChange={(e) => setSelectedPlanId(e.target.value)}
-        >
-          {planIds.map((pid) => (
-            <option key={pid} value={pid}>
-              {pid}
-            </option>
-          ))}
-        </select>
+      {/* (A) Book ID + "Fetch Plans" UI */}
+      <div style={{ marginBottom: "1rem" }}>
+        <label style={{ marginRight: 5 }}>Book ID:</label>
+        <input
+          type="text"
+          value={bookId}
+          onChange={(e) => setBookId(e.target.value)}
+          placeholder="Enter Book ID"
+          style={{ marginRight: 8 }}
+        />
+        <button onClick={handleFetchPlansByBook}>Fetch Plans by Book</button>
       </div>
 
-      {/* Sessions */}
-      {sessions.map((sess) => {
-        const { sessionLabel, activities = [] } = sess;
-        const sessionKey = `S-${sessionLabel}`;
-        const isSessionExpanded = expandedSessions.includes(sessionKey);
+      {/* (B) If we have plan IDs, show the dropdown */}
+      {localPlanIds.length > 0 && (
+        <div style={{ marginBottom: "1rem" }}>
+          <label style={{ marginRight: 5 }}>Plan ID:</label>
+          <select
+            value={selectedPlanId}
+            onChange={(e) => setSelectedPlanId(e.target.value)}
+          >
+            {localPlanIds.map((pid) => (
+              <option key={pid} value={pid}>
+                {pid}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
-        // Calculate total time in this session
-        const totalTime = activities.reduce((acc, a) => acc + (a.timeNeeded || 0), 0);
-        const sessionText = `Day ${sessionLabel} — ${totalTime} min`;
-
-        return (
-          <div key={sessionLabel}>
-            <div
-              style={baseHeaderStyle}
-              onClick={() => toggleSession(sessionKey)}
-              onMouseOver={(e) => {
-                e.currentTarget.style.backgroundColor = "#505050";
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.backgroundColor = "#2F2F2F";
-              }}
-              title={sessionText}
-            >
-              <span style={truncatedTextStyle}>
-                {isSessionExpanded ? "▾" : "▸"} {sessionText}
-              </span>
-            </div>
-
-            {isSessionExpanded && renderBooksInSession(activities, sessionLabel)}
-          </div>
-        );
-      })}
+      {/* (C) Render "loading" or plan detail */}
+      {!selectedPlanId ? (
+        <div>No Plan ID selected.</div>
+      ) : !plan ? (
+        <div>Loading plan data...</div>
+      ) : (
+        <div>
+          {/* 8) Now we have "plan" => Render the sessions/books/chapters exactly like before */}
+          {renderPlanStructure(plan)}
+        </div>
+      )}
     </div>
   );
+
+  // ----------------------------------------------------------------------------------
+  // 8) The existing plan structure rendering (sessions -> books -> chapters -> subchapters)
+  // ----------------------------------------------------------------------------------
+  function renderPlanStructure(planObj) {
+    const { sessions = [] } = planObj;
+
+    return sessions.map((sess) => {
+      const { sessionLabel, activities = [] } = sess;
+      const sessionKey = `S-${sessionLabel}`;
+      const isSessionExpanded = expandedSessions.includes(sessionKey);
+
+      // Calculate total time in this session
+      const totalTime = activities.reduce((acc, a) => acc + (a.timeNeeded || 0), 0);
+      const sessionText = `Day ${sessionLabel} — ${totalTime} min`;
+
+      return (
+        <div key={sessionLabel}>
+          <div
+            style={baseHeaderStyle}
+            onClick={() => toggleSession(sessionKey)}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = "#505050";
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = "#2F2F2F";
+            }}
+            title={sessionText}
+          >
+            <span style={truncatedTextStyle}>
+              {isSessionExpanded ? "▾" : "▸"} {sessionText}
+            </span>
+          </div>
+
+          {isSessionExpanded && renderBooksInSession(activities, sessionLabel)}
+        </div>
+      );
+    });
+  }
 
   // ----------------- TOGGLE HANDLERS -----------------
   function toggleSession(key) {
@@ -457,7 +492,7 @@ export default function Child2({
 
     return (
       <div key={key} style={activityStyle} title={label}>
-        {/* Left side: onOverviewSelect */}
+        {/* Left side: click => onOverviewSelect */}
         <div
           style={{
             cursor: "pointer",
@@ -474,7 +509,7 @@ export default function Child2({
           </span>
         </div>
 
-        {/* Right side: "Play" button */}
+        {/* Right side: "Play" button => call parent's onOpenPlayer */}
         <button
           style={{
             backgroundColor: colorScheme.heading || "#FFD700",
@@ -487,7 +522,7 @@ export default function Child2({
             marginLeft: "10px",
           }}
           onClick={(e) => {
-            e.stopPropagation();
+            e.stopPropagation(); // don’t trigger the onOverviewSelect
             onOpenPlayer(selectedPlanId, act, "/api/adaptive-plan");
           }}
         >

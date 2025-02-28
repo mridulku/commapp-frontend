@@ -17,6 +17,7 @@ import Child3 from "./Child3";
  */
 export default function MaterialsDashboard({
   // Example props (adjust as needed):
+  userId,
   planIds = [],
   homePlanId = "",
   backendURL = import.meta.env.VITE_BACKEND_URL,
@@ -32,6 +33,7 @@ export default function MaterialsDashboard({
       {/* Child2 => "overview" logic using array of planIds */}
       <Child2
         planIds={planIds}
+        userId={userId}
         // If Child2 needs a backendURL prop:
         backendURL={backendURL}
         onOverviewSelect={onHomeSelect}
@@ -46,6 +48,7 @@ export default function MaterialsDashboard({
 
       {/* Child3 => "home" logic using single planId */}
       <Child3
+        userId={userId}
         planId={homePlanId}
         backendURL={backendURL}
         onHomeSelect={onHomeSelect}
