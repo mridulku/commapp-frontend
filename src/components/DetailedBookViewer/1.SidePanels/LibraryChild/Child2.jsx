@@ -1,15 +1,16 @@
+// src/components/DetailedBookViewer/child2.jsx
+
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 
+// We'll import the new HistoryTab for the "History" tab
+import HistoryTab from "./HistoryTab";
+
 /**
- * Child2 - Updated per your request
- *
- * 1) Day selection remains via Tabs at the top.
- * 2) If only one book in a day, skip the book layer entirely (show chapters directly).
- * 3) Chapter expansions remain (collapsible).
- * 4) Sub-chapters are displayed as small "cards" with up to 3 buttons (READ, QUIZ, REVISE).
- * 5) If an activity type is missing for a sub-chapter, the corresponding button is disabled.
- * 6) All styling remains on a dark background with gold text, easily customizable.
+ * Child2 - Minimal changes to:
+ *  - Rename heading to "Adaptive Plan"
+ *  - Add an initial "History" tab
+ *  - Rename each session tab to "Today", "Tomorrow", "Day 3", etc.
  *
  * Props:
  *  - userId: string
@@ -89,9 +90,12 @@ export default function Child2({
 
     async function fetchPlan() {
       try {
-        const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/adaptive-plan`, {
-          params: { planId: selectedPlanId },
-        });
+        const res = await axios.get(
+          `${import.meta.env.VITE_BACKEND_URL}/api/adaptive-plan`,
+          {
+            params: { planId: selectedPlanId },
+          }
+        );
         if (res.data && res.data.planDoc) {
           setPlan(res.data.planDoc);
         } else {
@@ -150,18 +154,21 @@ export default function Child2({
     color: colorScheme.heading || "#FFD700",
   };
 
-  // Tabs (Days) style
+  // The "tabs" container
   const tabsContainerStyle = {
     display: "flex",
     marginBottom: "1rem",
     borderBottom: `1px solid ${colorScheme.borderColor || "#FFD700"}`,
   };
 
+  // Single "tab" style
   const tabStyle = (isActive) => ({
     padding: "0.5rem 1rem",
     cursor: "pointer",
     border: `1px solid ${colorScheme.borderColor || "#FFD700"}`,
-    borderBottom: isActive ? "none" : `1px solid ${colorScheme.borderColor || "#FFD700"}`,
+    borderBottom: isActive
+      ? "none"
+      : `1px solid ${colorScheme.borderColor || "#FFD700"}`,
     borderRadius: "8px 8px 0 0",
     marginRight: "5px",
     backgroundColor: isActive ? "#2F2F2F" : "#3D3D3D",
@@ -201,7 +208,7 @@ export default function Child2({
   };
 
   const activityButtonStyle = (isEnabled) => ({
-    backgroundColor: isEnabled ? (colorScheme.heading || "#FFD700") : "#777777",
+    backgroundColor: isEnabled ? colorScheme.heading || "#FFD700" : "#777777",
     color: isEnabled ? "#000" : "#ccc",
     border: "none",
     borderRadius: "4px",
@@ -218,7 +225,7 @@ export default function Child2({
   if (localPlanIds.length === 0 && !plan) {
     return (
       <div style={containerStyle}>
-        <h2 style={headingStyle}>Overview Plan</h2>
+        <h2 style={headingStyle}>Adaptive Plan</h2>
         <div>
           No plan IDs found for userId="{userId}" and bookId="{bookId}".
         </div>
@@ -228,7 +235,7 @@ export default function Child2({
 
   return (
     <div style={containerStyle}>
-      <h2 style={headingStyle}>Overview Plan</h2>
+      <h2 style={headingStyle}>Adaptive Plan</h2>
 
       {/* If there's more than 1 plan ID, show the dropdown */}
       {localPlanIds.length > 1 && (
@@ -259,7 +266,7 @@ export default function Child2({
   );
 
   // ------------------------------------------
-  // renderPlan: show each "Day" (session) as a Tab
+  // renderPlan: show each "session" as a Tab, with an extra "History" tab
   // ------------------------------------------
   function renderPlan(planObj) {
     const { sessions = [] } = planObj;
@@ -269,18 +276,44 @@ export default function Child2({
 
     return (
       <>
-        {/* Tabs for each day */}
+        {/* TABS container */}
         <div style={tabsContainerStyle}>
+          {/* Tab 0 => History */}
+          <div
+            key="historyTab"
+            style={tabStyle(activeSessionIndex === 0)}
+            onClick={() => setActiveSessionIndex(0)}
+          >
+            History
+          </div>
+
+          {/* Tabs for each session => starts at index 1 */}
           {sessions.map((sess, index) => {
-            const { sessionLabel, activities = [] } = sess;
-            const totalTime = activities.reduce((acc, a) => acc + (a.timeNeeded || 0), 0);
-            const label = `Day ${sessionLabel} (${totalTime} min)`;
-            const isActive = index === activeSessionIndex;
+            const tabIndex = index + 1; // offset by 1 to account for "History"
+
+            // We'll rename session labels:
+            // If sessionLabel = 1 => "Today"
+            // If sessionLabel = 2 => "Tomorrow"
+            // Else => "Day X"
+            let sessionDisplayName;
+            const sLabel = Number(sess.sessionLabel);
+            if (sLabel === 1) sessionDisplayName = "Today";
+            else if (sLabel === 2) sessionDisplayName = "Tomorrow";
+            else sessionDisplayName = `Day ${sLabel}`;
+
+            // Compute total time for the label
+            const totalTime = (sess.activities || []).reduce(
+              (acc, a) => acc + (a.timeNeeded || 0),
+              0
+            );
+            const label = `${sessionDisplayName} (${totalTime} min)`;
+
+            const isActive = activeSessionIndex === tabIndex;
             return (
               <div
-                key={sessionLabel}
+                key={sess.sessionLabel}
                 style={tabStyle(isActive)}
-                onClick={() => setActiveSessionIndex(index)}
+                onClick={() => setActiveSessionIndex(tabIndex)}
               >
                 {label}
               </div>
@@ -288,16 +321,27 @@ export default function Child2({
           })}
         </div>
 
-        {/* Render the active day's content */}
-        {renderSessionContent(sessions[activeSessionIndex], activeSessionIndex)}
+        {/* Render the content depending on which tab is selected */}
+        {activeSessionIndex === 0
+          ? // The "History" tab
+            renderHistoryTab()
+          : // Any other tab => sessions[activeSessionIndex-1]
+            renderSessionContent(sessions[activeSessionIndex - 1])}
       </>
     );
   }
 
   // ------------------------------------------
+  // renderHistoryTab: show the HistoryTab component
+  // ------------------------------------------
+  function renderHistoryTab() {
+    return <HistoryTab />;
+  }
+
+  // ------------------------------------------
   // renderSessionContent: for the active day
   // ------------------------------------------
-  function renderSessionContent(session, sessionIndex) {
+  function renderSessionContent(session) {
     if (!session) return null;
     const { activities = [] } = session;
 
@@ -312,32 +356,30 @@ export default function Child2({
 
     const uniqueBooks = [...bookMap.keys()];
 
-    // If there's only one book in this day, skip the book layer entirely
+    // If there's only one book in this day, skip the book layer
     if (uniqueBooks.length === 1) {
       const [singleBookId] = uniqueBooks;
       const singleBookActivities = bookMap.get(singleBookId) || [];
-      return renderChaptersLayer(singleBookActivities, sessionIndex, singleBookId, true);
+      return renderChaptersLayer(singleBookActivities, singleBookId, true);
     }
 
-    // Otherwise, show each book as a collapsible (if you still want that).
-    // If you want to collapse at the book level, you could add expand/collapse states,
-    // but for now, let's just show them as headings.
+    // Otherwise, show each book as a heading & chapters
     return (
       <div style={{ marginTop: "1rem" }}>
         {uniqueBooks.map((bookId) => {
           const acts = bookMap.get(bookId) || [];
-
-          // We can show a heading for each book, or an h3, etc.
-          // Or we could add a collapsible, if desired.
           const bookName = acts[0]?.bookName || `Book (${bookId})`;
-          const totalBookTime = acts.reduce((acc, a) => acc + (a.timeNeeded || 0), 0);
+          const totalBookTime = acts.reduce(
+            (acc, a) => acc + (a.timeNeeded || 0),
+            0
+          );
 
           return (
             <div key={bookId} style={{ marginBottom: "1rem" }}>
               <h3 style={{ fontWeight: "bold", margin: "0.75rem 0 0.25rem" }}>
                 {bookName} ({totalBookTime} min)
               </h3>
-              {renderChaptersLayer(acts, sessionIndex, bookId, false)}
+              {renderChaptersLayer(acts, bookId, false)}
             </div>
           );
         })}
@@ -346,12 +388,9 @@ export default function Child2({
   }
 
   // ------------------------------------------
-  // renderChaptersLayer: group by chapter & show collapsibles
-  //
-  // "skipBookLayer" indicates whether we've already
-  // skipped the entire "book" UI (only one book).
+  // renderChaptersLayer
   // ------------------------------------------
-  function renderChaptersLayer(activities, sessionIndex, bookId, skipBookLayer) {
+  function renderChaptersLayer(activities, bookId, skipBookLayer) {
     // Group by chapter
     const chapterMap = new Map();
     for (const act of activities) {
@@ -364,17 +403,25 @@ export default function Child2({
     return (
       <div style={{ marginLeft: skipBookLayer ? 0 : "1rem" }}>
         {[...chapterMap.entries()].map(([chapterId, cActs]) => {
-          const chapterKey = `sess${sessionIndex}-book${bookId}-chap${chapterId}`;
+          const chapterKey = `book${bookId}-chap${chapterId}`;
           const isChapterOpen = expandedChapters.includes(chapterKey);
 
-          const chapterName = cActs[0]?.chapterName || `Chapter (${chapterId})`;
-          const totalChapterTime = cActs.reduce((acc, a) => acc + (a.timeNeeded || 0), 0);
+          const chapterName =
+            cActs[0]?.chapterName || `Chapter (${chapterId})`;
+          const totalChapterTime = cActs.reduce(
+            (acc, a) => acc + (a.timeNeeded || 0),
+            0
+          );
           const chapterLabel = `${chapterName} (${totalChapterTime} min)`;
 
           return (
             <div key={chapterId} style={{ marginBottom: "1rem" }}>
-              <div style={collapsibleHeaderStyle} onClick={() => toggleChapter(chapterKey)}>
-                {isChapterOpen ? "▾" : "▸"} <span style={{ marginLeft: 5 }}>{chapterLabel}</span>
+              <div
+                style={collapsibleHeaderStyle}
+                onClick={() => toggleChapter(chapterKey)}
+              >
+                {isChapterOpen ? "▾" : "▸"}{" "}
+                <span style={{ marginLeft: 5 }}>{chapterLabel}</span>
               </div>
               {isChapterOpen && renderSubChapterCards(cActs)}
             </div>
@@ -385,12 +432,10 @@ export default function Child2({
   }
 
   // ------------------------------------------
-  // renderSubChapterCards: group by subChapterId,
-  // and for each sub-chapter, show a "card" with
-  // up to 3 buttons: READ, QUIZ, REVISE.
+  // renderSubChapterCards
   // ------------------------------------------
   function renderSubChapterCards(chapterActivities) {
-    // Group by sub-chapter
+    // Group by subChapterId
     const subMap = new Map();
     for (const act of chapterActivities) {
       if (!subMap.has(act.subChapterId)) {
@@ -402,20 +447,17 @@ export default function Child2({
     return (
       <div style={{ marginTop: "0.5rem", marginLeft: "1.5rem" }}>
         {[...subMap.entries()].map(([subId, subActs]) => {
-          // We might find read, quiz, revise among these activities
           const readAct = subActs.find((a) => a.type === "READ");
           const quizAct = subActs.find((a) => a.type === "QUIZ");
           const reviseAct = subActs.find((a) => a.type === "REVISE");
-
-          // We can show the sub-chapter name (from any activity)
-          const subName = subActs[0]?.subChapterName || `Sub-Chapter (${subId})`;
+          const subName =
+            subActs[0]?.subChapterName || `Sub-Chapter (${subId})`;
 
           return (
             <div key={subId} style={subChapterCardStyle}>
               <div style={subChapterTitleStyle}>{subName}</div>
-              {/* If you want to sum time, you can do so individually or collectively */}
               <div style={activityButtonsRowStyle}>
-                {/* READ Button */}
+                {/* READ */}
                 <button
                   style={activityButtonStyle(!!readAct)}
                   disabled={!readAct}
@@ -426,12 +468,10 @@ export default function Child2({
                     }
                   }}
                 >
-                  {readAct
-                    ? `Read (${readAct.timeNeeded || 0}m)`
-                    : "Read"}
+                  {readAct ? `Read (${readAct.timeNeeded || 0}m)` : "Read"}
                 </button>
 
-                {/* QUIZ Button */}
+                {/* QUIZ */}
                 <button
                   style={activityButtonStyle(!!quizAct)}
                   disabled={!quizAct}
@@ -442,12 +482,10 @@ export default function Child2({
                     }
                   }}
                 >
-                  {quizAct
-                    ? `Quiz (${quizAct.timeNeeded || 0}m)`
-                    : "Quiz"}
+                  {quizAct ? `Quiz (${quizAct.timeNeeded || 0}m)` : "Quiz"}
                 </button>
 
-                {/* REVISE Button */}
+                {/* REVISE */}
                 <button
                   style={activityButtonStyle(!!reviseAct)}
                   disabled={!reviseAct}
@@ -458,9 +496,7 @@ export default function Child2({
                     }
                   }}
                 >
-                  {reviseAct
-                    ? `Revise (${reviseAct.timeNeeded || 0}m)`
-                    : "Revise"}
+                  {reviseAct ? `Revise (${reviseAct.timeNeeded || 0}m)` : "Revise"}
                 </button>
               </div>
             </div>

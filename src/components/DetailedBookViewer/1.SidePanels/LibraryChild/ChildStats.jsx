@@ -12,19 +12,16 @@ import {
   Paper,
   CircularProgress
 } from "@mui/material";
+
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import SubjectIcon from "@mui/icons-material/Subject";
-import SpeedIcon from "@mui/icons-material/Speed";
+import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
+import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import PsychologyIcon from "@mui/icons-material/Psychology";
 import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined";
 import QuizOutlinedIcon from "@mui/icons-material/QuizOutlined";
 import RepeatIcon from "@mui/icons-material/Repeat";
 import EditIcon from "@mui/icons-material/Edit";
-import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
-import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
-import BookmarkAddedIcon from "@mui/icons-material/BookmarkAdded";
-import InfoIcon from "@mui/icons-material/Info";
 
 import axios from "axios";
 import _ from "lodash";
@@ -35,19 +32,19 @@ import EditAdaptivePlanModal from "./EditAdaptivePlanModal";
 /**
  * ChildStats
  *
- * A panel that:
- *  1) Fetches the most recent plan for the given user/book from the backend
- *  2) Aggregates stats (reading, quiz, revise, etc.)
- *  3) Displays them in "infocard" style (icons + short labels)
- *  4) Shows "Today's Progress" and "Resume Learning" CTA
- *  5) Allows editing the plan via EditAdaptivePlanModal
+ * Shows an "infographical" summary of the user's most recent plan for a specific book:
+ *   - Row 1: Target Date, Level, Total Plan Time, Unique Chapters, Unique Subchapters
+ *   - Row 2 (with progress bars): Reading, Quiz, Revise, Overall Time
+ *   - "Today's Progress" bar
+ *   - "Resume Learning" button
+ *   - "Edit Plan" icon => opens EditAdaptivePlanModal
  *
  * Props:
  *  - userId (string)
  *  - bookId (string)
  *  - colorScheme (object)
  *  - onResume (function(bookId))
- *  - backendURL (string) - optional, or can use an ENV variable
+ *  - backendURL (string) - optional or from env
  */
 export default function ChildStats({
   userId,
@@ -56,16 +53,16 @@ export default function ChildStats({
   onResume = () => {},
   backendURL = "http://localhost:3001",
 }) {
-  // 1) UI State for plan info
+  // States for fetching and storing plan data
   const [loadingPlan, setLoadingPlan] = useState(false);
   const [planError, setPlanError] = useState(null);
   const [serverPlan, setServerPlan] = useState(null);
   const [aggregated, setAggregated] = useState(null);
 
-  // 2) Local states for "today’s progress" & "Resume Learning"
+  // "Today’s Progress" as a separate bar
   const [todaysProgress, setTodaysProgress] = useState(0);
 
-  // 3) Edit Plan Modal control
+  // Edit Plan Modal
   const [editModalOpen, setEditModalOpen] = useState(false);
 
   // Color scheme fallback
@@ -74,12 +71,12 @@ export default function ChildStats({
   const accent = colorScheme.accent || "#BB86FC";
   const borderC = colorScheme.borderColor || "#444";
 
-  // ----------------------------------------------------------
-  // FETCH MOST RECENT PLAN FOR (userId, bookId) on mount or changes
-  // ----------------------------------------------------------
+  // ---------------------------------------------------------
+  // Fetch the plan for userId + bookId whenever they change
+  // ---------------------------------------------------------
   useEffect(() => {
     if (!userId || !bookId) {
-      // If missing either, reset to no plan
+      // reset everything if missing
       setServerPlan(null);
       setAggregated(null);
       setPlanError(null);
@@ -94,31 +91,25 @@ export default function ChildStats({
         setServerPlan(null);
         setAggregated(null);
 
-        // Example GET: /api/adaptive-plans?userId=xxx
-        // Then filter or pick the one that matches this bookId, if needed
+        // GET /api/adaptive-plans?userId=xxx
         const res = await axios.get(`${backendURL}/api/adaptive-plans`, {
           params: { userId },
         });
-
         const allPlans = res.data.plans || [];
         if (!allPlans.length) {
           throw new Error("No plans found for this user.");
         }
 
-        // Potentially filter by this specific book if your plan has 'bookId' field
-        // We'll assume each plan has a sessions[] that references a single book
-        // If you store multiple books in a single plan, you'll need a different approach
+        // Filter or pick the plan for this book if your plan doc has "bookId"
         const matchingPlans = allPlans.filter((p) => {
-          // optional check if p.bookId === bookId or if sessions belong to that book
-          // if your plan doc doesn't have a direct 'bookId', you can skip filtering
-          return true; // or (p.bookId === bookId)
+          // if p.bookId === bookId, or something similar
+          return true; // or p.bookId === bookId
         });
-
         if (!matchingPlans.length) {
           throw new Error(`No plan found for bookId: ${bookId}`);
         }
 
-        // Sort so that the most recent plan is first, if you track createdAt
+        // Sort if needed for "most recent"
         // matchingPlans.sort((a, b) => b.createdAt - a.createdAt);
 
         const recentPlan = matchingPlans[0];
@@ -128,9 +119,8 @@ export default function ChildStats({
         const agg = computeAggregation(recentPlan);
         setAggregated(agg);
 
-        // Example "today’s progress" logic
-        // In a real scenario, you might read from plan sessions
-        setTodaysProgress(45); // placeholder
+        // Example placeholder for "today’s progress"
+        setTodaysProgress(30);
       } catch (err) {
         console.error("Error fetching plan:", err);
         setPlanError(err.message || "Failed to fetch plan data.");
@@ -143,7 +133,9 @@ export default function ChildStats({
   }, [userId, bookId, backendURL]);
 
   /**
-   * Helper: compute aggregator from the plan's sessions + activities
+   * Summarizes plan sessions/activities:
+   *  - total reading/quiz/revise time
+   *  - unique chapters / sub-chapters
    */
   function computeAggregation(plan) {
     if (!plan || !plan.sessions) return null;
@@ -151,14 +143,9 @@ export default function ChildStats({
     let allActivities = [];
     plan.sessions.forEach((sess) => {
       if (sess.activities) {
-        allActivities = allActivities.concat(sess.activities);
+        allActivities.push(...sess.activities);
       }
     });
-
-    // plan-level totals
-    const totalReadCount = allActivities.filter((a) => a.type === "READ").length;
-    const totalQuizCount = allActivities.filter((a) => a.type === "QUIZ").length;
-    const totalReviseCount = allActivities.filter((a) => a.type === "REVISE").length;
 
     const readTime = _.sumBy(
       allActivities.filter((a) => a.type === "READ"),
@@ -173,21 +160,18 @@ export default function ChildStats({
       "timeNeeded"
     );
 
-    const uniqueSubChapterCount = _.uniqBy(allActivities, "subChapterId").length;
-    const uniqueChapterCount = _.uniqBy(allActivities, "chapterId").length;
-
     const totalPlanTime = readTime + quizTime + reviseTime;
 
+    const uniqueChapterCount = _.uniqBy(allActivities, "chapterId").length;
+    const uniqueSubChapterCount = _.uniqBy(allActivities, "subChapterId").length;
+
     return {
-      totalPlanTime,
-      totalReadCount,
-      totalQuizCount,
-      totalReviseCount,
       readTime,
       quizTime,
       reviseTime,
-      uniqueSubChapterCount,
+      totalPlanTime,
       uniqueChapterCount,
+      uniqueSubChapterCount,
     };
   }
 
@@ -200,7 +184,7 @@ export default function ChildStats({
     return mins ? `${hrs} hr ${mins} min` : `${hrs} hr`;
   }
 
-  // Render a single "Info Card"
+  // InfoCard: No progress bar
   const InfoCard = ({ icon, label, value, tooltip }) => (
     <Tooltip title={tooltip || ""} arrow>
       <Paper
@@ -214,14 +198,20 @@ export default function ChildStats({
           alignItems: "center",
           p: 1,
           backgroundColor: "rgba(255,255,255,0.06)",
+          color: fg,
           transition: "background-color 0.3s",
           ":hover": {
             backgroundColor: "rgba(255,255,255,0.12)",
           },
         }}
       >
-        <Box sx={{ color: accent, fontSize: "1.8rem", mb: 0.5 }}>{icon}</Box>
-        <Typography variant="caption" sx={{ textTransform: "uppercase", fontSize: "0.7rem" }}>
+        <Box sx={{ color: accent, fontSize: "1.8rem", mb: 0.5 }}>
+          {icon}
+        </Box>
+        <Typography
+          variant="caption"
+          sx={{ textTransform: "uppercase", fontSize: "0.7rem" }}
+        >
           {label}
         </Typography>
         <Typography variant="body2" sx={{ fontWeight: "bold" }}>
@@ -231,13 +221,83 @@ export default function ChildStats({
     </Tooltip>
   );
 
-  // Prepare some local references for plan data
-  const planName = serverPlan?.planName || "(No Name)";
-  const planTargetDate = serverPlan?.targetDate || "N/A";
-  const planLevel = serverPlan?.level || "N/A";
-  const bookName = serverPlan?.bookName || "No Book Selected"; 
-  // Or fallback from your existing code if the plan doesn't store bookName
-  // e.g. if your plan doesn't have bookName, you might store it from the parent as well
+  // InfoCard with progress bar (done vs. total)
+  const InfoCardWithProgress = ({ icon, label, total, done = 0, tooltip }) => {
+    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+
+    return (
+      <Tooltip title={tooltip || ""} arrow>
+        <Paper
+          elevation={3}
+          sx={{
+            width: 140,
+            height: 100,
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "center",
+            p: 1,
+            backgroundColor: "rgba(255,255,255,0.06)",
+            color: fg,
+            transition: "background-color 0.3s",
+            ":hover": {
+              backgroundColor: "rgba(255,255,255,0.12)",
+            },
+          }}
+        >
+          <Box sx={{ color: accent, fontSize: "1.8rem", mb: 0.5 }}>
+            {icon}
+          </Box>
+          <Typography
+            variant="caption"
+            sx={{ textTransform: "uppercase", fontSize: "0.7rem" }}
+          >
+            {label}
+          </Typography>
+
+          <Typography variant="body2" sx={{ fontWeight: "bold" }}>
+            {formatMinutes(done)} / {formatMinutes(total)}
+          </Typography>
+
+          <LinearProgress
+            variant="determinate"
+            value={percent}
+            sx={{
+              width: "85%",
+              height: 6,
+              borderRadius: 1,
+              backgroundColor: "rgba(255,255,255,0.2)",
+              "& .MuiLinearProgress-bar": {
+                backgroundColor: accent,
+              },
+              mt: 0.5,
+            }}
+          />
+          <Typography variant="caption" sx={{ mt: 0.3 }}>
+            {percent}%
+          </Typography>
+        </Paper>
+      </Tooltip>
+    );
+  };
+
+  // If we have data, define everything
+  const planTitle = serverPlan?.planName || "(No Name)";
+  const targetDate = serverPlan?.targetDate || "N/A";
+  const masteryLevel = serverPlan?.level || "N/A";
+
+  // If aggregator is found, we show times. "done" is 0 for now
+  let readTime = 0, quizTime = 0, reviseTime = 0, totalPlanTime = 0;
+  let uniqueChapterCount = 0, uniqueSubChapterCount = 0;
+
+  if (aggregated) {
+    readTime = aggregated.readTime;
+    quizTime = aggregated.quizTime;
+    reviseTime = aggregated.reviseTime;
+    totalPlanTime = aggregated.totalPlanTime;
+    uniqueChapterCount = aggregated.uniqueChapterCount;
+    uniqueSubChapterCount = aggregated.uniqueSubChapterCount;
+  }
 
   return (
     <Box
@@ -252,13 +312,13 @@ export default function ChildStats({
         gap: 2,
       }}
     >
-      {/* HEADER: Book/Plan Title + Edit icon */}
+      {/* HEADER => Book Title + Edit */}
       <Box sx={{ display: "flex", justifyContent: "space-between" }}>
         <Typography
           variant="h5"
           sx={{ color: accent, fontWeight: "bold", mb: 1 }}
         >
-          {bookId ? bookName : "No Book Selected"}
+          {bookId ? planTitle : "No Book Selected"}
         </Typography>
 
         <IconButton
@@ -270,7 +330,7 @@ export default function ChildStats({
         </IconButton>
       </Box>
 
-      {/* LOADING / ERROR STATES */}
+      {/* LOADING / ERROR */}
       {loadingPlan && (
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <CircularProgress size={20} />
@@ -281,100 +341,115 @@ export default function ChildStats({
         <Typography sx={{ color: "red" }}>{planError}</Typography>
       )}
 
-      {/* IF WE HAVE A PLAN & AGGREGATED DATA */}
+      {/* MAIN DISPLAY if plan + aggregator exist */}
       {!loadingPlan && !planError && serverPlan && aggregated && (
         <>
-          {/* Small ID + Name text (for debugging) */}
+          {/* Debug: plan ID + name */}
           <Typography variant="body2" sx={{ fontStyle: "italic" }}>
-            Plan ID: {serverPlan.id} | {planName}
+            Plan ID: {serverPlan.id} | {planTitle}
           </Typography>
 
-          {/* InfoCard Grid */}
-          <Grid container spacing={2} justifyContent="center">
-            {/* Target Date */}
+          {/* 
+            ROW 1 => 
+              1) Target Date
+              2) Mastery Level
+              3) Total Plan Time
+              4) Unique Chapters
+              5) Unique Sub-Chapters 
+          */}
+          <Grid container spacing={2} justifyContent="center" sx={{ mb: 1 }}>
             <Grid item>
               <InfoCard
                 icon={<CalendarMonthIcon />}
                 label="Target Date"
-                value={planTargetDate}
-                tooltip="Deadline to finish the plan"
+                value={targetDate}
+                tooltip="Deadline to finish"
               />
             </Grid>
-
-            {/* Mastery Level */}
             <Grid item>
               <InfoCard
                 icon={<AssignmentTurnedInIcon />}
                 label="Mastery Level"
-                value={planLevel}
-                tooltip="How in-depth you plan to study"
+                value={masteryLevel}
+                tooltip="How deeply you plan to learn"
               />
             </Grid>
-
-            {/* Total Plan Time */}
             <Grid item>
               <InfoCard
                 icon={<AccessTimeIcon />}
                 label="Total Plan Time"
-                value={`${formatMinutes(aggregated.totalPlanTime)}`}
-                tooltip="Sum of read/quiz/revise times"
+                value={formatMinutes(totalPlanTime)}
+                tooltip="Sum of read + quiz + revise"
               />
             </Grid>
-
-            {/* Reading Time */}
-            <Grid item>
-              <InfoCard
-                icon={<MenuBookOutlinedIcon />}
-                label="Reading"
-                value={`${formatMinutes(aggregated.readTime)}`}
-                tooltip="Total reading time"
-              />
-            </Grid>
-
-            {/* Quiz Time */}
-            <Grid item>
-              <InfoCard
-                icon={<QuizOutlinedIcon />}
-                label="Quiz"
-                value={`${formatMinutes(aggregated.quizTime)}`}
-                tooltip="Total quiz time"
-              />
-            </Grid>
-
-            {/* Revise Time */}
-            <Grid item>
-              <InfoCard
-                icon={<RepeatIcon />}
-                label="Revise"
-                value={`${formatMinutes(aggregated.reviseTime)}`}
-                tooltip="Time allocated for revision"
-              />
-            </Grid>
-
-            {/* Unique Chapters */}
             <Grid item>
               <InfoCard
                 icon={<MenuBookIcon />}
-                label="Unique Chapters"
-                value={aggregated.uniqueChapterCount}
-                tooltip="Distinct chapters covered in this plan"
+                label="Chapters"
+                value={uniqueChapterCount}
+                tooltip="Distinct chapters in plan"
               />
             </Grid>
-
-            {/* Unique SubChapters */}
             <Grid item>
               <InfoCard
                 icon={<SubjectIcon />}
-                label="Unique SubChaps"
-                value={aggregated.uniqueSubChapterCount}
-                tooltip="Distinct subchapters covered in this plan"
+                label="Sub-Chapters"
+                value={uniqueSubChapterCount}
+                tooltip="Distinct subchapters"
+              />
+            </Grid>
+          </Grid>
+
+          {/* 
+            ROW 2 => each with a progress bar
+              1) Reading
+              2) Quiz
+              3) Revise
+              4) Overall Time
+            "done" is 0 for now
+          */}
+          <Grid container spacing={2} justifyContent="center">
+            <Grid item>
+              <InfoCardWithProgress
+                icon={<MenuBookOutlinedIcon />}
+                label="Reading"
+                total={readTime}
+                done={0}
+                tooltip="Reading progress"
+              />
+            </Grid>
+            <Grid item>
+              <InfoCardWithProgress
+                icon={<QuizOutlinedIcon />}
+                label="Quiz"
+                total={quizTime}
+                done={0}
+                tooltip="Quiz progress"
+              />
+            </Grid>
+            <Grid item>
+              <InfoCardWithProgress
+                icon={<RepeatIcon />}
+                label="Revise"
+                total={reviseTime}
+                done={0}
+                tooltip="Revision progress"
+              />
+            </Grid>
+            <Grid item>
+              <InfoCardWithProgress
+                icon={<AccessTimeIcon />}
+                label="Overall Time"
+                total={totalPlanTime}
+                done={0}
+                tooltip="Total time spent so far"
               />
             </Grid>
           </Grid>
         </>
       )}
 
-      {/* Today’s Progress */}
+      {/* TODAY’S PROGRESS */}
       <Box>
         <Typography variant="body1" sx={{ fontWeight: "bold", mb: 0.5 }}>
           Today’s Progress: {todaysProgress}%
@@ -410,14 +485,13 @@ export default function ChildStats({
         </Button>
       </Box>
 
-      {/* Edit Plan Modal */}
+      {/* EDIT PLAN MODAL */}
       <EditAdaptivePlanModal
         open={editModalOpen}
         onClose={() => setEditModalOpen(false)}
         userId={userId}
         backendURL={backendURL}
         colorScheme={colorScheme}
-        // You can pass existingPlanData if needed, or rely on the modal’s fetch logic
       />
     </Box>
   );
