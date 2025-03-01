@@ -2,11 +2,11 @@
 
 import React, { useState } from "react";
 import { Grid, Box, Tabs, Tab } from "@mui/material";
-import Child1 from "./Child1";
-import Child2 from "./Child2";
-import Child3 from "./Child3";
+import Child1 from "./LibraryChild/Child1";
+import Child2 from "./LibraryChild/Child2";
+import Child3 from "./LibraryChild/Child3";
 // Import your new stats component
-import ChildStats from "./ChildStats";
+import ChildStats from "./LibraryChild/ChildStats";
 
 
 export default function MaterialsDashboard({

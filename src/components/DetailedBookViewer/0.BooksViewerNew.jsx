@@ -9,7 +9,7 @@ import UnifiedSidebar from "./1.SidePanels/0.UnifiedSidebar";
 import ToursManager from "./0.1Tours/ToursManager";
 
 // Existing components...
-import BookProgress from "./2.2Library/BookProgress";
+import BookProgress from "../Archive/2.2Library/BookProgress";
 import SubchapterContent from "./4.Subchapter Content/0.SubchapterContent";
 import OverviewContent from "./2.1Overview/0.OverviewContent";
 import UserProfileAnalytics from "./2.4Profile/UserProfileAnalytics";
@@ -21,8 +21,8 @@ import PanelAdaptiveProcess from "./2.1Overview/PanelAdaptiveProcess";
 
 import PanelE from "./2.1Overview/PanelE"; // Example new component
 import StatsPanel from "./2.1Overview/1.StatsPanel";
-import BookSummary from "./2.2Library/BookSummary";
-import LibraryHome from "./2.2Library/LibraryHome";
+import BookSummary from "../Archive/2.2Library/BookSummary";
+import LibraryHome from "../Archive/2.2Library/LibraryHome";
 import AdaptiveHome from "./2.3Adaptive/AdaptiveHome";
 
 // The cinematic "player" modal
