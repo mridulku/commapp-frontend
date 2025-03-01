@@ -6,7 +6,7 @@
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
     "@mui/icons-material": "^6.4.5",
-    "@mui/material": "^6.4.5",
+    "@mui/material": "^6.4.6",
     "@mui/system": "^6.4.3",
     "@testing-library/jest-dom": "^5.16.5",
     "@testing-library/react": "^13.4.0",
@@ -19,7 +19,9 @@
     "react-joyride": "^2.9.3",
     "react-markdown": "^9.0.3",
     "react-router-dom": "^7.1.1",
+    "react-slick": "^0.30.3",
     "reactour": "^1.19.4",
+    "slick-carousel": "^1.8.1",
     "usetiful-sdk": "^0.2.0",
     "uuid": "^11.0.5",
     "web-vitals": "^3.1.0"

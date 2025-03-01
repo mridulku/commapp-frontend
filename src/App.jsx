@@ -2,11 +2,17 @@
 import React, { useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 
+import "slick-carousel/slick/slick.css";
+import "slick-carousel/slick/slick-theme.css";
+
 // 1) Import Usetiful methods
 import { loadUsetifulScript, setUsetifulTags } from "usetiful-sdk";
 
 // NEW: Landing Page (public)
 import LandingPage from "./components/PreLogin/LandingPage";
+
+import OnboardingCarousel from "./components/OnboardingCarousel";
+
 
 import BooksOverview from "./components/Archive/Archive 4/BooksOverview";
 import ReadingPlan from "./components/Archive/Archive 4/ReadingPlan";
@@ -329,7 +335,16 @@ function App() {
             </PrivateRoute>
           }
         />
+        <Route
+          path="/onboardingcarousel"
+          element={
+            <PrivateRoute>
+              <OnboardingCarousel />
+            </PrivateRoute>
+          }
+        />
       </Routes>
+      
       
 
 
