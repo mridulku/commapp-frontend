@@ -9,6 +9,8 @@ import {
   Grid,
   Tooltip,
   IconButton,
+  Paper,
+  CircularProgress
 } from "@mui/material";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import SubjectIcon from "@mui/icons-material/Subject";
@@ -19,6 +21,13 @@ import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined";
 import QuizOutlinedIcon from "@mui/icons-material/QuizOutlined";
 import RepeatIcon from "@mui/icons-material/Repeat";
 import EditIcon from "@mui/icons-material/Edit";
+import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
+import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
+import BookmarkAddedIcon from "@mui/icons-material/BookmarkAdded";
+import InfoIcon from "@mui/icons-material/Info";
+
+import axios from "axios";
+import _ from "lodash";
 
 // Import the modal for editing the plan
 import EditAdaptivePlanModal from "./EditAdaptivePlanModal";
@@ -26,90 +35,161 @@ import EditAdaptivePlanModal from "./EditAdaptivePlanModal";
 /**
  * ChildStats
  *
- * Shows:
- *  - Book title as header
- *  - Two rows of factor cards:
- *      Row 1: chapters, sub-chapters, expected reading time, reading speed
- *      Row 2: plan type (with progress), reading, quiz, revision
- *  - "Today’s Progress" bar
- *  - "Resume Learning" button
- *  - "Edit Plan" icon button => opens EditAdaptivePlanModal
+ * A panel that:
+ *  1) Fetches the most recent plan for the given user/book from the backend
+ *  2) Aggregates stats (reading, quiz, revise, etc.)
+ *  3) Displays them in "infocard" style (icons + short labels)
+ *  4) Shows "Today's Progress" and "Resume Learning" CTA
+ *  5) Allows editing the plan via EditAdaptivePlanModal
  *
  * Props:
  *  - userId (string)
  *  - bookId (string)
  *  - colorScheme (object)
  *  - onResume (function(bookId))
+ *  - backendURL (string) - optional, or can use an ENV variable
  */
 export default function ChildStats({
   userId,
   bookId,
   colorScheme = {},
   onResume = () => {},
+  backendURL = "http://localhost:3001",
 }) {
-  // Example placeholders (replace with real data).
-  const [bookTitle, setBookTitle] = useState("Sample Book Title");
-  const [chapters, setChapters] = useState(10);
-  const [subChapters, setSubChapters] = useState(50);
-  const [expectedReadingTime, setExpectedReadingTime] = useState(120); // minutes
-  const [readingSpeed, setReadingSpeed] = useState(250); // wpm
+  // 1) UI State for plan info
+  const [loadingPlan, setLoadingPlan] = useState(false);
+  const [planError, setPlanError] = useState(null);
+  const [serverPlan, setServerPlan] = useState(null);
+  const [aggregated, setAggregated] = useState(null);
 
-  // Plan Type progress (like Mastery vs. Revision)
-  const [planType, setPlanType] = useState("Mastery");
-  const [planTypeStats, setPlanTypeStats] = useState({ total: 100, done: 40 });
+  // 2) Local states for "today’s progress" & "Resume Learning"
+  const [todaysProgress, setTodaysProgress] = useState(0);
 
-  // Reading/Quiz/Revision each with total/done in minutes
-  const [readingExpected, setReadingExpected] = useState({ total: 60, done: 15 });
-  const [quizExpected, setQuizExpected] = useState({ total: 20, done: 5 });
-  const [revisionExpected, setRevisionExpected] = useState({ total: 40, done: 10 });
-
-  // "Today’s Progress"
-  const [todaysProgress, setTodaysProgress] = useState(40); // 40%
-
-  // State to manage the Edit Modal
+  // 3) Edit Plan Modal control
   const [editModalOpen, setEditModalOpen] = useState(false);
 
-  // Example existing plan data for the edit modal
-  // Typically, you'd fetch this from an API or build it from states
-  const existingPlanData = {
-    targetDate: "2025-07-20",
-    maxDays: 10,
-    wpm: 250,
-    dailyReadingTime: 30,
-    quizTime: 5,
-    reviseTime: 5,
-    level: "mastery",
-    selectedBooks: ["bookA", "bookB"],
-    selectedChapters: ["ch1", "ch2"],
-    selectedSubChapters: ["sub1", "sub2"],
-  };
-
-  useEffect(() => {
-    if (!bookId) {
-      // Reset stats if no book is selected
-      setBookTitle("No Book Selected");
-      setChapters(0);
-      setSubChapters(0);
-      setExpectedReadingTime(0);
-      setReadingSpeed(0);
-      setPlanType("N/A");
-      setPlanTypeStats({ total: 100, done: 0 });
-      setReadingExpected({ total: 0, done: 0 });
-      setQuizExpected({ total: 0, done: 0 });
-      setRevisionExpected({ total: 0, done: 0 });
-      setTodaysProgress(0);
-    } else {
-      // Otherwise, fetch real data for user/book, e.g.:
-      // GET /api/book-stats?userId=xxx&bookId=yyy
-      // Then set states accordingly. For now, placeholders are used.
-    }
-  }, [bookId]);
-
-  // Convert color scheme or fallback
+  // Color scheme fallback
   const bg = colorScheme.sidebarBg || "#222";
   const fg = colorScheme.textPrimary || "#FFF";
   const accent = colorScheme.accent || "#BB86FC";
   const borderC = colorScheme.borderColor || "#444";
+
+  // ----------------------------------------------------------
+  // FETCH MOST RECENT PLAN FOR (userId, bookId) on mount or changes
+  // ----------------------------------------------------------
+  useEffect(() => {
+    if (!userId || !bookId) {
+      // If missing either, reset to no plan
+      setServerPlan(null);
+      setAggregated(null);
+      setPlanError(null);
+      setTodaysProgress(0);
+      return;
+    }
+
+    const fetchPlan = async () => {
+      try {
+        setLoadingPlan(true);
+        setPlanError(null);
+        setServerPlan(null);
+        setAggregated(null);
+
+        // Example GET: /api/adaptive-plans?userId=xxx
+        // Then filter or pick the one that matches this bookId, if needed
+        const res = await axios.get(`${backendURL}/api/adaptive-plans`, {
+          params: { userId },
+        });
+
+        const allPlans = res.data.plans || [];
+        if (!allPlans.length) {
+          throw new Error("No plans found for this user.");
+        }
+
+        // Potentially filter by this specific book if your plan has 'bookId' field
+        // We'll assume each plan has a sessions[] that references a single book
+        // If you store multiple books in a single plan, you'll need a different approach
+        const matchingPlans = allPlans.filter((p) => {
+          // optional check if p.bookId === bookId or if sessions belong to that book
+          // if your plan doc doesn't have a direct 'bookId', you can skip filtering
+          return true; // or (p.bookId === bookId)
+        });
+
+        if (!matchingPlans.length) {
+          throw new Error(`No plan found for bookId: ${bookId}`);
+        }
+
+        // Sort so that the most recent plan is first, if you track createdAt
+        // matchingPlans.sort((a, b) => b.createdAt - a.createdAt);
+
+        const recentPlan = matchingPlans[0];
+        setServerPlan(recentPlan);
+
+        // compute aggregator
+        const agg = computeAggregation(recentPlan);
+        setAggregated(agg);
+
+        // Example "today’s progress" logic
+        // In a real scenario, you might read from plan sessions
+        setTodaysProgress(45); // placeholder
+      } catch (err) {
+        console.error("Error fetching plan:", err);
+        setPlanError(err.message || "Failed to fetch plan data.");
+      } finally {
+        setLoadingPlan(false);
+      }
+    };
+
+    fetchPlan();
+  }, [userId, bookId, backendURL]);
+
+  /**
+   * Helper: compute aggregator from the plan's sessions + activities
+   */
+  function computeAggregation(plan) {
+    if (!plan || !plan.sessions) return null;
+
+    let allActivities = [];
+    plan.sessions.forEach((sess) => {
+      if (sess.activities) {
+        allActivities = allActivities.concat(sess.activities);
+      }
+    });
+
+    // plan-level totals
+    const totalReadCount = allActivities.filter((a) => a.type === "READ").length;
+    const totalQuizCount = allActivities.filter((a) => a.type === "QUIZ").length;
+    const totalReviseCount = allActivities.filter((a) => a.type === "REVISE").length;
+
+    const readTime = _.sumBy(
+      allActivities.filter((a) => a.type === "READ"),
+      "timeNeeded"
+    );
+    const quizTime = _.sumBy(
+      allActivities.filter((a) => a.type === "QUIZ"),
+      "timeNeeded"
+    );
+    const reviseTime = _.sumBy(
+      allActivities.filter((a) => a.type === "REVISE"),
+      "timeNeeded"
+    );
+
+    const uniqueSubChapterCount = _.uniqBy(allActivities, "subChapterId").length;
+    const uniqueChapterCount = _.uniqBy(allActivities, "chapterId").length;
+
+    const totalPlanTime = readTime + quizTime + reviseTime;
+
+    return {
+      totalPlanTime,
+      totalReadCount,
+      totalQuizCount,
+      totalReviseCount,
+      readTime,
+      quizTime,
+      reviseTime,
+      uniqueSubChapterCount,
+      uniqueChapterCount,
+    };
+  }
 
   // Helper to format minutes
   function formatMinutes(min) {
@@ -119,6 +199,45 @@ export default function ChildStats({
     const mins = min % 60;
     return mins ? `${hrs} hr ${mins} min` : `${hrs} hr`;
   }
+
+  // Render a single "Info Card"
+  const InfoCard = ({ icon, label, value, tooltip }) => (
+    <Tooltip title={tooltip || ""} arrow>
+      <Paper
+        elevation={3}
+        sx={{
+          width: 140,
+          height: 100,
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          alignItems: "center",
+          p: 1,
+          backgroundColor: "rgba(255,255,255,0.06)",
+          transition: "background-color 0.3s",
+          ":hover": {
+            backgroundColor: "rgba(255,255,255,0.12)",
+          },
+        }}
+      >
+        <Box sx={{ color: accent, fontSize: "1.8rem", mb: 0.5 }}>{icon}</Box>
+        <Typography variant="caption" sx={{ textTransform: "uppercase", fontSize: "0.7rem" }}>
+          {label}
+        </Typography>
+        <Typography variant="body2" sx={{ fontWeight: "bold" }}>
+          {value}
+        </Typography>
+      </Paper>
+    </Tooltip>
+  );
+
+  // Prepare some local references for plan data
+  const planName = serverPlan?.planName || "(No Name)";
+  const planTargetDate = serverPlan?.targetDate || "N/A";
+  const planLevel = serverPlan?.level || "N/A";
+  const bookName = serverPlan?.bookName || "No Book Selected"; 
+  // Or fallback from your existing code if the plan doesn't store bookName
+  // e.g. if your plan doesn't have bookName, you might store it from the parent as well
 
   return (
     <Box
@@ -133,13 +252,13 @@ export default function ChildStats({
         gap: 2,
       }}
     >
-      {/* HEADER ROW => Book Title + Edit Plan icon button */}
+      {/* HEADER: Book/Plan Title + Edit icon */}
       <Box sx={{ display: "flex", justifyContent: "space-between" }}>
         <Typography
           variant="h5"
           sx={{ color: accent, fontWeight: "bold", mb: 1 }}
         >
-          {bookTitle}
+          {bookId ? bookName : "No Book Selected"}
         </Typography>
 
         <IconButton
@@ -151,95 +270,111 @@ export default function ChildStats({
         </IconButton>
       </Box>
 
-      {/* ROW 1: Chapters, Sub-chapters, Expected Reading, Reading Speed */}
-      <Grid container spacing={2}>
-        <Grid item xs={6} sm={6} md={3}>
-          <FactorCard
-            icon={<MenuBookIcon />}
-            label="Chapters"
-            value={chapters}
-            tooltip="Total chapters in this book"
-            accent={accent}
-          />
-        </Grid>
-        <Grid item xs={6} sm={6} md={3}>
-          <FactorCard
-            icon={<SubjectIcon />}
-            label="Sub-Chapters"
-            value={subChapters}
-            tooltip="Total sub-sections in the book"
-            accent={accent}
-          />
-        </Grid>
-        <Grid item xs={6} sm={6} md={3}>
-          <FactorCard
-            icon={<AccessTimeIcon />}
-            label="Expected Reading"
-            value={formatMinutes(expectedReadingTime)}
-            tooltip="Estimated total time to read the main content"
-            accent={accent}
-          />
-        </Grid>
-        <Grid item xs={6} sm={6} md={3}>
-          <FactorCard
-            icon={<SpeedIcon />}
-            label="Reading Speed"
-            value={`${readingSpeed} wpm`}
-            tooltip="Your assumed words-per-minute reading speed"
-            accent={accent}
-          />
-        </Grid>
-      </Grid>
+      {/* LOADING / ERROR STATES */}
+      {loadingPlan && (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <CircularProgress size={20} />
+          <Typography>Fetching plan data...</Typography>
+        </Box>
+      )}
+      {planError && (
+        <Typography sx={{ color: "red" }}>{planError}</Typography>
+      )}
 
-      {/* ROW 2: Plan Type (with progress), Reading, Quiz, Revision */}
-      <Grid container spacing={2}>
-        <Grid item xs={12} sm={6} md={3}>
-          <FactorCardWithProgress
-            icon={planType === "Mastery" ? <PsychologyIcon /> : <RepeatIcon />}
-            label="Plan Type"
-            total={planTypeStats.total}
-            done={planTypeStats.done}
-            tooltip={`This plan is set to: ${planType}`}
-            accent={accent}
-            extraValue={planType}
-          />
-        </Grid>
+      {/* IF WE HAVE A PLAN & AGGREGATED DATA */}
+      {!loadingPlan && !planError && serverPlan && aggregated && (
+        <>
+          {/* Small ID + Name text (for debugging) */}
+          <Typography variant="body2" sx={{ fontStyle: "italic" }}>
+            Plan ID: {serverPlan.id} | {planName}
+          </Typography>
 
-        <Grid item xs={12} sm={6} md={3}>
-          <FactorCardWithProgress
-            icon={<MenuBookOutlinedIcon />}
-            label="Reading"
-            total={readingExpected.total}
-            done={readingExpected.done}
-            tooltip="Time allocated to reading in minutes"
-            accent={accent}
-          />
-        </Grid>
+          {/* InfoCard Grid */}
+          <Grid container spacing={2} justifyContent="center">
+            {/* Target Date */}
+            <Grid item>
+              <InfoCard
+                icon={<CalendarMonthIcon />}
+                label="Target Date"
+                value={planTargetDate}
+                tooltip="Deadline to finish the plan"
+              />
+            </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
-          <FactorCardWithProgress
-            icon={<QuizOutlinedIcon />}
-            label="Quiz"
-            total={quizExpected.total}
-            done={quizExpected.done}
-            tooltip="Time allocated to quizzes in minutes"
-            accent={accent}
-          />
-        </Grid>
+            {/* Mastery Level */}
+            <Grid item>
+              <InfoCard
+                icon={<AssignmentTurnedInIcon />}
+                label="Mastery Level"
+                value={planLevel}
+                tooltip="How in-depth you plan to study"
+              />
+            </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
-          <FactorCardWithProgress
-            icon={<RepeatIcon />}
-            label="Revision"
-            total={revisionExpected.total}
-            done={revisionExpected.done}
-            tooltip="Time allocated to revision in minutes"
-            accent={accent}
-          />
-        </Grid>
-      </Grid>
+            {/* Total Plan Time */}
+            <Grid item>
+              <InfoCard
+                icon={<AccessTimeIcon />}
+                label="Total Plan Time"
+                value={`${formatMinutes(aggregated.totalPlanTime)}`}
+                tooltip="Sum of read/quiz/revise times"
+              />
+            </Grid>
 
-      {/* Today's Progress Bar */}
+            {/* Reading Time */}
+            <Grid item>
+              <InfoCard
+                icon={<MenuBookOutlinedIcon />}
+                label="Reading"
+                value={`${formatMinutes(aggregated.readTime)}`}
+                tooltip="Total reading time"
+              />
+            </Grid>
+
+            {/* Quiz Time */}
+            <Grid item>
+              <InfoCard
+                icon={<QuizOutlinedIcon />}
+                label="Quiz"
+                value={`${formatMinutes(aggregated.quizTime)}`}
+                tooltip="Total quiz time"
+              />
+            </Grid>
+
+            {/* Revise Time */}
+            <Grid item>
+              <InfoCard
+                icon={<RepeatIcon />}
+                label="Revise"
+                value={`${formatMinutes(aggregated.reviseTime)}`}
+                tooltip="Time allocated for revision"
+              />
+            </Grid>
+
+            {/* Unique Chapters */}
+            <Grid item>
+              <InfoCard
+                icon={<MenuBookIcon />}
+                label="Unique Chapters"
+                value={aggregated.uniqueChapterCount}
+                tooltip="Distinct chapters covered in this plan"
+              />
+            </Grid>
+
+            {/* Unique SubChapters */}
+            <Grid item>
+              <InfoCard
+                icon={<SubjectIcon />}
+                label="Unique SubChaps"
+                value={aggregated.uniqueSubChapterCount}
+                tooltip="Distinct subchapters covered in this plan"
+              />
+            </Grid>
+          </Grid>
+        </>
+      )}
+
+      {/* Today’s Progress */}
       <Box>
         <Typography variant="body1" sx={{ fontWeight: "bold", mb: 0.5 }}>
           Today’s Progress: {todaysProgress}%
@@ -275,133 +410,15 @@ export default function ChildStats({
         </Button>
       </Box>
 
-      {/* EDIT PLAN MODAL */}
+      {/* Edit Plan Modal */}
       <EditAdaptivePlanModal
         open={editModalOpen}
         onClose={() => setEditModalOpen(false)}
         userId={userId}
+        backendURL={backendURL}
         colorScheme={colorScheme}
-        existingPlanData={existingPlanData}
-        onPlanUpdate={() => {
-          // e.g. re-fetch or refresh data if needed
-          console.log("Plan updated, do any refresh here if needed");
-        }}
+        // You can pass existingPlanData if needed, or rely on the modal’s fetch logic
       />
     </Box>
-  );
-}
-
-/**
- * FactorCard: A simple card (no progress bar).
- */
-function FactorCard({ icon, label, value, tooltip, accent }) {
-  return (
-    <Tooltip title={tooltip || ""} arrow>
-      <Box
-        sx={{
-          border: "1px solid rgba(255,255,255,0.1)",
-          borderRadius: 2,
-          p: 1.5,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: 0.5,
-          cursor: tooltip ? "help" : "default",
-          backgroundColor: "rgba(255,255,255,0.06)",
-          transition: "background-color 0.3s",
-          ":hover": {
-            backgroundColor: "rgba(255,255,255,0.12)",
-          },
-        }}
-      >
-        <Box sx={{ color: accent, fontSize: "1.75rem" }}>
-          {icon}
-        </Box>
-        <Typography
-          variant="caption"
-          sx={{ textTransform: "uppercase", fontSize: "0.7rem" }}
-        >
-          {label}
-        </Typography>
-        <Typography variant="body2" sx={{ fontWeight: "bold" }}>
-          {value}
-        </Typography>
-      </Box>
-    </Tooltip>
-  );
-}
-
-/**
- * FactorCardWithProgress: similar to FactorCard but includes a small progress bar.
- * Optionally, we can show an extraValue (like "Mastery") above the bar if needed.
- */
-function FactorCardWithProgress({
-  icon,
-  label,
-  total,
-  done,
-  tooltip,
-  accent,
-  extraValue,
-}) {
-  const percent = total ? Math.round((done / total) * 100) : 0;
-
-  return (
-    <Tooltip title={tooltip || ""} arrow>
-      <Box
-        sx={{
-          border: "1px solid rgba(255,255,255,0.1)",
-          borderRadius: 2,
-          p: 1.5,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: 0.5,
-          cursor: tooltip ? "help" : "default",
-          backgroundColor: "rgba(255,255,255,0.06)",
-          transition: "background-color 0.3s",
-          ":hover": {
-            backgroundColor: "rgba(255,255,255,0.12)",
-          },
-        }}
-      >
-        <Box sx={{ color: accent, fontSize: "1.75rem" }}>{icon}</Box>
-
-        <Typography
-          variant="caption"
-          sx={{ textTransform: "uppercase", fontSize: "0.7rem" }}
-        >
-          {label}
-        </Typography>
-
-        {extraValue && (
-          <Typography variant="body2" sx={{ fontWeight: "bold" }}>
-            {extraValue}
-          </Typography>
-        )}
-
-        <Typography variant="body2" sx={{ fontWeight: "bold" }}>
-          {done} / {total} min
-        </Typography>
-
-        <LinearProgress
-          variant="determinate"
-          value={percent}
-          sx={{
-            width: "100%",
-            height: 6,
-            borderRadius: 1,
-            backgroundColor: "rgba(255,255,255,0.2)",
-            "& .MuiLinearProgress-bar": {
-              backgroundColor: accent,
-            },
-          }}
-        />
-
-        <Typography variant="caption" sx={{ opacity: 0.8 }}>
-          {percent}%
-        </Typography>
-      </Box>
-    </Tooltip>
   );
 }
