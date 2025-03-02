@@ -1,6 +1,6 @@
 // src/components/DetailedBookViewer/OnboardingFormContent.jsx
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   ref as firebaseRef,
   uploadBytesResumable,
@@ -18,8 +18,8 @@ import {
   FormControlLabel,
 } from "@mui/material";
 
-// Import your updated plan wizard
-import EditAdaptivePlanModal from "./1.SidePanels/LibraryChild/EditAdaptivePlanModal";
+// Import your final ProcessAnimation component
+import ProcessAnimation from "./ProcessAnimation"; // <-- adjust path if needed
 
 export default function OnboardingFormContent() {
   const [step, setStep] = useState(1);
@@ -33,8 +33,20 @@ export default function OnboardingFormContent() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [uploadDone, setUploadDone] = useState(false);
-  const [processing, setProcessing] = useState(false);
-  // If you eventually need "processingComplete," add it here
+
+  // We won't have a separate "processing" flag anymore; 
+  // once the upload is done, we show "Upload Complete" and the animation.
+
+  // For the user ID
+  const [currentUserId, setCurrentUserId] = useState("demoUserId");
+
+  // On mount, fetch the user from Firebase auth
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (user?.uid) {
+      setCurrentUserId(user.uid);
+    }
+  }, []);
 
   /* --------------------------------
    * STEP 1: SELECT & UPLOAD
@@ -108,7 +120,6 @@ export default function OnboardingFormContent() {
     try {
       await uploadPDF(pdfFile);
       setUploadDone(true);
-      setProcessing(true);
     } catch (err) {
       console.error("Upload error:", err);
       setUploadDone(false);
@@ -147,12 +158,13 @@ export default function OnboardingFormContent() {
   }
 
   /* --------------------------------
-   * STEP 2: ANALYZING
+   * STEP 2: SHOW UPLOAD PROGRESS OR "UPLOAD COMPLETE + ProcessAnimation"
    * -------------------------------- */
-  function Step2Analyzing() {
+  function Step2UploadingOrAnalyze() {
     return (
       <Box sx={{ p: 3, textAlign: "center" }}>
         {!uploadDone ? (
+          // Still uploading => show progress
           <>
             <Typography variant="h6" gutterBottom>
               Uploading Your PDF...
@@ -162,60 +174,20 @@ export default function OnboardingFormContent() {
             </Box>
             <Typography sx={{ mt: 1 }}>{uploadProgress}%</Typography>
           </>
-        ) : processing ? (
-          <>
+        ) : (
+          // Upload finished => show "Upload Complete" AND the ProcessAnimation component
+          <Box>
             <Typography variant="h6" gutterBottom>
               Upload Complete!
             </Typography>
             <Typography variant="body1" sx={{ mb: 2 }}>
-              Now analyzing your PDF with AI to understand different sections.
-            </Typography>
-            <Typography variant="body2" sx={{ mb: 2 }}>
-              We’re working behind the scenes to create a detailed plan. This may take
-              some time, so please be patient.
+              Now you can analyze your PDF with AI to detect chapters and sub-chapters.
             </Typography>
 
-            <Box
-              sx={{
-                width: 150,
-                height: 150,
-                margin: "0 auto",
-                background:
-                  "url('https://media.giphy.com/media/3oEjI6SIIHBdRxXI40/giphy.gif') center/cover",
-                borderRadius: "50%",
-                mb: 3,
-              }}
-            />
-
-            <Button variant="contained" onClick={() => setStep(3)}>
-              Create Adaptive Plan
-            </Button>
-          </>
-        ) : (
-          <Typography>Unexpected state encountered.</Typography>
+            {/* Render the ProcessAnimation right here */}
+            <ProcessAnimation userId={currentUserId} />
+          </Box>
         )}
-      </Box>
-    );
-  }
-
-  /* --------------------------------
-   * STEP 3: RENDER PLAN WIZARD INLINE
-   * -------------------------------- */
-  function Step3ShowPlanWizard() {
-    // We pass `renderAsDialog={false}` so it does NOT open a MUI <Dialog>.
-    return (
-      <Box sx={{ p: 3 }}>
-        <Typography variant="h6" sx={{ mb: 2 }}>
-          Step 3: Create Your Plan
-        </Typography>
-
-        <EditAdaptivePlanModal
-          renderAsDialog={false}  // Important: no separate dialog
-          open={true}             // We'll pass open={true}, but it won't matter in inline mode
-          onClose={() => setStep(2)}  // If user clicks "Back" at step=0, we go back to step=2
-          userId="demo-user-id-1234"
-          // You could pass your real backendURL or bookId here if you have them
-        />
       </Box>
     );
   }
@@ -223,8 +195,7 @@ export default function OnboardingFormContent() {
   return (
     <Box sx={{ color: "#fff" }}>
       {step === 1 && <Step1UploadForm />}
-      {step === 2 && <Step2Analyzing />}
-      {step === 3 && <Step3ShowPlanWizard />}
+      {step === 2 && <Step2UploadingOrAnalyze />}
     </Box>
   );
 }

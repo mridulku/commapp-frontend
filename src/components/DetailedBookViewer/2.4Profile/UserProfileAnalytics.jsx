@@ -5,6 +5,15 @@ import { auth } from "../../../firebase"; // Adjust import path as needed
 // Import our new child components
 import UserHistory from "./UserHistory";
 
+import ProcessingDataView from "./ProcessingDataView";
+
+import ChapterFlowView from "./ChapterFlowView";
+
+
+import ProcessAnimation from "../ProcessAnimation";
+
+
+
 
 
 function UserProfileAnalytics({ colorScheme = {} }) {
@@ -78,6 +87,11 @@ function UserProfileAnalytics({ colorScheme = {} }) {
 
           {/* User History component */}
           <UserHistory userId={userId} colorScheme={colorScheme} />
+          <ProcessingDataView userId={userId} colorScheme={colorScheme} />
+          <ChapterFlowView userId={userId} colorScheme={colorScheme} />
+          <ProcessAnimation userId={userId} colorScheme={colorScheme} />
+          
+          
        
         </>
       )}
