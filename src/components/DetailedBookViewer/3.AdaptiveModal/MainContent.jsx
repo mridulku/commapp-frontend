@@ -7,12 +7,13 @@ import ReviseView from "./ReviseView";
 
 /**
  * MainContent
- *
+ * -----------
  * Renders the right-side component based on the selectedActivity's type
  * (READ, QUIZ, REVISE, etc.).
  *
  * Props:
- *   - currentItem: object with { type, subChapterId, ... }
+ *   - currentItem: object with { type, subChapterId, level?, ... }
+ *        (You may have more fields like .bookId, .chapterId, etc.)
  *   - userId: optional user ID if needed
  *   - backendURL: your API base
  *   - onRefreshData: callback after certain actions
@@ -24,7 +25,7 @@ export default function MainContent({
   backendURL,
   onRefreshData,
 }) {
-  // If no activity selected, show a prompt
+  // 1) If no activity selected, show a prompt
   if (!currentItem) {
     return (
       <div style={placeholderStyle}>
@@ -34,7 +35,8 @@ export default function MainContent({
     );
   }
 
-  // We expect something like { type, subChapterId, ... }
+  // 2) We expect something like { type, subChapterId, ... }
+  //    "type" is how we decide which view to render.
   const { type, subChapterId } = currentItem;
   const activityType = type ? type.toLowerCase() : "";
 
@@ -53,18 +55,26 @@ export default function MainContent({
 
     case "quiz":
       // You might pass subChapterId or quiz data to QuizView
-      return <QuizView subChapterId={currentItem.subChapterId} userId={userId} level={currentItem.level} />;
-
-    
-
-
+      return (
+        <QuizView
+          subChapterId={currentItem.subChapterId}
+          userId={userId}
+          level={currentItem.level}
+        />
+      );
 
     case "revise":
     case "revision":
-      return <ReviseView subChapterId={subChapterId} userId={userId} level={currentItem.level} />;
+      return (
+        <ReviseView
+          subChapterId={subChapterId}
+          userId={userId}
+          level={currentItem.level}
+        />
+      );
 
     default:
-      // Fallback for unknown types
+      // 3) Fallback for unknown types
       return (
         <div style={placeholderStyle}>
           <h2>Unknown Activity: {type}</h2>
@@ -75,6 +85,7 @@ export default function MainContent({
   }
 }
 
+// ~~~~~~~~ STYLES ~~~~~~~~
 const placeholderStyle = {
   padding: "20px",
   color: "#fff",

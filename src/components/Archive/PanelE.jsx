@@ -1,7 +1,7 @@
 // src/components/DetailedBookViewer/PanelE.jsx
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import { auth } from "../../../firebase"; // the client auth if you still need user login
+import { auth } from "../../firebase"; // the client auth if you still need user login
 import _ from "lodash";
 
 // adjust your endpoint

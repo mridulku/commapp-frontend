@@ -197,16 +197,10 @@ function BooksViewer2() {
           >
             <PanelC 
              userId={userId}/>
-            <PanelD
-              categories={categories}
-              selectedCategory={selectedCategory}
-              onCategoryChange={handleCategoryChange}
-              booksData={displayedBooksData}
-              handleSubChapterClick={handleSubChapterClick}
-              selectedSubChapter={selectedSubChapter}
-            />
+            
             <PanelAdaptiveProcess />
           </div>
+          
         </>
       );
     

@@ -61,7 +61,7 @@ export default function OnboardingModal({ open, onClose }) {
   );
 }
 
-/** Basic styling for the parent container/modal */
+/** Basic styling for the overlay */
 const overlayStyle = {
   position: "fixed",
   top: 0,
@@ -75,11 +75,21 @@ const overlayStyle = {
   justifyContent: "center",
 };
 
+/**
+ * The main modal container: adjusted to be wider/taller
+ * so the onboarding form + plan wizard is not cramped.
+ */
 const modalStyle = {
   backgroundColor: "rgba(0,0,0,0.8)",
   padding: "20px",
   borderRadius: "8px",
-  width: "450px",
+
+  // Use a relative or percentage-based width for more space
+  width: "80vw",
+  // Optionally cap the maximum width
+  maxWidth: "1000px",
+
+  // Keep or adjust the height as needed
   maxHeight: "80vh",
   overflowY: "auto",
   position: "relative",

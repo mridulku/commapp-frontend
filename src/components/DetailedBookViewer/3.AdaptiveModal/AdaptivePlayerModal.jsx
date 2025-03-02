@@ -22,23 +22,13 @@ import {
 
 /**
  * AdaptivePlayerModal
- *
- * A modal-like component that shows:
- *   - A top bar with timer/info
- *   - A left panel that fetches the plan & displays sessions/activities
- *   - A main content area for the selected activity (READ, QUIZ, etc.)
- *   - A bottom bar for progress
- *   - An optional chat panel
- *
- * Props:
- *   - isOpen: boolean (whether to show)
- *   - onClose: function (close callback)
- *   - planId: string (the Firestore doc ID)
- *   - userId: string (optional)
- *   - initialActivityContext: { subChapterId, type } to auto-expand in LeftPanel
- *   - sessionLength: number of minutes for the session timer (default 45)
- *   - daysUntilExam: number for display (default 7)
- *   - fetchUrl: optional string route for LeftPanel to fetch from
+ * --------------------
+ * A modal-like component that:
+ *   - Renders a TopBar (timer)
+ *   - A LeftPanel (which fetches & flattens the plan, calls onPlanFlattened)
+ *   - A MainContent (displays a selected activity)
+ *   - Next/Prev arrows for linear flow
+ *   - A BottomBar and optional ChatPanel
  */
 export default function AdaptivePlayerModal({
   isOpen,
@@ -48,24 +38,12 @@ export default function AdaptivePlayerModal({
   initialActivityContext = null,
   sessionLength = 45,
   daysUntilExam = 7,
-  // NEW: pass a fetchUrl so LeftPanel can use it (default to "/api/adaptive-plan-total" or your choice)
   fetchUrl = "/api/adaptive-plan",
 }) {
-  // 1) Track the currently selected activity (READ/QUIZ/etc.)
-  const [selectedActivity, setSelectedActivity] = useState(null);
-
-  // 2) Timer logic
+  // ------------------- (1) Timer (no conditions) -------------------
   const [secondsLeft, setSecondsLeft] = useState(sessionLength * 60);
   const timerRef = useRef(null);
 
-  // 3) Chat states
-  const [chatOpen, setChatOpen] = useState(false);
-  const [chatMessages, setChatMessages] = useState([
-    { sender: "system", text: "Hello! Need help? Just ask me here." },
-  ]);
-  const [newMessage, setNewMessage] = useState("");
-
-  // Start/stop timer when the modal opens
   useEffect(() => {
     if (isOpen) {
       setSecondsLeft(sessionLength * 60);
@@ -78,30 +56,96 @@ export default function AdaptivePlayerModal({
     };
   }, [isOpen, sessionLength]);
 
-  // Don’t render anything if modal is not open
-  if (!isOpen) return null;
+  // ------------------- (2) Flattened activities array -------------------
+  // We'll get this from LeftPanel's "onPlanFlattened" callback
+  const [allActivities, setAllActivities] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(-1);
 
-  // Close button in the top bar
-  const handleClose = () => {
-    if (onClose) onClose();
-  };
+  // We also track the last item the user clicked in the left panel
+  const [selectedActivity, setSelectedActivity] = useState(null);
 
-  // Called whenever the user selects an activity from LeftPanel
-  const handleActivitySelect = (index, activity) => {
-    console.log("Clicked index=", index, "activity=", activity);
+  // Called by LeftPanel once it has fetched + flattened the plan
+  function handlePlanFlattened(flatList) {
+    console.log("[AdaptivePlayerModal] handlePlanFlattened =>", flatList);
+    setAllActivities(flatList || []);
+    if (flatList && flatList.length > 0) {
+      setCurrentIndex(0);
+    } else {
+      setCurrentIndex(-1);
+    }
+    setSelectedActivity(null);
+  }
+
+  // Called by LeftPanel whenever user clicks an activity
+  function handleActivitySelect(activity) {
+    console.log("[AdaptivePlayerModal] handleActivitySelect =>", activity);
     setSelectedActivity(activity);
-  };
+    // Optionally sync with allActivities
+    if (activity && allActivities.length) {
+      const i = allActivities.findIndex(
+        (a) => a.subChapterId === activity.subChapterId && a.type === activity.type
+      );
+      if (i >= 0) {
+        setCurrentIndex(i);
+      } else {
+        console.warn("Activity not found in allActivities array!");
+        setCurrentIndex(-1);
+      }
+    }
+  }
 
-  // Simple chat send
-  const handleChatSend = () => {
+  // Decide which item to show in the main area
+  const currentFlowItem =
+    currentIndex >= 0 && currentIndex < allActivities.length
+      ? allActivities[currentIndex]
+      : null;
+  const activityToShow = currentFlowItem || selectedActivity;
+
+  // ------------------- (3) Next/Prev logic -------------------
+  function handleNext() {
+    if (currentIndex < allActivities.length - 1) {
+      const newIndex = currentIndex + 1;
+      setCurrentIndex(newIndex);
+      setSelectedActivity(allActivities[newIndex]);
+    }
+  }
+
+  function handlePrev() {
+    if (currentIndex > 0) {
+      const newIndex = currentIndex - 1;
+      setCurrentIndex(newIndex);
+      setSelectedActivity(allActivities[newIndex]);
+    }
+  }
+
+  // ------------------- (4) Chat logic -------------------
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState([
+    { sender: "system", text: "Hello! Need help? Just ask me here." },
+  ]);
+  const [newMessage, setNewMessage] = useState("");
+
+  function handleChatSend() {
     if (!newMessage.trim()) return;
     setChatMessages((msgs) => [...msgs, { sender: "user", text: newMessage }]);
     setNewMessage("");
-  };
+  }
 
-  // Simple stepPercent for bottom bar
-  const stepPercent = selectedActivity ? 50 : 0;
+  // Step for bottom bar
+  const stepPercent = activityToShow ? 50 : 0;
 
+  // Close callback
+  function handleClose() {
+    if (onClose) onClose();
+  }
+
+  // ------------------- (5) If not open, skip rendering  -------------------
+  // (All hooks are already called unconditionally above, so it's safe)
+  if (!isOpen) {
+    return null;
+  }
+
+  // ------------------- (6) Render UI -------------------
   return (
     <div style={overlayStyle}>
       <div style={modalStyle}>
@@ -113,34 +157,61 @@ export default function AdaptivePlayerModal({
           onClose={handleClose}
         />
 
-        {/* === MAIN AREA (LeftPanel + MainContent) === */}
+        {/* === MAIN AREA === */}
         <div style={mainAreaStyle}>
-          {/* The plan-based left panel */}
+          {/* LEFT PANEL => fetches plan, flattens, calls handlePlanFlattened */}
           <LeftPanel
             planId={planId}
-            // If your left panel needs to fetch from a specific route:
-            fetchUrl={fetchUrl} 
+            fetchUrl={fetchUrl}
             backendURL={import.meta.env.VITE_BACKEND_URL}
-            onActivitySelect={handleActivitySelect}
             initialActivityContext={initialActivityContext}
+            onActivitySelect={handleActivitySelect}
+            onPlanFlattened={handlePlanFlattened}
           />
 
-          {/* The right side => show the currently selected activity */}
-          <MainContent
-            currentItem={selectedActivity}
-            userId={userId}
-            backendURL={import.meta.env.VITE_BACKEND_URL}
-            onRefreshData={handleRefreshData}
-          />
+          {/* RIGHT SIDE => show the selected/flow item */}
+          <div style={{ position: "relative", flex: 1 }}>
+            <MainContent
+              currentItem={activityToShow}
+              userId={userId}
+              backendURL={import.meta.env.VITE_BACKEND_URL}
+              onRefreshData={handleRefreshData}
+            />
+
+            {/* Next/Prev arrows */}
+            {allActivities.length > 1 && (
+              <>
+                {/* LEFT ARROW */}
+                <button
+                  style={{
+                    ...arrowButtonStyle,
+                    left: "10px",
+                  }}
+                  onClick={handlePrev}
+                  disabled={currentIndex <= 0}
+                >
+                  ◀
+                </button>
+
+                {/* RIGHT ARROW */}
+                <button
+                  style={{
+                    ...arrowButtonStyle,
+                    right: "10px",
+                  }}
+                  onClick={handleNext}
+                  disabled={currentIndex >= allActivities.length - 1}
+                >
+                  ▶
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         {/* === BOTTOM BAR === */}
         <div style={bottomBarStyle}>
-          <BottomBar
-            stepPercent={stepPercent}
-            currentIndex={0}
-            totalSteps={1}
-          />
+          <BottomBar stepPercent={stepPercent} currentIndex={0} totalSteps={1} />
         </div>
 
         {/* === CHAT PANEL === */}
@@ -156,3 +227,20 @@ export default function AdaptivePlayerModal({
     </div>
   );
 }
+
+// ---------- Style for arrow buttons ----------
+const arrowButtonStyle = {
+  position: "absolute",
+  top: "50%",
+  transform: "translateY(-50%)",
+  zIndex: 10,
+  width: "40px",
+  height: "40px",
+  borderRadius: "50%",
+  border: "none",
+  backgroundColor: "rgba(255,255,255,0.2)",
+  color: "#fff",
+  fontSize: "1.2rem",
+  cursor: "pointer",
+  transition: "background-color 0.3s",
+};

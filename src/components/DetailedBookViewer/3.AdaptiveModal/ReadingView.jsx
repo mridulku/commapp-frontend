@@ -12,14 +12,14 @@ function formatTime(totalSeconds) {
 
 /**
  * ReadingView
- * 
- * Fetches the subchapter data by subChapterId, then displays partial
- * reading logic (start/stop reading, text-size, truncated vs. expanded).
+ *
+ * Fetches subchapter data by subChapterId, then displays partial reading logic
+ * (start/stop reading, text-size, truncated vs. expanded).
  *
  * Props:
  *   - subChapterId: string (ID from your plan activity)
  *   - userId: string (optional)
- *   - backendURL: for your fetch calls
+ *   - backendURL: string (API base URL)
  *   - onRefreshData: callback if you want to refresh external data after state changes
  */
 export default function ReadingView({
@@ -29,43 +29,34 @@ export default function ReadingView({
   backendURL = "http://localhost:3001",
   onRefreshData,
 }) {
-  // 1) State: subchapter data => once we fetch it
+  // ==================== State ====================
   const [subChapter, setSubChapter] = useState(null);
-
-  // 2) localProficiency => "empty" | "reading" | "read" ...
   const [localProficiency, setLocalProficiency] = useState("empty");
-
-  // 3) partial text or full text
   const [isExpanded, setIsExpanded] = useState(false);
-
-  // 4) text-size
   const [fontSizeLevel, setFontSizeLevel] = useState(0);
 
-  // 5) Reading times
+  // Reading session times
   const [localStartMs, setLocalStartMs] = useState(null);
   const [localEndMs, setLocalEndMs] = useState(null);
   const [readingSeconds, setReadingSeconds] = useState(0);
   const [finalReadingTime, setFinalReadingTime] = useState(null);
 
-  // =========================================
-  // A) Fetch subchapter data from your backend
-  // =========================================
+  // ==================== A) Fetch subchapter ====================
   useEffect(() => {
     if (!subChapterId) return;
 
     async function fetchSubChapter() {
       try {
-        // e.g. GET /api/subchapters/:id
         const res = await axios.get(`${backendURL}/api/subchapters/${subChapterId}`);
-        // Expect shape: { subChapterId, subChapterName, summary, proficiency, wordCount, ... }
         const data = res.data;
+        if (!data) return;
 
-        setSubChapter(data || null);
+        setSubChapter(data);
 
-        // Set local proficiency from data if it exists
+        // If it has a proficiency, set local state
         setLocalProficiency(data.proficiency || "empty");
 
-        // If they have readStartTime / readEndTime, we can parse them
+        // If there's existing start/end times, apply them
         if (data.readStartTime) {
           setLocalStartMs(new Date(data.readStartTime).getTime());
         }
@@ -80,9 +71,7 @@ export default function ReadingView({
     fetchSubChapter();
   }, [subChapterId, backendURL]);
 
-  // =========================================
-  // B) Timer effect if reading
-  // =========================================
+  // ==================== B) Reading Timer ====================
   useEffect(() => {
     if (localProficiency === "reading" && localStartMs && !localEndMs) {
       const tick = () => {
@@ -98,7 +87,7 @@ export default function ReadingView({
     }
   }, [localProficiency, localStartMs, localEndMs]);
 
-  // Recompute final reading time if read
+  // Compute final reading time if user has "read"
   useEffect(() => {
     if (localProficiency === "read" && localStartMs && localEndMs) {
       const totalSec = Math.floor((localEndMs - localStartMs) / 1000);
@@ -108,47 +97,42 @@ export default function ReadingView({
     }
   }, [localProficiency, localStartMs, localEndMs]);
 
-  // If no subchapter data yet, show loading or fallback
+  // ==================== Early Returns ====================
   if (!subChapter) {
     return (
-      <div style={{ color: "#fff", padding: "20px" }}>
-        Loading subchapter {subChapterId} ...
+      <div style={outerContainer}>
+        <p>Loading subchapter {subChapterId} ...</p>
       </div>
     );
   }
 
-  // =========== Display Logic ==============
-  const {
-    subChapterName,
-    summary = "",
-    wordCount,
-    proficiency,  // might exist in the data
-  } = subChapter;
-
-  // localProficiency might override if we do local changes
-  // partial text
+  // ==================== Display Logic ====================
+  const { subChapterName, summary = "", wordCount } = subChapter;
   const maxChars = 200;
-  const truncated = summary.length > maxChars ? summary.slice(0, maxChars) + " ..." : summary;
+  const truncatedText =
+    summary.length > maxChars ? summary.slice(0, maxChars) + " ..." : summary;
 
   let displayedText;
   if (localProficiency === "empty") {
-    displayedText = truncated;
+    // Not started => truncated
+    displayedText = truncatedText;
   } else if (localProficiency === "reading") {
+    // Currently reading => full
     displayedText = summary;
   } else {
-    // "read" or "proficient" => partial or full
-    displayedText = isExpanded ? summary : truncated;
+    // "read" or "proficient"
+    displayedText = isExpanded ? summary : truncatedText;
   }
 
-  // readingTime display
-  let readingTimeDisplay = null;
+  // Reading time display
+  let readingTimeDisplay = "";
   if (localProficiency === "reading" && localStartMs && !localEndMs) {
     readingTimeDisplay = `Reading Time: ${formatTime(readingSeconds)}`;
   } else if (localProficiency === "read" && finalReadingTime) {
     readingTimeDisplay = `Total Reading: ${finalReadingTime}`;
   }
 
-  // =========== Handlers ===========
+  // ==================== Handlers ====================
   async function postUserActivity(eventType) {
     try {
       await axios.post(`${backendURL}/api/user-activities`, {
@@ -165,19 +149,16 @@ export default function ReadingView({
   async function handleStartReading() {
     setLocalProficiency("reading");
     setIsExpanded(true);
-
     const nowMs = Date.now();
     setLocalStartMs(nowMs);
     setLocalEndMs(null);
 
     try {
-      // e.g. POST /api/complete-subchapter to mark start
       await axios.post(`${backendURL}/api/complete-subchapter`, {
         userId,
         subChapterId,
         startReading: true,
       });
-
       await postUserActivity("startReading");
       onRefreshData && onRefreshData();
     } catch (error) {
@@ -191,18 +172,15 @@ export default function ReadingView({
   async function handleStopReading() {
     setLocalProficiency("read");
     setIsExpanded(true);
-
     const nowMs = Date.now();
     setLocalEndMs(nowMs);
 
     try {
-      // e.g. POST to mark end
       await axios.post(`${backendURL}/api/complete-subchapter`, {
         userId,
         subChapterId,
         endReading: true,
       });
-
       await postUserActivity("stopReading");
       onRefreshData && onRefreshData();
     } catch (error) {
@@ -213,45 +191,59 @@ export default function ReadingView({
     }
   }
 
-  // Expand/collapse if "read"/"proficient"
-  const canShowExpandCollapse =
-    localProficiency === "read" || localProficiency === "proficient";
   function toggleExpand() {
     setIsExpanded((prev) => !prev);
   }
 
-  // text size
+  // If "read"/"proficient", we can show an expand/collapse button
+  const canExpand = localProficiency === "read" || localProficiency === "proficient";
+
+  // Base font size (user can adjust via A- / A+)
   const baseFontSize = 16 + fontSizeLevel * 2;
 
   return (
-    <div style={containerStyle}>
-      <div style={headerStyle}>
+    <div style={outerContainer}>
+      {/* Header */}
+      <div style={headerSection}>
         <h2 style={{ margin: 0 }}>{subChapterName || "Subchapter Title"}</h2>
-        {wordCount && (
-          <div style={infoStyle}>
-            <strong>Words:</strong> {wordCount} |{" "}
-            <strong>Est Time:</strong> {Math.ceil(wordCount / 200)} min
-          </div>
-        )}
-        {readingTimeDisplay && (
-          <div style={infoStyle}>
-            <strong>{readingTimeDisplay}</strong>
-          </div>
-        )}
-        <div>
-          <button style={buttonStyle} onClick={() => setFontSizeLevel((p) => p - 1)}>A-</button>
-          <button style={buttonStyle} onClick={() => setFontSizeLevel((p) => p + 1)}>A+</button>
+        <div style={headerInfoRow}>
+          {wordCount != null && (
+            <div style={headerInfoItem}>
+              <strong>Words:</strong> {wordCount}
+            </div>
+          )}
+          {wordCount != null && (
+            <div style={headerInfoItem}>
+              <strong>Est Time:</strong> {Math.ceil(wordCount / 200)} min
+            </div>
+          )}
+          {readingTimeDisplay && (
+            <div style={headerInfoItem}>
+              <strong>{readingTimeDisplay}</strong>
+            </div>
+          )}
+        </div>
+        {/* Font size controls */}
+        <div style={fontSizeButtons}>
+          <button style={btnStyle} onClick={() => setFontSizeLevel((p) => p - 1)}>
+            A-
+          </button>
+          <button style={btnStyle} onClick={() => setFontSizeLevel((p) => p + 1)}>
+            A+
+          </button>
         </div>
       </div>
 
-      <div style={{ ...textStyle, fontSize: `${baseFontSize}px` }}>
+      {/* Main reading content (scrollable if long) */}
+      <div style={{ ...readingContentArea, fontSize: `${baseFontSize}px` }}>
         {displayedText}
       </div>
 
-      <div style={actionsContainer}>
+      {/* Action buttons at bottom */}
+      <div style={footerActions}>
         {renderActionButtons(localProficiency)}
-        {canShowExpandCollapse && (
-          <button style={buttonStyle} onClick={toggleExpand}>
+        {canExpand && (
+          <button style={btnStyle} onClick={toggleExpand}>
             {isExpanded ? "Collapse" : "Expand"}
           </button>
         )}
@@ -263,67 +255,101 @@ export default function ReadingView({
     switch (prof) {
       case "empty":
         return (
-          <button style={buttonStyle} onClick={handleStartReading}>
+          <button style={btnStyle} onClick={handleStartReading}>
             Start Reading
           </button>
         );
       case "reading":
         return (
-          <button style={buttonStyle} onClick={handleStopReading}>
+          <button style={btnStyle} onClick={handleStopReading}>
             Stop Reading
           </button>
         );
       case "read":
-        return <div style={infoStyle}>Reading Complete</div>;
+        return (
+          <div style={headerInfoItem}>
+            <em>Reading Complete</em>
+          </div>
+        );
       case "proficient":
-        return <div style={infoStyle}>You are Proficient!</div>;
+        return (
+          <div style={headerInfoItem}>
+            <em>You are Proficient!</em>
+          </div>
+        );
       default:
         return null;
     }
   }
 }
 
-// ~~~~~~~~~~~~~ STYLES ~~~~~~~~~~~~~
+// ----------------------------------------------------------------
+// STYLES
+// ----------------------------------------------------------------
 
-const containerStyle = {
-  backgroundColor: "rgba(255,255,255,0.1)",
-  backdropFilter: "blur(6px)",
-  padding: "15px",
-  borderRadius: "6px",
+/** Outer container: fills the entire right-side area, black background, white text. */
+const outerContainer = {
+  width: "100%",
+  height: "100%",
+  backgroundColor: "#000",
   color: "#fff",
-  margin: "20px 0",
+  display: "flex",
+  flexDirection: "column",
+  boxSizing: "border-box",
+  padding: "20px",
 };
 
-const headerStyle = {
+/** The top header area: subchapter name, word count, reading time, font-size controls, etc. */
+const headerSection = {
+  marginBottom: "16px",
   display: "flex",
   flexWrap: "wrap",
   alignItems: "center",
   justifyContent: "space-between",
-  marginBottom: "10px",
 };
 
-const infoStyle = {
-  fontSize: "0.9rem",
+/** Row of info items (word count, reading time, etc.) */
+const headerInfoRow = {
+  display: "flex",
+  gap: "10px",
+  flexWrap: "wrap",
+};
+
+/** Each small piece of info in the row */
+const headerInfoItem = {
+  fontSize: "0.85rem",
   fontStyle: "italic",
-  marginRight: "10px",
 };
 
-const textStyle = {
-  marginBottom: "15px",
-  lineHeight: "1.5",
+/** Container for the A- / A+ buttons */
+const fontSizeButtons = {
+  display: "flex",
+  gap: "6px",
+};
+
+/** The main reading content area. We allow scrolling if the text is long. */
+const readingContentArea = {
+  flex: 1,
+  overflowY: "auto",
+  lineHeight: 1.5,
+  marginBottom: "10px",
   whiteSpace: "pre-line",
 };
 
-const actionsContainer = {
+/** Footer row with reading actions (start reading, stop reading, expand, etc.) */
+const footerActions = {
   display: "flex",
+  alignItems: "center",
   gap: "8px",
 };
 
-const buttonStyle = {
+/** A simple dark button style. */
+const btnStyle = {
   backgroundColor: "#444",
   color: "#fff",
-  padding: "6px 12px",
   border: "none",
   borderRadius: "4px",
+  padding: "6px 12px",
   cursor: "pointer",
+  fontSize: "0.85rem",
 };

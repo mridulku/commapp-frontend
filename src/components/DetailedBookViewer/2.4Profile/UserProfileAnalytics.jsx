@@ -4,8 +4,7 @@ import { auth } from "../../../firebase"; // Adjust import path as needed
 
 // Import our new child components
 import UserHistory from "./UserHistory";
-import AdaptivePlanGenerator from "./AdaptivePlanGenerator.jsx";
-import PanelE from "./PanelE.jsx";
+
 
 
 function UserProfileAnalytics({ colorScheme = {} }) {
@@ -76,12 +75,10 @@ function UserProfileAnalytics({ colorScheme = {} }) {
             <p>(Any additional user info here.)</p>
           </div>
 
-          {/* Adaptive Plan Generator component */}
-          <AdaptivePlanGenerator userId={userId} colorScheme={colorScheme} />
 
           {/* User History component */}
           <UserHistory userId={userId} colorScheme={colorScheme} />
-          <PanelE userId={userId}  />
+       
         </>
       )}
     </div>

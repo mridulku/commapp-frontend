@@ -1,7 +1,6 @@
 // src/components/DetailedBookViewer/OnboardingFormContent.jsx
 
 import React, { useState } from "react";
-import axios from "axios";
 import {
   ref as firebaseRef,
   uploadBytesResumable,
@@ -13,130 +12,130 @@ import {
   Box,
   Typography,
   TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Button,
-  Grid,
-  FormHelperText,
+  CircularProgress,
+  Checkbox,
+  FormControlLabel,
 } from "@mui/material";
 
-const backendURL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
-
-const UPSC_SUBJECTS = [
-  "History",
-  "Polity & Governance",
-  "Geography",
-  "Economics",
-  "Environment & Ecology",
-  "General Science",
-  "Current Affairs",
-];
-const JEE_SUBJECTS = ["Physics", "Chemistry", "Mathematics"];
+// Import your updated plan wizard
+import EditAdaptivePlanModal from "./1.SidePanels/LibraryChild/EditAdaptivePlanModal";
 
 export default function OnboardingFormContent() {
-  // Single-step form approach collecting the same data
-  const [formData, setFormData] = useState({
-    name: "",
-    exam: "",
-    subject: "",
-    dailyHours: "",
-    preparationGoal: "",
-    additionalNote: "",
-    pdfFile: null,
-  });
+  const [step, setStep] = useState(1);
 
-  const [submitting, setSubmitting] = useState(false);
-  const [successMessage, setSuccessMessage] = useState("");
+  // File + title
+  const [pdfFile, setPdfFile] = useState(null);
+  const [pdfTitle, setPdfTitle] = useState("");
+  const [autoGenerateTitle, setAutoGenerateTitle] = useState(false);
 
-  // If exam changes, reset subject
-  const handleExamChange = (examVal) => {
-    setFormData((prev) => ({
-      ...prev,
-      exam: examVal,
-      subject: "", // reset subject if exam changes
-    }));
-  };
+  // Upload states
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [uploadDone, setUploadDone] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  // If you eventually need "processingComplete," add it here
 
-  const handlePdfSelect = (e) => {
-    const file = e.target.files?.[0];
-    setFormData((prev) => ({ ...prev, pdfFile: file || null }));
-  };
+  /* --------------------------------
+   * STEP 1: SELECT & UPLOAD
+   * -------------------------------- */
+  function Step1UploadForm() {
+    return (
+      <Box sx={{ p: 3, textAlign: "center" }}>
+        <Typography variant="h6" gutterBottom>
+          Upload Your PDF
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Choose your PDF file and enter a title (or auto-generate).
+        </Typography>
 
-  // Based on exam, choose subject array
-  let subjectOptions = [];
-  if (formData.exam === "UPSC") subjectOptions = UPSC_SUBJECTS;
-  if (formData.exam === "IIT JEE") subjectOptions = JEE_SUBJECTS;
+        {/* File Picker */}
+        <Button variant="contained" component="label" sx={{ mb: 2 }}>
+          Choose PDF
+          <input
+            type="file"
+            accept="application/pdf"
+            hidden
+            onChange={(e) => setPdfFile(e.target.files?.[0] || null)}
+          />
+        </Button>
+        {pdfFile && (
+          <Typography variant="subtitle2" sx={{ mt: 1 }}>
+            Selected: {pdfFile.name}
+          </Typography>
+        )}
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setSubmitting(true);
-    setSuccessMessage("");
+        {/* PDF Title or auto-generate */}
+        <Box sx={{ mt: 2 }}>
+          <TextField
+            label="PDF Title"
+            variant="outlined"
+            disabled={autoGenerateTitle}
+            value={pdfTitle}
+            onChange={(e) => setPdfTitle(e.target.value)}
+            sx={{ backgroundColor: "#fff", mb: 1, width: "100%", maxWidth: 400 }}
+          />
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={autoGenerateTitle}
+                onChange={(e) => setAutoGenerateTitle(e.target.checked)}
+              />
+            }
+            label="Auto-generate title"
+          />
+        </Box>
 
-    try {
-      // 1) If pdfFile is present, upload
-      let pdfLink = "";
-      if (formData.pdfFile) {
-        pdfLink = await uploadPDFWithMetadata(formData.pdfFile);
-      }
-
-      // 2) Build payload
-      const payload = {
-        category: "academic",
-        answers: {
-          name: formData.name,
-          exam: formData.exam,
-          subject: formData.subject,
-          dailyHours: formData.dailyHours,
-          preparationGoal: formData.preparationGoal,
-          additionalNote: formData.additionalNote,
-          pdfLink: pdfLink,
-        },
-      };
-
-      const token = localStorage.getItem("token") || "";
-      const resp = await axios.post(`${backendURL}/api/learnerpersona`, payload, {
-        headers: { Authorization: token ? `Bearer ${token}` : "" },
-      });
-
-      if (resp.data.success) {
-        setSuccessMessage("All set! Your onboarding is complete.");
-      } else {
-        setSuccessMessage("Something went wrong storing your info.");
-      }
-    } catch (err) {
-      console.error("Error submitting =>", err);
-      setSuccessMessage("Error uploading or submitting. Check console logs.");
-    }
-
-    setSubmitting(false);
+        {/* Next button */}
+        <Box sx={{ mt: 3 }}>
+          <Button
+            variant="contained"
+            onClick={handleNextFromStep1}
+            disabled={!pdfFile}
+          >
+            Next
+          </Button>
+        </Box>
+      </Box>
+    );
   }
 
-  // Same PDF logic as the chat version
-  function uploadPDFWithMetadata(file) {
+  async function handleNextFromStep1() {
+    if (!pdfFile) return;
+    setStep(2);
+    setUploading(true);
+
+    try {
+      await uploadPDF(pdfFile);
+      setUploadDone(true);
+      setProcessing(true);
+    } catch (err) {
+      console.error("Upload error:", err);
+      setUploadDone(false);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function uploadPDF(file) {
     return new Promise((resolve, reject) => {
-      if (!file) {
-        resolve("");
-        return;
-      }
       const user = auth.currentUser;
       const path = `pdfUploads/${file.name}/${file.name}`;
       const storageRef = firebaseRef(storage, path);
+
       const metadata = {
         customMetadata: {
-          category: "Academic",
+          category: "academic",
           userId: user?.uid || "noUser",
         },
       };
 
       const uploadTask = uploadBytesResumable(storageRef, file, metadata);
-
       uploadTask.on(
         "state_changed",
-        (snap) => {
-          const progress = (snap.bytesTransferred / snap.totalBytes) * 100;
-          console.log(`[UploadProgress] => ${progress}%`);
+        (snapshot) => {
+          const prog = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          setUploadProgress(Math.round(prog));
         },
         (err) => reject(err),
         async () => {
@@ -147,151 +146,85 @@ export default function OnboardingFormContent() {
     });
   }
 
+  /* --------------------------------
+   * STEP 2: ANALYZING
+   * -------------------------------- */
+  function Step2Analyzing() {
+    return (
+      <Box sx={{ p: 3, textAlign: "center" }}>
+        {!uploadDone ? (
+          <>
+            <Typography variant="h6" gutterBottom>
+              Uploading Your PDF...
+            </Typography>
+            <Box sx={{ mb: 2 }}>
+              <CircularProgress />
+            </Box>
+            <Typography sx={{ mt: 1 }}>{uploadProgress}%</Typography>
+          </>
+        ) : processing ? (
+          <>
+            <Typography variant="h6" gutterBottom>
+              Upload Complete!
+            </Typography>
+            <Typography variant="body1" sx={{ mb: 2 }}>
+              Now analyzing your PDF with AI to understand different sections.
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 2 }}>
+              We’re working behind the scenes to create a detailed plan. This may take
+              some time, so please be patient.
+            </Typography>
+
+            <Box
+              sx={{
+                width: 150,
+                height: 150,
+                margin: "0 auto",
+                background:
+                  "url('https://media.giphy.com/media/3oEjI6SIIHBdRxXI40/giphy.gif') center/cover",
+                borderRadius: "50%",
+                mb: 3,
+              }}
+            />
+
+            <Button variant="contained" onClick={() => setStep(3)}>
+              Create Adaptive Plan
+            </Button>
+          </>
+        ) : (
+          <Typography>Unexpected state encountered.</Typography>
+        )}
+      </Box>
+    );
+  }
+
+  /* --------------------------------
+   * STEP 3: RENDER PLAN WIZARD INLINE
+   * -------------------------------- */
+  function Step3ShowPlanWizard() {
+    // We pass `renderAsDialog={false}` so it does NOT open a MUI <Dialog>.
+    return (
+      <Box sx={{ p: 3 }}>
+        <Typography variant="h6" sx={{ mb: 2 }}>
+          Step 3: Create Your Plan
+        </Typography>
+
+        <EditAdaptivePlanModal
+          renderAsDialog={false}  // Important: no separate dialog
+          open={true}             // We'll pass open={true}, but it won't matter in inline mode
+          onClose={() => setStep(2)}  // If user clicks "Back" at step=0, we go back to step=2
+          userId="demo-user-id-1234"
+          // You could pass your real backendURL or bookId here if you have them
+        />
+      </Box>
+    );
+  }
+
   return (
     <Box sx={{ color: "#fff" }}>
-      <Typography variant="h6" sx={{ mb: 1 }}>
-        Onboarding Form
-      </Typography>
-      {successMessage && (
-        <Typography sx={{ color: "lime", mb: 2 }}>{successMessage}</Typography>
-      )}
-
-      {/* Form */}
-      <Box component="form" onSubmit={handleSubmit}>
-        <Grid container spacing={2}>
-          {/* Name */}
-          <Grid item xs={12}>
-            <TextField
-              label="Name"
-              variant="outlined"
-              fullWidth
-              value={formData.name}
-              onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
-              InputProps={{ style: { backgroundColor: "#fff" } }}
-            />
-          </Grid>
-
-          {/* Exam */}
-          <Grid item xs={12}>
-            <FormControl fullWidth>
-              <InputLabel>Exam</InputLabel>
-              <Select
-                label="Exam"
-                value={formData.exam}
-                onChange={(e) => handleExamChange(e.target.value)}
-                sx={{ backgroundColor: "#fff" }}
-              >
-                <MenuItem value="">(Select an exam)</MenuItem>
-                <MenuItem value="UPSC">UPSC</MenuItem>
-                <MenuItem value="IIT JEE">IIT JEE</MenuItem>
-              </Select>
-              <FormHelperText>Which exam are you preparing for?</FormHelperText>
-            </FormControl>
-          </Grid>
-
-          {/* Subject (conditional) */}
-          {formData.exam && (
-            <Grid item xs={12}>
-              <FormControl fullWidth>
-                <InputLabel>Subject</InputLabel>
-                <Select
-                  label="Subject"
-                  value={formData.subject}
-                  onChange={(e) =>
-                    setFormData((p) => ({ ...p, subject: e.target.value }))
-                  }
-                  sx={{ backgroundColor: "#fff" }}
-                >
-                  <MenuItem value="">(Select a subject)</MenuItem>
-                  {subjectOptions.map((subj) => (
-                    <MenuItem key={subj} value={subj}>
-                      {subj}
-                    </MenuItem>
-                  ))}
-                </Select>
-                <FormHelperText>Which subject are you focusing on?</FormHelperText>
-              </FormControl>
-            </Grid>
-          )}
-
-          {/* Daily Hours */}
-          <Grid item xs={12}>
-            <TextField
-              label="Daily Study Hours"
-              type="number"
-              variant="outlined"
-              fullWidth
-              value={formData.dailyHours}
-              onChange={(e) =>
-                setFormData((p) => ({ ...p, dailyHours: e.target.value }))
-              }
-              InputProps={{ style: { backgroundColor: "#fff" }, inputProps: { min: 0 } }}
-            />
-          </Grid>
-
-          {/* Preparation Goal */}
-          <Grid item xs={12}>
-            <FormControl fullWidth>
-              <InputLabel>Preparation Goal</InputLabel>
-              <Select
-                label="Preparation Goal"
-                value={formData.preparationGoal}
-                onChange={(e) =>
-                  setFormData((p) => ({ ...p, preparationGoal: e.target.value }))
-                }
-                sx={{ backgroundColor: "#fff" }}
-              >
-                <MenuItem value="">(Select a goal)</MenuItem>
-                <MenuItem value="revise">Revise</MenuItem>
-                <MenuItem value="start afresh">Start Afresh</MenuItem>
-                <MenuItem value="deep mastery">Deep Mastery</MenuItem>
-              </Select>
-              <FormHelperText>What's your preparation approach?</FormHelperText>
-            </FormControl>
-          </Grid>
-
-          {/* Additional Note */}
-          <Grid item xs={12}>
-            <TextField
-              label="Additional Note"
-              variant="outlined"
-              fullWidth
-              multiline
-              rows={2}
-              value={formData.additionalNote}
-              onChange={(e) =>
-                setFormData((p) => ({ ...p, additionalNote: e.target.value }))
-              }
-              InputProps={{ style: { backgroundColor: "#fff" } }}
-            />
-          </Grid>
-
-          {/* PDF Upload */}
-          <Grid item xs={12}>
-            <Typography variant="body2" sx={{ mb: 1 }}>
-              Upload PDF (optional)
-            </Typography>
-            <input type="file" accept="application/pdf" onChange={handlePdfSelect} />
-            {formData.pdfFile && (
-              <Typography variant="caption" sx={{ display: "block", mt: 0.5 }}>
-                {formData.pdfFile.name}
-              </Typography>
-            )}
-          </Grid>
-        </Grid>
-
-        {/* Submit button */}
-        <Box sx={{ textAlign: "right", mt: 3 }}>
-          <Button
-            type="submit"
-            variant="contained"
-            disabled={submitting}
-            sx={{ fontWeight: "bold" }}
-          >
-            {submitting ? "Submitting..." : "Finalize"}
-          </Button>
-        </Box>
-      </Box>
+      {step === 1 && <Step1UploadForm />}
+      {step === 2 && <Step2Analyzing />}
+      {step === 3 && <Step3ShowPlanWizard />}
     </Box>
   );
 }

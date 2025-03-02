@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 
 // Two distinct prompts: 3 questions vs. 5 questions
+// Two distinct prompts: 3 questions vs. 5 questions
 const PROMPT_3_QUESTIONS = `You are a helpful assistant. Given the following text, generate 3 multiple-choice questions 
 that test basic recall (Bloom's Remember/Understand). 
 Return ONLY valid JSON with the structure:
@@ -44,12 +45,13 @@ Do NOT wrap it in backticks.
 Just return valid JSON.
 `;
 
+
 /**
  * QuizView
- *
- * 1) Fetches subChapter data from /api/subchapters/:subChapterId
- * 2) Checks if there's an existing quiz doc (score).
- * 3) If none or score < 3 => calls GPT using the chosen prompt (3 or 5 Q's).
+ * ----------
+ * 1) Fetches subChapter data
+ * 2) Checks existing quiz or calls GPT if needed
+ * 3) Renders the multiple-choice quiz in a black background container
  */
 export default function QuizView({
   subChapterId,
@@ -61,8 +63,6 @@ export default function QuizView({
   // ---------- State Variables ----------
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-
-  // subchapter content we fetch from server
   const [subChapter, setSubChapter] = useState(null);
 
   const [questions, setQuestions] = useState([]);
@@ -70,18 +70,12 @@ export default function QuizView({
   const [score, setScore] = useState(null);
   const [readOnly, setReadOnly] = useState(false);
 
-  // API key for GPT
+  // For GPT:
   const apiKey = import.meta.env.VITE_OPENAI_KEY;
 
-  console.log("QuizView props =>", {
-    subChapterId,
-    level,
-    userId,
-    backendURL,
-    apiKeyExists: !!apiKey,
-  });
-
-  // 1) On mount or when subChapterId changes, fetch subchapter data & then quiz logic
+  // -----------------------------------
+  // Lifecycle: fetch subchapter + quiz
+  // -----------------------------------
   useEffect(() => {
     if (!subChapterId || !userId) {
       console.warn("[QuizView] Missing subChapterId or userId => cannot proceed.");
@@ -89,7 +83,7 @@ export default function QuizView({
       return;
     }
 
-    // Reset states
+    // Reset UI states
     setLoading(true);
     setError(null);
     setSubChapter(null);
@@ -98,24 +92,19 @@ export default function QuizView({
     setScore(null);
     setReadOnly(false);
 
-    // A) Fetch subchapter from server
     async function fetchSubchapterAndQuiz() {
       try {
-        // 1) Fetch subchapter details
+        // A) Fetch subchapter details
         const subRes = await axios.get(`${backendURL}/api/subchapters/${subChapterId}`);
         const subData = subRes.data;
-        console.log("[QuizView] fetched subchapter =>", subData);
         setSubChapter(subData);
 
-        // 2) Check existing quiz doc
+        // B) Check existing quiz doc
         const existingQuiz = await fetchExistingQuiz(userId, subChapterId);
-        console.log("[QuizView] existingQuiz =>", existingQuiz);
-
         if (existingQuiz) {
           // If doc found
           if (existingQuiz.score === 3 || existingQuiz.score === 5) {
-            // Perfect score => readOnly mode
-            console.log("[QuizView] Perfect score => read-only mode.");
+            // Perfect score => readOnly
             setQuestions(existingQuiz.questions || []);
             setSelectedAnswers(existingQuiz.selectedAnswers || {});
             setScore(existingQuiz.score ?? null);
@@ -123,17 +112,15 @@ export default function QuizView({
             setLoading(false);
             return;
           } else {
-            console.log("[QuizView] found quiz doc but score < perfect => calling GPT again");
-            // we want a new quiz => call GPT
+            // Score < perfect => fetch GPT again
             await fetchQuizFromGPT(subData.summary);
           }
         } else {
           // no doc => new quiz from GPT
-          console.log("[QuizView] no quiz doc => calling GPT fresh.");
           await fetchQuizFromGPT(subData.summary);
         }
       } catch (err) {
-        console.error("[QuizView] Error in fetchSubchapterAndQuiz =>", err);
+        console.error("[QuizView] Error =>", err);
         setError(err.message);
       } finally {
         setLoading(false);
@@ -143,55 +130,43 @@ export default function QuizView({
     fetchSubchapterAndQuiz();
   }, [subChapterId, userId, backendURL]);
 
-  // ================ fetchExistingQuiz =================
+  // -----------------------------------
+  // Helper: fetch existing quiz
+  // -----------------------------------
   async function fetchExistingQuiz(userId, subChapterId) {
     const url = `${backendURL}/api/quizzes?userId=${userId}&subChapterId=${subChapterId}`;
-    console.log("[fetchExistingQuiz] GET =>", url);
     const resp = await fetch(url);
     if (!resp.ok) {
       throw new Error(`[fetchExistingQuiz] HTTP ${resp.status}`);
     }
     const data = await resp.json();
     if (data.success && data.data) {
-      return data.data; // e.g. { userId, subChapterId, questions, score, ... }
+      return data.data; // { userId, subChapterId, questions, score, etc. }
     } else {
       return null;
     }
   }
 
-  // ================ GPT fetchQuizFromGPT =================
+  // -----------------------------------
+  // Helper: call GPT if no / incomplete quiz
+  // -----------------------------------
   async function fetchQuizFromGPT(subChapterContent) {
     if (!apiKey) {
-      console.error("[fetchQuizFromGPT] No OpenAI API key found!");
       setError("No OpenAI API key found!");
       return;
     }
-    // Pick the correct prompt based on level
-    let basePrompt;
-    if (level === "mastery") {
-      basePrompt = PROMPT_5_QUESTIONS;
-    } else {
-      basePrompt = PROMPT_3_QUESTIONS;
-    }
-
-    // If summary is empty => GPT can't do much
-    if (!subChapterContent) {
-      console.warn("[fetchQuizFromGPT] subChapterContent is empty => GPT might produce bland quiz.");
-    }
-
-    console.log("[fetchQuizFromGPT] using prompt =>", level === "mastery" ? "5-question" : "3-question");
+    let basePrompt = level === "mastery" ? PROMPT_5_QUESTIONS : PROMPT_3_QUESTIONS;
 
     try {
       setLoading(true);
       setError(null);
 
-      // Compose final GPT user prompt
       const fullPrompt = `
         ${basePrompt}
         Text Content:
-        ${subChapterContent}
+        ${subChapterContent || ""}
       `;
-      console.log("[fetchQuizFromGPT] sending prompt to GPT:", fullPrompt.slice(0, 200), "...");
+      console.log("[fetchQuizFromGPT] using prompt =>", fullPrompt.slice(0, 200), "...");
 
       const response = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
@@ -208,30 +183,24 @@ export default function QuizView({
 
       if (!response.ok) {
         const errData = await response.json();
-        console.error("[fetchQuizFromGPT] GPT error response:", errData);
-        throw new Error(errData.error?.message || "[fetchQuizFromGPT] API request failed.");
+        throw new Error(errData.error?.message || "GPT request failed");
       }
 
       const data = await response.json();
       const reply = data.choices?.[0]?.message?.content || "";
-      console.log("[fetchQuizFromGPT] raw GPT reply:", reply);
 
       let parsed;
       try {
         parsed = JSON.parse(reply.trim());
-        console.log("[fetchQuizFromGPT] parsed JSON:", parsed);
       } catch (parseErr) {
-        console.warn("[fetchQuizFromGPT] Could not parse GPT response as JSON. raw:", reply);
         throw new Error("GPT response is not valid JSON.");
       }
 
       if (!parsed.questions || !Array.isArray(parsed.questions)) {
-        console.error("[fetchQuizFromGPT] Missing 'questions' array in GPT response.");
         throw new Error("GPT response JSON missing 'questions' array.");
       }
 
       setQuestions(parsed.questions);
-      console.log("[fetchQuizFromGPT] success => setQuestions with length=", parsed.questions.length);
     } catch (err) {
       console.error("[fetchQuizFromGPT] error:", err);
       setError(err.message);
@@ -240,25 +209,20 @@ export default function QuizView({
     }
   }
 
-  // ================ handleOptionChange =================
+  // -----------------------------------
+  // handleOptionChange
+  // -----------------------------------
   function handleOptionChange(qIndex, optIndex) {
-    if (readOnly) {
-      console.log("[handleOptionChange] readOnly => ignoring input.");
-      return;
-    }
-    console.log("[handleOptionChange] user selected qIndex=", qIndex, "optIndex=", optIndex);
+    if (readOnly) return;
     setSelectedAnswers((prev) => ({ ...prev, [qIndex]: optIndex }));
   }
 
-  // ================ handleSubmit => compute score & store doc =================
+  // -----------------------------------
+  // handleSubmit => compute score, store doc
+  // -----------------------------------
   async function handleSubmit() {
-    if (!questions.length) {
-      console.warn("[handleSubmit] no questions => cannot submit");
-      return;
-    }
-    console.log("[handleSubmit] computing user score...");
+    if (!questions.length) return;
     let correctCount = 0;
-
     questions.forEach((q, idx) => {
       const userSelectionIdx = selectedAnswers[idx];
       if (userSelectionIdx != null) {
@@ -266,12 +230,9 @@ export default function QuizView({
         if (userOption === q.answer) correctCount++;
       }
     });
-
     const finalScore = correctCount;
-    console.log("[handleSubmit] finalScore=", finalScore, " / ", questions.length);
     setScore(finalScore);
 
-    // store in DB
     try {
       await saveQuizToServer({
         userId,
@@ -282,16 +243,16 @@ export default function QuizView({
         score: finalScore,
         backendURL,
       });
-      console.log("[handleSubmit] quiz doc saved successfully.");
     } catch (err) {
       console.error("[handleSubmit] Error storing quiz:", err);
       setError(err.message);
     }
-
     setReadOnly(true);
   }
 
-  // ================ saveQuizToServer => /api/quizzes (POST) =================
+  // -----------------------------------
+  // Helper: store quiz doc in DB
+  // -----------------------------------
   async function saveQuizToServer({
     userId,
     subChapterId,
@@ -301,7 +262,6 @@ export default function QuizView({
     score,
     backendURL,
   }) {
-    console.log("[saveQuizToServer] storing doc with score=", score);
     const payload = {
       userId,
       subChapterId,
@@ -322,93 +282,126 @@ export default function QuizView({
     }
   }
 
-  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  // RENDER UI
-  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  console.log("[QuizView] render => loading=", loading, " error=", error, " questions.length=", questions.length);
-
+  // -----------------------------------
+  // Render
+  // -----------------------------------
   return (
-    <div style={quizContainer}>
-      <h2>Quiz for SubChapter: {subChapter?.subChapterName || subChapterId}</h2>
-      {level && <p style={{ fontStyle: "italic" }}>Level: {level}</p>}
+    <div style={outerContainer}>
+      {/* Header */}
+      <div style={headerSection}>
+        <h2 style={{ margin: 0 }}>
+          Quiz for SubChapter: {subChapter?.subChapterName || subChapterId}
+        </h2>
+        {level && (
+          <p style={{ margin: 0, fontStyle: "italic", fontSize: "0.9rem" }}>
+            Level: {level}
+          </p>
+        )}
+      </div>
 
-      {loading && <p>Loading quiz data...</p>}
+      {/* Main content area */}
+      <div style={quizContentArea}>
+        {loading && <p>Loading quiz data...</p>}
 
-      {error && (
-        <p style={{ color: "red" }}>
-          <strong>Error:</strong> {error}
-        </p>
-      )}
+        {error && (
+          <p style={{ color: "red" }}>
+            <strong>Error:</strong> {error}
+          </p>
+        )}
 
-      {/* If we have questions */}
-      {!loading && !error && questions.length > 0 && (
-        <div>
-          {questions.map((q, qIndex) => (
-            <div key={qIndex} style={{ marginBottom: "1rem" }}>
-              <strong>Q{qIndex + 1}: {q.question}</strong>
-              <div style={{ marginTop: "0.5rem" }}>
-                {q.options.map((opt, optIndex) => {
-                  const checked = selectedAnswers[qIndex] === optIndex;
-                  return (
-                    <label
-                      key={optIndex}
-                      style={{ display: "block", marginLeft: "1rem" }}
-                    >
-                      <input
-                        type="radio"
-                        name={`q-${qIndex}`}
-                        value={opt}
-                        disabled={readOnly}
-                        checked={checked}
-                        onChange={() => handleOptionChange(qIndex, optIndex)}
-                      />
-                      {opt}
-                    </label>
-                  );
-                })}
+        {/* If we have questions */}
+        {!loading && !error && questions.length > 0 && (
+          <div>
+            {questions.map((q, qIndex) => (
+              <div key={qIndex} style={questionBlock}>
+                <strong>
+                  Q{qIndex + 1}: {q.question}
+                </strong>
+                <div style={{ marginTop: "0.5rem" }}>
+                  {q.options.map((opt, optIndex) => {
+                    const checked = selectedAnswers[qIndex] === optIndex;
+                    return (
+                      <label
+                        key={optIndex}
+                        style={{ display: "block", marginLeft: "1rem" }}
+                      >
+                        <input
+                          type="radio"
+                          name={`q-${qIndex}`}
+                          value={opt}
+                          disabled={readOnly}
+                          checked={checked}
+                          onChange={() => handleOptionChange(qIndex, optIndex)}
+                        />
+                        {opt}
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
 
-          {/* Show score if we have one */}
-          {score !== null && (
-            <div style={{ marginTop: "1rem", fontWeight: "bold" }}>
-              You scored {score} / {questions.length} correct!
-            </div>
-          )}
+            {/* Score if we have one */}
+            {score !== null && (
+              <div style={{ marginTop: "1rem", fontWeight: "bold" }}>
+                You scored {score} / {questions.length} correct!
+              </div>
+            )}
 
-          {/* If readOnly or we've already got a score, hide submit */}
-          {!readOnly && score === null && (
-            <button style={quizButtonStyle} onClick={handleSubmit}>
-              Submit
-            </button>
-          )}
-        </div>
-      )}
+            {/* Submit button only if not readOnly & no score yet */}
+            {!readOnly && score === null && (
+              <button style={quizButtonStyle} onClick={handleSubmit}>
+                Submit
+              </button>
+            )}
+          </div>
+        )}
 
-      {/* If no quiz from GPT and not loading/error => "No questions" */}
-      {!loading && !error && questions.length === 0 && (
-        <p>No questions available.</p>
-      )}
+        {/* If no quiz and not loading/error => "No questions" */}
+        {!loading && !error && questions.length === 0 && (
+          <p>No questions available.</p>
+        )}
+      </div>
     </div>
   );
 }
 
-// ---------- Styles ----------
-const quizContainer = {
-  padding: "20px",
+// --------------------- Styles ---------------------
+
+const outerContainer = {
+  /* Fill the entire right side, black background */
+  width: "100%",
+  height: "100%",
+  backgroundColor: "#000",
   color: "#fff",
-  backgroundColor: "rgba(0, 128, 0, 0.3)", // light greenish
-  borderRadius: "8px",
+  display: "flex",
+  flexDirection: "column",
+  boxSizing: "border-box",
+  padding: "20px",
+};
+
+const headerSection = {
+  marginBottom: "16px",
+};
+
+const quizContentArea = {
+  flex: 1,
+  overflowY: "auto",
+  /* If you want a subtle border or scroll styling, adjust here */
+};
+
+const questionBlock = {
+  marginBottom: "1rem",
 };
 
 const quizButtonStyle = {
-  padding: "10px 20px",
+  padding: "8px 16px",
   borderRadius: "4px",
   border: "none",
-  backgroundColor: "#203A43",
+  backgroundColor: "#444",
   color: "#fff",
   fontWeight: "bold",
   cursor: "pointer",
   marginTop: "10px",
+  fontSize: "0.9rem",
 };
