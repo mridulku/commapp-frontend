@@ -16,13 +16,30 @@ import {
   CircularProgress,
   Checkbox,
   FormControlLabel,
+  Stepper,
+  Step,
+  StepLabel,
 } from "@mui/material";
 
 // Import your final ProcessAnimation component
 import ProcessAnimation from "./ProcessAnimation"; // <-- adjust path if needed
 
+/**
+ * OnboardingFormContent
+ * Renders a top nav bar (3-step), then the usual
+ * (1) PDF Upload => (2) ProcessAnimation => (3) Plan Wizard (via EditAdaptivePlanModal).
+ */
 export default function OnboardingFormContent() {
+  // "step" is the internal logic:
+  //   step=1 => show upload form
+  //   step=2 => show upload progress or process animation
+  //
+  // But we also have an "activeNavStep" for the top Stepper (1..3):
+  //   1 => "Upload"
+  //   2 => "Analyze"
+  //   3 => "Plan"
   const [step, setStep] = useState(1);
+  const [activeNavStep, setActiveNavStep] = useState(0);
 
   // File + title
   const [pdfFile, setPdfFile] = useState(null);
@@ -34,19 +51,41 @@ export default function OnboardingFormContent() {
   const [uploading, setUploading] = useState(false);
   const [uploadDone, setUploadDone] = useState(false);
 
-  // We won't have a separate "processing" flag anymore; 
-  // once the upload is done, we show "Upload Complete" and the animation.
-
   // For the user ID
   const [currentUserId, setCurrentUserId] = useState("demoUserId");
 
-  // On mount, fetch the user from Firebase auth
   useEffect(() => {
+    // On mount, fetch user from Firebase
     const user = auth.currentUser;
     if (user?.uid) {
       setCurrentUserId(user.uid);
     }
   }, []);
+
+  // On load, we set the navigation step to 0 => "Upload"
+  useEffect(() => {
+    setActiveNavStep(0); // step index: 0 => "Upload", 1 => "Analyze", 2 => "Plan"
+  }, []);
+
+  /* --------------------------------
+   * Step Navigation (Top Bar)
+   * -------------------------------- */
+  const steps = ["Upload", "Analyze", "Plan"]; // 3 steps
+  // "activeNavStep" = 0, 1, or 2
+
+  function renderNavBar() {
+    return (
+      <Box sx={{ mb: 2 }}>
+        <Stepper activeStep={activeNavStep}>
+          {steps.map((label, index) => (
+            <Step key={label}>
+              <StepLabel>{label}</StepLabel>
+            </Step>
+          ))}
+        </Stepper>
+      </Box>
+    );
+  }
 
   /* --------------------------------
    * STEP 1: SELECT & UPLOAD
@@ -114,9 +153,12 @@ export default function OnboardingFormContent() {
 
   async function handleNextFromStep1() {
     if (!pdfFile) return;
+    // Move local step => 2
     setStep(2);
-    setUploading(true);
+    // Move nav => 1 => "Analyze"
+    setActiveNavStep(1);
 
+    setUploading(true);
     try {
       await uploadPDF(pdfFile);
       setUploadDone(true);
@@ -158,7 +200,7 @@ export default function OnboardingFormContent() {
   }
 
   /* --------------------------------
-   * STEP 2: SHOW UPLOAD PROGRESS OR "UPLOAD COMPLETE + ProcessAnimation"
+   * STEP 2: SHOW UPLOAD PROGRESS OR "PROCESS ANIMATION"
    * -------------------------------- */
   function Step2UploadingOrAnalyze() {
     return (
@@ -175,17 +217,25 @@ export default function OnboardingFormContent() {
             <Typography sx={{ mt: 1 }}>{uploadProgress}%</Typography>
           </>
         ) : (
-          // Upload finished => show "Upload Complete" AND the ProcessAnimation component
+          // Upload finished => show "Upload Complete" AND the ProcessAnimation
           <Box>
             <Typography variant="h6" gutterBottom>
               Upload Complete!
             </Typography>
             <Typography variant="body1" sx={{ mb: 2 }}>
-              Now you can analyze your PDF with AI to detect chapters and sub-chapters.
+              Now analyzing your PDF with AI to detect chapters and sub-chapters...
             </Typography>
 
-            {/* Render the ProcessAnimation right here */}
-            <ProcessAnimation userId={currentUserId} />
+            {/* 
+              Render the ProcessAnimation right here.
+              We pass a callback that sets activeNavStep=2 
+              whenever the "Create Plan" button is clicked in that component 
+              (which triggers the EditAdaptivePlanModal).
+            */}
+            <ProcessAnimation
+              userId={currentUserId}
+              onShowPlanModal={() => setActiveNavStep(2)}
+            />
           </Box>
         )}
       </Box>
@@ -194,6 +244,10 @@ export default function OnboardingFormContent() {
 
   return (
     <Box sx={{ color: "#fff" }}>
+      {/* Top step navigation bar */}
+      {renderNavBar()}
+
+      {/* Then the main content */}
       {step === 1 && <Step1UploadForm />}
       {step === 2 && <Step2UploadingOrAnalyze />}
     </Box>

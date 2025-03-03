@@ -39,7 +39,7 @@ function getNumericPrefix(title) {
  *  - backendURL (string, optional)
  *  - colorScheme (string, optional) – if you want to pass it to the plan wizard
  */
-export default function ProcessAnimation({ userId, backendURL, colorScheme }) {
+export default function ProcessAnimation({ userId, backendURL, colorScheme, onShowPlanModal }) {
   // We'll store the "latest" bookId from the server
   const [bookId, setBookId] = useState('');
 
@@ -68,6 +68,11 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme }) {
       [chapterName]: !prev[chapterName],
     }));
   };
+
+  
+
+
+
 
   /**
    * 1) Fetch chapters + subchapters from your backend for a given bookId
@@ -126,6 +131,8 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme }) {
       alert('Error fetching data. Check the console/logs.');
     }
   }
+
+
 
   /**
    * On mount, wait a few seconds, then fetch the "latest book" for this user

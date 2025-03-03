@@ -7,7 +7,7 @@ function PrivateRoute({ children }) {
 
   // If no token, redirect to our new AuthLogin page
   if (!token) {
-    return <Navigate to="/authlogin" replace />;
+    return <Navigate to="/" replace />;
   }
 
   // Otherwise, render the protected child component

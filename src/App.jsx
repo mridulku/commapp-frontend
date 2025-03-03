@@ -21,7 +21,11 @@ import AdaptiveStatsDashboard from "./components/Archive/Archive 11/AdaptiveStat
 import GptQuestionGenerator from "./components/Archive/Archive 10/GptQuestionGenerator";
 import BooksViewer3 from "./components/Archive/Archive 9/BooksViewer3";
 
-import AuthLogin from "./components/PreLogin/AuthLogin";
+import AuthLogin from "./components/Archive/AuthLogin";
+import AuthSignGoogle from "./components/Archive/AuthSignGoogle";
+import AuthSignIn from "./components/PreLogin/AuthSignIn";
+
+
 import PrivateRoute from "./components/PreLogin/PrivateRoute";
 import Login from "./components/Archive/Archive 5/Login";
 import ChatInterface from "./components/Archive/Archive 5/ChatInterface";
@@ -47,6 +51,9 @@ import CoursesMaterialManager from "./components/Archive/Archive 3/CoursesMateri
 
 import BooksViewer from "./components/Archive/Archive 1/BooksViewer";
 import BooksViewer2 from "./components/DetailedBookViewer/0.BooksViewerNew";
+
+
+
 import PlanBrowser from "./components/DetailedBookViewer/PlanBrowser";
 
 
@@ -76,6 +83,16 @@ function App() {
 
         {/* 2. Auth login page (public) */}
         <Route path="/authlogin" element={<AuthLogin />} />
+
+        {/* 2. Auth login page (public) */}
+        <Route path="/authsigngoogle" element={<AuthSignGoogle />} />
+
+        {/* 2. Auth login page (public) */}
+        <Route path="/authsignin" element={<AuthSignIn />} />
+
+
+       
+
 
         {/* 3. Protected Onboarding page */}
         <Route
@@ -343,6 +360,7 @@ function App() {
             </PrivateRoute>
           }
         />
+        
       </Routes>
       
       

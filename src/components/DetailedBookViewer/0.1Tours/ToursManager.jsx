@@ -2,6 +2,36 @@
 import React, { useState, useEffect } from "react";
 import Tour from "reactour";
 
+/** -----------------------------------------
+ * Step arrays: define them outside the component
+ * so they don't get re-defined on every render
+ ------------------------------------------*/
+const overviewSteps = [
+  { selector: "#panelA", content: "Panel A in overview." },
+  { selector: "#panelB", content: "Panel B in overview." },
+];
+
+const libraryNoBookSteps = [
+  { selector: "#libraryNoBookStart", content: "Welcome to Library (no book selected)." },
+  { selector: "#libraryNoBookGrid", content: "Here’s the grid of available books." },
+];
+
+const libraryBookSelectedSteps = [
+  { selector: "#libraryBookSelectedTitle", content: "You have selected a book." },
+  { selector: "#libraryBookOverview", content: "Check out the book details here." },
+];
+
+const librarySubchapterSteps = [
+  { selector: "#summarizebutton", content: "Click here to get a summary of this subchapter's content." },
+  { selector: "#askdoubtbutton", content: "Have questions or doubts? Ask them here!" },
+  { selector: "#dynamictutorbutton", content: "Open the dynamic tutor for interactive learning and Q&A." },
+  { selector: "#fontsizebutton", content: "Adjust the font size for a comfortable reading experience." },
+  { selector: "#startreadingbutton", content: "If not yet reading, click here to start reading mode." },
+  { selector: "#stopreadingbutton", content: "Already reading? Use this to stop when you're done." },
+  { selector: "#takequizbutton", content: "Take a quiz to test your knowledge of this subchapter." },
+  { selector: "#takeanotherquizbutton", content: "You can retake or try another quiz for further practice." },
+];
+
 function ToursManager({
   viewMode,
   selectedBook,
@@ -11,35 +41,6 @@ function ToursManager({
 }) {
   const [isTourOpen, setIsTourOpen] = useState(false);
   const [steps, setSteps] = useState([]);
-
-  // Step arrays for OVERVIEW
-  const overviewSteps = [
-    { selector: "#panelA", content: "Panel A in overview." },
-    { selector: "#panelB", content: "Panel B in overview." },
-    // ...
-  ];
-
-  // Step arrays for LIBRARY (three states)
-  const libraryNoBookSteps = [
-    { selector: "#libraryNoBookStart", content: "Welcome to Library (no book selected)." },
-    { selector: "#libraryNoBookGrid", content: "Here’s the grid of available books." },
-  ];
-
-  const libraryBookSelectedSteps = [
-    { selector: "#libraryBookSelectedTitle", content: "You have selected a book." },
-    { selector: "#libraryBookOverview", content: "Check out the book details here." },
-  ];
-
-  const librarySubchapterSteps = [
-    { selector: "#summarizebutton", content: "Click here to get a summary of this subchapter's content." },
-    { selector: "#askdoubtbutton", content: "Have questions or doubts? Ask them here!" },
-    { selector: "#dynamictutorbutton", content: "Open the dynamic tutor for interactive learning and Q&A." },
-    { selector: "#fontsizebutton", content: "Adjust the font size for a comfortable reading experience." },
-    { selector: "#startreadingbutton", content: "If not yet reading, click here to start reading mode." },
-    { selector: "#stopreadingbutton", content: "Already reading? Use this to stop when you're done." },
-    { selector: "#takequizbutton", content: "Take a quiz to test your knowledge of this subchapter." },
-    { selector: "#takeanotherquizbutton", content: "You can retake or try another quiz for further practice." },
-  ];
 
   // -------------------------------------------------------
   // 1) Main effect: build steps array & open/close the tour
@@ -54,13 +55,13 @@ function ToursManager({
       // No book selected
       if (!selectedBook) {
         newSteps = libraryNoBookSteps;
-
+      }
       // Book selected but NO subchapter
-      } else if (selectedBook && !selectedSubChapter) {
+      else if (selectedBook && !selectedSubChapter) {
         newSteps = libraryBookSelectedSteps;
-
+      }
       // Subchapter selected
-      } else if (selectedSubChapter) {
+      else if (selectedSubChapter) {
         newSteps = librarySubchapterSteps;
       }
     } else {
@@ -79,33 +80,35 @@ function ToursManager({
 
     setSteps(finalSteps);
 
-    // Open tour if we have some steps left
+    // If we have steps & user triggered the tour => open
     if (triggerTour && finalSteps.length > 0) {
       setIsTourOpen(true);
     } else {
       setIsTourOpen(false);
     }
   }, [
+    // Do NOT include the step arrays themselves here
     viewMode,
     selectedBook,
     selectedSubChapter,
     triggerTour,
-    overviewSteps,
-    libraryNoBookSteps,
-    libraryBookSelectedSteps,
-    librarySubchapterSteps,
   ]);
 
   // ------------------------------------------------------------------------
   // 2) Additional effect: force-close the tour if user changes viewMode
+  //    BUT only if it's currently open to avoid repeated setIsTourOpen(false)
   // ------------------------------------------------------------------------
-  // This ensures we don't keep old steps while UI transitions,
-  // avoiding "roundedStep" errors if the DOM changes drastically
   useEffect(() => {
-    setIsTourOpen(false);
-    // If you need to reset triggerTour as well, you can do so from the parent or here:
-    // onTourDone && onTourDone();
-  }, [viewMode]);
+    if (isTourOpen) {
+      // if user changes viewMode while the tour is open => close
+      setIsTourOpen(false);
+      // If needed, notify parent
+      if (onTourDone) onTourDone();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode]); 
+  // We do not include isTourOpen in the dependencies to avoid
+  // double-calling setIsTourOpen, but we check it once here.
 
   // If the user manually closes the tour:
   function handleClose() {
