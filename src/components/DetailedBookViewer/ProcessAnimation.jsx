@@ -1,3 +1,7 @@
+import EditAdaptivePlanModal from './1.SidePanels/LibraryChild/EditAdaptivePlanModal';
+
+// src/components/DetailedBookViewer/ProcessAnimation.jsx
+
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import {
@@ -7,7 +11,6 @@ import {
   CircularProgress,
   List,
   ListItem,
-  TextField,
   IconButton,
   Collapse
 } from '@mui/material';
@@ -15,9 +18,11 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 
+// Import your inline plan wizard
+
 /**
- * Safely parse a numeric prefix from a string.
- * e.g. "3. Something" => 3. If invalid, return a large number so it sorts at the end.
+ * Helper: safely parse numeric prefix "3. Something" => 3.
+ * If invalid, return 999999 so it sorts last.
  */
 function getNumericPrefix(title) {
   if (typeof title !== 'string') return 999999;
@@ -27,27 +32,36 @@ function getNumericPrefix(title) {
   return Number.isNaN(num) ? 999999 : num;
 }
 
-export default function ProcessAnimation({ userId }) {
+/**
+ * ProcessAnimation
+ * Props:
+ *  - userId (string) : from Firebase or your auth
+ *  - backendURL (string, optional)
+ *  - colorScheme (string, optional) – if you want to pass it to the plan wizard
+ */
+export default function ProcessAnimation({ userId, backendURL, colorScheme }) {
+  // We'll store the "latest" bookId from the server
   const [bookId, setBookId] = useState('');
 
-  // currentStep: -1 => not started, up to 8 => final
+  // The step-based states: 0..8
   const [currentStep, setCurrentStep] = useState(-1);
 
-  // Fully cleaned & sorted chapters from the server
+  // The real chapters data
   const [chapters, setChapters] = useState([]);
-
-  // For step 3 typing effect
+  // For "typing out" the chapter list in step 3
   const [displayedChapters, setDisplayedChapters] = useState([]);
-
-  // For step 5 subchapters (key = chapterName => array of subchapter names)
+  // For sub-chapters at step 5
   const [displayedSubChapters, setDisplayedSubChapters] = useState({});
-
+  // A numeric count to show "3. X chapters detected"
   const [numChaptersDetected, setNumChaptersDetected] = useState(0);
 
-  // Expand/collapse for sub-chapters
+  // For toggling expansions of sub-chapters
   const [expandedChapters, setExpandedChapters] = useState({});
 
-  // Toggle expansion
+  // Whether to show the plan wizard inline
+  const [showPlanWizard, setShowPlanWizard] = useState(false);
+
+  // Expand/collapse toggler
   const handleToggleExpand = (chapterName) => {
     setExpandedChapters((prev) => ({
       ...prev,
@@ -56,71 +70,97 @@ export default function ProcessAnimation({ userId }) {
   };
 
   /**
-   * Called when the user clicks "Start".
-   * We GET /api/process-book-data?userId=...&bookId=...
+   * 1) Fetch chapters + subchapters from your backend for a given bookId
+   * 2) Kick off step-based animation (setCurrentStep to 0)
    */
-  const handleStartProcessing = async () => {
-    if (!userId || !bookId) {
-      alert('Please provide both userId and bookId');
+  async function handleStartProcessing(latestBookId) {
+    if (!userId || !latestBookId) {
+      console.warn('Missing userId or bookId for processing data.');
       return;
     }
     try {
-      // Fetch data
-      const res = await axios.get('http://localhost:3001/api/process-book-data', {
-        params: { userId, bookId },
+      // If no backendURL, default to localhost
+      const baseURL = backendURL || 'http://localhost:3001';
+      // e.g. GET /api/process-book-data?userId=XYZ&bookId=ABC
+      const res = await axios.get(`${baseURL}/api/process-book-data`, {
+        params: { userId, bookId: latestBookId },
       });
       const data = res.data || {};
-      // data.chapters should be an array of { name, subchapters: [...] }
-
-      // 1) Force chapters into an array
       const rawChapters = Array.isArray(data.chapters) ? data.chapters : [];
 
-      // 2) Clean & sort chapters
-      // We'll build a new array that we guarantee is safe
+      // Clean & sort chapters
       const cleanedChapters = rawChapters
         .filter((c) => c && typeof c.name === 'string')
-        .map((c) => {
-          // Safely convert subchapters to array
-          const rawSubs = Array.isArray(c.subchapters) ? c.subchapters : [];
-
-          // Filter & sort subchapters
-          const safeSubs = rawSubs
+        .map((ch) => {
+          const rawSubs = Array.isArray(ch.subchapters) ? ch.subchapters : [];
+          const sortedSubs = rawSubs
             .filter((s) => s && typeof s.name === 'string')
-            .sort((s1, s2) => {
-              const aVal = getNumericPrefix(s1?.name || '');
-              const bVal = getNumericPrefix(s2?.name || '');
+            .sort((a, b) => {
+              const aVal = getNumericPrefix(a.name);
+              const bVal = getNumericPrefix(b.name);
               return aVal - bVal;
             });
-
-          return {
-            ...c,
-            subchapters: safeSubs,
-          };
+          return { ...ch, subchapters: sortedSubs };
         })
         .sort((a, b) => {
-          const aVal = getNumericPrefix(a?.name || '');
-          const bVal = getNumericPrefix(b?.name || '');
+          const aVal = getNumericPrefix(a.name);
+          const bVal = getNumericPrefix(b.name);
           return aVal - bVal;
         });
 
+      // Save them
       setChapters(cleanedChapters);
       setNumChaptersDetected(cleanedChapters.length);
 
-      // Reset the typed-out items
+      // Reset anything typed out so far
       setDisplayedChapters([]);
       setDisplayedSubChapters({});
       setExpandedChapters({});
+      // Hide the wizard if it was open
+      setShowPlanWizard(false);
 
-      // Start at step 0
+      // Start the animation at step 0
       setCurrentStep(0);
     } catch (err) {
-      console.error('Failed to fetch data:', err);
-      alert('Error fetching data. Check console/logs.');
+      console.error('Failed to fetch process-book-data:', err);
+      alert('Error fetching data. Check the console/logs.');
     }
-  };
+  }
 
   /**
-   * Step-based animation effect:
+   * On mount, wait a few seconds, then fetch the "latest book" for this user
+   * => Then call handleStartProcessing(bookId)
+   */
+  useEffect(() => {
+    if (!userId) return;
+    const timer = setTimeout(() => {
+      fetchLatestBookAndProcess();
+    }, 60000);
+    return () => clearTimeout(timer);
+  }, [userId]);
+
+  async function fetchLatestBookAndProcess() {
+    try {
+      const baseURL = backendURL || 'http://localhost:3001';
+      // GET /api/latest-book?userId=...
+      const res = await axios.get(`${baseURL}/api/latest-book`, {
+        params: { userId },
+      });
+      const data = res.data || {};
+      if (!data.bookId) {
+        console.error('No latest book found for this user.');
+        return;
+      }
+      setBookId(data.bookId);
+      // Next => load chapters for that book
+      handleStartProcessing(data.bookId);
+    } catch (err) {
+      console.error('Error fetching latest-book:', err);
+    }
+  }
+
+  /**
+   * The step-based side effect:
    *  0: Upload Complete
    *  1: Analyzing Content
    *  2: X Chapters Detected
@@ -128,75 +168,72 @@ export default function ProcessAnimation({ userId }) {
    *  4: Analyzing chapters
    *  5: Sub-chapters detected
    *  6: Analyzing sub-chapters
-   *  7: All content absorbed
-   *  8: Create Adaptive Plan
+   *  7: All Content Absorbed
+   *  8: Show "Create Adaptive Plan"
    */
   useEffect(() => {
-    if (currentStep < 0) return; // not started yet
+    if (currentStep < 0) return; // means we haven't started
 
     switch (currentStep) {
       case 0:
+        // after 1s => step 1
         setTimeout(() => setCurrentStep(1), 1000);
         break;
       case 1:
+        // after 1s => step 2
         setTimeout(() => setCurrentStep(2), 1000);
         break;
       case 2:
+        // after 1s => step 3
         setTimeout(() => setCurrentStep(3), 1000);
         break;
       case 3: {
-        // Type out the chapter names
+        // Type out each chapter name
         setDisplayedChapters([]);
-        let i = 0;
-        const typeInterval = setInterval(() => {
-          const ch = chapters[i];
-          if (!ch || typeof ch.name !== 'string') {
-            // out of bounds or invalid
-            clearInterval(typeInterval);
+        let index = 0;
+        const interval = setInterval(() => {
+          const ch = chapters[index];
+          if (!ch) {
+            clearInterval(interval);
             setTimeout(() => setCurrentStep(4), 500);
             return;
           }
           setDisplayedChapters((prev) => [...prev, ch.name]);
-          i++;
-          if (i >= chapters.length) {
-            clearInterval(typeInterval);
+          index++;
+          if (index >= chapters.length) {
+            clearInterval(interval);
             setTimeout(() => setCurrentStep(4), 500);
           }
         }, 150);
         break;
       }
       case 4:
+        // after 1s => step 5
         setTimeout(() => setCurrentStep(5), 1000);
         break;
-      case 5: {
-        // We'll "detect" subchapters
+      case 5:
+        // sub-chapters => type them out with short delay for each chapter
         (async () => {
-          let newSubObj = {};
+          let newObj = {};
           for (let i = 0; i < chapters.length; i++) {
             const c = chapters[i];
-            if (!c || typeof c.name !== 'string') continue;
-
-            // c.subchapters should be safe, but just to be sure:
-            const subArr = Array.isArray(c.subchapters) ? c.subchapters : [];
-            // We'll gather subchapters by name
-            const subNames = subArr
-              .filter((s) => s && typeof s.name === 'string')
-              .map((s) => s.name);
-
-            newSubObj[c.name] = subNames;
-            setDisplayedSubChapters({ ...newSubObj });
-
-            // small delay before next
-            await new Promise((res) => setTimeout(res, 200));
+            if (!c || !Array.isArray(c.subchapters)) continue;
+            // gather subchapter names
+            const subNames = c.subchapters.map((s) => s.name || '');
+            newObj[c.name] = subNames;
+            setDisplayedSubChapters({ ...newObj });
+            // short delay for "detecting" next
+            await new Promise((r) => setTimeout(r, 200));
           }
           setTimeout(() => setCurrentStep(6), 1000);
         })();
         break;
-      }
       case 6:
+        // after 1s => step 7
         setTimeout(() => setCurrentStep(7), 1000);
         break;
       case 7:
+        // after 1s => step 8
         setTimeout(() => setCurrentStep(8), 1000);
         break;
       default:
@@ -204,20 +241,22 @@ export default function ProcessAnimation({ userId }) {
     }
   }, [currentStep, chapters]);
 
-  // Renders a spinner or check icon depending on step progress
-  const renderStepStatus = (stepIndex) => {
+  /**
+   * Renders spinner or check icon next to each step
+   */
+  function renderStepStatus(stepIndex) {
     if (currentStep === stepIndex) {
-      return <CircularProgress size={18} sx={{ ml: 1, color: '#4CAF50' }} />;
+      return (
+        <CircularProgress size={18} sx={{ ml: 1, color: '#4CAF50' }} />
+      );
     }
     if (currentStep > stepIndex) {
       return (
-        <CheckCircleIcon
-          sx={{ ml: 1, fontSize: '1.25rem', color: '#4CAF50' }}
-        />
+        <CheckCircleIcon sx={{ ml: 1, fontSize: '1.25rem', color: '#4CAF50' }} />
       );
     }
     return null;
-  };
+  }
 
   return (
     <Box
@@ -242,33 +281,24 @@ export default function ProcessAnimation({ userId }) {
           mt: 2,
         }}
       >
-        {/* Book ID input */}
-        <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-          <TextField
-            variant="filled"
-            label="Enter Book ID"
-            value={bookId}
-            onChange={(e) => setBookId(e.target.value)}
-            InputProps={{ style: { backgroundColor: '#333', color: '#fff' } }}
-            sx={{ flex: 1 }}
-          />
-          <Button
-            variant="contained"
-            onClick={handleStartProcessing}
-            sx={{ alignSelf: 'flex-end' }}
-          >
-            Start
-          </Button>
-        </Box>
+        {/* If we haven't started, show a small "Fetching..." indicator */}
+        {currentStep < 0 && (
+          <Box textAlign="center">
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              Please wait...
+            </Typography>
+            <CircularProgress />
+            <Typography sx={{ mt: 1, fontSize: '0.9rem', color: '#aaa' }}>
+              Fetching your latest uploaded book...
+            </Typography>
+          </Box>
+        )}
 
-        {/* Steps appear only after we start (>=0) */}
-        {currentStep >= 0 && (
+        {/* If we have started but haven't shown the plan wizard yet */}
+        {currentStep >= 0 && !showPlanWizard && (
           <>
             {/* Step 0 */}
-            <Typography
-              variant="h6"
-              sx={{ display: 'flex', alignItems: 'center' }}
-            >
+            <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center' }}>
               1. Upload Complete
               {renderStepStatus(0)}
             </Typography>
@@ -328,16 +358,16 @@ export default function ProcessAnimation({ userId }) {
               </Typography>
             )}
 
-            {/* Display collapsible sub-chapters */}
+            {/* Collapsible sub-chapters */}
             {currentStep >= 5 && (
               <Box sx={{ ml: 2, mt: 1 }}>
                 {Object.keys(displayedSubChapters).map((chapterName) => {
                   const subs = displayedSubChapters[chapterName] || [];
-                  const isExpanded = !!expandedChapters[chapterName];
+                  const isExpanded = expandedChapters[chapterName] || false;
 
                   return (
                     <Box key={chapterName} sx={{ mb: 2 }}>
-                      {/* Clickable row for chapter */}
+                      {/* Chapter row */}
                       <Box
                         sx={{
                           display: 'flex',
@@ -364,7 +394,6 @@ export default function ProcessAnimation({ userId }) {
                         </IconButton>
                       </Box>
 
-                      {/* Collapsible list */}
                       <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                         <List sx={{ pl: 3, listStyleType: 'disc', color: '#ccc' }}>
                           {subs.map((subName, i) => (
@@ -409,18 +438,35 @@ export default function ProcessAnimation({ userId }) {
               </Typography>
             )}
 
-            {/* Step 8 */}
+            {/* Step 8 => button to open plan wizard inline */}
             {currentStep === 8 && (
               <Box sx={{ mt: 4 }}>
                 <Button
                   variant="contained"
-                  onClick={() => alert('Adaptive Plan Created!')}
+                  onClick={() => setShowPlanWizard(true)}
                 >
                   Create Adaptive Plan
                 </Button>
               </Box>
             )}
           </>
+        )}
+
+        {/* If showPlanWizard===true => render EditAdaptivePlanModal inline */}
+        {showPlanWizard && (
+          <Box sx={{ mt: 3 }}>
+            <EditAdaptivePlanModal
+              // Renders in line, not a MUI <Dialog>
+              renderAsDialog={false}
+              // We'll pass open={true} for clarity, but it's ignored if renderAsDialog=false
+              open={true}
+              onClose={() => setShowPlanWizard(false)}
+              userId={userId}
+              bookId={bookId}
+              backendURL={backendURL}
+              colorScheme={colorScheme}
+            />
+          </Box>
         )}
       </Box>
     </Box>
