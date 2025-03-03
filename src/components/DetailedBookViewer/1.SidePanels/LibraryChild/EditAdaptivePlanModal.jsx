@@ -1,6 +1,6 @@
 // src/components/DetailedBookViewer/EditAdaptivePlanModal.jsx
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -72,30 +72,48 @@ export default function EditAdaptivePlanModal({
   // -------------------------------------------------
   // STEP 1: CHAPTER SELECTION
   // -------------------------------------------------
-  const [chapters, setChapters] = useState([
-    {
-      id: "ch1",
-      title: "Chapter 1: Introduction",
-      expanded: false,
-      selected: true,
-      subchapters: [
-        { id: "ch1.1", title: "Subchapter 1.1", selected: true },
-        { id: "ch1.2", title: "Subchapter 1.2", selected: true },
-      ],
-    },
-    {
-      id: "ch2",
-      title: "Chapter 2: Advanced Topics",
-      expanded: false,
-      selected: true,
-      subchapters: [
-        { id: "ch2.1", title: "Subchapter 2.1", selected: true },
-        { id: "ch2.2", title: "Subchapter 2.2", selected: true },
-        { id: "ch2.3", title: "Subchapter 2.3", selected: true },
-      ],
-    },
-  ]);
+  // Initially empty. Will be fetched from /api/process-book-data if bookId && userId exist.
+  const [chapters, setChapters] = useState([]);
 
+  // Fetch real chapters/subchapters if we have both userId and bookId
+  useEffect(() => {
+    async function fetchChapters() {
+      try {
+        const response = await axios.get(`${backendURL}/api/process-book-data`, {
+          params: { userId, bookId },
+        });
+        const data = response.data || {};
+
+        if (data.chapters && Array.isArray(data.chapters)) {
+          // Transform returned data into the format we need
+          const transformed = data.chapters.map((chap) => ({
+            id: chap.id,
+            title: chap.name, // from 'name' in DB
+            expanded: false,
+            selected: true,
+            subchapters: (chap.subchapters || []).map((sub) => ({
+              id: sub.id,
+              title: sub.name,
+              selected: true,
+            })),
+          }));
+          setChapters(transformed);
+        }
+      } catch (error) {
+        console.error("Error fetching chapters:", error);
+      }
+    }
+
+    if (userId && bookId) {
+      fetchChapters();
+    } else {
+      // If no bookId/userId, you could optionally set a default or dummy list here,
+      // or just leave chapters empty until provided.
+      // setChapters([...someFallbackData]); // if needed
+    }
+  }, [userId, bookId, backendURL]);
+
+  // Toggle entire chapter selection
   const handleToggleChapter = (chapterIndex) => {
     const updatedChapters = [...chapters];
     const current = updatedChapters[chapterIndex];
@@ -107,16 +125,19 @@ export default function EditAdaptivePlanModal({
     setChapters(updatedChapters);
   };
 
+  // Toggle individual subchapter selection
   const handleToggleSubchapter = (chapterIndex, subIndex) => {
     const updatedChapters = [...chapters];
     const subChaps = updatedChapters[chapterIndex].subchapters;
     subChaps[subIndex].selected = !subChaps[subIndex].selected;
 
+    // If at least one subchapter is selected, the parent chapter is "selected".
     const anySelected = subChaps.some((sc) => sc.selected);
     updatedChapters[chapterIndex].selected = anySelected;
     setChapters(updatedChapters);
   };
 
+  // Expand/collapse the accordion
   const handleAccordionToggle = (chapterIndex) => {
     const updatedChapters = [...chapters];
     updatedChapters[chapterIndex].expanded =
@@ -158,6 +179,8 @@ export default function EditAdaptivePlanModal({
         quizTime = 3;
         reviseTime = 3;
       }
+      // else if masteryLevel === "glance"
+      // stays at quizTime = 1, reviseTime = 1
 
       const requestBody = {
         userId,
@@ -171,7 +194,9 @@ export default function EditAdaptivePlanModal({
         requestBody.bookId = bookId;
       }
 
-      const createEndpoint = "https://generateadaptiveplan-zfztjkkvva-uc.a.run.app";
+      // Example endpoint for plan creation (replace if needed):
+      const createEndpoint =
+        "https://generateadaptiveplan-zfztjkkvva-uc.a.run.app";
       const response = await axios.post(createEndpoint, requestBody, {
         headers: { "Content-Type": "application/json" },
       });
@@ -211,6 +236,7 @@ export default function EditAdaptivePlanModal({
       if (!allPlans.length) {
         throw new Error("No plans found for this user.");
       }
+      // Sort by createdAt descending to get the most recent plan
       allPlans.sort((a, b) => {
         const tA = new Date(a.createdAt).getTime();
         const tB = new Date(b.createdAt).getTime();
@@ -240,10 +266,18 @@ export default function EditAdaptivePlanModal({
 
     const totalReadCount = allActivities.filter((a) => a.type === "READ").length;
     const totalQuizCount = allActivities.filter((a) => a.type === "QUIZ").length;
-    const totalReviseCount = allActivities.filter((a) => a.type === "REVISE").length;
+    const totalReviseCount = allActivities.filter(
+      (a) => a.type === "REVISE"
+    ).length;
 
-    const readTime = _.sumBy(allActivities.filter((a) => a.type === "READ"), "timeNeeded");
-    const quizTime = _.sumBy(allActivities.filter((a) => a.type === "QUIZ"), "timeNeeded");
+    const readTime = _.sumBy(
+      allActivities.filter((a) => a.type === "READ"),
+      "timeNeeded"
+    );
+    const quizTime = _.sumBy(
+      allActivities.filter((a) => a.type === "QUIZ"),
+      "timeNeeded"
+    );
     const reviseTime = _.sumBy(
       allActivities.filter((a) => a.type === "REVISE"),
       "timeNeeded"
@@ -317,7 +351,7 @@ export default function EditAdaptivePlanModal({
         reason,
       });
       setIsProcessingLocalCalc(false);
-    }, 300);
+    }, 6000);
   };
 
   function formatTimestamp(ts) {
@@ -336,10 +370,12 @@ export default function EditAdaptivePlanModal({
   // -------------------------------------------------
   const handleNext = async () => {
     if (activeStep === 0) {
+      // Move from step 0 to 1
       setActiveStep(1);
       return;
     }
     if (activeStep === 1) {
+      // Calculate feasibility, create plan, move to step 2
       calculatePlanLocally();
       await createPlanOnBackend();
       setActiveStep(2);
@@ -347,6 +383,7 @@ export default function EditAdaptivePlanModal({
       return;
     }
     if (activeStep === 2) {
+      // Final confirmation
       if (renderAsDialog && onClose) {
         onClose();
       }
@@ -355,6 +392,7 @@ export default function EditAdaptivePlanModal({
 
   const handleBack = () => {
     if (activeStep === 0) {
+      // If it's a dialog, close on back from step 0
       if (renderAsDialog && onClose) {
         onClose();
       }
@@ -386,6 +424,11 @@ export default function EditAdaptivePlanModal({
         <Typography variant="h6" sx={{ mb: 2, fontWeight: "bold", color: "#fff" }}>
           Select Chapters/Subchapters:
         </Typography>
+        {chapters.length === 0 && (
+          <Typography variant="body2" sx={{ color: "#ccc" }}>
+            No chapters found or not yet loaded.
+          </Typography>
+        )}
         {chapters.map((ch, idx) => (
           <Accordion
             key={ch.id}

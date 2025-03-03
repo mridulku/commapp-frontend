@@ -490,6 +490,7 @@ export default function ChildStats({
         open={editModalOpen}
         onClose={() => setEditModalOpen(false)}
         userId={userId}
+        bookId = {bookId}
         backendURL={backendURL}
         colorScheme={colorScheme}
       />
