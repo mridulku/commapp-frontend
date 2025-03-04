@@ -29,13 +29,9 @@ export default function UploadBook({ userId, onComplete }) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadDone, setUploadDone] = useState(false);
 
-  // If you need the user from Firebase directly:
-  // const [currentUserId, setCurrentUserId] = useState(userId || null);
-
   // Handler for uploading the selected PDF
   const handleUpload = async () => {
     if (!pdfFile) return;
-
     setUploading(true);
     setUploadProgress(0);
 
@@ -43,7 +39,7 @@ export default function UploadBook({ userId, onComplete }) {
       // 1. Upload PDF to Firebase
       const downloadURL = await uploadPDF(pdfFile);
 
-      // 2. Mark user as onboarded
+      // 2. Mark user as onboarded in your backend
       await markUserOnboarded(userId);
 
       setUploadDone(true);
@@ -95,7 +91,6 @@ export default function UploadBook({ userId, onComplete }) {
   const markUserOnboarded = async (uid) => {
     if (!uid) return;
     try {
-      // Replace this endpoint with your actual backend endpoint
       await axios.post(`${import.meta.env.VITE_BACKEND_URL}/api/learner-personas/onboard`, {
         userId: uid,
       });
@@ -105,26 +100,70 @@ export default function UploadBook({ userId, onComplete }) {
     }
   };
 
+  /* ------------------------------------
+   * Styles (Dark / Semi‐Transparent Card)
+   * ------------------------------------ */
+  const cardStyle = {
+    maxWidth: 600,
+    margin: "0 auto",
+    backgroundColor: "rgba(255,255,255,0.04)",  // or "rgba(0,0,0,0.5)" if you prefer
+    padding: "24px",
+    borderRadius: "12px",
+    textAlign: "center",
+    boxShadow: "0 4px 30px rgba(0,0,0,0.5)",
+    color: "#fff",
+  };
+
+  const textFieldStyle = {
+    mb: 1,
+    width: "100%",
+    // For a dark theme, you can try variant="filled" with custom styles:
+    "& .MuiFilledInput-root": {
+      backgroundColor: "rgba(255,255,255,0.1)",
+    },
+    "& .MuiOutlinedInput-root": {
+      // For outlined variant, set the border color:
+      "& fieldset": {
+        borderColor: "#888",
+      },
+      "&:hover fieldset": {
+        borderColor: "#ccc",
+      },
+    },
+    // Label color
+    "& .MuiInputLabel-root": {
+      color: "#bbb",
+    },
+    // Input text color
+    "& .MuiInputBase-input": {
+      color: "#fff",
+    },
+  };
+
+  // Purple accent (optional—use if you want the same purple as the carousel)
+  const accentPurple = "#9b59b6";
+  const accentPurpleHover = "#8e44ad";
+
+  const uploadButtonStyle = {
+    backgroundColor: accentPurple,
+    color: "#fff",
+    textTransform: "none",
+    "&:hover": {
+      backgroundColor: accentPurpleHover,
+    },
+  };
+
   return (
-    <Box
-      sx={{
-        maxWidth: 600,
-        margin: "0 auto",
-        backgroundColor: "#f5f5f5",
-        p: 3,
-        borderRadius: 2,
-        textAlign: "center",
-      }}
-    >
-      <Typography variant="h6" gutterBottom>
+    <Box sx={cardStyle}>
+      <Typography variant="h6" gutterBottom sx={{ fontWeight: "bold" }}>
         Upload Your Book
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+      <Typography variant="body2" sx={{ mb: 2, color: "#ccc" }}>
         Select a PDF file, optionally enter a title (or auto-generate it).
       </Typography>
 
       {/* File Picker */}
-      <Button variant="contained" component="label" sx={{ mb: 2 }}>
+      <Button variant="contained" component="label" sx={uploadButtonStyle}>
         Choose PDF
         <input
           type="file"
@@ -134,7 +173,7 @@ export default function UploadBook({ userId, onComplete }) {
         />
       </Button>
       {pdfFile && (
-        <Typography variant="subtitle2" sx={{ mt: 1 }}>
+        <Typography variant="subtitle2" sx={{ mt: 1, color: "#ccc" }}>
           Selected: {pdfFile.name}
         </Typography>
       )}
@@ -147,43 +186,43 @@ export default function UploadBook({ userId, onComplete }) {
           disabled={autoGenerateTitle}
           value={pdfTitle}
           onChange={(e) => setPdfTitle(e.target.value)}
-          sx={{ mb: 1, width: "100%" }}
+          sx={textFieldStyle}
         />
         <FormControlLabel
           control={
             <Checkbox
               checked={autoGenerateTitle}
               onChange={(e) => setAutoGenerateTitle(e.target.checked)}
+              sx={{ color: "#ccc" }}
             />
           }
-          label="Auto-generate title"
+          label={<span style={{ color: "#ccc" }}>Auto-generate title</span>}
         />
       </Box>
 
       {/* Upload / Next button */}
       <Box sx={{ mt: 3 }}>
         {uploading ? (
-          <>
-            {!uploadDone ? (
-              <>
-                <Typography variant="body1" gutterBottom>
-                  Uploading {uploadProgress}%
-                </Typography>
-                <CircularProgress />
-              </>
-            ) : (
-              <Typography variant="body1" color="success.main">
-                Upload Complete!
+          !uploadDone ? (
+            <>
+              <Typography variant="body1" gutterBottom sx={{ color: "#ccc" }}>
+                Uploading {uploadProgress}%
               </Typography>
-            )}
-          </>
+              <CircularProgress />
+            </>
+          ) : (
+            <Typography variant="body1" sx={{ color: "success.main" }}>
+              Upload Complete!
+            </Typography>
+          )
         ) : (
           <Button
             variant="contained"
             onClick={handleUpload}
             disabled={!pdfFile}
+            sx={{ ...uploadButtonStyle, mt: 1 }}
           >
-            Upload
+            {pdfFile ? "Upload" : "Upload (Select a File First)"}
           </Button>
         )}
       </Box>

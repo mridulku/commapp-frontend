@@ -6,62 +6,44 @@ import OnboardingFormContent from "./OnboardingFormContent";
 
 /**
  * OnboardingModal (Parent)
- *
- * A single overlay that toggles between "Chat" or "Form" tabs.
- * Props:
- *  - open (bool) : whether the modal is visible
- *  - onClose (fn): closes the modal
+ * 
+ * Key change:
+ *   - We removed "overflowY: 'auto'" from `modalStyle` and replaced it with "overflow: 'hidden'".
+ *   - This removes the scroll bar entirely. If your content is taller than the screen, it may be cut off.
+ *     If that happens, you might prefer "overflowY: 'auto'" but that does show a scrollbar.
  */
 export default function OnboardingModal({ open, onClose }) {
-  // Toggle between "chat" and "form"
-  const [activeView, setActiveView] = useState("chat");
+  const enableChat = false;
+  const [activeView, setActiveView] = useState("form");
 
   if (!open) return null;
 
   return (
     <div style={overlayStyle}>
       <div style={modalStyle}>
-        {/* Close "X" button */}
         <button onClick={onClose} style={closeButtonStyle}>
           X
         </button>
 
-        {/* Header with 2 buttons => Chat / Form */}
-        <div style={tabsContainerStyle}>
-          <button
-            onClick={() => setActiveView("chat")}
-            style={{
-              ...tabButtonStyle,
-              backgroundColor: activeView === "chat" ? "#444" : "#333",
-            }}
-          >
-            Chat
-          </button>
-          <button
-            onClick={() => setActiveView("form")}
-            style={{
-              ...tabButtonStyle,
-              backgroundColor: activeView === "form" ? "#444" : "#333",
-            }}
-          >
-            Form
-          </button>
-        </div>
-
-        {/* Conditionally render either Chat or Form content */}
-        <div style={{ marginTop: "1rem" }}>
-          {activeView === "chat" ? (
-            <OnboardingChatContent />
-          ) : (
+        {/* If you want to re-enable Chat in the future, uncomment tab UI here */}
+        {enableChat ? (
+          <div style={{ marginTop: "1rem" }}>
+            {activeView === "chat" ? (
+              <OnboardingChatContent />
+            ) : (
+              <OnboardingFormContent />
+            )}
+          </div>
+        ) : (
+          <div style={{ marginTop: "1rem" }}>
             <OnboardingFormContent />
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-/** Basic styling for the overlay */
 const overlayStyle = {
   position: "fixed",
   top: 0,
@@ -75,23 +57,22 @@ const overlayStyle = {
   justifyContent: "center",
 };
 
-/**
- * The main modal container: adjusted to be wider/taller
- * so the onboarding form + plan wizard is not cramped.
- */
 const modalStyle = {
   backgroundColor: "rgba(0,0,0,0.8)",
   padding: "20px",
   borderRadius: "8px",
-
-  // Use a relative or percentage-based width for more space
   width: "80vw",
-  // Optionally cap the maximum width
   maxWidth: "1000px",
+  // IMPORTANT: remove any forced scrolling:
+  // overflowY: "auto", // remove
+  // Instead, hide overflow or allow visible:
+  overflow: "hidden",
 
-  // Keep or adjust the height as needed
-  maxHeight: "80vh",
-  overflowY: "auto",
+  // If content is bigger than the screen, it might get cut off.
+  // If that’s not desired, try `overflow: "visible"` (still no scrollbar,
+  // but content might overflow outside the modal).
+  // overflow: "visible",
+
   position: "relative",
 };
 
@@ -103,20 +84,5 @@ const closeButtonStyle = {
   border: "none",
   color: "#fff",
   fontSize: "16px",
-  cursor: "pointer",
-};
-
-const tabsContainerStyle = {
-  display: "flex",
-  justifyContent: "center",
-  gap: "1rem",
-  marginBottom: "1rem",
-};
-
-const tabButtonStyle = {
-  padding: "8px 16px",
-  border: "none",
-  borderRadius: "4px",
-  color: "#fff",
   cursor: "pointer",
 };
