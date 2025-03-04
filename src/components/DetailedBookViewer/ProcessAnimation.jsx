@@ -1,5 +1,3 @@
-import EditAdaptivePlanModal from './1.SidePanels/LibraryChild/EditAdaptivePlanModal';
-
 // src/components/DetailedBookViewer/ProcessAnimation.jsx
 
 import React, { useEffect, useState } from 'react';
@@ -19,11 +17,9 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 
 // Import your inline plan wizard
+import EditAdaptivePlanModal from './1.SidePanels/LibraryChild/EditAdaptivePlanModal';
 
-/**
- * Helper: safely parse numeric prefix "3. Something" => 3.
- * If invalid, return 999999 so it sorts last.
- */
+// Helper: safely parse numeric prefix "3. Something" => 3.
 function getNumericPrefix(title) {
   if (typeof title !== 'string') return 999999;
   const match = title.trim().match(/^(\d+)\./);
@@ -38,6 +34,7 @@ function getNumericPrefix(title) {
  *  - userId (string) : from Firebase or your auth
  *  - backendURL (string, optional)
  *  - colorScheme (string, optional) – if you want to pass it to the plan wizard
+ *  - onShowPlanModal (fn) : If you want to externally trigger a "create plan"
  */
 export default function ProcessAnimation({ userId, backendURL, colorScheme, onShowPlanModal }) {
   // We'll store the "latest" bookId from the server
@@ -61,18 +58,13 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
   // Whether to show the plan wizard inline
   const [showPlanWizard, setShowPlanWizard] = useState(false);
 
-  // Expand/collapse toggler
+  // Toggle expand/collapse for sub-chapters
   const handleToggleExpand = (chapterName) => {
     setExpandedChapters((prev) => ({
       ...prev,
       [chapterName]: !prev[chapterName],
     }));
   };
-
-  
-
-
-
 
   /**
    * 1) Fetch chapters + subchapters from your backend for a given bookId
@@ -84,7 +76,6 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
       return;
     }
     try {
-      // If no backendURL, default to localhost
       const baseURL = backendURL || 'http://localhost:3001';
       // e.g. GET /api/process-book-data?userId=XYZ&bookId=ABC
       const res = await axios.get(`${baseURL}/api/process-book-data`, {
@@ -113,7 +104,6 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
           return aVal - bVal;
         });
 
-      // Save them
       setChapters(cleanedChapters);
       setNumChaptersDetected(cleanedChapters.length);
 
@@ -121,7 +111,6 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
       setDisplayedChapters([]);
       setDisplayedSubChapters({});
       setExpandedChapters({});
-      // Hide the wizard if it was open
       setShowPlanWizard(false);
 
       // Start the animation at step 0
@@ -132,8 +121,6 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
     }
   }
 
-
-
   /**
    * On mount, wait a few seconds, then fetch the "latest book" for this user
    * => Then call handleStartProcessing(bookId)
@@ -142,7 +129,7 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
     if (!userId) return;
     const timer = setTimeout(() => {
       fetchLatestBookAndProcess();
-    }, 60000);
+    }, 300);
     return () => clearTimeout(timer);
   }, [userId]);
 
@@ -248,9 +235,7 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
     }
   }, [currentStep, chapters]);
 
-  /**
-   * Renders spinner or check icon next to each step
-   */
+  // Renders spinner or check icon next to each step
   function renderStepStatus(stepIndex) {
     if (currentStep === stepIndex) {
       return (
@@ -265,217 +250,206 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
     return null;
   }
 
+  // >>> NEW: "Card" container style, so no forced full-screen
+  const containerStyle = {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    color: '#fff',
+    padding: '24px',
+    borderRadius: '12px',
+    boxShadow: '0 4px 30px rgba(0,0,0,0.5)',
+    maxWidth: '600px',
+    margin: '0 auto',
+  };
+
   return (
-    <Box
-      sx={{
-        backgroundColor: '#111',
-        color: '#fff',
-        minHeight: '100vh',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'flex-start',
-        p: 2,
-      }}
-    >
-      <Box
-        sx={{
-          width: '90%',
-          maxWidth: '600px',
-          backgroundColor: '#222',
-          border: '1px solid #333',
-          borderRadius: 2,
-          p: 3,
-          mt: 2,
-        }}
-      >
-        {/* If we haven't started, show a small "Fetching..." indicator */}
-        {currentStep < 0 && (
-          <Box textAlign="center">
-            <Typography variant="h6" sx={{ mb: 2 }}>
-              Please wait...
+    <Box sx={containerStyle}>
+      {/* If we haven't started, show a small "Fetching..." indicator */}
+      {currentStep < 0 && (
+        <Box textAlign="center">
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            Please wait...
+          </Typography>
+          <CircularProgress />
+          <Typography sx={{ mt: 1, fontSize: '0.9rem', color: '#aaa' }}>
+            Fetching your latest uploaded book...
+          </Typography>
+        </Box>
+      )}
+
+      {/* If we have started but haven't shown the plan wizard yet */}
+      {currentStep >= 0 && !showPlanWizard && (
+        <>
+          {/* Step 0 */}
+          <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center' }}>
+            1. Upload Complete
+            {renderStepStatus(0)}
+          </Typography>
+
+          {/* Step 1 */}
+          {currentStep >= 1 && (
+            <Typography
+              variant="h6"
+              sx={{ display: 'flex', alignItems: 'center', mt: 1 }}
+            >
+              2. Analyzing Content
+              {renderStepStatus(1)}
             </Typography>
-            <CircularProgress />
-            <Typography sx={{ mt: 1, fontSize: '0.9rem', color: '#aaa' }}>
-              Fetching your latest uploaded book...
+          )}
+
+          {/* Step 2 */}
+          {currentStep >= 2 && (
+            <Typography
+              variant="h6"
+              sx={{ display: 'flex', alignItems: 'center', mt: 1 }}
+            >
+              3. {numChaptersDetected} Chapters Detected
+              {renderStepStatus(2)}
             </Typography>
-          </Box>
-        )}
+          )}
 
-        {/* If we have started but haven't shown the plan wizard yet */}
-        {currentStep >= 0 && !showPlanWizard && (
-          <>
-            {/* Step 0 */}
-            <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center' }}>
-              1. Upload Complete
-              {renderStepStatus(0)}
+          {/* Step 3: typed-out chapters */}
+          {currentStep >= 3 && (
+            <Box sx={{ ml: 2, mt: 1 }}>
+              {displayedChapters.map((chName, idx) => (
+                <Typography key={idx} variant="body1">
+                  {chName}
+                </Typography>
+              ))}
+            </Box>
+          )}
+
+          {/* Step 4 */}
+          {currentStep >= 4 && (
+            <Typography
+              variant="h6"
+              sx={{ display: 'flex', alignItems: 'center', mt: 2 }}
+            >
+              4. Analyzing Chapters
+              {renderStepStatus(4)}
             </Typography>
+          )}
 
-            {/* Step 1 */}
-            {currentStep >= 1 && (
-              <Typography
-                variant="h6"
-                sx={{ display: 'flex', alignItems: 'center', mt: 1 }}
-              >
-                2. Analyzing Content
-                {renderStepStatus(1)}
-              </Typography>
-            )}
+          {/* Step 5 */}
+          {currentStep >= 5 && (
+            <Typography
+              variant="h6"
+              sx={{ display: 'flex', alignItems: 'center', mt: 2 }}
+            >
+              5. Sub-chapters Detected
+              {renderStepStatus(5)}
+            </Typography>
+          )}
 
-            {/* Step 2 */}
-            {currentStep >= 2 && (
-              <Typography
-                variant="h6"
-                sx={{ display: 'flex', alignItems: 'center', mt: 1 }}
-              >
-                3. {numChaptersDetected} Chapters Detected
-                {renderStepStatus(2)}
-              </Typography>
-            )}
+          {/* Collapsible sub-chapters */}
+          {currentStep >= 5 && (
+            <Box sx={{ ml: 2, mt: 1 }}>
+              {Object.keys(displayedSubChapters).map((chapterName) => {
+                const subs = displayedSubChapters[chapterName] || [];
+                const isExpanded = expandedChapters[chapterName] || false;
 
-            {/* Step 3: typed-out chapters */}
-            {currentStep >= 3 && (
-              <Box sx={{ ml: 2, mt: 1 }}>
-                {displayedChapters.map((chName, idx) => (
-                  <Typography key={idx} variant="body1">
-                    {chName}
-                  </Typography>
-                ))}
-              </Box>
-            )}
-
-            {/* Step 4 */}
-            {currentStep >= 4 && (
-              <Typography
-                variant="h6"
-                sx={{ display: 'flex', alignItems: 'center', mt: 2 }}
-              >
-                4. Analyzing Chapters
-                {renderStepStatus(4)}
-              </Typography>
-            )}
-
-            {/* Step 5 */}
-            {currentStep >= 5 && (
-              <Typography
-                variant="h6"
-                sx={{ display: 'flex', alignItems: 'center', mt: 2 }}
-              >
-                5. Sub-chapters Detected
-                {renderStepStatus(5)}
-              </Typography>
-            )}
-
-            {/* Collapsible sub-chapters */}
-            {currentStep >= 5 && (
-              <Box sx={{ ml: 2, mt: 1 }}>
-                {Object.keys(displayedSubChapters).map((chapterName) => {
-                  const subs = displayedSubChapters[chapterName] || [];
-                  const isExpanded = expandedChapters[chapterName] || false;
-
-                  return (
-                    <Box key={chapterName} sx={{ mb: 2 }}>
-                      {/* Chapter row */}
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          cursor: 'pointer',
+                return (
+                  <Box key={chapterName} sx={{ mb: 2 }}>
+                    {/* Chapter row */}
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => handleToggleExpand(chapterName)}
+                    >
+                      <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                        {chapterName}
+                      </Typography>
+                      <Typography variant="body2" sx={{ ml: 1, color: '#aaa' }}>
+                        ({subs.length} sub-chapters detected)
+                      </Typography>
+                      <IconButton
+                        size="small"
+                        sx={{ color: '#ccc', ml: 'auto' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleExpand(chapterName);
                         }}
-                        onClick={() => handleToggleExpand(chapterName)}
                       >
-                        <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                          {chapterName}
-                        </Typography>
-                        <Typography variant="body2" sx={{ ml: 1, color: '#aaa' }}>
-                          ({subs.length} sub-chapters detected)
-                        </Typography>
-                        <IconButton
-                          size="small"
-                          sx={{ color: '#ccc', ml: 'auto' }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleToggleExpand(chapterName);
-                          }}
-                        >
-                          {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                        </IconButton>
-                      </Box>
-
-                      <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                        <List sx={{ pl: 3, listStyleType: 'disc', color: '#ccc' }}>
-                          {subs.map((subName, i) => (
-                            <ListItem
-                              key={i}
-                              sx={{
-                                display: 'list-item',
-                                pl: 0,
-                                py: 0.2,
-                              }}
-                            >
-                              {subName}
-                            </ListItem>
-                          ))}
-                        </List>
-                      </Collapse>
+                        {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                      </IconButton>
                     </Box>
-                  );
-                })}
-              </Box>
-            )}
 
-            {/* Step 6 */}
-            {currentStep >= 6 && (
-              <Typography
-                variant="h6"
-                sx={{ display: 'flex', alignItems: 'center', mt: 2 }}
+                    <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                      <List sx={{ pl: 3, listStyleType: 'disc', color: '#ccc' }}>
+                        {subs.map((subName, i) => (
+                          <ListItem
+                            key={i}
+                            sx={{
+                              display: 'list-item',
+                              pl: 0,
+                              py: 0.2,
+                            }}
+                          >
+                            {subName}
+                          </ListItem>
+                        ))}
+                      </List>
+                    </Collapse>
+                  </Box>
+                );
+              })}
+            </Box>
+          )}
+
+          {/* Step 6 */}
+          {currentStep >= 6 && (
+            <Typography
+              variant="h6"
+              sx={{ display: 'flex', alignItems: 'center', mt: 2 }}
+            >
+              6. Analyzing Sub-chapters
+              {renderStepStatus(6)}
+            </Typography>
+          )}
+
+          {/* Step 7 */}
+          {currentStep >= 7 && (
+            <Typography
+              variant="h6"
+              sx={{ display: 'flex', alignItems: 'center', mt: 2 }}
+            >
+              7. All Content Absorbed
+              {renderStepStatus(7)}
+            </Typography>
+          )}
+
+          {/* Step 8 => button to open plan wizard inline */}
+          {currentStep === 8 && (
+            <Box sx={{ mt: 4 }}>
+              <Button
+                variant="contained"
+                onClick={() => setShowPlanWizard(true)}
               >
-                6. Analyzing Sub-chapters
-                {renderStepStatus(6)}
-              </Typography>
-            )}
+                Create Adaptive Plan
+              </Button>
+            </Box>
+          )}
+        </>
+      )}
 
-            {/* Step 7 */}
-            {currentStep >= 7 && (
-              <Typography
-                variant="h6"
-                sx={{ display: 'flex', alignItems: 'center', mt: 2 }}
-              >
-                7. All Content Absorbed
-                {renderStepStatus(7)}
-              </Typography>
-            )}
-
-            {/* Step 8 => button to open plan wizard inline */}
-            {currentStep === 8 && (
-              <Box sx={{ mt: 4 }}>
-                <Button
-                  variant="contained"
-                  onClick={() => setShowPlanWizard(true)}
-                >
-                  Create Adaptive Plan
-                </Button>
-              </Box>
-            )}
-          </>
-        )}
-
-        {/* If showPlanWizard===true => render EditAdaptivePlanModal inline */}
-        {showPlanWizard && (
-          <Box sx={{ mt: 3 }}>
-            <EditAdaptivePlanModal
-              // Renders in line, not a MUI <Dialog>
-              renderAsDialog={false}
-              // We'll pass open={true} for clarity, but it's ignored if renderAsDialog=false
-              open={true}
-              onClose={() => setShowPlanWizard(false)}
-              userId={userId}
-              bookId={bookId}
-              backendURL={backendURL}
-              colorScheme={colorScheme}
-            />
-          </Box>
-        )}
-      </Box>
+      {/* If showPlanWizard===true => render EditAdaptivePlanModal inline */}
+      {showPlanWizard && (
+        <Box sx={{ mt: 3 }}>
+          <EditAdaptivePlanModal
+            // Renders in-line, not a MUI <Dialog>
+            renderAsDialog={false}
+            // We'll pass open={true} for clarity
+            open={true}
+            onClose={() => setShowPlanWizard(false)}
+            userId={userId}
+            bookId={bookId}
+            backendURL={backendURL}
+            colorScheme={colorScheme}
+          />
+        </Box>
+      )}
     </Box>
   );
 }

@@ -908,6 +908,8 @@ export default function EditAdaptivePlanModal({
       <Dialog
         open={open}
         onClose={onClose}
+        // KEY: This ensures we have one scrollable area for the entire modal
+        scroll="paper"
         fullWidth
         maxWidth="md"
         PaperProps={{
@@ -929,6 +931,6 @@ export default function EditAdaptivePlanModal({
     );
   }
 
-  // Otherwise, render inline
+  // Otherwise, render inline (no MUI dialog)
   return <>{content}</>;
 }

@@ -7,10 +7,9 @@ import OnboardingFormContent from "./OnboardingFormContent";
 /**
  * OnboardingModal (Parent)
  * 
- * Key change:
- *   - We removed "overflowY: 'auto'" from `modalStyle` and replaced it with "overflow: 'hidden'".
- *   - This removes the scroll bar entirely. If your content is taller than the screen, it may be cut off.
- *     If that happens, you might prefer "overflowY: 'auto'" but that does show a scrollbar.
+ * We hide the Chat tab (enableChat=false) and always show the Form content.
+ * If you want to re-enable Chat in the future, set enableChat=true and uncomment
+ * the tab UI below.
  */
 export default function OnboardingModal({ open, onClose }) {
   const enableChat = false;
@@ -21,11 +20,11 @@ export default function OnboardingModal({ open, onClose }) {
   return (
     <div style={overlayStyle}>
       <div style={modalStyle}>
+        {/* Close "X" button */}
         <button onClick={onClose} style={closeButtonStyle}>
           X
         </button>
 
-        {/* If you want to re-enable Chat in the future, uncomment tab UI here */}
         {enableChat ? (
           <div style={{ marginTop: "1rem" }}>
             {activeView === "chat" ? (
@@ -35,6 +34,7 @@ export default function OnboardingModal({ open, onClose }) {
             )}
           </div>
         ) : (
+          // Chat disabled => always show form
           <div style={{ marginTop: "1rem" }}>
             <OnboardingFormContent />
           </div>
@@ -63,16 +63,8 @@ const modalStyle = {
   borderRadius: "8px",
   width: "80vw",
   maxWidth: "1000px",
-  // IMPORTANT: remove any forced scrolling:
-  // overflowY: "auto", // remove
-  // Instead, hide overflow or allow visible:
-  overflow: "hidden",
-
-  // If content is bigger than the screen, it might get cut off.
-  // If that’s not desired, try `overflow: "visible"` (still no scrollbar,
-  // but content might overflow outside the modal).
-  // overflow: "visible",
-
+  // Let the child control the scrolling:
+  overflow: "hidden", // or "visible"
   position: "relative",
 };
 
