@@ -11,39 +11,20 @@ import {
   Stepper,
   Step,
   StepLabel,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-  Checkbox,
-  FormControlLabel,
-  TextField,
-  RadioGroup,
-  Radio,
-  Grid,
   CircularProgress,
-  Tooltip,
-  IconButton,
-  FormControl,
-  FormLabel,
-  Paper,
 } from "@mui/material";
-
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import InfoIcon from "@mui/icons-material/Info";
 import CheckIcon from "@mui/icons-material/Check";
-import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
-import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
-import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import AutoStoriesIcon from "@mui/icons-material/AutoStories";
-import QuizIcon from "@mui/icons-material/Quiz";
-import RepeatIcon from "@mui/icons-material/Repeat";
-import BookmarkAddedIcon from "@mui/icons-material/BookmarkAdded";
 
 import axios from "axios";
 import _ from "lodash";
 
+// Import the three child components
+import ChapterSelection from "./ChapterSelection";
+import PlanSelection from "./PlanSelection";
+import PlanRender from "./PlanRender";
+
 /**
- * EditAdaptivePlanModal
+ * EditAdaptivePlanModal (Parent)
  *
  * A multi-step wizard for creating/editing an Adaptive Plan.
  *
@@ -73,9 +54,8 @@ export default function EditAdaptivePlanModal({
   const [createdPlan, setCreatedPlan] = useState(null);
 
   // -------------------------------------------------
-  // STEP 1: CHAPTER SELECTION
+  // STEP 1: CHAPTER SELECTION (state in parent, UI in child)
   // -------------------------------------------------
-  // We fetch chapters from /api/process-book-data if both userId && bookId exist
   const [chapters, setChapters] = useState([]);
 
   useEffect(() => {
@@ -144,7 +124,7 @@ export default function EditAdaptivePlanModal({
   };
 
   // -------------------------------------------------
-  // STEP 2: FORM FIELDS
+  // STEP 2: PLAN SELECTION (Target date, daily reading, mastery)
   // -------------------------------------------------
   const [targetDate, setTargetDate] = useState("");
   const [dailyReadingTime, setDailyReadingTime] = useState(30);
@@ -161,7 +141,6 @@ export default function EditAdaptivePlanModal({
 
   /**
    * createPlanOnBackend
-   * Hits the external "create" endpoint to generate an Adaptive Plan.
    */
   const createPlanOnBackend = async () => {
     if (!userId) {
@@ -182,8 +161,7 @@ export default function EditAdaptivePlanModal({
         quizTime = 3;
         reviseTime = 3;
       }
-      // else if masteryLevel === "glance"
-      // stays at quizTime = 1, reviseTime = 1
+      // else if "glance": stays at (1,1)
 
       const requestBody = {
         userId,
@@ -206,7 +184,6 @@ export default function EditAdaptivePlanModal({
       });
 
       const newPlan = response.data?.plan;
-      // Save the newly created plan in local state
       setCreatedPlan(newPlan);
       setCreatedPlanId(newPlan?.id || null);
       setCreatedAt(newPlan?.createdAt || null);
@@ -219,17 +196,12 @@ export default function EditAdaptivePlanModal({
   };
 
   // -------------------------------------------------
-  // STEP 3: FETCH MOST RECENT PLAN (User + Book)
+  // STEP 3: FETCH MOST RECENT PLAN
   // -------------------------------------------------
   const [isFetchingPlan, setIsFetchingPlan] = useState(false);
   const [serverPlan, setServerPlan] = useState(null);
   const [aggregated, setAggregated] = useState(null);
 
-  /**
-   * fetchMostRecentPlan
-   * Calls /api/adaptive-plans with userId and bookId as query params.
-   * We'll get all matching plans, then pick the most recent by createdAt.
-   */
   const fetchMostRecentPlan = async () => {
     if (!userId) {
       console.warn("No userId provided—can't fetch plan.");
@@ -244,7 +216,7 @@ export default function EditAdaptivePlanModal({
       const res = await axios.get(`${backendURL}/api/adaptive-plans`, {
         params: {
           userId,
-          bookId, // so we only get the plans for *this* user + *this* book
+          bookId,
         },
       });
 
@@ -258,8 +230,7 @@ export default function EditAdaptivePlanModal({
         const tB = new Date(b.createdAt).getTime();
         return tB - tA;
       });
-      const recentPlan = allPlans[0]; // The most recent plan
-
+      const recentPlan = allPlans[0];
       setServerPlan(recentPlan);
 
       // Compute reading/quiz/revise totals
@@ -273,9 +244,6 @@ export default function EditAdaptivePlanModal({
     }
   };
 
-  /**
-   * Compute total times and counts from plan sessions.
-   */
   function computeAggregation(plan) {
     if (!plan || !plan.sessions) return null;
     let allActivities = [];
@@ -287,9 +255,8 @@ export default function EditAdaptivePlanModal({
 
     const totalReadCount = allActivities.filter((a) => a.type === "READ").length;
     const totalQuizCount = allActivities.filter((a) => a.type === "QUIZ").length;
-    const totalReviseCount = allActivities.filter(
-      (a) => a.type === "REVISE"
-    ).length;
+    const totalReviseCount = allActivities.filter((a) => a.type === "REVISE")
+      .length;
 
     const readTime = _.sumBy(
       allActivities.filter((a) => a.type === "READ"),
@@ -381,21 +348,6 @@ export default function EditAdaptivePlanModal({
     }, 6000);
   }
 
-  function formatTimestamp(ts) {
-    if (!ts) return "N/A";
-    // If it's a Firestore Timestamp object with .toDate()
-    if (typeof ts.toDate === "function") {
-      return ts.toDate().toLocaleString();
-    }
-    // If it's an object with _seconds
-    if (ts._seconds) {
-      const millis = ts._seconds * 1000;
-      return new Date(millis).toLocaleString();
-    }
-    // Otherwise assume it's a standard date string
-    return String(ts);
-  }
-
   // -------------------------------------------------
   // NAVIGATION
   // -------------------------------------------------
@@ -406,18 +358,18 @@ export default function EditAdaptivePlanModal({
       return;
     }
     if (activeStep === 1) {
-      // (1) Calculate feasibility locally
+      // 1) Calculate feasibility locally
       calculatePlanLocally();
-      // (2) Create plan on backend
+      // 2) Create plan on backend
       await createPlanOnBackend();
-      // (3) Move to step 2
+      // 3) Move to step 2
       setActiveStep(2);
-      // (4) Then fetch the most recent plan (User + Book)
+      // 4) Then fetch the most recent plan
       fetchMostRecentPlan();
       return;
     }
     if (activeStep === 2) {
-      // Final confirmation => close dialog if we have one
+      // Final step => if dialog, close it
       if (renderAsDialog && onClose) {
         onClose();
       }
@@ -436,379 +388,45 @@ export default function EditAdaptivePlanModal({
   };
 
   // -------------------------------------------------
-  // STEP CONTENT RENDER
+  // RENDER STEP CONTENT
   // -------------------------------------------------
   const renderStepContent = (step) => {
     switch (step) {
       case 0:
-        return step0SelectChapters();
+        return (
+          <ChapterSelection
+            chapters={chapters}
+            onToggleChapter={handleToggleChapter}
+            onToggleSubchapter={handleToggleSubchapter}
+            onAccordionToggle={handleAccordionToggle}
+          />
+        );
       case 1:
-        return step1ScheduleMastery();
+        return (
+          <PlanSelection
+            targetDate={targetDate}
+            setTargetDate={setTargetDate}
+            dailyReadingTime={dailyReadingTime}
+            setDailyReadingTime={setDailyReadingTime}
+            masteryLevel={masteryLevel}
+            setMasteryLevel={setMasteryLevel}
+          />
+        );
       case 2:
-        return step2ReviewConfirm();
+        return (
+          <PlanRender
+            isCreatingPlan={isCreatingPlan}
+            isFetchingPlan={isFetchingPlan}
+            serverError={serverError}
+            serverPlan={serverPlan}
+            aggregated={aggregated}
+            planSummary={planSummary}
+          />
+        );
       default:
         return <Typography sx={{ color: "#fff" }}>Unknown step</Typography>;
     }
   };
-
-  // Step 0: CHAPTER SELECTION
-  function step0SelectChapters() {
-    return (
-      <Box>
-        <Typography variant="h6" sx={{ mb: 2, fontWeight: "bold", color: "#fff" }}>
-          Select Chapters/Subchapters:
-        </Typography>
-        {chapters.length === 0 && (
-          <Typography variant="body2" sx={{ color: "#ccc" }}>
-            No chapters found or not yet loaded.
-          </Typography>
-        )}
-        {chapters.map((ch, idx) => (
-          <Accordion
-            key={ch.id}
-            expanded={ch.expanded}
-            onChange={() => handleAccordionToggle(idx)}
-            sx={{
-              marginBottom: 1,
-              backgroundColor: "#262626",
-              color: "#fff",
-            }}
-          >
-            <AccordionSummary
-              expandIcon={
-                <ExpandMoreIcon sx={{ color: "#fff", fontSize: "1.5rem" }} />
-              }
-            >
-              <FormControlLabel
-                sx={{ color: "#fff" }}
-                control={
-                  <Checkbox
-                    checked={ch.selected}
-                    onChange={() => handleToggleChapter(idx)}
-                    onClick={(e) => e.stopPropagation()}
-                    sx={{
-                      color: "#B39DDB",
-                      "&.Mui-checked": { color: "#B39DDB" },
-                    }}
-                  />
-                }
-                label={
-                  <Typography sx={{ fontWeight: "bold", color: "#fff" }}>
-                    {ch.title}
-                  </Typography>
-                }
-              />
-            </AccordionSummary>
-            <AccordionDetails
-              sx={{ backgroundColor: "#1f1f1f", color: "#fff" }}
-            >
-              {ch.subchapters.map((sub, sidx) => (
-                <FormControlLabel
-                  key={sub.id}
-                  control={
-                    <Checkbox
-                      checked={sub.selected}
-                      onChange={() => handleToggleSubchapter(idx, sidx)}
-                      sx={{
-                        color: "#B39DDB",
-                        "&.Mui-checked": { color: "#B39DDB" },
-                      }}
-                    />
-                  }
-                  label={sub.title}
-                  sx={{ display: "block", marginLeft: 3, color: "#fff" }}
-                />
-              ))}
-            </AccordionDetails>
-          </Accordion>
-        ))}
-      </Box>
-    );
-  }
-
-  // Step 1: TARGET DATE, DAILY READING, MASTERY
-  function step1ScheduleMastery() {
-    return (
-      <Grid container spacing={3}>
-        <Grid item xs={12} sm={6}>
-          <Box display="flex" alignItems="center" gap={1}>
-            <Typography
-              variant="subtitle1"
-              sx={{ fontWeight: "bold", color: "#fff" }}
-            >
-              <CalendarMonthIcon
-                sx={{ fontSize: "1rem", verticalAlign: "middle", color: "#B39DDB" }}
-              />{" "}
-              Target Date
-            </Typography>
-            <Tooltip title="We use this to see if you can finish in time.">
-              <IconButton size="small" sx={{ color: "#B39DDB" }}>
-                <InfoIcon fontSize="inherit" />
-              </IconButton>
-            </Tooltip>
-          </Box>
-          <TextField
-            type="date"
-            fullWidth
-            value={targetDate}
-            onChange={(e) => setTargetDate(e.target.value)}
-            variant="outlined"
-            size="small"
-            sx={{
-              "& .MuiOutlinedInput-root": {
-                color: "#fff",
-                backgroundColor: "#333",
-              },
-              "& .MuiOutlinedInput-notchedOutline": {
-                borderColor: "#B39DDB",
-              },
-              "& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline": {
-                borderColor: "#D1C4E9",
-              },
-            }}
-            InputLabelProps={{
-              style: { color: "#fff" },
-            }}
-          />
-        </Grid>
-
-        <Grid item xs={12} sm={6}>
-          <Box display="flex" alignItems="center" gap={1}>
-            <Typography
-              variant="subtitle1"
-              sx={{ fontWeight: "bold", color: "#fff" }}
-            >
-              <AccessTimeIcon
-                sx={{ fontSize: "1rem", verticalAlign: "middle", color: "#B39DDB" }}
-              />{" "}
-              Daily Reading (min)
-            </Typography>
-            <Tooltip title="Minutes per day you can dedicate">
-              <IconButton size="small" sx={{ color: "#B39DDB" }}>
-                <InfoIcon fontSize="inherit" />
-              </IconButton>
-            </Tooltip>
-          </Box>
-          <TextField
-            type="number"
-            fullWidth
-            value={dailyReadingTime}
-            onChange={(e) => setDailyReadingTime(Number(e.target.value))}
-            variant="outlined"
-            size="small"
-            sx={{
-              "& .MuiOutlinedInput-root": {
-                color: "#fff",
-                backgroundColor: "#333",
-              },
-              "& .MuiOutlinedInput-notchedOutline": {
-                borderColor: "#B39DDB",
-              },
-              "&:hover .MuiOutlinedInput-notchedOutline": {
-                borderColor: "#D1C4E9",
-              },
-            }}
-          />
-        </Grid>
-
-        <Grid item xs={12}>
-          <Box display="flex" alignItems="center" gap={1}>
-            <Typography
-              variant="subtitle1"
-              sx={{ fontWeight: "bold", color: "#fff" }}
-            >
-              <AssignmentTurnedInIcon
-                sx={{ fontSize: "1rem", verticalAlign: "middle", color: "#B39DDB" }}
-              />{" "}
-              Mastery Level
-            </Typography>
-            <Tooltip
-              title={
-                <Box sx={{ color: "#fff" }}>
-                  <strong>Mastery:</strong> Deep understanding
-                  <br />
-                  <strong>Revision:</strong> Quick review
-                  <br />
-                  <strong>Glance:</strong> Minimal detail
-                </Box>
-              }
-            >
-              <IconButton size="small" sx={{ color: "#B39DDB" }}>
-                <InfoIcon fontSize="inherit" />
-              </IconButton>
-            </Tooltip>
-          </Box>
-          <FormControl sx={{ mt: 1 }}>
-            <FormLabel sx={{ color: "#fff" }}>Choose Level</FormLabel>
-            <RadioGroup
-              row
-              value={masteryLevel}
-              onChange={(e) => setMasteryLevel(e.target.value)}
-            >
-              {["mastery", "revision", "glance"].map((val) => (
-                <FormControlLabel
-                  key={val}
-                  value={val}
-                  control={
-                    <Radio
-                      sx={{
-                        color: "#B39DDB",
-                        "&.Mui-checked": { color: "#B39DDB" },
-                      }}
-                    />
-                  }
-                  label={val.charAt(0).toUpperCase() + val.slice(1)}
-                  sx={{ color: "#fff" }}
-                />
-              ))}
-            </RadioGroup>
-          </FormControl>
-        </Grid>
-      </Grid>
-    );
-  }
-
-  // Step 2: REVIEW & CONFIRM
-  function step2ReviewConfirm() {
-    return (
-      <Box sx={{ color: "#fff" }}>
-        {(isCreatingPlan || isFetchingPlan) && (
-          <Box textAlign="center" mb={2}>
-            <CircularProgress sx={{ color: "#B39DDB" }} />
-            <Typography variant="body2" sx={{ mt: 1, color: "#fff" }}>
-              {isCreatingPlan
-                ? "Creating plan on backend..."
-                : "Fetching plan from server..."}
-            </Typography>
-          </Box>
-        )}
-
-        {serverError && (
-          <Typography variant="body1" sx={{ color: "#f44336" }}>
-            {serverError}
-          </Typography>
-        )}
-
-        {serverPlan && aggregated && !isFetchingPlan && !isCreatingPlan && (
-          <>
-            <Typography
-              variant="h5"
-              sx={{ fontWeight: "bold", textAlign: "center", color: "#fff" }}
-            >
-              Your Plan is Ready!
-            </Typography>
-
-            <Typography
-              variant="body2"
-              sx={{ textAlign: "center", fontStyle: "italic", color: "#ccc" }}
-            >
-              Plan ID: {serverPlan.id}
-            </Typography>
-
-            <Box
-              display="flex"
-              flexWrap="wrap"
-              justifyContent="center"
-              gap={2}
-              mt={2}
-            >
-              <InfoCard
-                icon={<CalendarMonthIcon sx={{ fontSize: "2rem" }} />}
-                label="Target Date"
-                value={serverPlan.targetDate || "N/A"}
-              />
-              <InfoCard
-                icon={<AssignmentTurnedInIcon sx={{ fontSize: "2rem" }} />}
-                label="Mastery Level"
-                value={serverPlan.level || "N/A"}
-              />
-              <InfoCard
-                icon={<BookmarkAddedIcon sx={{ fontSize: "2rem" }} />}
-                label="Unique Chapters"
-                value={aggregated.uniqueChapterCount}
-              />
-              <InfoCard
-                icon={<BookmarkAddedIcon sx={{ fontSize: "2rem" }} />}
-                label="Unique SubChapters"
-                value={aggregated.uniqueSubChapterCount}
-              />
-              <InfoCard
-                icon={<AccessTimeIcon sx={{ fontSize: "2rem" }} />}
-                label="Total Plan Time"
-                value={`${aggregated.totalPlanTime} min`}
-              />
-              <InfoCard
-                icon={<AutoStoriesIcon sx={{ fontSize: "2rem" }} />}
-                label="Reading"
-                value={`${aggregated.readTime} min`}
-              />
-              <InfoCard
-                icon={<QuizIcon sx={{ fontSize: "2rem" }} />}
-                label="Quiz"
-                value={`${aggregated.quizTime} min`}
-              />
-              <InfoCard
-                icon={<RepeatIcon sx={{ fontSize: "2rem" }} />}
-                label="Revise"
-                value={`${aggregated.reviseTime} min`}
-              />
-              <InfoCard
-                icon={<InfoIcon sx={{ fontSize: "2rem" }} />}
-                label="Created At"
-                value={formatTimestamp(serverPlan.createdAt)}
-              />
-            </Box>
-
-            <Box textAlign="center" mt={3}>
-              {planSummary.feasible ? (
-                <Typography sx={{ color: "#4caf50", fontWeight: "bold" }}>
-                  Your plan seems feasible!
-                </Typography>
-              ) : (
-                <Typography sx={{ color: "#f44336", fontWeight: "bold" }}>
-                  This plan may not be feasible. {planSummary.reason}
-                </Typography>
-              )}
-            </Box>
-          </>
-        )}
-
-        {!isCreatingPlan && !isFetchingPlan && !serverError && !serverPlan && (
-          <Typography variant="body2" fontStyle="italic" sx={{ color: "#ccc" }}>
-            No plan data available.
-          </Typography>
-        )}
-      </Box>
-    );
-  }
-
-  // InfoCard sub-component for step2ReviewConfirm
-  function InfoCard({ icon, label, value }) {
-    return (
-      <Paper
-        elevation={3}
-        sx={{
-          width: 170,
-          height: 120,
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          alignItems: "center",
-          p: 1,
-          backgroundColor: "#2e2e2e",
-          color: "#fff",
-        }}
-      >
-        <Box textAlign="center" mb={1} sx={{ color: "#B39DDB" }}>
-          {icon}
-        </Box>
-        <Typography variant="subtitle2" sx={{ fontWeight: "bold" }}>
-          {label}
-        </Typography>
-        <Typography variant="body1">{value}</Typography>
-      </Paper>
-    );
-  }
 
   // -------------------------------------------------
   // MAIN RENDER
@@ -828,9 +446,7 @@ export default function EditAdaptivePlanModal({
             }
       }
     >
-      <Typography variant="h6" sx={{ fontWeight: "bold", mb: 2, color: "#fff" }}>
-        Adaptive Plan Setup
-      </Typography>
+      
 
       <Stepper
         activeStep={activeStep}
@@ -855,7 +471,7 @@ export default function EditAdaptivePlanModal({
         <Button
           variant="outlined"
           onClick={handleBack}
-          disabled={isProcessingLocalCalc || isCreatingPlan || isFetchingPlan}
+          disabled={isCreatingPlan || isFetchingPlan || isProcessingLocalCalc}
           sx={{
             borderColor: "#B39DDB",
             color: "#fff",
@@ -867,11 +483,12 @@ export default function EditAdaptivePlanModal({
           Back
         </Button>
 
+        {/* Next or Confirm button */}
         {activeStep < steps.length - 1 && (
           <Button
             variant="contained"
             onClick={handleNext}
-            disabled={isProcessingLocalCalc || isCreatingPlan || isFetchingPlan}
+            disabled={isCreatingPlan || isFetchingPlan || isProcessingLocalCalc}
             startIcon={<CheckIcon />}
             sx={{
               backgroundColor: "#B39DDB",
@@ -883,9 +500,9 @@ export default function EditAdaptivePlanModal({
           </Button>
         )}
         {activeStep === steps.length - 1 &&
-          !isProcessingLocalCalc &&
           !isCreatingPlan &&
-          !isFetchingPlan && (
+          !isFetchingPlan &&
+          !isProcessingLocalCalc && (
             <Button
               variant="contained"
               onClick={handleNext}
@@ -908,7 +525,6 @@ export default function EditAdaptivePlanModal({
       <Dialog
         open={open}
         onClose={onClose}
-        // KEY: This ensures we have one scrollable area for the entire modal
         scroll="paper"
         fullWidth
         maxWidth="md"
