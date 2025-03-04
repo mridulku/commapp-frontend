@@ -1,24 +1,19 @@
 // src/components/DetailedBookViewer/BooksViewer2.jsx
+
 import React, { useState, useEffect } from "react";
 import { useBooksViewer } from "./useBooksViewer";
 import OnboardingModal from "./OnboardingModal";
 
-import MaterialsDashboard from "./1.SidePanels/MaterialsDashboard"; // Example new component
-
+import MaterialsDashboard from "./1.SidePanels/MaterialsDashboard"; // Example
 import UnifiedSidebar from "./1.SidePanels/0.UnifiedSidebar";
 import ToursManager from "./0.1Tours/ToursManager";
 
 // Existing components...
 import BookProgress from "../Archive/2.2Library/BookProgress";
 import SubchapterContent from "./4.Subchapter Content/0.SubchapterContent";
-import OverviewContent from "./2.1Overview/0.OverviewContent";
 import UserProfileAnalytics from "./2.4Profile/UserProfileAnalytics";
-import PanelA from "./2.1Overview/2.PanelA";
-import PanelB from "./2.1Overview/3.PanelB";
 import PanelC from "./2.1Overview/4.PanelC";
-import PanelD from "./2.1Overview/5.PanelD";
 import PanelAdaptiveProcess from "./2.1Overview/PanelAdaptiveProcess";
-
 import PanelE from "./2.1Overview/PanelE"; // Example new component
 import StatsPanel from "./2.1Overview/1.StatsPanel";
 import BookSummary from "../Archive/2.2Library/BookSummary";
@@ -26,7 +21,7 @@ import LibraryHome from "../Archive/2.2Library/LibraryHome";
 import AdaptiveHome from "./2.3Adaptive/AdaptiveHome";
 
 // The cinematic "player" modal
-import AdaptivePlayerModal from "./3.AdaptiveModal/AdaptivePlayerModal"; // Adjust path as needed
+import AdaptivePlayerModal from "./3.AdaptiveModal/AdaptivePlayerModal"; // Adjust path if needed
 
 function BooksViewer2() {
   const {
@@ -66,7 +61,7 @@ function BooksViewer2() {
   const [initialActivityContext, setInitialActivityContext] = useState(null);
   const [modalFetchUrl, setModalFetchUrl] = useState("/api/adaptive-plan-total");
 
-  // For “Home” filler content (we won't use selectedHomeActivity if we're showing PanelE)
+  // For “Home” filler content
   const [selectedHomeActivity, setSelectedHomeActivity] = useState(null);
 
   /**
@@ -132,7 +127,7 @@ function BooksViewer2() {
     backgroundColor: themeColors.background,
   };
 
-  // The floating question-mark & player buttons
+  // Common base for floating buttons
   const floatBtnBase = {
     position: "fixed",
     bottom: "20px",
@@ -156,19 +151,10 @@ function BooksViewer2() {
     backgroundColor: themeColors.accent,
   };
 
-  const floatPlayerButtonStyle = {
-    ...floatBtnBase,
-    right: "20px",
-    fontSize: "1.3rem",
-    backgroundColor: "#CF6679",
-  };
-
   // Filter the data based on library/adaptive/overview
   const displayedBooksData = getFilteredBooksData();
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-
-  // Toggle function
   const handleToggleSidebar = () => {
     setIsSidebarCollapsed((prev) => !prev);
   };
@@ -181,29 +167,28 @@ function BooksViewer2() {
       setShowOnboardingModal(false);
     }
   }, [isOnboarded]);
- 
+
   // Decide main content for each viewMode
   let mainContent;
   if (viewMode === "overview") {
-      mainContent = (
-        <>
-          <StatsPanel />
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: "20px",
-            }}
-          >
-            <PanelC 
-             userId={userId}/>
-            
-            <PanelAdaptiveProcess />
-          </div>
-          
-        </>
-      );
-    
+    mainContent = (
+      <>
+        <StatsPanel />
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "20px",
+          }}
+        >
+          <PanelC
+            userId={userId}
+            onOpenOnboarding={() => setShowOnboardingModal(true)}
+          />
+          <PanelAdaptiveProcess />
+        </div>
+      </>
+    );
   } else if (viewMode === "profile") {
     mainContent = <UserProfileAnalytics />;
   } else if (viewMode === "library") {
@@ -271,30 +256,34 @@ function BooksViewer2() {
       );
     }
   } else if (viewMode === "home") {
-    // ----- NEW: Show the new component (PanelE or whichever you want) ------
-    mainContent = <MaterialsDashboard 
-    isCollapsed={isSidebarCollapsed}
-    userId={userId}
-          onToggleCollapse={handleToggleSidebar}
-          themeColors={themeColors}
-          viewMode={viewMode}
-          setViewMode={setViewMode}
-          categories={categories}
-          selectedCategory={selectedCategory}
-          onCategoryChange={handleCategoryChange}
-          booksData={displayedBooksData}
-          expandedBookName={expandedBookName}
-          toggleBookExpansion={toggleBookExpansion}
-          expandedChapters={expandedChapters}
-          toggleChapterExpansion={toggleChapterExpansion}
-          handleBookClick={handleBookClick}
-          handleChapterClick={handleChapterClick}
-          handleSubChapterClick={handleSubChapterClick}
-          selectedSubChapter={selectedSubChapter}
-          homePlanId={homePlanId}
-          planIds={planIds}
-          onHomeSelect={(act) => setSelectedHomeActivity(act)}
-          onOpenPlayer={handleOpenPlayer}/>;
+    // Show some home panel content or MaterialsDashboard
+    mainContent = (
+      <MaterialsDashboard
+        onOpenOnboarding={() => setShowOnboardingModal(true)}
+        isCollapsed={isSidebarCollapsed}
+        userId={userId}
+        onToggleCollapse={handleToggleSidebar}
+        themeColors={themeColors}
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+        categories={categories}
+        selectedCategory={selectedCategory}
+        onCategoryChange={handleCategoryChange}
+        booksData={displayedBooksData}
+        expandedBookName={expandedBookName}
+        toggleBookExpansion={toggleBookExpansion}
+        expandedChapters={expandedChapters}
+        toggleChapterExpansion={toggleChapterExpansion}
+        handleBookClick={handleBookClick}
+        handleChapterClick={handleChapterClick}
+        handleSubChapterClick={handleSubChapterClick}
+        selectedSubChapter={selectedSubChapter}
+        homePlanId={homePlanId}
+        planIds={planIds}
+        onHomeSelect={(act) => setSelectedHomeActivity(act)}
+        onOpenPlayer={handleOpenPlayer}
+      />
+    );
   }
 
   return (
@@ -341,19 +330,6 @@ function BooksViewer2() {
         ?
       </button>
 
-      {/* Floating "player" button => open OnboardingModal */}
-      <button
-        style={floatPlayerButtonStyle}
-        onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "#a85b61")}
-        onMouseOut={(e) => (e.currentTarget.style.backgroundColor = "#CF6679")}
-        onClick={() => {
-          setShowOnboardingModal(true);
-        }}
-        title="Open Onboarding"
-      >
-        ►
-      </button>
-
       {/* Joyride-based tours */}
       <ToursManager
         viewMode={viewMode}
@@ -373,7 +349,7 @@ function BooksViewer2() {
         fetchUrl={modalFetchUrl}
       />
 
-      {/* The new Onboarding Modal (only shows if showOnboardingModal = true) */}
+      {/* The Onboarding Modal (only shows if showOnboardingModal = true) */}
       <OnboardingModal
         open={showOnboardingModal}
         onClose={() => setShowOnboardingModal(false)}

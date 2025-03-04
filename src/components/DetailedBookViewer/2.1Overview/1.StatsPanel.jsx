@@ -6,13 +6,13 @@ import React from "react";
  * StatsPanel
  *
  * Four small “cards” in a row:
- * 1) Total Materials
- * 2) Plan Progress (with a small progress bar)
- * 3) Daily Average
- * 4) Days Until Next Deadline
+ *  1) Today's Schedule (Time)
+ *  2) Today's Progress (progress bar)
+ *  3) Daily Average
+ *  4) Active Courses
  */
 function StatsPanel() {
-  // Panel container styling
+  // Container that holds all four stat cards
   const panelContainerStyle = {
     display: "flex",
     gap: "20px",
@@ -25,7 +25,7 @@ function StatsPanel() {
     justifyContent: "space-around",
   };
 
-  // Each stat card styling
+  // Each individual card
   const statCardStyle = {
     display: "flex",
     flexDirection: "row",
@@ -35,7 +35,7 @@ function StatsPanel() {
     borderRadius: "8px",
     minWidth: "160px",
     justifyContent: "space-between",
-    color: "#fff",           // white text
+    color: "#fff", // white text
   };
 
   const iconStyle = {
@@ -50,11 +50,11 @@ function StatsPanel() {
     flex: 1,
   };
 
-  // The main number or info
+  // The main “big number” or info
   const valueStyle = {
     fontWeight: "bold",
     fontSize: "1.1rem",
-    color: "#FFD700", // gold accent
+    color: "#B39DDB", // Purple accent
   };
 
   const labelStyle = {
@@ -62,10 +62,8 @@ function StatsPanel() {
     opacity: 0.9,
   };
 
-  // For the progress bar in the Plan Progress stat
-  // Example: 60% progress
-  const progressPercent = 60;
-
+  // For the progress bar in the “Today’s Progress” stat
+  const progressPercent = 60; // placeholder
   const progressBarContainer = {
     marginTop: "4px",
     width: "100%",
@@ -77,32 +75,31 @@ function StatsPanel() {
   const progressBarFill = {
     width: `${progressPercent}%`,
     height: "100%",
-    backgroundColor: "#FFD700", // gold
+    backgroundColor: "#B39DDB", // purple
     borderRadius: "3px",
   };
 
   return (
     <div style={panelContainerStyle}>
-      {/* Stat #1: Total Materials */}
+      {/* Stat #1: Today's Schedule */}
       <div style={statCardStyle}>
-        <span role="img" aria-label="materials" style={iconStyle}>
-          📚
+        <span role="img" aria-label="clock" style={iconStyle}>
+          ⏰
         </span>
         <div style={textContainerStyle}>
-          <span style={valueStyle}>8</span>
-          <span style={labelStyle}>Total Materials</span>
+          <span style={valueStyle}>1h 30m</span>
+          <span style={labelStyle}>Today’s Schedule</span>
         </div>
       </div>
 
-      {/* Stat #2: Plan Progress (with progress bar) */}
+      {/* Stat #2: Today's Progress */}
       <div style={statCardStyle}>
         <span role="img" aria-label="progress" style={iconStyle}>
-          📈
+          📊
         </span>
         <div style={textContainerStyle}>
           <span style={valueStyle}>{progressPercent}%</span>
-          <span style={labelStyle}>Plan Progress</span>
-          {/* Small inline progress bar */}
+          <span style={labelStyle}>Today’s Progress</span>
           <div style={progressBarContainer}>
             <div style={progressBarFill} />
           </div>
@@ -111,23 +108,23 @@ function StatsPanel() {
 
       {/* Stat #3: Daily Average */}
       <div style={statCardStyle}>
-        <span role="img" aria-label="time" style={iconStyle}>
-          ⏰
+        <span role="img" aria-label="average" style={iconStyle}>
+          🕒
         </span>
         <div style={textContainerStyle}>
-          <span style={valueStyle}>1h 30m</span>
+          <span style={valueStyle}>1h 20m</span>
           <span style={labelStyle}>Daily Average</span>
         </div>
       </div>
 
-      {/* Stat #4: Days Until Next Deadline */}
+      {/* Stat #4: Active Courses */}
       <div style={statCardStyle}>
-        <span role="img" aria-label="deadline" style={iconStyle}>
-          🚀
+        <span role="img" aria-label="courses" style={iconStyle}>
+          📚
         </span>
         <div style={textContainerStyle}>
-          <span style={valueStyle}>14</span>
-          <span style={labelStyle}>Days Until Deadline</span>
+          <span style={valueStyle}>4</span>
+          <span style={labelStyle}>Active Courses</span>
         </div>
       </div>
     </div>

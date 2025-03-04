@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import {
   GoogleAuthProvider,
   signInWithPopup,
-  signInWithCustomToken
+  signInWithCustomToken,
 } from "firebase/auth";
 import axios from "axios";
 import { auth } from "../../firebase";
@@ -42,28 +42,22 @@ const darkTheme = createTheme({
   palette: {
     mode: "dark",
     primary: {
-      main: "#B39DDB" // Purple accent
+      main: "#B39DDB", // Purple accent
     },
     secondary: {
-      main: "#FFD700" // Gold accent
+      main: "#FFD700", // Gold accent
     },
     background: {
       default: "#0F0F0F",
-      paper: "#1F1F1F"
+      paper: "#1F1F1F",
     },
     text: {
       primary: "#FFFFFF",
-      secondary: "#AAAAAA"
-    }
+      secondary: "#AAAAAA",
+    },
   },
   typography: {
-    fontFamily: [
-      "Inter",
-      "Roboto",
-      "Helvetica",
-      "Arial",
-      "sans-serif"
-    ].join(","),
+    fontFamily: ["Inter", "Roboto", "Helvetica", "Arial", "sans-serif"].join(","),
   },
 });
 
@@ -85,7 +79,7 @@ export default function AuthSignIn() {
   // If you have your backend URL in env or just hardcode it:
   const backendURL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
 
-  // If user is already logged in => redirect to /dashboard
+  // If user is already logged in => we skip sign-in
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) {
@@ -94,26 +88,24 @@ export default function AuthSignIn() {
   }, [navigate]);
 
   /**
-   * Helper: After sign-in, create learnerPersonas doc if it doesn't exist
-   * with userId, wpm=200, dailyReadingTime=30
+   * Helper: After sign-in, create a learnerPersonas doc if none exists,
+   * using your custom endpoint => e.g. /create-learner-persona
    */
   async function createLearnerPersonaIfNeeded() {
     try {
-      // The current user must exist here
+      // The current user must exist here, post sign-in
       const currentUser = auth.currentUser;
       if (!currentUser) return;
 
-      // Call an endpoint in your backend that does:
-      // "If there's no doc in learnerPersonas with userId = X, create it with wpm=200, dailyReadingTime=30"
+      // e.g., if the doc already exists, the server will ignore
       await axios.post(`${backendURL}/create-learner-persona`, {
         userId: currentUser.uid,
         wpm: 200,
-        dailyReadingTime: 30
+        dailyReadingTime: 30,
       });
-      // If the doc already exists, the server can ignore or do nothing
     } catch (err) {
       console.error("Error creating learner persona:", err);
-      // Not a show-stopper, but log an error if needed
+      // Not a show-stopper, so we won't block
     }
   }
 
@@ -125,27 +117,34 @@ export default function AuthSignIn() {
     try {
       const response = await axios.post(`${backendURL}/login`, {
         username,
-        password
+        password,
       });
 
       if (response.data.success) {
         const { token, firebaseCustomToken, user } = response.data;
+
         if (!firebaseCustomToken) {
           alert("No Firebase custom token returned from server.");
           return;
         }
 
-        // ----- IMPORTANT: sign in to Firebase using the custom token -----
+        // Sign in to Firebase using the custom token
         await signInWithCustomToken(auth, firebaseCustomToken);
 
-        // Try to create a learner persona if none exists
+        // Store userId from the newly signed-in Firebase user
+        const currentUserId = auth.currentUser?.uid;
+        if (currentUserId) {
+          localStorage.setItem("userId", currentUserId);
+        }
+
+        // Attempt to create a default learnerPersona (optional)
         await createLearnerPersonaIfNeeded();
 
-        // Store your JWT + user data
+        // Store your server's JWT + user data
         localStorage.setItem("token", token);
         localStorage.setItem("userData", JSON.stringify(user));
 
-        // Navigate to dashboard
+        // Go to Dashboard
         navigate("/dashboard");
       } else {
         setErrorMsg(response.data.error || "Login failed");
@@ -166,26 +165,34 @@ export default function AuthSignIn() {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
 
-      // Get Firebase ID token from the newly signed-in user
+      // Now, get the Firebase ID token from the newly signed-in user
       const idToken = await auth.currentUser.getIdToken();
 
       // Send it to your server's /login-google route
-      const response = await axios.post(`${backendURL}/login-google`, { idToken });
+      const response = await axios.post(`${backendURL}/login-google`, {
+        idToken,
+      });
 
       if (response.data.success) {
         const { token, firebaseCustomToken, user } = response.data;
 
-        // ----- Sign in with the custom token from the server -----
+        // Sign in with the custom token from the server
         await signInWithCustomToken(auth, firebaseCustomToken);
 
-        // Try to create a learner persona if none exists
+        // Store userId from the newly signed-in Firebase user
+        const currentUserId = auth.currentUser?.uid;
+        if (currentUserId) {
+          localStorage.setItem("userId", currentUserId);
+        }
+
+        // Attempt to create a default learnerPersona
         await createLearnerPersonaIfNeeded();
 
         // Store server JWT + user data
         localStorage.setItem("token", token);
         localStorage.setItem("userData", JSON.stringify(user));
 
-        // Navigate to dashboard
+        // Navigate to Dashboard
         navigate("/dashboard");
       } else {
         setErrorMsg(response.data.error || "Google Sign-In failed");
@@ -256,7 +263,7 @@ export default function AuthSignIn() {
               fontWeight: "bold",
               display: "flex",
               alignItems: "center",
-              justifyContent: "center"
+              justifyContent: "center",
             }}
           >
             <GoogleLogo />

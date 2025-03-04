@@ -13,9 +13,10 @@ import {
   MenuItem,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
-import UploadMaterialModal from "./UploadMaterialModal";
 
-// Optional helper for an emoji icon
+/**
+ * Helper function for an emoji icon based on the book's name
+ */
 function getBookIcon(bookName) {
   const lower = (bookName || "").toLowerCase();
   if (lower.includes("math")) return "📐";
@@ -25,22 +26,36 @@ function getBookIcon(bookName) {
   return "📚";
 }
 
-export default function Child1({ userId, onBookSelect = () => {} }) {
+/**
+ * Child1
+ *
+ * A panel listing the user's books, with search, sort, and pagination.
+ *
+ * Props:
+ *  - userId (string)
+ *  - onBookSelect(bookId, bookName) => void
+ *  - onOpenOnboarding() => void   // to trigger the same "upload" modal from parent
+ */
+export default function Child1({
+  userId,
+  onBookSelect = () => {},
+  onOpenOnboarding = () => {},
+}) {
   const [booksData, setBooksData] = useState([]);
   const [selectedBookId, setSelectedBookId] = useState(null);
 
-  const [uploadOpen, setUploadOpen] = useState(false);
-
+  // Pagination
   const [page, setPage] = useState(1);
-  const booksPerPage = 10;
+  // CHANGED: only 5 books per page now
+  const booksPerPage = 5;
 
   // Search & Sort
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOption, setSortOption] = useState("NEWEST");
 
-  // -------------
+  // ----------------
   // 1) Fetch Books
-  // -------------
+  // ----------------
   useEffect(() => {
     if (!userId) return;
 
@@ -65,9 +80,9 @@ export default function Child1({ userId, onBookSelect = () => {} }) {
     fetchBooks();
   }, [userId]);
 
-  // -------------
+  // ----------------
   // 2) Filter & Sort
-  // -------------
+  // ----------------
   const filteredBooks = booksData.filter((book) => {
     const name = book.name || "";
     return name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -81,17 +96,22 @@ export default function Child1({ userId, onBookSelect = () => {} }) {
     const nameB = (b.name || "").toLowerCase();
 
     switch (sortOption) {
-      case "NEWEST": return dateB - dateA;
-      case "OLDEST": return dateA - dateB;
-      case "ALPHA_ASC": return nameA.localeCompare(nameB);
-      case "ALPHA_DESC": return nameB.localeCompare(nameA);
-      default: return 0;
+      case "NEWEST":
+        return dateB - dateA;
+      case "OLDEST":
+        return dateA - dateB;
+      case "ALPHA_ASC":
+        return nameA.localeCompare(nameB);
+      case "ALPHA_DESC":
+        return nameB.localeCompare(nameA);
+      default:
+        return 0;
     }
   });
 
-  // -------------
+  // ----------------
   // 3) Compute Stats
-  // -------------
+  // ----------------
   const bookStats = sortedBooks.map((book) => {
     const chapters = book.chapters || [];
     let subChaptersCount = 0;
@@ -118,28 +138,20 @@ export default function Child1({ userId, onBookSelect = () => {} }) {
     };
   });
 
+  // ----------------
   // Pagination
+  // ----------------
   const startIndex = (page - 1) * booksPerPage;
   const endIndex = startIndex + booksPerPage;
   const pagedBooks = bookStats.slice(startIndex, endIndex);
 
-  // -------------
+  // ----------------
   // 4) Handlers
-  // -------------
+  // ----------------
   function handleCardClick(bookId, bookName) {
     setSelectedBookId(bookId);
     onBookSelect(bookId, bookName);
   }
-
-  // This must exist if you're passing it to <UploadMaterialModal onUpload={...}>
-  function handleUploadMaterial(data) {
-    console.log("Received new upload data =>", data);
-    alert("Material uploaded. (Demo, not storing anywhere.)");
-  }
-
-  // Upload modal
-  const handleOpenUpload = () => setUploadOpen(true);
-  const handleCloseUpload = () => setUploadOpen(false);
 
   // Search & sort
   const handleSearchChange = (e) => {
@@ -151,9 +163,9 @@ export default function Child1({ userId, onBookSelect = () => {} }) {
     setPage(1);
   };
 
-  // -------------
+  // ----------------
   // 5) Render
-  // -------------
+  // ----------------
   return (
     <Box
       sx={{
@@ -165,10 +177,29 @@ export default function Child1({ userId, onBookSelect = () => {} }) {
         gap: 2,
       }}
     >
-      <Typography variant="h6" sx={{ fontWeight: "bold", mb: 1 }}>
-        My Materials
-      </Typography>
+      {/* 
+         Title row: "My Materials" + plus icon 
+         Moved AddIcon here next to "My Materials"
+      */}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        <Typography variant="h6" sx={{ fontWeight: "bold", mb: 0 }}>
+          My Materials
+        </Typography>
 
+        {/* Calls onOpenOnboarding() from parent to trigger the same Upload flow */}
+        <IconButton
+          onClick={onOpenOnboarding}
+          sx={{ color: "#4CAF50" }}
+          title="Upload Material"
+        >
+          <AddIcon />
+        </IconButton>
+      </Box>
+
+      {/* 
+         Row for Search & Sort 
+         (the plus button was removed from here and placed above)
+      */}
       <Box
         sx={{
           display: "flex",
@@ -232,16 +263,9 @@ export default function Child1({ userId, onBookSelect = () => {} }) {
             <MenuItem value="ALPHA_DESC">Z–A</MenuItem>
           </Select>
         </FormControl>
-
-        <IconButton
-          onClick={handleOpenUpload}
-          sx={{ color: "#4CAF50" }}
-          title="Upload Material"
-        >
-          <AddIcon />
-        </IconButton>
       </Box>
 
+      {/* If no books at all */}
       {bookStats.length === 0 ? (
         <Typography variant="body2">
           No books found for userId="{userId}".
@@ -301,7 +325,10 @@ export default function Child1({ userId, onBookSelect = () => {} }) {
                     {bs.name}
                   </Typography>
 
-                  <Typography variant="caption" sx={{ display: "block", opacity: 0.8 }}>
+                  <Typography
+                    variant="caption"
+                    sx={{ display: "block", opacity: 0.8 }}
+                  >
                     {creationDateText}
                   </Typography>
 
@@ -328,6 +355,7 @@ export default function Child1({ userId, onBookSelect = () => {} }) {
         </Box>
       )}
 
+      {/* Pagination => only show if total books is more than 1 page */}
       {bookStats.length > booksPerPage && (
         <Box sx={{ mt: 1, display: "flex", justifyContent: "center" }}>
           <Pagination
@@ -357,12 +385,6 @@ export default function Child1({ userId, onBookSelect = () => {} }) {
           />
         </Box>
       )}
-
-      <UploadMaterialModal
-        open={uploadOpen}
-        onClose={handleCloseUpload}
-        onUpload={handleUploadMaterial} // Re-added function here
-      />
     </Box>
   );
 }

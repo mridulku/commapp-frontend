@@ -3,27 +3,40 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 
+// A helper to randomize icons for each book tile
 function getRandomIcon() {
   const icons = ["📐", "🔬", "🏰", "🎨", "📚", "📝", "📊", "💻"];
   return icons[Math.floor(Math.random() * icons.length)];
 }
 
-function PanelC({ userId = "demoUser123" }) {
+/**
+ * PanelC
+ * Renders a list of the user's books, plus their "Day 1" plan data if it exists.
+ *
+ * Props:
+ *  - userId (string): The user's ID
+ *  - onOpenOnboarding (function): Callback to open the "OnboardingModal" from parent
+ */
+function PanelC({ userId = "demoUser123", onOpenOnboarding = () => {} }) {
   const [books, setBooks] = useState([]);
+  // We'll store plan info for each book in an object keyed by the book's doc.id
+  // e.g. plansData[bookId] = { loading, error, hasPlan, readCount, quizCount, reviseCount, totalTime }
+  const [plansData, setPlansData] = useState({});
 
+  // ------------------------------------------------
+  // 1) FETCH THE BOOKS
+  // ------------------------------------------------
   useEffect(() => {
     if (!userId) return;
 
     async function fetchBooks() {
       try {
-        // Adjust this to match your environment (e.g. VITE_BACKEND_URL)
-        const res = await axios.get(
-          `${import.meta.env.VITE_BACKEND_URL}/api/books-user`,
-          {
-            params: { userId },
-          }
-        );
+        const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/books-user`, {
+          params: { userId },
+        });
+
         if (res.data && res.data.success) {
+          console.log("Books fetched from the server:", res.data.data);
           setBooks(res.data.data);
         } else {
           console.warn("No data or success=false fetching books:", res.data);
@@ -38,11 +51,102 @@ function PanelC({ userId = "demoUser123" }) {
     fetchBooks();
   }, [userId]);
 
-  // -------------------- Display Logic --------------------
-  // We'll build a final array of "cards" that we want to render:
-  //  - If no books => only "See All Courses" card
-  //  - If 1-3 books => show them + "See All Courses" card
-  //  - If 4 or more => show first 3 + "X more courses available" card
+  // ------------------------------------------------
+  // 2) WHEN BOOKS ARRIVE, FETCH THE PLAN FOR EACH
+  // ------------------------------------------------
+  useEffect(() => {
+    async function fetchPlanForBook(bookId) {
+      // Mark the plan as loading
+      setPlansData((prev) => ({
+        ...prev,
+        [bookId]: { loading: true, error: null, hasPlan: false },
+      }));
+
+      try {
+        const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/adaptive-plans`, {
+          params: {
+            userId,
+            bookId, // same approach as your EditAdaptivePlanModal
+          },
+        });
+
+        const allPlans = res.data?.plans || [];
+        if (allPlans.length === 0) {
+          // No plan for this book
+          setPlansData((prev) => ({
+            ...prev,
+            [bookId]: {
+              loading: false,
+              error: null,
+              hasPlan: false,
+            },
+          }));
+          return;
+        }
+
+        // Sort by createdAt descending
+        allPlans.sort((a, b) => {
+          const tA = new Date(a.createdAt).getTime();
+          const tB = new Date(b.createdAt).getTime();
+          return tB - tA;
+        });
+        const recentPlan = allPlans[0];
+
+        // Grab "Day 1" (session[0]) data if available
+        let readCount = 0;
+        let quizCount = 0;
+        let reviseCount = 0;
+        let totalTime = 0;
+
+        if (recentPlan.sessions && recentPlan.sessions.length > 0) {
+          const day1Activities = recentPlan.sessions[0].activities || [];
+          day1Activities.forEach((act) => {
+            if (act.type === "READ") {
+              readCount += 1;
+            } else if (act.type === "QUIZ") {
+              quizCount += 1;
+            } else if (act.type === "REVISE") {
+              reviseCount += 1;
+            }
+            // If timeNeeded is on each activity, sum it to totalTime
+            if (act.timeNeeded) {
+              totalTime += act.timeNeeded;
+            }
+          });
+        }
+
+        // Save plan data
+        setPlansData((prev) => ({
+          ...prev,
+          [bookId]: {
+            loading: false,
+            error: null,
+            hasPlan: true,
+            readCount,
+            quizCount,
+            reviseCount,
+            totalTime,
+          },
+        }));
+      } catch (err) {
+        console.error("Error fetching plan for book:", bookId, err);
+        setPlansData((prev) => ({
+          ...prev,
+          [bookId]: { loading: false, error: err.message, hasPlan: false },
+        }));
+      }
+    }
+
+    // For each book, call fetchPlanForBook
+    books.forEach((book) => {
+      if (!book.id) return; // if missing doc id for some reason
+      fetchPlanForBook(book.id);
+    });
+  }, [books, userId]);
+
+  // ------------------------------------------------
+  // Display logic
+  // ------------------------------------------------
   const booksCount = books.length;
   let displayBooks = [];
 
@@ -52,16 +156,17 @@ function PanelC({ userId = "demoUser123" }) {
       {
         isSeeAll: true,
         title: "See All Courses",
-        icon: "📚", // or any icon you prefer
+        icon: "📚",
         extraCoursesCount: 0,
+        bookId: null,
       },
     ];
   } else if (booksCount < 4) {
-    // 1-3 books => show each + one "See All Courses" card
+    // 1-3 books => show them + "See All Courses"
     displayBooks = books.map((b) => ({
       isSeeAll: false,
-      // if your doc has "bookName", otherwise adapt as needed
-      title: b.bookName || "Untitled",
+      bookId: b.id,
+      title: b.name || "Untitled",
       icon: getRandomIcon(),
     }));
     displayBooks.push({
@@ -69,12 +174,14 @@ function PanelC({ userId = "demoUser123" }) {
       title: "See All Courses",
       icon: "📚",
       extraCoursesCount: 0,
+      bookId: null,
     });
   } else {
-    // 4 or more => show the first 3, plus "X more courses" tile
+    // 4+ => show first 3, plus "X more courses"
     const firstThree = books.slice(0, 3).map((b) => ({
       isSeeAll: false,
-      title: b.bookName || "Untitled",
+      bookId: b.id,
+      title: b.name || "Untitled",
       icon: getRandomIcon(),
     }));
     const remaining = booksCount - 3;
@@ -83,34 +190,36 @@ function PanelC({ userId = "demoUser123" }) {
       title: `${remaining} more courses available`,
       icon: "📚",
       extraCoursesCount: remaining,
+      bookId: null,
     });
     displayBooks = firstThree;
   }
 
   return (
     <div style={panelStyle}>
-      {/* Top row: Title on left, "Upload New Material" on right */}
+      {/* Top row: Title + "Upload New Material" button */}
       <div style={topRowStyle}>
         <h2 style={{ margin: 0 }}>My Courses / Books</h2>
         <div style={{ display: "flex", gap: "10px" }}>
-          <button style={uploadButtonStyle} onClick={() => { /* placeholder */ }}>
+          {/*
+            Updated: We call onOpenOnboarding() from the parent
+            to show the same "OnboardingModal" used by the red floating button
+          */}
+          <button style={uploadButtonStyle} onClick={onOpenOnboarding}>
             <span style={{ marginRight: "6px" }}>⬆️</span> Upload New Material
           </button>
         </div>
       </div>
 
-      {/* Tiles container */}
+      {/* Main grid of course/book tiles */}
       <div style={tileContainerStyle}>
         {displayBooks.map((item, idx) => {
           if (item.isSeeAll) {
-            // Special "See All Courses" or "X more courses" tile
+            // "See All Courses" or "X more courses" tile
             return (
               <div key={`seeAll-${idx}`} style={tileStyle}>
                 <div style={iconStyle}>{item.icon}</div>
                 <h3 style={{ margin: "10px 0 5px 0" }}>{item.title}</h3>
-
-                {/* No progress bar for "See All" */}
-                {/* No "Today's target" text for "See All" */}
 
                 <div style={buttonRowStyle}>
                   <button style={seeAllCoursesButtonStyle}>
@@ -120,28 +229,82 @@ function PanelC({ userId = "demoUser123" }) {
               </div>
             );
           } else {
-            // Normal course tile
+            // Normal course tile => check plan data in plansData[item.bookId]
+            const planInfo = plansData[item.bookId] || {};
+            const {
+              loading,
+              error,
+              hasPlan,
+              readCount = 0,
+              quizCount = 0,
+              reviseCount = 0,
+              totalTime = 0,
+            } = planInfo;
+
+            // If still loading plan data
+            if (loading) {
+              return (
+                <div key={`course-${idx}`} style={tileStyle}>
+                  <div style={iconStyle}>{item.icon}</div>
+                  <h3 style={{ margin: "10px 0 5px 0" }}>{item.title}</h3>
+                  <p style={{ fontSize: "0.9rem", opacity: 0.7 }}>
+                    Loading plan...
+                  </p>
+                </div>
+              );
+            }
+
+            // If error or no plan found
+            if (error || !hasPlan) {
+              return (
+                <div key={`course-${idx}`} style={tileStyle}>
+                  <div style={iconStyle}>{item.icon}</div>
+                  <h3 style={{ margin: "10px 0 5px 0" }}>{item.title}</h3>
+                  <p
+                    style={{
+                      fontSize: "0.9rem",
+                      opacity: 0.7,
+                      marginTop: "10px",
+                    }}
+                  >
+                    {error
+                      ? `Error: ${error}`
+                      : "No learning plan found for this course."}
+                  </p>
+
+                  <div style={buttonRowStyle}>
+                    <button style={noPlanButtonStyle}>
+                      Create Learning Plan
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+
+            // If we do have a plan => show progress bar (40% placeholder) + stats
             return (
               <div key={`course-${idx}`} style={tileStyle}>
                 <div style={iconStyle}>{item.icon}</div>
                 <h3 style={{ margin: "10px 0 5px 0" }}>{item.title}</h3>
 
-                {/* Static 40% progress bar */}
+                {/* Progress bar (purple) */}
                 <div style={progressBarContainerStyle}>
                   <div
                     style={{
                       ...progressBarFillStyle,
-                      width: "40%",
+                      width: "40%", // placeholder for now
                     }}
                   />
                 </div>
                 <p style={progressLabelStyle}>40% complete</p>
 
-                {/* Today’s Target */}
-                <p style={targetTextStyle}>
-                  Today’s Target: Complete chapter 2.1 - 2.3, 
-                  1 hour 30 minutes schedule today
-                </p>
+                {/* Each item on its own line, small text */}
+                <div style={targetInfoContainerStyle}>
+                  <div style={infoLineStyle}>⏰ {totalTime} min total</div>
+                  <div style={infoLineStyle}>📖 {readCount} read</div>
+                  <div style={infoLineStyle}>❓ {quizCount} quizzes</div>
+                  <div style={infoLineStyle}>🔄 {reviseCount} revise</div>
+                </div>
 
                 <div style={buttonRowStyle}>
                   <button style={primaryButtonStyle}>Start Learning</button>
@@ -155,7 +318,8 @@ function PanelC({ userId = "demoUser123" }) {
   );
 }
 
-// ==================== Styles (same as original) ====================
+// ==================== Styles ====================
+
 const panelStyle = {
   backgroundColor: "rgba(255, 255, 255, 0.1)",
   borderRadius: "8px",
@@ -206,24 +370,35 @@ const baseButtonStyle = {
   fontWeight: "bold",
 };
 
+// "Start Learning" => Purple button
 const primaryButtonStyle = {
   ...baseButtonStyle,
-  backgroundColor: "#FFD700",
+  backgroundColor: "#B39DDB",
   color: "#000",
 };
 
+// "See All Courses" => Blue button
 const seeAllCoursesButtonStyle = {
   ...baseButtonStyle,
   backgroundColor: "#03A9F4",
   color: "#000",
 };
 
+// "Upload New Material" => Green button
 const uploadButtonStyle = {
   ...baseButtonStyle,
   backgroundColor: "#4CAF50",
   color: "#000",
 };
 
+// "Create Learning Plan" => Orange button
+const noPlanButtonStyle = {
+  ...baseButtonStyle,
+  backgroundColor: "#FF9800",
+  color: "#000",
+};
+
+// Progress bar container
 const progressBarContainerStyle = {
   width: "100%",
   height: "8px",
@@ -232,9 +407,10 @@ const progressBarContainerStyle = {
   marginTop: "10px",
 };
 
+// Purple progress fill
 const progressBarFillStyle = {
   height: "100%",
-  backgroundColor: "#FFD700",
+  backgroundColor: "#B39DDB",
   borderRadius: "4px",
   transition: "width 0.3s ease",
 };
@@ -245,9 +421,17 @@ const progressLabelStyle = {
   opacity: 0.8,
 };
 
-const targetTextStyle = {
-  marginTop: "5px",
-  fontStyle: "italic",
+// Container for line-by-line stats
+const targetInfoContainerStyle = {
+  display: "flex",
+  flexDirection: "column",
+  marginTop: "10px",
+};
+
+const infoLineStyle = {
+  fontSize: "0.75rem",
+  marginBottom: "4px",
+  opacity: 0.9,
 };
 
 export default PanelC;

@@ -11,6 +11,7 @@ export default function MaterialsDashboard({
   userId,
   planIds = [],
   homePlanId = "",
+  onOpenOnboarding = () => {},
   backendURL = import.meta.env.VITE_BACKEND_URL,
   onHomeSelect = () => {},
   onOpenPlayer = () => {},
@@ -43,7 +44,7 @@ export default function MaterialsDashboard({
           backgroundColor: "#000",
         }}
       >
-        <Child1 userId={userId} onBookSelect={handleBookSelect} />
+        <Child1 userId={userId} onBookSelect={handleBookSelect} onOpenOnboarding={onOpenOnboarding} />
       </Grid>
 
       {/* RIGHT COLUMN */}

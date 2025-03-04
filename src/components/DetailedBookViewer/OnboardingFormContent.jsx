@@ -1,6 +1,7 @@
 // src/components/DetailedBookViewer/OnboardingFormContent.jsx
 
 import React, { useState, useEffect } from "react";
+import axios from "axios";
 import {
   ref as firebaseRef,
   uploadBytesResumable,
@@ -71,13 +72,12 @@ export default function OnboardingFormContent() {
    * Step Navigation (Top Bar)
    * -------------------------------- */
   const steps = ["Upload", "Analyze", "Plan"]; // 3 steps
-  // "activeNavStep" = 0, 1, or 2
 
   function renderNavBar() {
     return (
       <Box sx={{ mb: 2 }}>
         <Stepper activeStep={activeNavStep}>
-          {steps.map((label, index) => (
+          {steps.map((label) => (
             <Step key={label}>
               <StepLabel>{label}</StepLabel>
             </Step>
@@ -124,7 +124,12 @@ export default function OnboardingFormContent() {
             disabled={autoGenerateTitle}
             value={pdfTitle}
             onChange={(e) => setPdfTitle(e.target.value)}
-            sx={{ backgroundColor: "#fff", mb: 1, width: "100%", maxWidth: 400 }}
+            sx={{
+              backgroundColor: "#fff",
+              mb: 1,
+              width: "100%",
+              maxWidth: 400,
+            }}
           />
           <FormControlLabel
             control={
@@ -151,6 +156,19 @@ export default function OnboardingFormContent() {
     );
   }
 
+  // Helper to mark user as onboarded after successful upload
+  async function markUserOnboarded(uid) {
+    if (!uid) return;
+    try {
+      await axios.post(`${import.meta.env.VITE_BACKEND_URL}/api/learner-personas/onboard`, {
+        userId: uid,
+      });
+      console.log("User marked as onboarded:", uid);
+    } catch (err) {
+      console.error("Error marking user onboarded:", err);
+    }
+  }
+
   async function handleNextFromStep1() {
     if (!pdfFile) return;
     // Move local step => 2
@@ -160,7 +178,12 @@ export default function OnboardingFormContent() {
 
     setUploading(true);
     try {
+      // 1) Upload the PDF
       await uploadPDF(pdfFile);
+
+      // 2) Mark user as onboarded
+      await markUserOnboarded(currentUserId);
+
       setUploadDone(true);
     } catch (err) {
       console.error("Upload error:", err);
@@ -180,7 +203,7 @@ export default function OnboardingFormContent() {
         customMetadata: {
           category: "academic",
           userId: user?.uid || "noUser",
-          courseName: pdfTitle, // <<-- pass your pdfTitle here
+          courseName: pdfTitle, // we pass pdfTitle as well
         },
       };
 
@@ -227,10 +250,10 @@ export default function OnboardingFormContent() {
               Now analyzing your PDF with AI to detect chapters and sub-chapters...
             </Typography>
 
-            {/* 
+            {/*
               Render the ProcessAnimation right here.
-              We pass a callback that sets activeNavStep=2 
-              whenever the "Create Plan" button is clicked in that component 
+              We pass a callback that sets activeNavStep=2
+              whenever the "Create Plan" button is clicked in that component
               (which triggers the EditAdaptivePlanModal).
             */}
             <ProcessAnimation
