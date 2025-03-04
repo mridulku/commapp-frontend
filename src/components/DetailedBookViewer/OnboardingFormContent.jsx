@@ -1,82 +1,61 @@
 // src/components/DetailedBookViewer/OnboardingFormContent.jsx
 
 import React, { useState, useEffect } from "react";
+import { Box, Stepper, Step, StepLabel } from "@mui/material";
 import axios from "axios";
-import {
-  ref as firebaseRef,
-  uploadBytesResumable,
-  getDownloadURL,
-} from "firebase/storage";
-import { storage, auth } from "../../firebase";
+import { auth } from "../../firebase";
 
-import {
-  Box,
-  Typography,
-  TextField,
-  Button,
-  CircularProgress,
-  Checkbox,
-  FormControlLabel,
-  Stepper,
-  Step,
-  StepLabel,
-} from "@mui/material";
+// Import the new components:
+import OnboardingCarousel from "./OnboardingCarousel";
+import UploadBook from "./UploadBook";
 
-// Import your final ProcessAnimation component
-import ProcessAnimation from "./ProcessAnimation"; // <-- adjust path if needed
+// Import your existing components (assuming these paths are correct)
+import ProcessAnimation from "./ProcessAnimation";
+import EditAdaptivePlanModal from "./1.Sidepanels/LibraryChild/EditAdaptivePlanModal";
 
 /**
- * OnboardingFormContent
- * Renders a top nav bar (3-step), then the usual
- * (1) PDF Upload => (2) ProcessAnimation => (3) Plan Wizard (via EditAdaptivePlanModal).
+ * OnboardingFormContent is now the "parent container" that controls:
+ *   Step 0 => Onboarding Carousel
+ *   Step 1 => Upload Book
+ *   Step 2 => Process Animation
+ *   Step 3 => EditAdaptivePlanModal
+ *
+ * We show the Stepper only at steps >= 1.
  */
 export default function OnboardingFormContent() {
-  // "step" is the internal logic:
-  //   step=1 => show upload form
-  //   step=2 => show upload progress or process animation
-  //
-  // But we also have an "activeNavStep" for the top Stepper (1..3):
-  //   1 => "Upload"
-  //   2 => "Analyze"
-  //   3 => "Plan"
-  const [step, setStep] = useState(1);
-  const [activeNavStep, setActiveNavStep] = useState(0);
+  // parentStep represents the user's current stage in the flow:
+  // 0 => Onboarding Carousel
+  // 1 => Upload Book
+  // 2 => ProcessAnimation
+  // 3 => EditAdaptivePlanModal
+  const [parentStep, setParentStep] = useState(0);
 
-  // File + title
-  const [pdfFile, setPdfFile] = useState(null);
-  const [pdfTitle, setPdfTitle] = useState("");
-  const [autoGenerateTitle, setAutoGenerateTitle] = useState(false);
+  // For Stepper display, we define these 3 steps (Upload, Analyze, Plan).
+  // We do NOT include the carousel as a step in the Stepper
+  // so that it remains hidden during the carousel.
+  const steps = ["Upload", "Analyze", "Plan"];
 
-  // Upload states
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploading, setUploading] = useState(false);
-  const [uploadDone, setUploadDone] = useState(false);
+  // We may need the current user ID to pass into child components for uploading, etc.
+  const [currentUserId, setCurrentUserId] = useState(null);
 
-  // For the user ID
-  const [currentUserId, setCurrentUserId] = useState("demoUserId");
-
+  // On mount, retrieve the current user
   useEffect(() => {
-    // On mount, fetch user from Firebase
     const user = auth.currentUser;
     if (user?.uid) {
       setCurrentUserId(user.uid);
     }
   }, []);
 
-  // On load, we set the navigation step to 0 => "Upload"
-  useEffect(() => {
-    setActiveNavStep(0); // step index: 0 => "Upload", 1 => "Analyze", 2 => "Plan"
-  }, []);
+  // ---- Stepper rendering logic ----
+  const renderStepper = () => {
+    // If we're on the carousel (step 0), do NOT show the Stepper
+    if (parentStep === 0) return null;
 
-  /* --------------------------------
-   * Step Navigation (Top Bar)
-   * -------------------------------- */
-  const steps = ["Upload", "Analyze", "Plan"]; // 3 steps
-
-  function renderNavBar() {
+    // Otherwise, Stepper is active. However, parentStep=1 => active step=0, etc.
+    // so we subtract 1 to align them:
     return (
-      <Box sx={{ mb: 2 }}>
-        <Stepper activeStep={activeNavStep}>
+      <Box sx={{ mb: 3 }}>
+        <Stepper activeStep={parentStep - 1}>
           {steps.map((label) => (
             <Step key={label}>
               <StepLabel>{label}</StepLabel>
@@ -85,195 +64,65 @@ export default function OnboardingFormContent() {
         </Stepper>
       </Box>
     );
-  }
+  };
 
-  /* --------------------------------
-   * STEP 1: SELECT & UPLOAD
-   * -------------------------------- */
-  function Step1UploadForm() {
-    return (
-      <Box sx={{ p: 3, textAlign: "center" }}>
-        <Typography variant="h6" gutterBottom>
-          Upload Your PDF
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Choose your PDF file and enter a title (or auto-generate).
-        </Typography>
+  // ---- Callback handlers for child components ----
+  const handleCarouselFinish = () => {
+    // The user clicks "Start Uploading" from the carousel => move to step 1
+    setParentStep(1);
+  };
 
-        {/* File Picker */}
-        <Button variant="contained" component="label" sx={{ mb: 2 }}>
-          Choose PDF
-          <input
-            type="file"
-            accept="application/pdf"
-            hidden
-            onChange={(e) => setPdfFile(e.target.files?.[0] || null)}
-          />
-        </Button>
-        {pdfFile && (
-          <Typography variant="subtitle2" sx={{ mt: 1 }}>
-            Selected: {pdfFile.name}
-          </Typography>
-        )}
+  const handleUploadComplete = () => {
+    // Once uploading is finished, move to step 2 => ProcessAnimation
+    setParentStep(2);
+  };
 
-        {/* PDF Title or auto-generate */}
-        <Box sx={{ mt: 2 }}>
-          <TextField
-            label="PDF Title"
-            variant="outlined"
-            disabled={autoGenerateTitle}
-            value={pdfTitle}
-            onChange={(e) => setPdfTitle(e.target.value)}
-            sx={{
-              backgroundColor: "#fff",
-              mb: 1,
-              width: "100%",
-              maxWidth: 400,
-            }}
-          />
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={autoGenerateTitle}
-                onChange={(e) => setAutoGenerateTitle(e.target.checked)}
-              />
-            }
-            label="Auto-generate title"
-          />
-        </Box>
+  const handleAnalyzeComplete = () => {
+    // Once the user is done with ProcessAnimation,
+    // they might click "Create Plan" => step 3 => show EditAdaptivePlanModal
+    setParentStep(3);
+  };
 
-        {/* Next button */}
-        <Box sx={{ mt: 3 }}>
-          <Button
-            variant="contained"
-            onClick={handleNextFromStep1}
-            disabled={!pdfFile}
-          >
-            Next
-          </Button>
-        </Box>
-      </Box>
-    );
-  }
+  const handlePlanModalClose = () => {
+    // If needed, once plan is done, you could do something else (e.g. close, route away)
+    console.log("Plan creation complete or modal closed");
+  };
 
-  // Helper to mark user as onboarded after successful upload
-  async function markUserOnboarded(uid) {
-    if (!uid) return;
-    try {
-      await axios.post(`${import.meta.env.VITE_BACKEND_URL}/api/learner-personas/onboard`, {
-        userId: uid,
-      });
-      console.log("User marked as onboarded:", uid);
-    } catch (err) {
-      console.error("Error marking user onboarded:", err);
-    }
-  }
-
-  async function handleNextFromStep1() {
-    if (!pdfFile) return;
-    // Move local step => 2
-    setStep(2);
-    // Move nav => 1 => "Analyze"
-    setActiveNavStep(1);
-
-    setUploading(true);
-    try {
-      // 1) Upload the PDF
-      await uploadPDF(pdfFile);
-
-      // 2) Mark user as onboarded
-      await markUserOnboarded(currentUserId);
-
-      setUploadDone(true);
-    } catch (err) {
-      console.error("Upload error:", err);
-      setUploadDone(false);
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  function uploadPDF(file) {
-    return new Promise((resolve, reject) => {
-      const user = auth.currentUser;
-      const path = `pdfUploads/${file.name}/${file.name}`;
-      const storageRef = firebaseRef(storage, path);
-
-      const metadata = {
-        customMetadata: {
-          category: "academic",
-          userId: user?.uid || "noUser",
-          courseName: pdfTitle, // we pass pdfTitle as well
-        },
-      };
-
-      const uploadTask = uploadBytesResumable(storageRef, file, metadata);
-      uploadTask.on(
-        "state_changed",
-        (snapshot) => {
-          const prog = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          setUploadProgress(Math.round(prog));
-        },
-        (err) => reject(err),
-        async () => {
-          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-          resolve(downloadURL);
-        }
-      );
-    });
-  }
-
-  /* --------------------------------
-   * STEP 2: SHOW UPLOAD PROGRESS OR "PROCESS ANIMATION"
-   * -------------------------------- */
-  function Step2UploadingOrAnalyze() {
-    return (
-      <Box sx={{ p: 3, textAlign: "center" }}>
-        {!uploadDone ? (
-          // Still uploading => show progress
-          <>
-            <Typography variant="h6" gutterBottom>
-              Uploading Your PDF...
-            </Typography>
-            <Box sx={{ mb: 2 }}>
-              <CircularProgress />
-            </Box>
-            <Typography sx={{ mt: 1 }}>{uploadProgress}%</Typography>
-          </>
-        ) : (
-          // Upload finished => show "Upload Complete" AND the ProcessAnimation
-          <Box>
-            <Typography variant="h6" gutterBottom>
-              Upload Complete!
-            </Typography>
-            <Typography variant="body1" sx={{ mb: 2 }}>
-              Now analyzing your PDF with AI to detect chapters and sub-chapters...
-            </Typography>
-
-            {/*
-              Render the ProcessAnimation right here.
-              We pass a callback that sets activeNavStep=2
-              whenever the "Create Plan" button is clicked in that component
-              (which triggers the EditAdaptivePlanModal).
-            */}
-            <ProcessAnimation
-              userId={currentUserId}
-              onShowPlanModal={() => setActiveNavStep(2)}
-            />
-          </Box>
-        )}
-      </Box>
-    );
-  }
-
+  // ---- Main Rendering ----
   return (
-    <Box sx={{ color: "#fff" }}>
-      {/* Top step navigation bar */}
-      {renderNavBar()}
+    <Box sx={{ backgroundColor: "#fff", color: "#000", p: 2 }}>
+      {/* Stepper (hidden during carousel) */}
+      {renderStepper()}
 
-      {/* Then the main content */}
-      {step === 1 && <Step1UploadForm />}
-      {step === 2 && <Step2UploadingOrAnalyze />}
+      {/* Step 0 => Onboarding Carousel */}
+      {parentStep === 0 && (
+        <OnboardingCarousel onFinish={handleCarouselFinish} />
+      )}
+
+      {/* Step 1 => Upload Book */}
+      {parentStep === 1 && (
+        <UploadBook
+          userId={currentUserId}
+          onComplete={handleUploadComplete}
+        />
+      )}
+
+      {/* Step 2 => ProcessAnimation */}
+      {parentStep === 2 && (
+        <ProcessAnimation
+          userId={currentUserId}
+          onShowPlanModal={handleAnalyzeComplete}
+        />
+      )}
+
+      {/* Step 3 => EditAdaptivePlanModal (or Plan Wizard) */}
+      {parentStep === 3 && (
+        <EditAdaptivePlanModal
+          userId={currentUserId}
+          open={true}
+          onClose={handlePlanModalClose}
+        />
+      )}
     </Box>
   );
 }
