@@ -180,6 +180,7 @@ export default function OnboardingFormContent() {
         customMetadata: {
           category: "academic",
           userId: user?.uid || "noUser",
+          courseName: pdfTitle, // <<-- pass your pdfTitle here
         },
       };
 

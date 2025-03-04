@@ -69,13 +69,15 @@ export default function EditAdaptivePlanModal({
   const [activeStep, setActiveStep] = useState(0);
   const steps = ["Select Chapters", "Schedule & Mastery", "Review & Confirm"];
 
+  // Keep track of a newly created plan object
+  const [createdPlan, setCreatedPlan] = useState(null);
+
   // -------------------------------------------------
   // STEP 1: CHAPTER SELECTION
   // -------------------------------------------------
-  // Initially empty. Will be fetched from /api/process-book-data if bookId && userId exist.
+  // We fetch chapters from /api/process-book-data if both userId && bookId exist
   const [chapters, setChapters] = useState([]);
 
-  // Fetch real chapters/subchapters if we have both userId and bookId
   useEffect(() => {
     async function fetchChapters() {
       try {
@@ -106,10 +108,6 @@ export default function EditAdaptivePlanModal({
 
     if (userId && bookId) {
       fetchChapters();
-    } else {
-      // If no bookId/userId, you could optionally set a default or dummy list here,
-      // or just leave chapters empty until provided.
-      // setChapters([...someFallbackData]); // if needed
     }
   }, [userId, bookId, backendURL]);
 
@@ -131,7 +129,7 @@ export default function EditAdaptivePlanModal({
     const subChaps = updatedChapters[chapterIndex].subchapters;
     subChaps[subIndex].selected = !subChaps[subIndex].selected;
 
-    // If at least one subchapter is selected, the parent chapter is "selected".
+    // If at least one subchapter is selected, mark the parent chapter as selected
     const anySelected = subChaps.some((sc) => sc.selected);
     updatedChapters[chapterIndex].selected = anySelected;
     setChapters(updatedChapters);
@@ -140,8 +138,8 @@ export default function EditAdaptivePlanModal({
   // Expand/collapse the accordion
   const handleAccordionToggle = (chapterIndex) => {
     const updatedChapters = [...chapters];
-    updatedChapters[chapterIndex].expanded =
-      !updatedChapters[chapterIndex].expanded;
+    updatedChapters[chapterIndex].expanded = !updatedChapters[chapterIndex]
+      .expanded;
     setChapters(updatedChapters);
   };
 
@@ -161,6 +159,10 @@ export default function EditAdaptivePlanModal({
   const [createdPlanId, setCreatedPlanId] = useState(null);
   const [createdAt, setCreatedAt] = useState(null);
 
+  /**
+   * createPlanOnBackend
+   * Hits the external "create" endpoint to generate an Adaptive Plan.
+   */
   const createPlanOnBackend = async () => {
     if (!userId) {
       console.warn("No userId provided. Cannot create plan.");
@@ -170,6 +172,7 @@ export default function EditAdaptivePlanModal({
       setServerError(null);
       setIsCreatingPlan(true);
 
+      // Decide quizTime & reviseTime based on masteryLevel
       let quizTime = 1;
       let reviseTime = 1;
       if (masteryLevel === "mastery") {
@@ -197,11 +200,14 @@ export default function EditAdaptivePlanModal({
       // Example endpoint for plan creation (replace if needed):
       const createEndpoint =
         "https://generateadaptiveplan-zfztjkkvva-uc.a.run.app";
+
       const response = await axios.post(createEndpoint, requestBody, {
         headers: { "Content-Type": "application/json" },
       });
 
       const newPlan = response.data?.plan;
+      // Save the newly created plan in local state
+      setCreatedPlan(newPlan);
       setCreatedPlanId(newPlan?.id || null);
       setCreatedAt(newPlan?.createdAt || null);
     } catch (error) {
@@ -213,12 +219,17 @@ export default function EditAdaptivePlanModal({
   };
 
   // -------------------------------------------------
-  // STEP 3: FETCH MOST RECENT PLAN
+  // STEP 3: FETCH MOST RECENT PLAN (User + Book)
   // -------------------------------------------------
   const [isFetchingPlan, setIsFetchingPlan] = useState(false);
   const [serverPlan, setServerPlan] = useState(null);
   const [aggregated, setAggregated] = useState(null);
 
+  /**
+   * fetchMostRecentPlan
+   * Calls /api/adaptive-plans with userId and bookId as query params.
+   * We'll get all matching plans, then pick the most recent by createdAt.
+   */
   const fetchMostRecentPlan = async () => {
     if (!userId) {
       console.warn("No userId provided—can't fetch plan.");
@@ -229,22 +240,29 @@ export default function EditAdaptivePlanModal({
       setServerError(null);
       setServerPlan(null);
 
+      // GET /api/adaptive-plans?userId=...&bookId=...
       const res = await axios.get(`${backendURL}/api/adaptive-plans`, {
-        params: { userId },
+        params: {
+          userId,
+          bookId, // so we only get the plans for *this* user + *this* book
+        },
       });
+
       const allPlans = res.data?.plans || [];
       if (!allPlans.length) {
-        throw new Error("No plans found for this user.");
+        throw new Error("No plans found for this user/book combination.");
       }
-      // Sort by createdAt descending to get the most recent plan
+      // Sort by createdAt descending
       allPlans.sort((a, b) => {
         const tA = new Date(a.createdAt).getTime();
         const tB = new Date(b.createdAt).getTime();
         return tB - tA;
       });
-      const recentPlan = allPlans[0];
+      const recentPlan = allPlans[0]; // The most recent plan
+
       setServerPlan(recentPlan);
 
+      // Compute reading/quiz/revise totals
       const agg = computeAggregation(recentPlan);
       setAggregated(agg);
     } catch (err) {
@@ -255,6 +273,9 @@ export default function EditAdaptivePlanModal({
     }
   };
 
+  /**
+   * Compute total times and counts from plan sessions.
+   */
   function computeAggregation(plan) {
     if (!plan || !plan.sessions) return null;
     let allActivities = [];
@@ -312,8 +333,10 @@ export default function EditAdaptivePlanModal({
     reason: "",
   });
 
-  const calculatePlanLocally = () => {
+  function calculatePlanLocally() {
     setIsProcessingLocalCalc(true);
+
+    // Rough local estimate of reading times
     let timePerSubchapter = 10;
     if (masteryLevel === "revision") timePerSubchapter = 5;
     if (masteryLevel === "glance") timePerSubchapter = 2;
@@ -321,7 +344,9 @@ export default function EditAdaptivePlanModal({
     let subchapterCount = 0;
     chapters.forEach((ch) => {
       ch.subchapters.forEach((sub) => {
-        if (sub.selected) subchapterCount += 1;
+        if (sub.selected) {
+          subchapterCount += 1;
+        }
       });
     });
 
@@ -331,6 +356,7 @@ export default function EditAdaptivePlanModal({
 
     const today = new Date();
     const tDate = new Date(targetDate);
+
     let feasible = true;
     let reason = "";
     if (!isNaN(tDate.getTime())) {
@@ -342,6 +368,7 @@ export default function EditAdaptivePlanModal({
       }
     }
 
+    // Fake 6-second delay to mimic some local processing
     setTimeout(() => {
       setPlanSummary({
         totalMinutes: totalTime,
@@ -352,16 +379,20 @@ export default function EditAdaptivePlanModal({
       });
       setIsProcessingLocalCalc(false);
     }, 6000);
-  };
+  }
 
   function formatTimestamp(ts) {
     if (!ts) return "N/A";
+    // If it's a Firestore Timestamp object with .toDate()
     if (typeof ts.toDate === "function") {
       return ts.toDate().toLocaleString();
-    } else if (ts._seconds) {
+    }
+    // If it's an object with _seconds
+    if (ts._seconds) {
       const millis = ts._seconds * 1000;
       return new Date(millis).toLocaleString();
     }
+    // Otherwise assume it's a standard date string
     return String(ts);
   }
 
@@ -375,15 +406,18 @@ export default function EditAdaptivePlanModal({
       return;
     }
     if (activeStep === 1) {
-      // Calculate feasibility, create plan, move to step 2
+      // (1) Calculate feasibility locally
       calculatePlanLocally();
+      // (2) Create plan on backend
       await createPlanOnBackend();
+      // (3) Move to step 2
       setActiveStep(2);
+      // (4) Then fetch the most recent plan (User + Book)
       fetchMostRecentPlan();
       return;
     }
     if (activeStep === 2) {
-      // Final confirmation
+      // Final confirmation => close dialog if we have one
       if (renderAsDialog && onClose) {
         onClose();
       }
@@ -402,7 +436,7 @@ export default function EditAdaptivePlanModal({
   };
 
   // -------------------------------------------------
-  // STEP CONTENT
+  // STEP CONTENT RENDER
   // -------------------------------------------------
   const renderStepContent = (step) => {
     switch (step) {
@@ -417,7 +451,7 @@ export default function EditAdaptivePlanModal({
     }
   };
 
-  /* STEP 0: SELECT CHAPTERS */
+  // Step 0: CHAPTER SELECTION
   function step0SelectChapters() {
     return (
       <Box>
@@ -465,7 +499,9 @@ export default function EditAdaptivePlanModal({
                 }
               />
             </AccordionSummary>
-            <AccordionDetails sx={{ backgroundColor: "#1f1f1f", color: "#fff" }}>
+            <AccordionDetails
+              sx={{ backgroundColor: "#1f1f1f", color: "#fff" }}
+            >
               {ch.subchapters.map((sub, sidx) => (
                 <FormControlLabel
                   key={sub.id}
@@ -490,7 +526,7 @@ export default function EditAdaptivePlanModal({
     );
   }
 
-  /* STEP 1: TARGET DATE, DAILY READING, MASTERY */
+  // Step 1: TARGET DATE, DAILY READING, MASTERY
   function step1ScheduleMastery() {
     return (
       <Grid container spacing={3}>
@@ -632,7 +668,7 @@ export default function EditAdaptivePlanModal({
     );
   }
 
-  /* STEP 2: REVIEW & CONFIRM */
+  // Step 2: REVIEW & CONFIRM
   function step2ReviewConfirm() {
     return (
       <Box sx={{ color: "#fff" }}>
@@ -746,9 +782,7 @@ export default function EditAdaptivePlanModal({
     );
   }
 
-  // -------------------------------------------------
-  // INFOCARD SUB-COMPONENT
-  // -------------------------------------------------
+  // InfoCard sub-component for step2ReviewConfirm
   function InfoCard({ icon, label, value }) {
     return (
       <Paper
@@ -895,6 +929,6 @@ export default function EditAdaptivePlanModal({
     );
   }
 
-  // Otherwise inline
+  // Otherwise, render inline
   return <>{content}</>;
 }

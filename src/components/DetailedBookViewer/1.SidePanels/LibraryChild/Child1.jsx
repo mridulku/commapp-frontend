@@ -3,59 +3,57 @@ import axios from "axios";
 import {
   Box,
   Typography,
-  Button,
   LinearProgress,
   IconButton,
   Pagination,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
 import UploadMaterialModal from "./UploadMaterialModal";
-import AddIcon from "@mui/icons-material/Add"; // or any small icon for upload
 
-/**
- * Child1
- * A compact vertical list of books with:
- *  - Icon
- *  - Book title
- *  - Small progress bar
- *  - Pagination if there are more than 10 books
- *
- * Props:
- *   - userId (string): the user's ID
- *   - onBookSelect (function): callback(bookId)
- */
-
-// optional helper function for icon-emoji
+// Optional helper for an emoji icon
 function getBookIcon(bookName) {
   const lower = (bookName || "").toLowerCase();
   if (lower.includes("math")) return "📐";
   if (lower.includes("science")) return "🔬";
   if (lower.includes("history")) return "🏰";
   if (lower.includes("art")) return "🎨";
-  return "📚"; // Default
+  return "📚";
 }
 
 export default function Child1({ userId, onBookSelect = () => {} }) {
-  // Book data from /api/books-user
   const [booksData, setBooksData] = useState([]);
-  // Which book is selected
   const [selectedBookId, setSelectedBookId] = useState(null);
-  // Upload modal
+
   const [uploadOpen, setUploadOpen] = useState(false);
-  // Pagination
+
   const [page, setPage] = useState(1);
   const booksPerPage = 10;
 
+  // Search & Sort
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortOption, setSortOption] = useState("NEWEST");
+
+  // -------------
+  // 1) Fetch Books
+  // -------------
   useEffect(() => {
     if (!userId) return;
+
     async function fetchBooks() {
       try {
-        const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/books-user`, {
-          params: { userId },
-        });
+        const res = await axios.get(
+          `${import.meta.env.VITE_BACKEND_URL}/api/books-user`,
+          { params: { userId } }
+        );
         if (res.data && res.data.success) {
-          setBooksData(res.data.data); // array of books
+          setBooksData(res.data.data);
         } else {
-          console.warn("No data or success=false fetching books:", res.data);
+          console.warn("No data or success=false:", res.data);
           setBooksData([]);
         }
       } catch (err) {
@@ -63,11 +61,38 @@ export default function Child1({ userId, onBookSelect = () => {} }) {
         setBooksData([]);
       }
     }
+
     fetchBooks();
   }, [userId]);
 
-  // Transform data => stats for rendering
-  const bookStats = booksData.map((book) => {
+  // -------------
+  // 2) Filter & Sort
+  // -------------
+  const filteredBooks = booksData.filter((book) => {
+    const name = book.name || "";
+    return name.toLowerCase().includes(searchQuery.toLowerCase());
+  });
+
+  const sortedBooks = [...filteredBooks].sort((a, b) => {
+    const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+    const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+
+    const nameA = (a.name || "").toLowerCase();
+    const nameB = (b.name || "").toLowerCase();
+
+    switch (sortOption) {
+      case "NEWEST": return dateB - dateA;
+      case "OLDEST": return dateA - dateB;
+      case "ALPHA_ASC": return nameA.localeCompare(nameB);
+      case "ALPHA_DESC": return nameB.localeCompare(nameA);
+      default: return 0;
+    }
+  });
+
+  // -------------
+  // 3) Compute Stats
+  // -------------
+  const bookStats = sortedBooks.map((book) => {
     const chapters = book.chapters || [];
     let subChaptersCount = 0;
     let subChaptersCompleted = 0;
@@ -86,56 +111,128 @@ export default function Child1({ userId, onBookSelect = () => {} }) {
       totalSubs > 0 ? Math.round((doneSubs / totalSubs) * 100) : 0;
 
     return {
-      bookId: book.bookId || book.id,
-      bookName: book.bookName || "Untitled Book",
+      bookId: book.id,
+      name: book.name || "Untitled Book",
+      createdAt: book.createdAt,
       progressPercent,
     };
   });
 
-  // Pagination slice
+  // Pagination
   const startIndex = (page - 1) * booksPerPage;
   const endIndex = startIndex + booksPerPage;
   const pagedBooks = bookStats.slice(startIndex, endIndex);
 
-  // Handlers
-  const handleCardClick = (bookId) => {
+  // -------------
+  // 4) Handlers
+  // -------------
+  function handleCardClick(bookId, bookName) {
     setSelectedBookId(bookId);
-    onBookSelect(bookId);
-  };
+    onBookSelect(bookId, bookName);
+  }
 
+  // This must exist if you're passing it to <UploadMaterialModal onUpload={...}>
+  function handleUploadMaterial(data) {
+    console.log("Received new upload data =>", data);
+    alert("Material uploaded. (Demo, not storing anywhere.)");
+  }
+
+  // Upload modal
   const handleOpenUpload = () => setUploadOpen(true);
   const handleCloseUpload = () => setUploadOpen(false);
 
-  const handleUploadMaterial = (data) => {
-    console.log("Received new upload data =>", data);
-    alert("Material uploaded. (Demo, not storing anywhere.)");
+  // Search & sort
+  const handleSearchChange = (e) => {
+    setSearchQuery(e.target.value);
+    setPage(1);
+  };
+  const handleSortChange = (e) => {
+    setSortOption(e.target.value);
+    setPage(1);
   };
 
-  // Render
+  // -------------
+  // 5) Render
+  // -------------
   return (
     <Box
       sx={{
-        // Remove large "minHeight" so it fits the parent's layout
         backgroundColor: "#000",
         color: "#FFF",
         p: 2,
         display: "flex",
         flexDirection: "column",
-        gap: 2, // small spacing between sections
+        gap: 2,
       }}
     >
-      {/* Top Row: Title + small Upload button */}
+      <Typography variant="h6" sx={{ fontWeight: "bold", mb: 1 }}>
+        My Materials
+      </Typography>
+
       <Box
         sx={{
           display: "flex",
-          justifyContent: "space-between",
           alignItems: "center",
-          mb: 1,
+          gap: 1,
+          flexWrap: "wrap",
         }}
       >
-        <Typography variant="h6" sx={{ fontWeight: "bold" }}>
-          My Materials
-        </Typography>
+        <TextField
+          variant="outlined"
+          size="small"
+          placeholder="Search..."
+          value={searchQuery}
+          onChange={handleSearchChange}
+          sx={{
+            width: "160px",
+            backgroundColor: "rgba(255,255,255,0.1)",
+            input: { color: "#FFF" },
+            "& .MuiOutlinedInput-root": {
+              "& > fieldset": {
+                borderColor: "rgba(255,255,255,0.3)",
+              },
+              "&:hover fieldset": {
+                borderColor: "#BB86FC",
+              },
+            },
+            "& .MuiSvgIcon-root": {
+              color: "#FFF",
+            },
+          }}
+        />
+
+        <FormControl
+          size="small"
+          sx={{
+            minWidth: 120,
+            backgroundColor: "rgba(255,255,255,0.1)",
+            "& .MuiOutlinedInput-root": {
+              "& > fieldset": {
+                borderColor: "rgba(255,255,255,0.3)",
+              },
+              "&:hover fieldset": {
+                borderColor: "#BB86FC",
+              },
+            },
+            "& .MuiSvgIcon-root": {
+              color: "#FFF",
+            },
+          }}
+        >
+          <InputLabel sx={{ color: "#FFF" }}>Sort</InputLabel>
+          <Select
+            value={sortOption}
+            label="Sort"
+            onChange={handleSortChange}
+            sx={{ color: "#FFF" }}
+          >
+            <MenuItem value="NEWEST">Newest</MenuItem>
+            <MenuItem value="OLDEST">Oldest</MenuItem>
+            <MenuItem value="ALPHA_ASC">A–Z</MenuItem>
+            <MenuItem value="ALPHA_DESC">Z–A</MenuItem>
+          </Select>
+        </FormControl>
+
         <IconButton
           onClick={handleOpenUpload}
           sx={{ color: "#4CAF50" }}
@@ -145,7 +242,6 @@ export default function Child1({ userId, onBookSelect = () => {} }) {
         </IconButton>
       </Box>
 
-      {/* Book List */}
       {bookStats.length === 0 ? (
         <Typography variant="body2">
           No books found for userId="{userId}".
@@ -154,9 +250,16 @@ export default function Child1({ userId, onBookSelect = () => {} }) {
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
           {pagedBooks.map((bs) => {
             const isSelected = bs.bookId === selectedBookId;
-            const icon = getBookIcon(bs.bookName);
+            const icon = getBookIcon(bs.name);
 
-            // List-item style
+            let creationDateText = "No date";
+            if (bs.createdAt) {
+              const dateObj = new Date(bs.createdAt);
+              if (!isNaN(dateObj.getTime())) {
+                creationDateText = dateObj.toLocaleDateString();
+              }
+            }
+
             const itemStyles = {
               display: "flex",
               flexDirection: "row",
@@ -178,9 +281,8 @@ export default function Child1({ userId, onBookSelect = () => {} }) {
               <Box
                 key={bs.bookId}
                 sx={itemStyles}
-                onClick={() => handleCardClick(bs.bookId)}
+                onClick={() => handleCardClick(bs.bookId, bs.name)}
               >
-                {/* Left: Icon */}
                 <Box
                   sx={{
                     fontSize: "1.5rem",
@@ -191,14 +293,18 @@ export default function Child1({ userId, onBookSelect = () => {} }) {
                   {icon}
                 </Box>
 
-                {/* Middle: Book Name & Progress bar */}
                 <Box sx={{ flex: 1 }}>
                   <Typography
                     variant="body1"
                     sx={{ fontWeight: "bold", lineHeight: 1.2 }}
                   >
-                    {bs.bookName}
+                    {bs.name}
                   </Typography>
+
+                  <Typography variant="caption" sx={{ display: "block", opacity: 0.8 }}>
+                    {creationDateText}
+                  </Typography>
+
                   <LinearProgress
                     variant="determinate"
                     value={bs.progressPercent}
@@ -222,24 +328,41 @@ export default function Child1({ userId, onBookSelect = () => {} }) {
         </Box>
       )}
 
-      {/* Pagination (only show if more books than page size) */}
       {bookStats.length > booksPerPage && (
         <Box sx={{ mt: 1, display: "flex", justifyContent: "center" }}>
           <Pagination
             count={Math.ceil(bookStats.length / booksPerPage)}
             page={page}
             onChange={(e, value) => setPage(value)}
-            color="primary"
+            sx={{
+              "& .MuiPaginationItem-root": {
+                color: "#FFF",
+                borderColor: "rgba(255,255,255,0.3)",
+              },
+              "& .MuiPaginationItem-ellipsis": {
+                color: "#FFF",
+              },
+              "& .MuiPaginationItem-root:hover": {
+                backgroundColor: "rgba(255,255,255,0.08)",
+              },
+              "& .MuiPaginationItem-root.Mui-selected": {
+                backgroundColor: "#BB86FC",
+                color: "#000",
+              },
+              "& .MuiPaginationItem-root.Mui-selected:hover": {
+                backgroundColor: "#BB86FC",
+                opacity: 0.9,
+              },
+            }}
           />
         </Box>
       )}
 
-      {/* Upload Modal */}
       <UploadMaterialModal
         open={uploadOpen}
         onClose={handleCloseUpload}
-        onUpload={handleUploadMaterial}
+        onUpload={handleUploadMaterial} // Re-added function here
       />
     </Box>
   );
-} 
+}

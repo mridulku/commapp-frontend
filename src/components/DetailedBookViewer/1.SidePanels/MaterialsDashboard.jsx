@@ -5,9 +5,7 @@ import { Grid, Box, Tabs, Tab } from "@mui/material";
 import Child1 from "./LibraryChild/Child1";
 import Child2 from "./LibraryChild/Child2";
 import Child3 from "./LibraryChild/Child3";
-// Import your new stats component
 import ChildStats from "./LibraryChild/ChildStats";
-
 
 export default function MaterialsDashboard({
   userId,
@@ -18,21 +16,23 @@ export default function MaterialsDashboard({
   onOpenPlayer = () => {},
   themeColors = {},
 }) {
-  // Book selected in Child1
+  // Book selected
   const [selectedBookId, setSelectedBookId] = useState("");
+  const [selectedBookName, setSelectedBookName] = useState("");
 
-  // Which tab is active? (0 => Child2, 1 => Child3)
+  // Which tab is active?
   const [activeTab, setActiveTab] = useState(0);
 
-  // When Child1 selects a book
-  const handleBookSelect = (bookId) => {
-    console.log("MaterialsDashboard -> handleBookSelect =>", bookId);
+  // Called by Child1
+  const handleBookSelect = (bookId, bookName) => {
+    console.log("MaterialsDashboard -> handleBookSelect =>", bookId, bookName);
     setSelectedBookId(bookId);
+    setSelectedBookName(bookName);
   };
 
   return (
     <Grid container style={{ width: "100%" }}>
-      {/* LEFT COLUMN (Child1) */}
+      {/* LEFT COLUMN => Child1 */}
       <Grid
         item
         xs={12}
@@ -43,10 +43,7 @@ export default function MaterialsDashboard({
           backgroundColor: "#000",
         }}
       >
-        <Child1 
-          userId={userId} 
-          onBookSelect={handleBookSelect}
-        />
+        <Child1 userId={userId} onBookSelect={handleBookSelect} />
       </Grid>
 
       {/* RIGHT COLUMN */}
@@ -59,30 +56,20 @@ export default function MaterialsDashboard({
           backgroundColor: "#111",
         }}
       >
-        {/* The container for stats + the tabs area */}
         <Box sx={{ display: "flex", flexDirection: "column" }}>
-          {/* 
-            1) Stats Section on top 
-            - Occupies ~25-30% vertical space if you want 
-            - Or simply let it size naturally
-          */}
-          <Box 
-            sx={{ 
-              // If you really want a forced height ratio, you can do:
-              // height: "25vh", // or 30vh, etc.
-              // Otherwise, let it auto-size:
-              mb: 2, 
-              p: 2 
-            }}
-          >
+          {/* 1) Stats Section */}
+          <Box sx={{ mb: 2, p: 2 }}>
             <ChildStats
               userId={userId}
               bookId={selectedBookId}
+              bookName={selectedBookName} 
               themeColors={themeColors}
+              backendURL={backendURL}
+              // onResume prop if needed => e.g. (id) => console.log("Resume", id)
             />
           </Box>
 
-          {/* 2) Tabs (Overview / Home Plan) */}
+          {/* 2) Tabs */}
           <Tabs
             value={activeTab}
             onChange={(e, newVal) => setActiveTab(newVal)}
