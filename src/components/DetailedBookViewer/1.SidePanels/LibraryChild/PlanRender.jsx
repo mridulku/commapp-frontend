@@ -1,4 +1,4 @@
-// src/components/DetailedBookViewer/PlanRender.jsx
+// src/components/HIDDIT/PlanRender.jsx
 
 import React from "react";
 import { Box, Typography, CircularProgress, Paper } from "@mui/material";
@@ -13,8 +13,7 @@ import InfoIcon from "@mui/icons-material/Info";
 
 /**
  * PlanRender
- *
- * Step 2 UI: Review & Confirm final plan data
+ * Step 2: Show final plan data, let user confirm.
  *
  * Props:
  *  - isCreatingPlan (bool)
@@ -32,19 +31,15 @@ export default function PlanRender({
   aggregated,
   planSummary,
 }) {
-  // Helper to format timestamps
   function formatTimestamp(ts) {
     if (!ts) return "N/A";
-    // If it's a Firestore Timestamp object with .toDate()
     if (typeof ts.toDate === "function") {
       return ts.toDate().toLocaleString();
     }
-    // If it's an object with _seconds
     if (ts._seconds) {
       const millis = ts._seconds * 1000;
       return new Date(millis).toLocaleString();
     }
-    // Otherwise assume it's a standard date string
     return String(ts);
   }
 
@@ -75,7 +70,6 @@ export default function PlanRender({
           >
             Your Plan is Ready!
           </Typography>
-
           <Typography
             variant="body2"
             sx={{ textAlign: "center", fontStyle: "italic", color: "#ccc" }}
@@ -163,7 +157,6 @@ export default function PlanRender({
   );
 }
 
-/** InfoCard sub-component for displaying each piece of plan data */
 function InfoCard({ icon, label, value }) {
   return (
     <Paper

@@ -1,4 +1,4 @@
-// src/components/DetailedBookViewer/EditAdaptivePlanModal.jsx
+// src/components/HIDDIT/EditAdaptivePlanModal.jsx
 
 import React, { useState, useEffect } from "react";
 import {
@@ -14,27 +14,33 @@ import {
   CircularProgress,
 } from "@mui/material";
 import CheckIcon from "@mui/icons-material/Check";
-
 import axios from "axios";
 import _ from "lodash";
 
-// Import the three child components
+// CHILD COMPONENTS (Wizard steps)
 import ChapterSelection from "./ChapterSelection";
 import PlanSelection from "./PlanSelection";
 import PlanRender from "./PlanRender";
 
+// The Player Modal
+import AdaptivePlayerModal from "../../3.AdaptiveModal/AdaptivePlayerModal";
+
 /**
- * EditAdaptivePlanModal (Parent)
+ * EditAdaptivePlanModal
  *
- * A multi-step wizard for creating/editing an Adaptive Plan.
+ * A multi-step wizard that:
+ *  1) Selects chapters
+ *  2) Picks schedule (target date, daily reading, mastery level)
+ *  3) Shows final plan summary
+ *  4) On confirm => automatically opens the Adaptive Player
  *
  * Props:
- *  - renderAsDialog (bool): If true, render inside a <Dialog>. If false, render inline.
- *  - open (bool): Whether the dialog is open (only relevant if renderAsDialog = true)
- *  - onClose (function): Callback when closing the dialog (only relevant if renderAsDialog = true)
- *  - userId (string): The user's ID (needed to create a plan)
- *  - backendURL (string): Base server URL
- *  - bookId (string): (Optional) Book ID to include
+ *  - renderAsDialog (bool)
+ *  - open (bool)
+ *  - onClose (func)
+ *  - userId (string)
+ *  - backendURL (string)
+ *  - bookId (string)
  */
 export default function EditAdaptivePlanModal({
   renderAsDialog = true,
@@ -45,32 +51,26 @@ export default function EditAdaptivePlanModal({
   bookId = "",
 }) {
   // -------------------------------------------------
-  // STEP MANAGEMENT
+  // STEPS
   // -------------------------------------------------
   const [activeStep, setActiveStep] = useState(0);
   const steps = ["Select Chapters", "Schedule & Mastery", "Review & Confirm"];
 
-  // Keep track of a newly created plan object
-  const [createdPlan, setCreatedPlan] = useState(null);
-
-  // -------------------------------------------------
-  // STEP 1: CHAPTER SELECTION (state in parent, UI in child)
-  // -------------------------------------------------
+  // Step 1: Chapter selection
   const [chapters, setChapters] = useState([]);
 
   useEffect(() => {
     async function fetchChapters() {
       try {
-        const response = await axios.get(`${backendURL}/api/process-book-data`, {
+        const res = await axios.get(`${backendURL}/api/process-book-data`, {
           params: { userId, bookId },
         });
-        const data = response.data || {};
-
+        const data = res.data || {};
         if (data.chapters && Array.isArray(data.chapters)) {
-          // Transform returned data into the format we need
+          // Transform
           const transformed = data.chapters.map((chap) => ({
             id: chap.id,
-            title: chap.name, // from 'name' in DB
+            title: chap.name,
             expanded: false,
             selected: true,
             subchapters: (chap.subchapters || []).map((sub) => ({
@@ -85,73 +85,57 @@ export default function EditAdaptivePlanModal({
         console.error("Error fetching chapters:", error);
       }
     }
-
     if (userId && bookId) {
       fetchChapters();
     }
   }, [userId, bookId, backendURL]);
 
-  // Toggle entire chapter selection
   const handleToggleChapter = (chapterIndex) => {
-    const updatedChapters = [...chapters];
-    const current = updatedChapters[chapterIndex];
-    current.selected = !current.selected;
-    if (!current.selected) {
-      current.subchapters.forEach((sc) => (sc.selected = false));
+    const updated = [...chapters];
+    const c = updated[chapterIndex];
+    c.selected = !c.selected;
+    if (!c.selected) {
+      c.subchapters.forEach((sc) => (sc.selected = false));
     }
-    updatedChapters[chapterIndex] = current;
-    setChapters(updatedChapters);
+    updated[chapterIndex] = c;
+    setChapters(updated);
   };
 
-  // Toggle individual subchapter selection
   const handleToggleSubchapter = (chapterIndex, subIndex) => {
-    const updatedChapters = [...chapters];
-    const subChaps = updatedChapters[chapterIndex].subchapters;
+    const updated = [...chapters];
+    const subChaps = updated[chapterIndex].subchapters;
     subChaps[subIndex].selected = !subChaps[subIndex].selected;
-
-    // If at least one subchapter is selected, mark the parent chapter as selected
-    const anySelected = subChaps.some((sc) => sc.selected);
-    updatedChapters[chapterIndex].selected = anySelected;
-    setChapters(updatedChapters);
+    updated[chapterIndex].selected = subChaps.some((sc) => sc.selected);
+    setChapters(updated);
   };
 
-  // Expand/collapse the accordion
   const handleAccordionToggle = (chapterIndex) => {
-    const updatedChapters = [...chapters];
-    updatedChapters[chapterIndex].expanded = !updatedChapters[chapterIndex]
-      .expanded;
-    setChapters(updatedChapters);
+    const updated = [...chapters];
+    updated[chapterIndex].expanded = !updated[chapterIndex].expanded;
+    setChapters(updated);
   };
 
-  // -------------------------------------------------
-  // STEP 2: PLAN SELECTION (Target date, daily reading, mastery)
-  // -------------------------------------------------
+  // Step 2: Plan selection
   const [targetDate, setTargetDate] = useState("");
   const [dailyReadingTime, setDailyReadingTime] = useState(30);
   const [masteryLevel, setMasteryLevel] = useState("mastery");
 
-  // -------------------------------------------------
-  // BACKEND CREATION
-  // -------------------------------------------------
+  // For plan creation
   const [isCreatingPlan, setIsCreatingPlan] = useState(false);
   const [serverError, setServerError] = useState(null);
-
+  const [createdPlan, setCreatedPlan] = useState(null);
   const [createdPlanId, setCreatedPlanId] = useState(null);
   const [createdAt, setCreatedAt] = useState(null);
 
-  /**
-   * createPlanOnBackend
-   */
-  const createPlanOnBackend = async () => {
+  async function createPlanOnBackend() {
     if (!userId) {
-      console.warn("No userId provided. Cannot create plan.");
+      console.warn("No userId provided—cannot create plan.");
       return;
     }
     try {
       setServerError(null);
       setIsCreatingPlan(true);
 
-      // Decide quizTime & reviseTime based on masteryLevel
       let quizTime = 1;
       let reviseTime = 1;
       if (masteryLevel === "mastery") {
@@ -161,9 +145,8 @@ export default function EditAdaptivePlanModal({
         quizTime = 3;
         reviseTime = 3;
       }
-      // else if "glance": stays at (1,1)
 
-      const requestBody = {
+      const body = {
         userId,
         targetDate,
         dailyReadingTime,
@@ -172,14 +155,14 @@ export default function EditAdaptivePlanModal({
         reviseTime,
       };
       if (bookId) {
-        requestBody.bookId = bookId;
+        body.bookId = bookId;
       }
 
-      // Example endpoint for plan creation (replace if needed):
+      // Example:
       const createEndpoint =
         "https://generateadaptiveplan-zfztjkkvva-uc.a.run.app";
 
-      const response = await axios.post(createEndpoint, requestBody, {
+      const response = await axios.post(createEndpoint, body, {
         headers: { "Content-Type": "application/json" },
       });
 
@@ -193,18 +176,16 @@ export default function EditAdaptivePlanModal({
     } finally {
       setIsCreatingPlan(false);
     }
-  };
+  }
 
-  // -------------------------------------------------
-  // STEP 3: FETCH MOST RECENT PLAN
-  // -------------------------------------------------
+  // Step 3: Fetch newly created or most recent plan
   const [isFetchingPlan, setIsFetchingPlan] = useState(false);
   const [serverPlan, setServerPlan] = useState(null);
   const [aggregated, setAggregated] = useState(null);
 
-  const fetchMostRecentPlan = async () => {
+  async function fetchMostRecentPlan() {
     if (!userId) {
-      console.warn("No userId provided—can't fetch plan.");
+      console.warn("No userId => can't fetch plan.");
       return;
     }
     try {
@@ -212,19 +193,14 @@ export default function EditAdaptivePlanModal({
       setServerError(null);
       setServerPlan(null);
 
-      // GET /api/adaptive-plans?userId=...&bookId=...
       const res = await axios.get(`${backendURL}/api/adaptive-plans`, {
-        params: {
-          userId,
-          bookId,
-        },
+        params: { userId, bookId },
       });
-
       const allPlans = res.data?.plans || [];
       if (!allPlans.length) {
-        throw new Error("No plans found for this user/book combination.");
+        throw new Error("No plans found for user/book combination.");
       }
-      // Sort by createdAt descending
+      // sort by createdAt desc
       allPlans.sort((a, b) => {
         const tA = new Date(a.createdAt).getTime();
         const tB = new Date(b.createdAt).getTime();
@@ -233,46 +209,43 @@ export default function EditAdaptivePlanModal({
       const recentPlan = allPlans[0];
       setServerPlan(recentPlan);
 
-      // Compute reading/quiz/revise totals
       const agg = computeAggregation(recentPlan);
       setAggregated(agg);
     } catch (err) {
       console.error("Error fetching plan:", err);
-      setServerError(err.message || "Failed to fetch the plan.");
+      setServerError(err.message || "Failed to fetch plan.");
     } finally {
       setIsFetchingPlan(false);
     }
-  };
+  }
 
   function computeAggregation(plan) {
     if (!plan || !plan.sessions) return null;
-    let allActivities = [];
+    let allActs = [];
     plan.sessions.forEach((sess) => {
       if (Array.isArray(sess.activities)) {
-        allActivities.push(...sess.activities);
+        allActs.push(...sess.activities);
       }
     });
-
-    const totalReadCount = allActivities.filter((a) => a.type === "READ").length;
-    const totalQuizCount = allActivities.filter((a) => a.type === "QUIZ").length;
-    const totalReviseCount = allActivities.filter((a) => a.type === "REVISE")
-      .length;
+    const totalReadCount = allActs.filter((a) => a.type === "READ").length;
+    const totalQuizCount = allActs.filter((a) => a.type === "QUIZ").length;
+    const totalReviseCount = allActs.filter((a) => a.type === "REVISE").length;
 
     const readTime = _.sumBy(
-      allActivities.filter((a) => a.type === "READ"),
+      allActs.filter((a) => a.type === "READ"),
       "timeNeeded"
     );
     const quizTime = _.sumBy(
-      allActivities.filter((a) => a.type === "QUIZ"),
+      allActs.filter((a) => a.type === "QUIZ"),
       "timeNeeded"
     );
     const reviseTime = _.sumBy(
-      allActivities.filter((a) => a.type === "REVISE"),
+      allActs.filter((a) => a.type === "REVISE"),
       "timeNeeded"
     );
 
-    const uniqueSubChapterCount = _.uniqBy(allActivities, "subChapterId").length;
-    const uniqueChapterCount = _.uniqBy(allActivities, "chapterId").length;
+    const uniqueSubChapterCount = _.uniqBy(allActs, "subChapterId").length;
+    const uniqueChapterCount = _.uniqBy(allActs, "chapterId").length;
     const totalPlanTime = readTime + quizTime + reviseTime;
 
     return {
@@ -288,9 +261,7 @@ export default function EditAdaptivePlanModal({
     };
   }
 
-  // -------------------------------------------------
-  // LOCAL FEASIBILITY CALC
-  // -------------------------------------------------
+  // Local feasibility (rough calc)
   const [isProcessingLocalCalc, setIsProcessingLocalCalc] = useState(false);
   const [planSummary, setPlanSummary] = useState({
     totalMinutes: 0,
@@ -303,7 +274,6 @@ export default function EditAdaptivePlanModal({
   function calculatePlanLocally() {
     setIsProcessingLocalCalc(true);
 
-    // Rough local estimate of reading times
     let timePerSubchapter = 10;
     if (masteryLevel === "revision") timePerSubchapter = 5;
     if (masteryLevel === "glance") timePerSubchapter = 2;
@@ -335,7 +305,7 @@ export default function EditAdaptivePlanModal({
       }
     }
 
-    // Fake 6-second delay to mimic some local processing
+    // simulate some delay
     setTimeout(() => {
       setPlanSummary({
         totalMinutes: totalTime,
@@ -349,36 +319,41 @@ export default function EditAdaptivePlanModal({
   }
 
   // -------------------------------------------------
+  // (NEW) ADAPTIVE PLAYER MODAL STATE
+  // -------------------------------------------------
+  const [showPlayer, setShowPlayer] = useState(false);
+  const [playerPlanId, setPlayerPlanId] = useState(null);
+
+  // -------------------------------------------------
   // NAVIGATION
   // -------------------------------------------------
   const handleNext = async () => {
     if (activeStep === 0) {
-      // Move from step 0 to 1
       setActiveStep(1);
       return;
     }
     if (activeStep === 1) {
-      // 1) Calculate feasibility locally
       calculatePlanLocally();
-      // 2) Create plan on backend
       await createPlanOnBackend();
-      // 3) Move to step 2
       setActiveStep(2);
-      // 4) Then fetch the most recent plan
       fetchMostRecentPlan();
       return;
     }
     if (activeStep === 2) {
-      // Final step => if dialog, close it
+      // final step => close wizard if dialog
       if (renderAsDialog && onClose) {
         onClose();
+      }
+      // Then open the player automatically if we have a plan
+      if (serverPlan && serverPlan.id) {
+        setPlayerPlanId(serverPlan.id);
+        setShowPlayer(true);
       }
     }
   };
 
   const handleBack = () => {
     if (activeStep === 0) {
-      // If it's a dialog, close on back from step 0
       if (renderAsDialog && onClose) {
         onClose();
       }
@@ -387,10 +362,7 @@ export default function EditAdaptivePlanModal({
     }
   };
 
-  // -------------------------------------------------
-  // RENDER STEP CONTENT
-  // -------------------------------------------------
-  const renderStepContent = (step) => {
+  function renderStepContent(step) {
     switch (step) {
       case 0:
         return (
@@ -426,18 +398,15 @@ export default function EditAdaptivePlanModal({
       default:
         return <Typography sx={{ color: "#fff" }}>Unknown step</Typography>;
     }
-  };
+  }
 
-  // -------------------------------------------------
-  // MAIN RENDER
-  // -------------------------------------------------
+  // main content
   const content = (
     <Box
       sx={
         renderAsDialog
           ? {}
           : {
-              // If rendering inline, apply a dark background area
               p: 2,
               backgroundColor: "#1f1f1f",
               borderRadius: 1,
@@ -446,8 +415,6 @@ export default function EditAdaptivePlanModal({
             }
       }
     >
-      
-
       <Stepper
         activeStep={activeStep}
         sx={{
@@ -483,7 +450,6 @@ export default function EditAdaptivePlanModal({
           Back
         </Button>
 
-        {/* Next or Confirm button */}
         {activeStep < steps.length - 1 && (
           <Button
             variant="contained"
@@ -520,33 +486,42 @@ export default function EditAdaptivePlanModal({
     </Box>
   );
 
-  if (renderAsDialog) {
-    return (
-      <Dialog
-        open={open}
-        onClose={onClose}
-        scroll="paper"
-        fullWidth
-        maxWidth="md"
-        PaperProps={{
-          sx: {
-            backgroundColor: "#1f1f1f",
-            color: "#fff",
-          },
-        }}
-      >
-        <DialogTitle sx={{ backgroundColor: "#1f1f1f", color: "#fff" }}>
-          <Typography variant="h6" sx={{ fontWeight: "bold" }}>
-            Adaptive Plan Setup
-          </Typography>
-        </DialogTitle>
-        <DialogContent sx={{ backgroundColor: "#1f1f1f", color: "#fff" }}>
-          {content}
-        </DialogContent>
-      </Dialog>
-    );
-  }
+  return (
+    <>
+      {renderAsDialog ? (
+        <Dialog
+          open={open}
+          onClose={onClose}
+          scroll="paper"
+          fullWidth
+          maxWidth="md"
+          PaperProps={{
+            sx: {
+              backgroundColor: "#1f1f1f",
+              color: "#fff",
+            },
+          }}
+        >
+          <DialogTitle sx={{ backgroundColor: "#1f1f1f", color: "#fff" }}>
+            <Typography variant="h6" sx={{ fontWeight: "bold" }}>
+              Adaptive Plan Setup
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ backgroundColor: "#1f1f1f", color: "#fff" }}>
+            {content}
+          </DialogContent>
+        </Dialog>
+      ) : (
+        <Box>{content}</Box>
+      )}
 
-  // Otherwise, render inline (no MUI dialog)
-  return <>{content}</>;
+      {/* Render the AdaptivePlayerModal (the cinematic player) */}
+      <AdaptivePlayerModal
+        isOpen={showPlayer}
+        onClose={() => setShowPlayer(false)}
+        planId={playerPlanId}
+        userId={userId}
+      />
+    </>
+  );
 }

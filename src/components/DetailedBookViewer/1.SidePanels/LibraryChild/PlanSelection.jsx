@@ -1,4 +1,4 @@
-// src/components/DetailedBookViewer/PlanSelection.jsx
+// src/components/HIDDIT/PlanSelection.jsx
 
 import React from "react";
 import {
@@ -20,19 +20,6 @@ import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
 
-/**
- * PlanSelection
- *
- * Step 1 UI: Pick Target Date, Daily Reading Time, and Mastery Level
- *
- * Props:
- *  - targetDate (string)
- *  - setTargetDate (func)
- *  - dailyReadingTime (number)
- *  - setDailyReadingTime (func)
- *  - masteryLevel (string) ["mastery", "revision", "glance"]
- *  - setMasteryLevel (func)
- */
 export default function PlanSelection({
   targetDate,
   setTargetDate,
@@ -141,10 +128,8 @@ export default function PlanSelection({
           <Tooltip
             title={
               <Box sx={{ color: "#fff" }}>
-                <strong>Mastery:</strong> Deep understanding
-                <br />
-                <strong>Revision:</strong> Quick review
-                <br />
+                <strong>Mastery:</strong> Deep understanding <br />
+                <strong>Revision:</strong> Quick review <br />
                 <strong>Glance:</strong> Minimal detail
               </Box>
             }

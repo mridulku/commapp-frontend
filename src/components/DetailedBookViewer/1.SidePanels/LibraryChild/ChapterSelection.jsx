@@ -1,4 +1,4 @@
-// src/components/DetailedBookViewer/ChapterSelection.jsx
+// src/components/HIDDIT/ChapterSelection.jsx
 
 import React from "react";
 import {
@@ -12,17 +12,6 @@ import {
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 
-/**
- * ChapterSelection
- *
- * Step 0 UI: Select Chapters/Subchapters
- * 
- * Props:
- *  - chapters (array): array of chapters, each with subchapters
- *  - onAccordionToggle (func): toggles expansion of a chapter
- *  - onToggleChapter (func): toggles an entire chapter
- *  - onToggleSubchapter (func): toggles a single subchapter
- */
 export default function ChapterSelection({
   chapters,
   onAccordionToggle,

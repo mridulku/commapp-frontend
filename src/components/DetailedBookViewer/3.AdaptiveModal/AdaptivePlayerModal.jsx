@@ -1,4 +1,4 @@
-// AdaptiveSessionRoot.jsx
+// src/components/HIDDIT/AdaptivePlayerModal.jsx
 
 import React, { useState, useEffect, useRef } from "react";
 import TopBar from "./TopBar";
@@ -7,28 +7,49 @@ import MainContent from "./MainContent";
 import BottomBar from "./BottomBar";
 import ChatPanel from "./ChatPanel";
 
-// For demonstration, a no-op refreshData:
-function handleRefreshData() {
-  console.log("Refreshing data...");
-}
-
-// Styles (unchanged)
-import {
-  overlayStyle,
-  modalStyle,
-  mainAreaStyle,
-  bottomBarStyle,
-} from "./styles";
+// Example minimal styling
+const overlayStyle = {
+  position: "fixed",
+  top: 0,
+  left: 0,
+  width: "100vw",
+  height: "100vh",
+  backgroundColor: "rgba(0,0,0,0.8)",
+  zIndex: 2000,
+};
+const modalStyle = {
+  position: "absolute",
+  top: "50%",
+  left: "50%",
+  width: "90%",
+  height: "90%",
+  transform: "translate(-50%,-50%)",
+  backgroundColor: "#000",
+  display: "flex",
+  flexDirection: "column",
+  color: "#fff",
+  borderRadius: "8px",
+};
+const mainAreaStyle = {
+  flex: 1,
+  display: "flex",
+};
+const bottomBarStyle = {
+  height: "40px",
+};
 
 /**
  * AdaptivePlayerModal
- * --------------------
- * A modal-like component that:
- *   - Renders a TopBar (timer)
- *   - A LeftPanel (which fetches & flattens the plan, calls onPlanFlattened)
- *   - A MainContent (displays a selected activity)
- *   - Next/Prev arrows for linear flow
- *   - A BottomBar and optional ChatPanel
+ *
+ * Props:
+ *  - isOpen (bool)
+ *  - onClose (func)
+ *  - planId (string)
+ *  - userId (string)
+ *  - initialActivityContext (object, optional)
+ *  - sessionLength (number, optional, default=45)
+ *  - daysUntilExam (number, optional, default=7)
+ *  - fetchUrl (string, optional, default="/api/adaptive-plan")
  */
 export default function AdaptivePlayerModal({
   isOpen,
@@ -40,7 +61,7 @@ export default function AdaptivePlayerModal({
   daysUntilExam = 7,
   fetchUrl = "/api/adaptive-plan",
 }) {
-  // ------------------- (1) Timer (no conditions) -------------------
+  // 1) Timer
   const [secondsLeft, setSecondsLeft] = useState(sessionLength * 60);
   const timerRef = useRef(null);
 
@@ -56,17 +77,12 @@ export default function AdaptivePlayerModal({
     };
   }, [isOpen, sessionLength]);
 
-  // ------------------- (2) Flattened activities array -------------------
-  // We'll get this from LeftPanel's "onPlanFlattened" callback
+  // 2) Flattened activities
   const [allActivities, setAllActivities] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(-1);
-
-  // We also track the last item the user clicked in the left panel
   const [selectedActivity, setSelectedActivity] = useState(null);
 
-  // Called by LeftPanel once it has fetched + flattened the plan
   function handlePlanFlattened(flatList) {
-    console.log("[AdaptivePlayerModal] handlePlanFlattened =>", flatList);
     setAllActivities(flatList || []);
     if (flatList && flatList.length > 0) {
       setCurrentIndex(0);
@@ -76,32 +92,24 @@ export default function AdaptivePlayerModal({
     setSelectedActivity(null);
   }
 
-  // Called by LeftPanel whenever user clicks an activity
   function handleActivitySelect(activity) {
-    console.log("[AdaptivePlayerModal] handleActivitySelect =>", activity);
     setSelectedActivity(activity);
-    // Optionally sync with allActivities
     if (activity && allActivities.length) {
       const i = allActivities.findIndex(
         (a) => a.subChapterId === activity.subChapterId && a.type === activity.type
       );
-      if (i >= 0) {
-        setCurrentIndex(i);
-      } else {
-        console.warn("Activity not found in allActivities array!");
-        setCurrentIndex(-1);
-      }
+      setCurrentIndex(i >= 0 ? i : -1);
     }
   }
 
-  // Decide which item to show in the main area
+  // Which item to show in MainContent
   const currentFlowItem =
     currentIndex >= 0 && currentIndex < allActivities.length
       ? allActivities[currentIndex]
       : null;
   const activityToShow = currentFlowItem || selectedActivity;
 
-  // ------------------- (3) Next/Prev logic -------------------
+  // Next/Prev
   function handleNext() {
     if (currentIndex < allActivities.length - 1) {
       const newIndex = currentIndex + 1;
@@ -109,7 +117,6 @@ export default function AdaptivePlayerModal({
       setSelectedActivity(allActivities[newIndex]);
     }
   }
-
   function handlePrev() {
     if (currentIndex > 0) {
       const newIndex = currentIndex - 1;
@@ -118,86 +125,82 @@ export default function AdaptivePlayerModal({
     }
   }
 
-  // ------------------- (4) Chat logic -------------------
+  // 3) Chat
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([
-    { sender: "system", text: "Hello! Need help? Just ask me here." },
+    { sender: "system", text: "Hello! Need help?" },
   ]);
   const [newMessage, setNewMessage] = useState("");
-
   function handleChatSend() {
     if (!newMessage.trim()) return;
     setChatMessages((msgs) => [...msgs, { sender: "user", text: newMessage }]);
     setNewMessage("");
   }
 
-  // Step for bottom bar
-  const stepPercent = activityToShow ? 50 : 0;
+  // 4) If not open, return null
+  if (!isOpen) return null;
 
-  // Close callback
-  function handleClose() {
-    if (onClose) onClose();
-  }
-
-  // ------------------- (5) If not open, skip rendering  -------------------
-  // (All hooks are already called unconditionally above, so it's safe)
-  if (!isOpen) {
-    return null;
-  }
-
-  // ------------------- (6) Render UI -------------------
+  // 5) Render the big overlay
   return (
     <div style={overlayStyle}>
       <div style={modalStyle}>
-        {/* === TOP BAR === */}
         <TopBar
           daysUntilExam={daysUntilExam}
           sessionLength={sessionLength}
           secondsLeft={secondsLeft}
-          onClose={handleClose}
+          onClose={onClose}
         />
 
-        {/* === MAIN AREA === */}
         <div style={mainAreaStyle}>
-          {/* LEFT PANEL => fetches plan, flattens, calls handlePlanFlattened */}
           <LeftPanel
             planId={planId}
             fetchUrl={fetchUrl}
-            backendURL={import.meta.env.VITE_BACKEND_URL}
             initialActivityContext={initialActivityContext}
-            onActivitySelect={handleActivitySelect}
             onPlanFlattened={handlePlanFlattened}
+            onActivitySelect={handleActivitySelect}
           />
 
-          {/* RIGHT SIDE => show the selected/flow item */}
           <div style={{ position: "relative", flex: 1 }}>
             <MainContent
               currentItem={activityToShow}
               userId={userId}
-              backendURL={import.meta.env.VITE_BACKEND_URL}
-              onRefreshData={handleRefreshData}
+              onRefreshData={() => console.log("Refresh data...")}
             />
 
-            {/* Next/Prev arrows */}
             {allActivities.length > 1 && (
               <>
-                {/* LEFT ARROW */}
                 <button
                   style={{
-                    ...arrowButtonStyle,
+                    position: "absolute",
+                    top: "50%",
                     left: "10px",
+                    transform: "translateY(-50%)",
+                    width: "40px",
+                    height: "40px",
+                    borderRadius: "50%",
+                    border: "none",
+                    backgroundColor: "rgba(255,255,255,0.2)",
+                    color: "#fff",
+                    cursor: "pointer",
                   }}
                   onClick={handlePrev}
                   disabled={currentIndex <= 0}
                 >
                   ◀
                 </button>
-
-                {/* RIGHT ARROW */}
                 <button
                   style={{
-                    ...arrowButtonStyle,
+                    position: "absolute",
+                    top: "50%",
                     right: "10px",
+                    transform: "translateY(-50%)",
+                    width: "40px",
+                    height: "40px",
+                    borderRadius: "50%",
+                    border: "none",
+                    backgroundColor: "rgba(255,255,255,0.2)",
+                    color: "#fff",
+                    cursor: "pointer",
                   }}
                   onClick={handleNext}
                   disabled={currentIndex >= allActivities.length - 1}
@@ -209,12 +212,14 @@ export default function AdaptivePlayerModal({
           </div>
         </div>
 
-        {/* === BOTTOM BAR === */}
         <div style={bottomBarStyle}>
-          <BottomBar stepPercent={stepPercent} currentIndex={0} totalSteps={1} />
+          <BottomBar
+            stepPercent={allActivities.length ? (currentIndex / allActivities.length) * 100 : 0}
+            currentIndex={currentIndex}
+            totalSteps={allActivities.length}
+          />
         </div>
 
-        {/* === CHAT PANEL === */}
         <ChatPanel
           open={chatOpen}
           onToggle={() => setChatOpen((o) => !o)}
@@ -227,20 +232,3 @@ export default function AdaptivePlayerModal({
     </div>
   );
 }
-
-// ---------- Style for arrow buttons ----------
-const arrowButtonStyle = {
-  position: "absolute",
-  top: "50%",
-  transform: "translateY(-50%)",
-  zIndex: 10,
-  width: "40px",
-  height: "40px",
-  borderRadius: "50%",
-  border: "none",
-  backgroundColor: "rgba(255,255,255,0.2)",
-  color: "#fff",
-  fontSize: "1.2rem",
-  cursor: "pointer",
-  transition: "background-color 0.3s",
-};
