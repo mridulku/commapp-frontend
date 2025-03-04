@@ -1,5 +1,3 @@
-// src/components/HIDDIT/AdaptivePlayerModal.jsx
-
 import React, { useState, useEffect, useRef } from "react";
 import TopBar from "./TopBar";
 import LeftPanel from "./LeftPanel";
@@ -7,7 +5,6 @@ import MainContent from "./MainContent";
 import BottomBar from "./BottomBar";
 import ChatPanel from "./ChatPanel";
 
-// Example minimal styling
 const overlayStyle = {
   position: "fixed",
   top: 0,
@@ -40,16 +37,16 @@ const bottomBarStyle = {
 
 /**
  * AdaptivePlayerModal
- *
+ * 
  * Props:
  *  - isOpen (bool)
  *  - onClose (func)
  *  - planId (string)
  *  - userId (string)
  *  - initialActivityContext (object, optional)
- *  - sessionLength (number, optional, default=45)
- *  - daysUntilExam (number, optional, default=7)
- *  - fetchUrl (string, optional, default="/api/adaptive-plan")
+ *  - sessionLength (number, default=45)
+ *  - daysUntilExam (number, default=7)
+ *  - fetchUrl (string, default="/api/adaptive-plan")
  */
 export default function AdaptivePlayerModal({
   isOpen,
@@ -77,73 +74,73 @@ export default function AdaptivePlayerModal({
     };
   }, [isOpen, sessionLength]);
 
-  // 2) Flattened activities
-  const [allActivities, setAllActivities] = useState([]);
+  // 2) Flattened activities + currentIndex
+  const [flattenedActivities, setFlattenedActivities] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(-1);
-  const [selectedActivity, setSelectedActivity] = useState(null);
 
+  /**
+   * handlePlanFlattened
+   * Called by LeftPanel once it fetches the plan & flattens it.
+   * We store that array locally. We'll also set currentIndex to 0 if any items exist.
+   */
   function handlePlanFlattened(flatList) {
-    setAllActivities(flatList || []);
-    if (flatList && flatList.length > 0) {
-      setCurrentIndex(0);
-    } else {
+    if (!flatList || flatList.length === 0) {
+      setFlattenedActivities([]);
       setCurrentIndex(-1);
+      return;
     }
-    setSelectedActivity(null);
+    setFlattenedActivities(flatList);
+    setCurrentIndex(0);
   }
 
-  function handleActivitySelect(activity) {
-    setSelectedActivity(activity);
-    if (activity && allActivities.length) {
-      const i = allActivities.findIndex(
-        (a) => a.subChapterId === activity.subChapterId && a.type === activity.type
-      );
-      setCurrentIndex(i >= 0 ? i : -1);
+  /**
+   * handleActivitySelect
+   * The left panel will pass us the *flatIndex* of the clicked activity, so we just set currentIndex.
+   */
+  function handleActivitySelect(flatIndex) {
+    if (typeof flatIndex === "number" && flatIndex >= 0 && flatIndex < flattenedActivities.length) {
+      setCurrentIndex(flatIndex);
     }
   }
 
-  // Which item to show in MainContent
-  const currentFlowItem =
-    currentIndex >= 0 && currentIndex < allActivities.length
-      ? allActivities[currentIndex]
+  // The item to show in MainContent
+  const activityToShow =
+    currentIndex >= 0 && currentIndex < flattenedActivities.length
+      ? flattenedActivities[currentIndex]
       : null;
-  const activityToShow = currentFlowItem || selectedActivity;
 
-  // Next/Prev
+  // 3) Next/Prev
   function handleNext() {
-    if (currentIndex < allActivities.length - 1) {
-      const newIndex = currentIndex + 1;
-      setCurrentIndex(newIndex);
-      setSelectedActivity(allActivities[newIndex]);
+    if (currentIndex < flattenedActivities.length - 1) {
+      setCurrentIndex((idx) => idx + 1);
     }
   }
   function handlePrev() {
     if (currentIndex > 0) {
-      const newIndex = currentIndex - 1;
-      setCurrentIndex(newIndex);
-      setSelectedActivity(allActivities[newIndex]);
+      setCurrentIndex((idx) => idx - 1);
     }
   }
 
-  // 3) Chat
+  // 4) Chat
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([
     { sender: "system", text: "Hello! Need help?" },
   ]);
   const [newMessage, setNewMessage] = useState("");
+
   function handleChatSend() {
     if (!newMessage.trim()) return;
     setChatMessages((msgs) => [...msgs, { sender: "user", text: newMessage }]);
     setNewMessage("");
   }
 
-  // 4) If not open, return null
+  // If not open, return null
   if (!isOpen) return null;
 
-  // 5) Render the big overlay
   return (
     <div style={overlayStyle}>
       <div style={modalStyle}>
+        {/* Top bar with countdown & close */}
         <TopBar
           daysUntilExam={daysUntilExam}
           sessionLength={sessionLength}
@@ -152,23 +149,29 @@ export default function AdaptivePlayerModal({
         />
 
         <div style={mainAreaStyle}>
+          {/* Left panel => fetches plan, calls handlePlanFlattened, calls handleActivitySelect */}
           <LeftPanel
             planId={planId}
             fetchUrl={fetchUrl}
             initialActivityContext={initialActivityContext}
             onPlanFlattened={handlePlanFlattened}
             onActivitySelect={handleActivitySelect}
+            // Pass currentIndex + flattenedActivities for optional highlighting
+            currentIndex={currentIndex}
+            flattenedActivities={flattenedActivities}
           />
 
           <div style={{ position: "relative", flex: 1 }}>
+            {/* Right panel => shows the selected activity */}
             <MainContent
               currentItem={activityToShow}
               userId={userId}
               onRefreshData={() => console.log("Refresh data...")}
             />
 
-            {allActivities.length > 1 && (
+            {flattenedActivities.length > 1 && (
               <>
+                {/* LEFT ARROW */}
                 <button
                   style={{
                     position: "absolute",
@@ -188,6 +191,7 @@ export default function AdaptivePlayerModal({
                 >
                   ◀
                 </button>
+                {/* RIGHT ARROW */}
                 <button
                   style={{
                     position: "absolute",
@@ -203,7 +207,7 @@ export default function AdaptivePlayerModal({
                     cursor: "pointer",
                   }}
                   onClick={handleNext}
-                  disabled={currentIndex >= allActivities.length - 1}
+                  disabled={currentIndex >= flattenedActivities.length - 1}
                 >
                   ▶
                 </button>
@@ -212,14 +216,20 @@ export default function AdaptivePlayerModal({
           </div>
         </div>
 
+        {/* Bottom bar => step percentage */}
         <div style={bottomBarStyle}>
           <BottomBar
-            stepPercent={allActivities.length ? (currentIndex / allActivities.length) * 100 : 0}
+            stepPercent={
+              flattenedActivities.length
+                ? (currentIndex / flattenedActivities.length) * 100
+                : 0
+            }
             currentIndex={currentIndex}
-            totalSteps={allActivities.length}
+            totalSteps={flattenedActivities.length}
           />
         </div>
 
+        {/* Chat */}
         <ChatPanel
           open={chatOpen}
           onToggle={() => setChatOpen((o) => !o)}

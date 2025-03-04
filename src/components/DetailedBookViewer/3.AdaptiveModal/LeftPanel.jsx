@@ -1,5 +1,3 @@
-// src/components/DetailedBookViewer/1.SidePanels/LeftPanel.jsx
-
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import {
@@ -16,21 +14,39 @@ import {
 import ExpandLessIcon from "@mui/icons-material/KeyboardArrowUp";
 import ExpandMoreIcon from "@mui/icons-material/KeyboardArrowDown";
 
-/**
- * getActivityStyle(type)
- *  - returns a background color for each activity type (READ, QUIZ, etc.)
- */
+// getActivityStyle => same as before
 function getActivityStyle(type) {
   switch ((type || "").toUpperCase()) {
     case "READ":
-      return { bgColor: "#4FC3F7" }; // light-blue
+      return { bgColor: "#4FC3F7" };
     case "QUIZ":
-      return { bgColor: "#AED581" }; // light-green
+      return { bgColor: "#AED581" };
     case "REVISE":
-      return { bgColor: "#FFD54F" }; // gold
+      return { bgColor: "#FFD54F" };
     default:
-      return { bgColor: "#BDBDBD" }; // fallback gray
+      return { bgColor: "#BDBDBD" };
   }
+}
+
+/**
+ * Flatten the entire plan doc into a single linear array, plus
+ * store a "flatIndex" (0-based) for each activity so we can identify it easily.
+ */
+function flattenPlanDoc(planDoc) {
+  const result = [];
+  const sessions = planDoc.sessions || [];
+  sessions.forEach((sess, sIdx) => {
+    (sess.activities || []).forEach((act) => {
+      result.push({
+        ...act,
+        // Force uppercase on type so it's consistent
+        type: (act.type || "").toUpperCase(),
+        dayIndex: sIdx,
+        flatIndex: result.length, // the index in the "flattened" array
+      });
+    });
+  });
+  return result;
 }
 
 /**
@@ -71,32 +87,7 @@ function autoExpandToActivity({
   if (foundSubChId) setExpandedSubChId(foundSubChId);
 }
 
-/**
- * Utility to flatten the entire plan doc into a single linear array
- * of activities (for Next/Prev or other linear flows).
- *
- * Example: 
- *  [
- *    { type: "READ", subChapterId: "...", dayIndex: 0, ... },
- *    { type: "QUIZ", subChapterId: "...", dayIndex: 0, ... },
- *    ...
- *  ]
- */
-function flattenPlanDoc(planDoc) {
-  const result = [];
-  const sessions = planDoc.sessions || [];
-  sessions.forEach((sess, sIdx) => {
-    (sess.activities || []).forEach((act) => {
-      result.push({
-        ...act,
-        dayIndex: sIdx,
-      });
-    });
-  });
-  return result;
-}
-
-/** A small utility to show truncated text with a Tooltip on hover */
+/** For showing truncated text with a tooltip */
 function TruncateTooltip({ text, sx }) {
   return (
     <Tooltip title={text} arrow>
@@ -116,18 +107,26 @@ function TruncateTooltip({ text, sx }) {
 
 /**
  * LeftPanel
- * ---------
- * - Fetches plan from `backendURL + fetchUrl`
- * - Renders day -> chapters -> subCh -> activities with collapsible expansions
- * - If `onPlanFlattened` is provided, calls it with the flattened array after fetching the plan
+ * 
+ * Props:
+ *  - planId (string)
+ *  - fetchUrl (string)
+ *  - backendURL (string)
+ *  - initialActivityContext (object)
+ *  - onPlanFlattened (func): to send the flattened array back up
+ *  - onActivitySelect (func): to tell parent which flatIndex user clicked
+ *  - currentIndex (number): parent's current selected item
+ *  - flattenedActivities (array): parent's flattened array (optional for advanced highlighting)
  */
 export default function LeftPanel({
   planId,
   fetchUrl = "/api/adaptive-plan",
   backendURL = "http://localhost:3001",
   initialActivityContext = null,
+  onPlanFlattened = () => {},
   onActivitySelect = () => {},
-  onPlanFlattened = () => {}, // <-- new callback to send flattened array up to the parent
+  currentIndex = -1,
+  flattenedActivities = [],
 }) {
   const [plan, setPlan] = useState(null);
   const [error, setError] = useState(null);
@@ -136,13 +135,10 @@ export default function LeftPanel({
   // For adaptive plan day selection
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
 
-  // Single expansion states
   const [expandedChapterId, setExpandedChapterId] = useState(null);
   const [expandedSubChId, setExpandedSubChId] = useState(null);
 
-  // ------------------------------------------------
   // 1) Fetch plan data
-  // ------------------------------------------------
   useEffect(() => {
     if (!planId) return;
     setLoading(true);
@@ -159,9 +155,7 @@ export default function LeftPanel({
       .finally(() => setLoading(false));
   }, [planId, backendURL, fetchUrl]);
 
-  // ------------------------------------------------
-  // 2) Once plan is fetched, flatten it => call onPlanFlattened
-  // ------------------------------------------------
+  // 2) Once plan is fetched, flatten => call onPlanFlattened
   useEffect(() => {
     if (plan) {
       const flatList = flattenPlanDoc(plan);
@@ -169,9 +163,7 @@ export default function LeftPanel({
     }
   }, [plan, onPlanFlattened]);
 
-  // ------------------------------------------------
   // 3) Auto-expand if initialActivityContext
-  // ------------------------------------------------
   useEffect(() => {
     if (plan && initialActivityContext) {
       autoExpandToActivity({
@@ -184,9 +176,7 @@ export default function LeftPanel({
     }
   }, [plan, initialActivityContext]);
 
-  // ------------------------------------------------
-  // 4) Handle loading/error states
-  // ------------------------------------------------
+  // 4) Handle loading/error
   if (loading) {
     return (
       <Box sx={containerSx}>
@@ -215,7 +205,6 @@ export default function LeftPanel({
     );
   }
 
-  // Determine plan type (adaptive vs. book)
   const planType = plan.planType || "adaptive";
 
   return (
@@ -228,6 +217,7 @@ export default function LeftPanel({
           setExpandedChapterId={setExpandedChapterId}
           expandedSubChId={expandedSubChId}
           setExpandedSubChId={setExpandedSubChId}
+          currentIndex={currentIndex}
         />
       ) : (
         <AdaptivePlanView
@@ -239,15 +229,15 @@ export default function LeftPanel({
           setExpandedChapterId={setExpandedChapterId}
           expandedSubChId={expandedSubChId}
           setExpandedSubChId={setExpandedSubChId}
+          currentIndex={currentIndex}
         />
       )}
     </Box>
   );
 }
 
-// -------------------------------------------------------------------
-// BookPlanView: Usually there's just one session if planType=book
-// -------------------------------------------------------------------
+// For BookPlanView or AdaptivePlanView, we either show the “Book -> Chapters -> SubCh -> Activities” or “Day -> Book -> ...”
+
 function BookPlanView({
   sessions,
   onActivitySelect,
@@ -255,12 +245,10 @@ function BookPlanView({
   setExpandedChapterId,
   expandedSubChId,
   setExpandedSubChId,
+  currentIndex,
 }) {
-  // We'll just show the first session if multiple
   const session = sessions[0] || {};
   const { activities = [] } = session;
-
-  // If only one book in this session, skip that book level
   const uniqueBookIds = new Set(activities.map((a) => a.bookId));
   const skipBookLevel = uniqueBookIds.size <= 1;
 
@@ -276,6 +264,7 @@ function BookPlanView({
               setExpandedChapterId,
               expandedSubChId,
               setExpandedSubChId,
+              currentIndex,
             })
           : renderBooks({
               activities,
@@ -284,15 +273,13 @@ function BookPlanView({
               setExpandedChapterId,
               expandedSubChId,
               setExpandedSubChId,
+              currentIndex,
             })}
       </Box>
     </>
   );
 }
 
-// -------------------------------------------------------------------
-// AdaptivePlanView: multiple days
-// -------------------------------------------------------------------
 function AdaptivePlanView({
   sessions,
   selectedDayIndex,
@@ -302,11 +289,11 @@ function AdaptivePlanView({
   setExpandedChapterId,
   expandedSubChId,
   setExpandedSubChId,
+  currentIndex,
 }) {
   const currentSession = sessions[selectedDayIndex] || {};
   const { activities = [], sessionLabel } = currentSession;
 
-  // If only one book, skip that level
   const uniqueBookIds = new Set(activities.map((a) => a.bookId));
   const skipBookLevel = uniqueBookIds.size <= 1;
 
@@ -315,8 +302,6 @@ function AdaptivePlanView({
   return (
     <>
       <Typography sx={titleSx}>Adaptive Plan</Typography>
-
-      {/* Day selector */}
       <Box sx={{ display: "flex", justifyContent: "center", mb: 1 }}>
         <FormControl variant="standard" sx={{ minWidth: 60 }}>
           <Select
@@ -354,6 +339,7 @@ function AdaptivePlanView({
               setExpandedChapterId,
               expandedSubChId,
               setExpandedSubChId,
+              currentIndex,
             })
           : renderBooks({
               activities,
@@ -362,15 +348,14 @@ function AdaptivePlanView({
               setExpandedChapterId,
               expandedSubChId,
               setExpandedSubChId,
+              currentIndex,
             })}
       </Box>
     </>
   );
 }
 
-// -------------------------------------------------------------------
-// RENDER: If skipping the "Book" level => Show chapters directly
-// -------------------------------------------------------------------
+// -------------- RENDER CHAPTERS DIRECTLY ----------------
 function renderChaptersDirect({
   activities,
   onActivitySelect,
@@ -378,8 +363,8 @@ function renderChaptersDirect({
   setExpandedChapterId,
   expandedSubChId,
   setExpandedSubChId,
+  currentIndex,
 }) {
-  // Group by chapter
   const chapterMap = new Map();
   for (const a of activities) {
     const cId = a.chapterId || "_noChap_";
@@ -398,8 +383,6 @@ function renderChaptersDirect({
     <List sx={{ p: 0 }} dense>
       {chapters.map((ch) => {
         const isChapterOpen = expandedChapterId === ch.chapterId;
-
-        // Example: parse out leading digit as "chapter index"
         const splitted = ch.chapterName.split(".");
         let indexToken = splitted[0];
         let restName = ch.chapterName;
@@ -408,16 +391,10 @@ function renderChaptersDirect({
         } else {
           indexToken = "";
         }
-
-        // total time
-        const totalTime = ch.items.reduce(
-          (acc, x) => acc + (x.timeNeeded || 0),
-          0
-        );
+        const totalTime = ch.items.reduce((acc, x) => acc + (x.timeNeeded || 0), 0);
 
         return (
           <Box key={ch.chapterId}>
-            {/* CHAPTER HEADER */}
             <ListItemButton
               sx={listItemButtonSx}
               onClick={() =>
@@ -429,16 +406,13 @@ function renderChaptersDirect({
                   <Typography sx={pillNumberSx}>{indexToken}</Typography>
                 </Box>
               )}
-
               <Box sx={{ flex: 1, overflow: "hidden" }}>
                 <TruncateTooltip
                   text={restName || ch.chapterName}
                   sx={{ fontSize: "0.75rem" }}
                 />
               </Box>
-
               <Box sx={timePillSx}>{totalTime}m</Box>
-
               {isChapterOpen ? (
                 <ExpandLessIcon sx={{ fontSize: "1rem", ml: 0.5 }} />
               ) : (
@@ -446,7 +420,6 @@ function renderChaptersDirect({
               )}
             </ListItemButton>
 
-            {/* SUBCHAPTERS */}
             <Collapse in={isChapterOpen} timeout="auto" unmountOnExit>
               <Box sx={{ pl: 2 }}>
                 {renderSubChapters({
@@ -454,6 +427,7 @@ function renderChaptersDirect({
                   onActivitySelect,
                   expandedSubChId,
                   setExpandedSubChId,
+                  currentIndex,
                 })}
               </Box>
             </Collapse>
@@ -464,9 +438,7 @@ function renderChaptersDirect({
   );
 }
 
-// -------------------------------------------------------------------
-// RENDER: Books => then chapters => subCh => activities
-// -------------------------------------------------------------------
+// -------------- RENDER BOOKS -> CHAPTERS -> SUBCH -> ACTS --------------
 function renderBooks({
   activities,
   onActivitySelect,
@@ -474,8 +446,8 @@ function renderBooks({
   setExpandedChapterId,
   expandedSubChId,
   setExpandedSubChId,
+  currentIndex,
 }) {
-  // group by book
   const bookMap = new Map();
   for (const a of activities) {
     const bId = a.bookId || "_noBook_";
@@ -493,17 +465,13 @@ function renderBooks({
   return (
     <List sx={{ p: 0 }} dense>
       {books.map((bk) => {
-        const totalTime = bk.items.reduce(
-          (acc, x) => acc + (x.timeNeeded || 0),
-          0
-        );
+        const totalTime = bk.items.reduce((acc, x) => acc + (x.timeNeeded || 0), 0);
 
         return (
           <Box key={bk.bookId} sx={{ mb: 0.5 }}>
             <Typography sx={bookLabelSx}>
               {bk.bookName} ({totalTime}m)
             </Typography>
-
             {renderChaptersDirect({
               activities: bk.items,
               onActivitySelect,
@@ -511,6 +479,7 @@ function renderBooks({
               setExpandedChapterId,
               expandedSubChId,
               setExpandedSubChId,
+              currentIndex,
             })}
           </Box>
         );
@@ -519,16 +488,13 @@ function renderBooks({
   );
 }
 
-// -------------------------------------------------------------------
-// RENDER: SubChapters => activities
-// -------------------------------------------------------------------
 function renderSubChapters({
   chapterItems,
   onActivitySelect,
   expandedSubChId,
   setExpandedSubChId,
+  currentIndex,
 }) {
-  // group by subChapter
   const subMap = new Map();
   for (const a of chapterItems) {
     const sId = a.subChapterId || "_noSub_";
@@ -545,7 +511,6 @@ function renderSubChapters({
 
   return subs.map((sb) => {
     const isSubOpen = expandedSubChId === sb.subChapterId;
-
     const splitted = sb.subChapterName.split(".");
     let indexToken = splitted[0];
     let restName = sb.subChapterName;
@@ -554,29 +519,23 @@ function renderSubChapters({
     } else {
       indexToken = "";
     }
-
     const totalTime = sb.items.reduce((acc, x) => acc + (x.timeNeeded || 0), 0);
 
     return (
       <Box key={sb.subChapterId} sx={{ mb: 0.5 }}>
-        {/* SUBCH HEADER */}
         <ListItemButton
           sx={listItemButtonSx}
-          onClick={() =>
-            setExpandedSubChId(isSubOpen ? null : sb.subChapterId)
-          }
+          onClick={() => setExpandedSubChId(isSubOpen ? null : sb.subChapterId)}
         >
           {indexToken && (
             <Box sx={subChPillSx}>
               <Typography sx={pillNumberSx}>{indexToken}</Typography>
             </Box>
           )}
-
           <Box sx={{ flex: 1, overflow: "hidden" }}>
             <TruncateTooltip text={restName} sx={{ fontSize: "0.7rem" }} />
           </Box>
           <Box sx={timePillSx}>{totalTime}m</Box>
-
           {isSubOpen ? (
             <ExpandLessIcon sx={{ fontSize: "1rem", ml: 0.5 }} />
           ) : (
@@ -584,21 +543,23 @@ function renderSubChapters({
           )}
         </ListItemButton>
 
-        {/* ACTIVITIES (READ, QUIZ, REVISE...) */}
         <Collapse in={isSubOpen} timeout="auto" unmountOnExit>
           <List dense disablePadding sx={{ pl: 2 }}>
             {sb.items.map((act, idx) => {
               const { bgColor } = getActivityStyle(act.type);
 
+              // Check if this is the currently selected activity
+              const isSelected = act.flatIndex === currentIndex;
+
               return (
                 <ListItemButton
-                  key={idx}
-                  onClick={() => onActivitySelect(act)}
-                  // ^^^^^ PASS THE ENTIRE ACT OBJ
+                  key={act.flatIndex}
+                  onClick={() => onActivitySelect(act.flatIndex)}
                   sx={{
                     ...listItemButtonSx,
                     mb: 0.3,
-                    bgcolor: bgColor,
+                    // If selected, highlight it
+                    bgcolor: isSelected ? "#FFA726" : bgColor,
                     color: "#000",
                   }}
                 >
@@ -619,9 +580,7 @@ function renderSubChapters({
   });
 }
 
-// -------------------------------------------------------------------
-// STYLES
-// -------------------------------------------------------------------
+// ------------------- STYLES -------------------
 const containerSx = {
   width: 300,
   minWidth: 250,
@@ -671,7 +630,7 @@ const listItemButtonSx = {
 const chapterPillSx = {
   minWidth: "1.4rem",
   height: "1.4rem",
-  bgcolor: "#EC407A", // pinkish for chapters
+  bgcolor: "#EC407A",
   borderRadius: "0.2rem",
   display: "flex",
   alignItems: "center",
@@ -682,7 +641,7 @@ const chapterPillSx = {
 const subChPillSx = {
   minWidth: "1.4rem",
   height: "1.4rem",
-  bgcolor: "#7E57C2", // purple for sub-ch
+  bgcolor: "#7E57C2",
   borderRadius: "0.2rem",
   display: "flex",
   alignItems: "center",
