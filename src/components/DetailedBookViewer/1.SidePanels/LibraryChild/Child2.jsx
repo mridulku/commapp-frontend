@@ -1,14 +1,10 @@
-// src/components/DetailedBookViewer/child2.jsx
+// src/components/DetailedBookViewer/Child2.jsx
 
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button } from "@mui/material";
-
-// We'll import the new HistoryTab for the "History" tab
 import HistoryTab from "./HistoryTab";
-
-// Import your Redux-based PlanFetcher
-import PlanFetcher from "../../PlanFetcher"; // <-- adjust path if needed
+import PlanFetcher from "../../PlanFetcher"; // Adjust path if needed
 
 /**
  * Child2
@@ -21,7 +17,7 @@ import PlanFetcher from "../../PlanFetcher"; // <-- adjust path if needed
  *  - userId: string
  *  - bookId: string
  *  - planIds: string[]
- *  - onOverviewSelect: function(activity) => void  (unused in this snippet, left in for compatibility)
+ *  - onOverviewSelect: function(activity) => void  (unused, left in for compatibility)
  *  - colorScheme: { panelBg, textColor, borderColor, heading }
  */
 export default function Child2({
@@ -29,9 +25,25 @@ export default function Child2({
   bookId = "",
   planIds = [],
   onOverviewSelect = () => {},
-  // OLD: onOpenPlayer = () => {},
   colorScheme = {},
 }) {
+  // ------------------------------------------
+  // STYLES & HELPER
+  // ------------------------------------------
+  function activityButtonStyle(isEnabled) {
+    return {
+      backgroundColor: isEnabled ? (colorScheme.heading || "#FFD700") : "#777777",
+      color: isEnabled ? "#000" : "#ccc",
+      border: "none",
+      borderRadius: "4px",
+      padding: "6px 10px",
+      cursor: isEnabled ? "pointer" : "not-allowed",
+      fontWeight: "bold",
+      fontSize: "0.9rem",
+      minWidth: "75px",
+    };
+  }
+
   // ------------------------------------------
   // 1) localPlanIds
   // ------------------------------------------
@@ -44,26 +56,35 @@ export default function Child2({
   // ------------------------------------------
   // 2) Fetch plan IDs whenever bookId changes
   // ------------------------------------------
+  const [selectedPlanId, setSelectedPlanId] = useState("");
+  const [plan, setPlan] = useState(null);
+
   useEffect(() => {
     async function fetchPlansForBook() {
       if (!userId || !bookId) {
+        console.log("[Child2] fetchPlansForBook => missing userId or bookId");
         setLocalPlanIds([]);
         setSelectedPlanId("");
         setPlan(null);
         return;
       }
 
+      console.log(
+        `[Child2] fetching plan IDs for userId="${userId}" bookId="${bookId}"...`
+      );
+
       try {
         const url = `${import.meta.env.VITE_BACKEND_URL}/api/adaptive-plan-id`;
         const res = await axios.get(url, { params: { userId, bookId } });
         if (res.data && res.data.planIds) {
+          console.log("[Child2] planIds returned =>", res.data.planIds);
           setLocalPlanIds(res.data.planIds);
         } else {
-          console.warn("No planIds returned:", res.data);
+          console.warn("[Child2] No planIds returned =>", res.data);
           setLocalPlanIds([]);
         }
       } catch (error) {
-        console.error("Error fetching plan IDs by bookId:", error);
+        console.error("[Child2] Error fetching plan IDs by bookId =>", error);
         setLocalPlanIds([]);
       }
     }
@@ -71,66 +92,62 @@ export default function Child2({
     fetchPlansForBook();
   }, [userId, bookId]);
 
-  // ------------------------------------------
-  // 3) Selected Plan & Fetched Plan
-  // ------------------------------------------
-  const [selectedPlanId, setSelectedPlanId] = useState("");
-  const [plan, setPlan] = useState(null);
-
+  // Whenever localPlanIds changes => pick the first or reset
   useEffect(() => {
     if (localPlanIds.length > 0) {
+      console.log("[Child2] localPlanIds changed => picking first =>", localPlanIds[0]);
       setSelectedPlanId(localPlanIds[0]);
     } else {
+      console.log("[Child2] localPlanIds empty => clearing planId");
       setSelectedPlanId("");
       setPlan(null);
     }
   }, [localPlanIds]);
 
+  // ------------------------------------------
+  // 3) Fetched Plan (in local state) – for local display/tabs
+  // ------------------------------------------
   useEffect(() => {
     if (!selectedPlanId) {
       setPlan(null);
       return;
     }
 
-    async function fetchPlan() {
+    async function fetchPlanDoc() {
+      console.log("[Child2] fetching planDoc => planId:", selectedPlanId);
       try {
         const res = await axios.get(
           `${import.meta.env.VITE_BACKEND_URL}/api/adaptive-plan`,
-          {
-            params: { planId: selectedPlanId },
-          }
+          { params: { planId: selectedPlanId } }
         );
         if (res.data && res.data.planDoc) {
+          console.log("[Child2] planDoc fetched =>", res.data.planDoc);
           setPlan(res.data.planDoc);
         } else {
-          console.error("No planDoc in response:", res.data);
+          console.error("[Child2] No planDoc in response =>", res.data);
           setPlan(null);
         }
       } catch (err) {
-        console.error("Error fetching plan:", err);
+        console.error("[Child2] Error fetching planDoc =>", err);
         setPlan(null);
       }
     }
 
-    fetchPlan();
+    fetchPlanDoc();
   }, [selectedPlanId]);
 
   // ------------------------------------------
-  // 4) Sessions => displayed as Tabs
+  // 4) Session Tab
   // ------------------------------------------
   const [activeSessionIndex, setActiveSessionIndex] = useState(0);
 
-  // Reset the active tab if the plan changes
+  // Reset the active tab if plan changes
   useEffect(() => {
     setActiveSessionIndex(0);
   }, [plan]);
 
-  // ------------------------------------------
-  // 5) Expand/Collapse state for chapters
-  // ------------------------------------------
+  // Expand/Collapse
   const [expandedChapters, setExpandedChapters] = useState([]);
-
-  // Clear expansions whenever plan changes
   useEffect(() => {
     setExpandedChapters([]);
   }, [plan]);
@@ -142,26 +159,40 @@ export default function Child2({
   }
 
   // ------------------------------------------
-  // 6) PlanFetcher Dialog State + Handler
+  // 5) PlanFetcher Dialog
   // ------------------------------------------
   const [showPlanDialog, setShowPlanDialog] = useState(false);
   const [dialogPlanId, setDialogPlanId] = useState("");
   const [dialogInitialActivity, setDialogInitialActivity] = useState(null);
 
-  // Instead of onOpenPlayer, we define handleOpenPlanFetcher
+  // This function is triggered on "Read"/"Quiz"/"Revise" click
   function handleOpenPlanFetcher(planId, activity) {
+    console.log("[Child2] handleOpenPlanFetcher => planId:", planId, "activity:", activity);
+
     setDialogPlanId(planId);
-    // We'll pass subChapterId and type as the initial context
-    setDialogInitialActivity({
-      subChapterId: activity.subChapterId,
-      type: activity.type,
-    });
+    if (!activity) {
+      console.warn("[Child2] handleOpenPlanFetcher => no activity provided");
+      setDialogInitialActivity(null);
+    } else {
+      const subChId = activity.subChapterId;
+      const actType = activity.type;
+      console.log("[Child2] Setting dialogInitialActivity =>", {
+        subChapterId: subChId,
+        type: actType,
+      });
+      setDialogInitialActivity({
+        subChapterId: subChId,
+        type: actType,
+      });
+    }
+
     setShowPlanDialog(true);
   }
 
   // ------------------------------------------
-  // 7) Styles
+  // RENDER
   // ------------------------------------------
+  // Basic container
   const containerStyle = {
     backgroundColor: colorScheme.panelBg || "#0D0D0D",
     color: colorScheme.textColor || "#FFD700",
@@ -176,74 +207,6 @@ export default function Child2({
     color: colorScheme.heading || "#FFD700",
   };
 
-  // The "tabs" container
-  const tabsContainerStyle = {
-    display: "flex",
-    marginBottom: "1rem",
-    borderBottom: `1px solid ${colorScheme.borderColor || "#FFD700"}`,
-  };
-
-  // Single "tab" style
-  const tabStyle = (isActive) => ({
-    padding: "0.5rem 1rem",
-    cursor: "pointer",
-    border: `1px solid ${colorScheme.borderColor || "#FFD700"}`,
-    borderBottom: isActive
-      ? "none"
-      : `1px solid ${colorScheme.borderColor || "#FFD700"}`,
-    borderRadius: "8px 8px 0 0",
-    marginRight: "5px",
-    backgroundColor: isActive ? "#2F2F2F" : "#3D3D3D",
-    color: colorScheme.textColor || "#FFD700",
-  });
-
-  // Collapsible chapter headers
-  const collapsibleHeaderStyle = {
-    cursor: "pointer",
-    padding: "8px 12px",
-    margin: "6px 0",
-    backgroundColor: "#2F2F2F",
-    borderRadius: "4px",
-    border: `1px solid ${colorScheme.borderColor || "#FFD700"}`,
-    fontWeight: "bold",
-  };
-
-  // Sub-chapter "card" container
-  const subChapterCardStyle = {
-    backgroundColor: "#3D3D3D",
-    border: `1px solid ${colorScheme.borderColor || "#FFD700"}`,
-    borderRadius: "6px",
-    padding: "1rem",
-    margin: "0.5rem 0",
-  };
-
-  const subChapterTitleStyle = {
-    fontSize: "0.95rem",
-    fontWeight: "bold",
-    marginBottom: "0.5rem",
-  };
-
-  // Buttons row
-  const activityButtonsRowStyle = {
-    display: "flex",
-    gap: "1rem",
-  };
-
-  const activityButtonStyle = (isEnabled) => ({
-    backgroundColor: isEnabled ? colorScheme.heading || "#FFD700" : "#777777",
-    color: isEnabled ? "#000" : "#ccc",
-    border: "none",
-    borderRadius: "4px",
-    padding: "6px 10px",
-    cursor: isEnabled ? "pointer" : "not-allowed",
-    fontWeight: "bold",
-    fontSize: "0.9rem",
-    minWidth: "75px",
-  });
-
-  // ------------------------------------------
-  // 8) Render
-  // ------------------------------------------
   if (localPlanIds.length === 0 && !plan) {
     return (
       <div style={containerStyle}>
@@ -259,11 +222,12 @@ export default function Child2({
     <div style={containerStyle}>
       <h2 style={headingStyle}>Adaptive Plan</h2>
 
-      {/* If there's more than 1 plan ID, show the dropdown */}
+      {/* If there's more than 1 plan ID => show a dropdown */}
       {localPlanIds.length > 1 && (
         <div style={{ marginBottom: "1rem" }}>
-          <label style={{ marginRight: 5 }}>Select Plan:</label>
+          <label>Select Plan:</label>
           <select
+            style={{ marginLeft: 10 }}
             value={selectedPlanId}
             onChange={(e) => setSelectedPlanId(e.target.value)}
           >
@@ -284,7 +248,7 @@ export default function Child2({
         renderPlan(plan)
       )}
 
-      {/* Our new PlanFetcher-based dialog */}
+      {/* The new Redux-based PlanFetcher dialog */}
       <Dialog
         open={showPlanDialog}
         onClose={() => setShowPlanDialog(false)}
@@ -293,10 +257,16 @@ export default function Child2({
       >
         <DialogTitle>Adaptive Plan Viewer</DialogTitle>
         <DialogContent>
+          <p style={{ fontSize: "0.85rem", color: "#888" }}>
+            {`[Child2 -> PlanFetcher] planId: ${dialogPlanId}`}
+            <br />
+            {`initialActivityContext: ${JSON.stringify(dialogInitialActivity, null, 2)}`}
+          </p>
+
           {dialogPlanId ? (
             <PlanFetcher
               planId={dialogPlanId}
-              // pass the initialActivityContext so PlanFetcher can highlight the correct subchapter
+              // pass the initialActivityContext to help jump to the correct subchapter
               initialActivityContext={dialogInitialActivity}
             />
           ) : (
@@ -311,7 +281,7 @@ export default function Child2({
   );
 
   // ------------------------------------------
-  // renderPlan: show each "session" as a Tab, with an extra "History" tab
+  // renderPlan => Show local plan's sessions
   // ------------------------------------------
   function renderPlan(planObj) {
     const { sessions = [] } = planObj;
@@ -322,42 +292,33 @@ export default function Child2({
     return (
       <>
         {/* TABS container */}
-        <div style={tabsContainerStyle}>
+        <div style={{ display: "flex", marginBottom: "1rem" }}>
           {/* Tab 0 => History */}
           <div
-            key="historyTab"
             style={tabStyle(activeSessionIndex === 0)}
             onClick={() => setActiveSessionIndex(0)}
           >
             History
           </div>
 
-          {/* Tabs for each session => starts at index 1 */}
           {sessions.map((sess, index) => {
-            const tabIndex = index + 1; // offset by 1 to account for "History"
-
-            // We'll rename session labels:
-            // If sessionLabel = 1 => "Today"
-            // If sessionLabel = 2 => "Tomorrow"
-            // Else => "Day X"
+            const tabIndex = index + 1;
             let sessionDisplayName;
             const sLabel = Number(sess.sessionLabel);
             if (sLabel === 1) sessionDisplayName = "Today";
             else if (sLabel === 2) sessionDisplayName = "Tomorrow";
             else sessionDisplayName = `Day ${sLabel}`;
 
-            // Compute total time for the label
             const totalTime = (sess.activities || []).reduce(
               (acc, a) => acc + (a.timeNeeded || 0),
               0
             );
             const label = `${sessionDisplayName} (${totalTime} min)`;
 
-            const isActive = activeSessionIndex === tabIndex;
             return (
               <div
                 key={sess.sessionLabel}
-                style={tabStyle(isActive)}
+                style={tabStyle(activeSessionIndex === tabIndex)}
                 onClick={() => setActiveSessionIndex(tabIndex)}
               >
                 {label}
@@ -366,24 +327,29 @@ export default function Child2({
           })}
         </div>
 
-        {/* Render the content depending on which tab is selected */}
         {activeSessionIndex === 0
-          ? renderHistoryTab()
+          ? <HistoryTab />
           : renderSessionContent(sessions[activeSessionIndex - 1])}
       </>
     );
   }
 
-  // ------------------------------------------
-  // renderHistoryTab: show the HistoryTab component
-  // ------------------------------------------
-  function renderHistoryTab() {
-    return <HistoryTab />;
+  // Style for each tab
+  function tabStyle(isActive) {
+    return {
+      padding: "0.5rem 1rem",
+      cursor: "pointer",
+      border: `1px solid ${colorScheme.borderColor || "#FFD700"}`,
+      borderBottom: isActive
+        ? "none"
+        : `1px solid ${colorScheme.borderColor || "#FFD700"}`,
+      borderRadius: "8px 8px 0 0",
+      marginRight: "5px",
+      backgroundColor: isActive ? "#2F2F2F" : "#3D3D3D",
+      color: colorScheme.textColor || "#FFD700",
+    };
   }
 
-  // ------------------------------------------
-  // renderSessionContent: for the active day
-  // ------------------------------------------
   function renderSessionContent(session) {
     if (!session) return null;
     const { activities = [] } = session;
@@ -396,26 +362,20 @@ export default function Child2({
       }
       bookMap.get(act.bookId).push(act);
     }
-
     const uniqueBooks = [...bookMap.keys()];
 
-    // If there's only one book in this day, skip the book layer
     if (uniqueBooks.length === 1) {
-      const [singleBookId] = uniqueBooks;
+      const singleBookId = uniqueBooks[0];
       const singleBookActivities = bookMap.get(singleBookId) || [];
       return renderChaptersLayer(singleBookActivities, singleBookId, true);
     }
 
-    // Otherwise, show each book as a heading & chapters
     return (
       <div style={{ marginTop: "1rem" }}>
         {uniqueBooks.map((bId) => {
           const acts = bookMap.get(bId) || [];
           const bookName = acts[0]?.bookName || `Book (${bId})`;
-          const totalBookTime = acts.reduce(
-            (acc, a) => acc + (a.timeNeeded || 0),
-            0
-          );
+          const totalBookTime = acts.reduce((acc, a) => acc + (a.timeNeeded || 0), 0);
 
           return (
             <div key={bId} style={{ marginBottom: "1rem" }}>
@@ -430,11 +390,7 @@ export default function Child2({
     );
   }
 
-  // ------------------------------------------
-  // renderChaptersLayer
-  // ------------------------------------------
   function renderChaptersLayer(activities, bookId, skipBookLayer) {
-    // Group by chapter
     const chapterMap = new Map();
     for (const act of activities) {
       if (!chapterMap.has(act.chapterId)) {
@@ -449,8 +405,7 @@ export default function Child2({
           const chapterKey = `book${bookId}-chap${chapterId}`;
           const isChapterOpen = expandedChapters.includes(chapterKey);
 
-          const chapterName =
-            cActs[0]?.chapterName || `Chapter (${chapterId})`;
+          const chapterName = cActs[0]?.chapterName || `Chapter (${chapterId})`;
           const totalChapterTime = cActs.reduce(
             (acc, a) => acc + (a.timeNeeded || 0),
             0
@@ -460,7 +415,15 @@ export default function Child2({
           return (
             <div key={chapterId} style={{ marginBottom: "1rem" }}>
               <div
-                style={collapsibleHeaderStyle}
+                style={{
+                  cursor: "pointer",
+                  padding: "8px 12px",
+                  margin: "6px 0",
+                  backgroundColor: "#2F2F2F",
+                  borderRadius: "4px",
+                  border: `1px solid ${colorScheme.borderColor || "#FFD700"}`,
+                  fontWeight: "bold",
+                }}
                 onClick={() => toggleChapter(chapterKey)}
               >
                 {isChapterOpen ? "▾" : "▸"}{" "}
@@ -474,11 +437,7 @@ export default function Child2({
     );
   }
 
-  // ------------------------------------------
-  // renderSubChapterCards
-  // ------------------------------------------
   function renderSubChapterCards(chapterActivities) {
-    // Group by subChapterId
     const subMap = new Map();
     for (const act of chapterActivities) {
       if (!subMap.has(act.subChapterId)) {
@@ -493,13 +452,29 @@ export default function Child2({
           const readAct = subActs.find((a) => a.type === "READ");
           const quizAct = subActs.find((a) => a.type === "QUIZ");
           const reviseAct = subActs.find((a) => a.type === "REVISE");
-          const subName =
-            subActs[0]?.subChapterName || `Sub-Chapter (${subId})`;
+          const subName = subActs[0]?.subChapterName || `Sub-Chapter (${subId})`;
 
           return (
-            <div key={subId} style={subChapterCardStyle}>
-              <div style={subChapterTitleStyle}>{subName}</div>
-              <div style={activityButtonsRowStyle}>
+            <div
+              key={subId}
+              style={{
+                backgroundColor: "#3D3D3D",
+                border: `1px solid ${colorScheme.borderColor || "#FFD700"}`,
+                borderRadius: "6px",
+                padding: "1rem",
+                margin: "0.5rem 0",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "0.95rem",
+                  fontWeight: "bold",
+                  marginBottom: "0.5rem",
+                }}
+              >
+                {subName}
+              </div>
+              <div style={{ display: "flex", gap: "1rem" }}>
                 {/* READ */}
                 <button
                   style={activityButtonStyle(!!readAct)}
@@ -507,7 +482,7 @@ export default function Child2({
                   onClick={(e) => {
                     e.stopPropagation();
                     if (readAct) {
-                      // Instead of onOpenPlayer => handleOpenPlanFetcher
+                      console.log("[Child2] 'READ' clicked =>", readAct);
                       handleOpenPlanFetcher(selectedPlanId, readAct);
                     }
                   }}
@@ -522,6 +497,7 @@ export default function Child2({
                   onClick={(e) => {
                     e.stopPropagation();
                     if (quizAct) {
+                      console.log("[Child2] 'QUIZ' clicked =>", quizAct);
                       handleOpenPlanFetcher(selectedPlanId, quizAct);
                     }
                   }}
@@ -536,6 +512,7 @@ export default function Child2({
                   onClick={(e) => {
                     e.stopPropagation();
                     if (reviseAct) {
+                      console.log("[Child2] 'REVISE' clicked =>", reviseAct);
                       handleOpenPlanFetcher(selectedPlanId, reviseAct);
                     }
                   }}

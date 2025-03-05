@@ -1,3 +1,5 @@
+// src/components/DetailedBookViewer/LeftPanel.jsx
+
 import React, { useState, useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { setCurrentIndex } from "./redux/planSlice";
@@ -6,8 +8,12 @@ import { setCurrentIndex } from "./redux/planSlice";
  * LeftPanel
  * ---------
  * - Single chain expansion
- * - Manual toggle: user can open any day/book/ch/subch, which collapses previous chain
- * - Auto sync: if currentIndex changes (via next/prev arrows in MainContent), we open that chain
+ * - Manual toggles for day/book/ch/subch
+ * - Auto sync: if currentIndex changes (via next/prev or initialActivityContext),
+ *   it expands the chain to that item.
+ *
+ * If your Redux code already sets currentIndex to the correct item based on
+ * initialActivityContext, this panel will highlight and expand the correct item.
  */
 export default function LeftPanel() {
   const dispatch = useDispatch();
@@ -21,19 +27,21 @@ export default function LeftPanel() {
   // E.g. { "day-2": true, "book-b123": true, "ch-c456": true, "subch-s789": true }
   const [expanded, setExpanded] = useState({});
 
+  // If we haven't finished loading or there's no plan yet
   if (status !== "succeeded" || !planDoc) {
     return <div style={styles.container}>No plan loaded yet.</div>;
   }
 
   const { planType = "adaptive", sessions = [] } = planDoc;
 
-  // ------------------------------------------------------------
-  // 1) Whenever currentIndex changes => auto-expand that chain
-  // ------------------------------------------------------------
+  // ------------------------------------------------------------------------
+  // 1) Whenever currentIndex changes => auto-expand the chain for that item
+  // ------------------------------------------------------------------------
   useEffect(() => {
     if (!flattenedActivities?.length) return;
     if (currentIndex < 0 || currentIndex >= flattenedActivities.length) return;
 
+    // The currently selected activity
     const currentItem = flattenedActivities[currentIndex];
     const { dayIndex, bookId, chapterId, subChapterId } = currentItem || {};
 
@@ -43,78 +51,50 @@ export default function LeftPanel() {
     }
 
     // Build the chain keys for this item
-    // e.g. { "day-2": true, "book-xyz": true, "ch-abc": true, "subch-123": true }
     const newExpanded = buildChain(dayIndex, bookId, chapterId, subChapterId);
-
     setExpanded(newExpanded);
+
   }, [currentIndex, flattenedActivities, planType]);
 
-  // ------------------------------------------------------------
-  // 2) If user changes day from dropdown, just set selectedDayIndex
-  // ------------------------------------------------------------
+  // ------------------------------------------------------------------------
+  // 2) handleDayChange => user changed day => reset expansions to that day
+  // ------------------------------------------------------------------------
   function handleDayChange(e) {
     setSelectedDayIndex(Number(e.target.value));
-    // We might optionally collapse everything or auto-open that day:
-    // If you want day to be auto expanded, do it here, e.g.:
+    // We collapse everything except that day:
     const dayKey = `day-${e.target.value}`;
     setExpanded({ [dayKey]: true });
   }
 
-  // ------------------------------------------------------------
-  // 3) handleToggleExpand => user clicked a day/book/chapter/subch header
-  //    If user is "opening" that node => close all others, open that chain
-  //    If user is "closing" that node => simply close that node (and children).
-  // ------------------------------------------------------------
+  // ------------------------------------------------------------------------
+  // 3) handleToggleExpand => user manually toggles a node
+  // ------------------------------------------------------------------------
   function handleToggleExpand(key, allActivities) {
-    const isCurrentlyOpen = expanded[key] === true;
-
-    if (isCurrentlyOpen) {
-      // Closing => just turn off this node and any deeper children
+    const isOpen = expanded[key] === true;
+    if (isOpen) {
+      // close it (and child expansions)
       const nextExpanded = { ...expanded };
       collapseNodeAndChildren(key, nextExpanded, allActivities);
       setExpanded(nextExpanded);
     } else {
-      // Opening => we want a single chain approach
-      //  1) figure out day/book/chapter/subch from 'key'
-      //  2) build a new object with only that chain open
-      //  3) preserve any ancestors (like day-2 if we are opening a book)
-
-      // If it's a day key => "day-2"
-      // If it's a book key => "book-xxx"
-      // etc. We'll parse them and open from root to that node.
-
+      // open it while preserving the chain for that node
       const nextExpanded = {};
 
-      // If user clicked a day => open that day, collapse all else
-      // If user clicked a book => keep day open & that book, close others
-      // If user clicked a chapter => keep day & book open, open this chapter
-      // If user clicked a subch => keep day & book & chapter open, open subCh
-
-      // We'll find the "chain" from day -> book -> chapter -> subChapter
-      // If you have the associated dayIndex/bookId, etc. we can open them
-      // But we only know the 'key' that was clicked. So we parse and do partial logic.
-
-      // We'll do a simpler approach: we find dayIndex from selectedDayIndex (assuming user is in that day)
+      // Always keep the day open
       const dayKey = `day-${selectedDayIndex}`;
       nextExpanded[dayKey] = true;
 
-      // If they clicked a "book-xxx"
+      // Then handle the exact node that was clicked
       if (key.startsWith("book-")) {
         nextExpanded[key] = true;
-      }
-      // If they clicked "ch-xxx" => we want the parent's book open as well if we can find it
-      else if (key.startsWith("ch-")) {
-        // We can't know which book it's under unless we map. We'll do it below by searching.
+      } else if (key.startsWith("ch-")) {
         nextExpanded[dayKey] = true;
         nextExpanded[key] = true;
-        // We'll fill in the parent's "book-xxx" if we discover it
         const parentBookKey = findParentBookKey(key, allActivities);
         if (parentBookKey) {
           nextExpanded[parentBookKey] = true;
         }
-      }
-      // If they clicked subch => open day, open parent book, open parent chapter, open subch
-      else if (key.startsWith("subch-")) {
+      } else if (key.startsWith("subch-")) {
         nextExpanded[dayKey] = true;
         nextExpanded[key] = true;
         const { parentBookKey, parentChapterKey } = findParentBookChKey(key, allActivities);
@@ -126,7 +106,7 @@ export default function LeftPanel() {
     }
   }
 
-  // For planType=book => skip day selection
+  // If planType="book", skip day selection
   if (planType === "book") {
     const singleSession = sessions[0] || {};
     return (
@@ -187,7 +167,7 @@ function BookPlanView({
   expanded,
   onToggleExpand,
 }) {
-  // We'll group by book
+  // Group by book
   const bookMap = new Map();
   for (const a of activities) {
     const bId = a.bookId || "_noBook";
@@ -226,7 +206,13 @@ function BookPlanView({
   );
 }
 
-function renderChapters(activities, currentIndex, onSelectActivity, expanded, onToggleExpand) {
+function renderChapters(
+  activities,
+  currentIndex,
+  onSelectActivity,
+  expanded,
+  onToggleExpand
+) {
   const chMap = new Map();
   for (const act of activities) {
     const cId = act.chapterId || "_noChap";
@@ -261,12 +247,22 @@ function renderChapters(activities, currentIndex, onSelectActivity, expanded, on
   });
 }
 
-function renderSubChapters(activities, currentIndex, onSelectActivity, expanded, onToggleExpand) {
+function renderSubChapters(
+  activities,
+  currentIndex,
+  onSelectActivity,
+  expanded,
+  onToggleExpand
+) {
   const sbMap = new Map();
   for (const act of activities) {
     const sbId = act.subChapterId || "_noSubCh";
     if (!sbMap.has(sbId)) {
-      sbMap.set(sbId, { subChapterId: sbId, subChapterName: act.subChapterName || sbId, items: [] });
+      sbMap.set(sbId, {
+        subChapterId: sbId,
+        subChapterName: act.subChapterName || sbId,
+        items: [],
+      });
     }
     sbMap.get(sbId).items.push(act);
   }
@@ -279,7 +275,7 @@ function renderSubChapters(activities, currentIndex, onSelectActivity, expanded,
     const sbTime = sb.items.reduce((acc, x) => acc + (x.timeNeeded || 0), 0);
 
     return (
-      <div key={sbKey} style={styles.subBlock}>
+      <div key={sb.subChapterId} style={styles.subBlock}>
         <div
           style={styles.blockHeader}
           onClick={() => onToggleExpand(sbKey, activities)}
@@ -302,7 +298,9 @@ function renderSubChapters(activities, currentIndex, onSelectActivity, expanded,
                   <span>
                     {act.type}: {act.subChapterName}
                   </span>
-                  <span style={{ marginLeft: "auto" }}>{act.timeNeeded || 0}m</span>
+                  <span style={{ marginLeft: "auto" }}>
+                    {act.timeNeeded || 0}m
+                  </span>
                 </div>
               );
             })}
@@ -313,23 +311,9 @@ function renderSubChapters(activities, currentIndex, onSelectActivity, expanded,
   });
 }
 
-//
-// HELPER FUNCTIONS
-//
-
-/**
- * buildChain(dayIndex, bookId, chapterId, subChId)
- * Returns an expanded object for that single chain.
- */
+// --------------- HELPER FUNCTIONS ---------------
 function buildChain(dayIndex, bookId, chapterId, subChId) {
-  // e.g. {
-  //   "day-2": true,
-  //   "book-xyz": true,
-  //   "ch-abc": true,
-  //   "subch-123": true
-  // }
   const obj = {};
-  // If dayIndex is present
   if (typeof dayIndex === "number") {
     obj[`day-${dayIndex}`] = true;
   }
@@ -339,22 +323,11 @@ function buildChain(dayIndex, bookId, chapterId, subChId) {
   return obj;
 }
 
-/**
- * collapseNodeAndChildren(key, expandedObj, allActivities)
- * Sets expandedObj[key] = false + any children of this node false as well.
- * We only do minimal recursion, because we store expansions by key.
- */
 function collapseNodeAndChildren(key, expandedObj, allActs) {
   if (expandedObj[key]) {
     delete expandedObj[key];
   }
-  // If user collapsed "ch-ABC", also subch-?? should close
-  // We can do a small loop: for each subch that belongs under "ch-ABC", remove it
-  // or for each item that belongs under book-??. This can be fairly involved if you want strict recursion.
-  // We'll do a quick approach: if "ch-xxx" is collapsed, also remove subch-yyy expansions if they exist in the same set.
-
   if (key.startsWith("ch-")) {
-    // find subch within these activities that belong to this ch
     const chId = key.substring(3);
     allActs.forEach((act) => {
       if (act.chapterId === chId && act.subChapterId) {
@@ -363,7 +336,6 @@ function collapseNodeAndChildren(key, expandedObj, allActs) {
       }
     });
   } else if (key.startsWith("book-")) {
-    // remove all ch- and subch- expansions under this book
     const bookId = key.substring(5);
     allActs.forEach((act) => {
       if (act.bookId === bookId) {
@@ -372,7 +344,6 @@ function collapseNodeAndChildren(key, expandedObj, allActs) {
       }
     });
   } else if (key.startsWith("day-")) {
-    // remove everything under that day
     const dayIdx = Number(key.substring(4));
     allActs.forEach((act) => {
       if (act.dayIndex === dayIdx) {
@@ -382,20 +353,11 @@ function collapseNodeAndChildren(key, expandedObj, allActs) {
       }
     });
   }
-  else if (key.startsWith("subch-")) {
-    // Just remove that subch
-    // That is already done above. No deeper level.
-  }
+  // If subch-, no deeper
 }
 
-/**
- * findParentBookKey(chKey, allActivities)
- * If user toggles "ch-xxx", we want to find the parent's book key if it exists.
- */
 function findParentBookKey(chKey, allActs) {
   const chId = chKey.substring(3);
-  // Find an item with chapterId=chId
-  // Then get its bookId => "book-xxx"
   const item = allActs.find((a) => a.chapterId === chId);
   if (item?.bookId) {
     return `book-${item.bookId}`;
@@ -403,10 +365,6 @@ function findParentBookKey(chKey, allActs) {
   return null;
 }
 
-/**
- * findParentBookChKey(subchKey, allActivities)
- * If user toggles "subch-xxx", we want to find the parent's book and chapter if possible.
- */
 function findParentBookChKey(subchKey, allActs) {
   const subId = subchKey.substring(6);
   const item = allActs.find((a) => a.subChapterId === subId);
@@ -416,9 +374,7 @@ function findParentBookChKey(subchKey, allActs) {
   return { parentBookKey, parentChapterKey };
 }
 
-//
-// Styles
-//
+// --------------- STYLES ---------------
 const styles = {
   container: {
     padding: 10,

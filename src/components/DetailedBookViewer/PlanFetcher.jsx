@@ -10,37 +10,53 @@ import MainContent from "./MainContent";
  * A Redux-based component that:
  *  - Accepts `planId` as a prop
  *  - Dispatches fetchPlan when planId changes
+ *  - If an `initialActivityContext` is provided (subChapterId, type),
+ *    it passes that to the plan slice, so we can jump to the right activity.
  *  - Renders LeftPanel and MainContent side-by-side
  *
  * PROPS:
  *  - planId (string): The plan ID to fetch from the server
+ *  - initialActivityContext (object): { subChapterId, type } optional
  *  - backendURL (string): optional override for the server base
  *  - fetchUrl (string): optional override for the fetch endpoint
  */
 export default function PlanFetcher({
   planId,
+  initialActivityContext, // optional prop
   backendURL = "http://localhost:3001",
   fetchUrl = "/api/adaptive-plan",
 }) {
   const dispatch = useDispatch();
   const { status, error, planDoc } = useSelector((state) => state.plan);
 
-  // 1) Whenever planId changes => dispatch fetchPlan
+  // useEffect: whenever planId or initialActivityContext changes => dispatch fetchPlan
   useEffect(() => {
-    if (planId) {
-      dispatch(fetchPlan({ planId, backendURL, fetchUrl }));
-    }
-  }, [planId, backendURL, fetchUrl, dispatch]);
+    if (!planId) return;
+
+    console.log("[PlanFetcher] dispatching fetchPlan =>", {
+      planId,
+      backendURL,
+      fetchUrl,
+      initialActivityContext,
+    });
+
+    dispatch(
+      fetchPlan({
+        planId,
+        backendURL,
+        fetchUrl,
+        initialActivityContext,
+      })
+    );
+  }, [planId, backendURL, fetchUrl, initialActivityContext, dispatch]);
 
   return (
     <div style={styles.appContainer}>
       <h2 style={{ marginTop: 0 }}>Redux Plan Viewer</h2>
 
-      {/* If we are loading */}
       {status === "loading" && <p>Loading plan...</p>}
       {error && <p style={{ color: "red" }}>{error}</p>}
 
-      {/* If no planDoc yet */}
       {!planDoc && status !== "loading" && !error && (
         <p>No plan loaded. Enter or pass a planId above.</p>
       )}
