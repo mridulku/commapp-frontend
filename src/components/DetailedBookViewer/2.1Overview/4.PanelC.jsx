@@ -2,8 +2,19 @@
 
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import AdaptivePlayerModal from "../3.AdaptiveModal/AdaptivePlayerModal"; // <-- import your player
-// ^ Adjust path if needed (e.g., "../AdaptivePlayerModal")
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+} from "@mui/material";
+
+// REPLACE OLD ADAPTIVE PLAYER IMPORT:
+// import AdaptivePlayerModal from "../3.AdaptiveModal/AdaptivePlayerModal";
+
+// NEW: import your Redux-based PlanFetcher
+import PlanFetcher from "../PlanFetcher"; // adjust path if needed
 
 // A helper to randomize icons for each book tile
 function getRandomIcon() {
@@ -14,7 +25,7 @@ function getRandomIcon() {
 /**
  * PanelC
  * Renders a list of the user's books + checks if a plan exists for each.
- * If a plan is found, user can click "Start Learning" => opens Adaptive Player.
+ * If a plan is found, user can click "Start Learning" => opens (NEW) PlanFetcher in a dialog.
  *
  * Props:
  *  - userId (string)
@@ -30,6 +41,7 @@ function PanelC({ userId = "demoUser123", onOpenOnboarding = () => {} }) {
   // --------------------------
   useEffect(() => {
     if (!userId) return;
+
     async function fetchBooks() {
       try {
         const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/books-user`, {
@@ -47,6 +59,7 @@ function PanelC({ userId = "demoUser123", onOpenOnboarding = () => {} }) {
         setBooks([]);
       }
     }
+
     fetchBooks();
   }, [userId]);
 
@@ -135,20 +148,20 @@ function PanelC({ userId = "demoUser123", onOpenOnboarding = () => {} }) {
   }, [books, userId]);
 
   // ------------------------------------------------
-  // (C) ADAPTIVE PLAYER STATE
+  // (C) NEW PLAN FETCHER DIALOG STATE
   // ------------------------------------------------
-  const [showPlayer, setShowPlayer] = useState(false);
+  const [showPlanDialog, setShowPlanDialog] = useState(false);
   const [currentPlanId, setCurrentPlanId] = useState(null);
 
   // If user hits "Start Learning"
   function handleStartLearning(bookId) {
     const planInfo = plansData[bookId];
     if (!planInfo || !planInfo.planId) {
-      console.warn("No plan found for this book => cannot open player");
+      console.warn("No plan found for this book => cannot open plan fetcher");
       return;
     }
     setCurrentPlanId(planInfo.planId);
-    setShowPlayer(true);
+    setShowPlanDialog(true);
   }
 
   // ------------------------------------------------
@@ -260,7 +273,13 @@ function PanelC({ userId = "demoUser123", onOpenOnboarding = () => {} }) {
                 <div key={`course-${idx}`} style={tileStyle}>
                   <div style={iconStyle}>{item.icon}</div>
                   <h3 style={{ margin: "10px 0 5px 0" }}>{item.title}</h3>
-                  <p style={{ fontSize: "0.9rem", opacity: 0.7, marginTop: "10px" }}>
+                  <p
+                    style={{
+                      fontSize: "0.9rem",
+                      opacity: 0.7,
+                      marginTop: "10px",
+                    }}
+                  >
                     {error
                       ? `Error: ${error}`
                       : "No learning plan found for this course."}
@@ -307,19 +326,26 @@ function PanelC({ userId = "demoUser123", onOpenOnboarding = () => {} }) {
       </div>
 
       {/* 
-        ADAPTIVE PLAYER MODAL
-        Rendered here so we can set showPlayer, currentPlanId, etc. 
+        NEW: Instead of <AdaptivePlayerModal>, we open a Dialog with PlanFetcher
       */}
-      <AdaptivePlayerModal
-        isOpen={showPlayer}
-        onClose={() => setShowPlayer(false)}
-        planId={currentPlanId}
-        userId={userId}
-        // optional overrides
-        // initialActivityContext={{ subChapterId: "...", type: "READ" }}
-        // sessionLength={60}
-        // daysUntilExam={10}
-      />
+      <Dialog
+        open={showPlanDialog}
+        onClose={() => setShowPlanDialog(false)}
+        fullWidth
+        maxWidth="lg"
+      >
+        <DialogTitle>Plan Viewer</DialogTitle>
+        <DialogContent>
+          {currentPlanId ? (
+            <PlanFetcher planId={currentPlanId} />
+          ) : (
+            <p>No planId found. Cannot load plan.</p>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowPlanDialog(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </div>
   );
 }

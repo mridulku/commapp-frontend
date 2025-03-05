@@ -11,6 +11,9 @@ import RepeatIcon from "@mui/icons-material/Repeat";
 import BookmarkAddedIcon from "@mui/icons-material/BookmarkAdded";
 import InfoIcon from "@mui/icons-material/Info";
 
+// (Optional) We can remove PlanFetcher import entirely if it's unused:
+// import PlanFetcher from "../../PlanFetcher"; // Adjust path if needed
+
 /**
  * PlanRender
  * Step 2: Show final plan data, let user confirm.
@@ -142,6 +145,8 @@ export default function PlanRender({
               </Typography>
             )}
           </Box>
+
+          {/* No PlanFetcher usage here => let parent handle opening the new Redux-based plan view. */}
         </>
       )}
 

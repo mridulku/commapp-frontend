@@ -2,22 +2,26 @@
 
 import React, { useEffect, useState } from "react";
 import axios from "axios";
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button } from "@mui/material";
 
 // We'll import the new HistoryTab for the "History" tab
 import HistoryTab from "./HistoryTab";
 
+// Import your Redux-based PlanFetcher
+import PlanFetcher from "../../PlanFetcher"; // <-- adjust path if needed
+
 /**
- * Child2 - Minimal changes to:
- *  - Rename heading to "Adaptive Plan"
- *  - Add an initial "History" tab
- *  - Rename each session tab to "Today", "Tomorrow", "Day 3", etc.
+ * Child2
+ *  - Renders "Adaptive Plan" heading
+ *  - Has a "History" tab plus sessions as tabs
+ *  - On user click of "Read"/"Quiz"/"Revise", opens a MUI Dialog with PlanFetcher
+ *    passing initialActivityContext (subChapterId, type).
  *
  * Props:
  *  - userId: string
  *  - bookId: string
  *  - planIds: string[]
- *  - onOverviewSelect: function(activity) => void
- *  - onOpenPlayer: function(planId, activity, fetchUrl) => void
+ *  - onOverviewSelect: function(activity) => void  (unused in this snippet, left in for compatibility)
  *  - colorScheme: { panelBg, textColor, borderColor, heading }
  */
 export default function Child2({
@@ -25,7 +29,7 @@ export default function Child2({
   bookId = "",
   planIds = [],
   onOverviewSelect = () => {},
-  onOpenPlayer = () => {},
+  // OLD: onOpenPlayer = () => {},
   colorScheme = {},
 }) {
   // ------------------------------------------
@@ -138,7 +142,25 @@ export default function Child2({
   }
 
   // ------------------------------------------
-  // 6) Styles
+  // 6) PlanFetcher Dialog State + Handler
+  // ------------------------------------------
+  const [showPlanDialog, setShowPlanDialog] = useState(false);
+  const [dialogPlanId, setDialogPlanId] = useState("");
+  const [dialogInitialActivity, setDialogInitialActivity] = useState(null);
+
+  // Instead of onOpenPlayer, we define handleOpenPlanFetcher
+  function handleOpenPlanFetcher(planId, activity) {
+    setDialogPlanId(planId);
+    // We'll pass subChapterId and type as the initial context
+    setDialogInitialActivity({
+      subChapterId: activity.subChapterId,
+      type: activity.type,
+    });
+    setShowPlanDialog(true);
+  }
+
+  // ------------------------------------------
+  // 7) Styles
   // ------------------------------------------
   const containerStyle = {
     backgroundColor: colorScheme.panelBg || "#0D0D0D",
@@ -220,7 +242,7 @@ export default function Child2({
   });
 
   // ------------------------------------------
-  // 7) Render
+  // 8) Render
   // ------------------------------------------
   if (localPlanIds.length === 0 && !plan) {
     return (
@@ -254,7 +276,6 @@ export default function Child2({
         </div>
       )}
 
-      {/* Plan content */}
       {!selectedPlanId ? (
         <div>No Plan ID selected.</div>
       ) : !plan ? (
@@ -262,6 +283,30 @@ export default function Child2({
       ) : (
         renderPlan(plan)
       )}
+
+      {/* Our new PlanFetcher-based dialog */}
+      <Dialog
+        open={showPlanDialog}
+        onClose={() => setShowPlanDialog(false)}
+        fullWidth
+        maxWidth="lg"
+      >
+        <DialogTitle>Adaptive Plan Viewer</DialogTitle>
+        <DialogContent>
+          {dialogPlanId ? (
+            <PlanFetcher
+              planId={dialogPlanId}
+              // pass the initialActivityContext so PlanFetcher can highlight the correct subchapter
+              initialActivityContext={dialogInitialActivity}
+            />
+          ) : (
+            <p>No planId found. Cannot load plan.</p>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowPlanDialog(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </div>
   );
 
@@ -323,10 +368,8 @@ export default function Child2({
 
         {/* Render the content depending on which tab is selected */}
         {activeSessionIndex === 0
-          ? // The "History" tab
-            renderHistoryTab()
-          : // Any other tab => sessions[activeSessionIndex-1]
-            renderSessionContent(sessions[activeSessionIndex - 1])}
+          ? renderHistoryTab()
+          : renderSessionContent(sessions[activeSessionIndex - 1])}
       </>
     );
   }
@@ -366,20 +409,20 @@ export default function Child2({
     // Otherwise, show each book as a heading & chapters
     return (
       <div style={{ marginTop: "1rem" }}>
-        {uniqueBooks.map((bookId) => {
-          const acts = bookMap.get(bookId) || [];
-          const bookName = acts[0]?.bookName || `Book (${bookId})`;
+        {uniqueBooks.map((bId) => {
+          const acts = bookMap.get(bId) || [];
+          const bookName = acts[0]?.bookName || `Book (${bId})`;
           const totalBookTime = acts.reduce(
             (acc, a) => acc + (a.timeNeeded || 0),
             0
           );
 
           return (
-            <div key={bookId} style={{ marginBottom: "1rem" }}>
+            <div key={bId} style={{ marginBottom: "1rem" }}>
               <h3 style={{ fontWeight: "bold", margin: "0.75rem 0 0.25rem" }}>
                 {bookName} ({totalBookTime} min)
               </h3>
-              {renderChaptersLayer(acts, bookId, false)}
+              {renderChaptersLayer(acts, bId, false)}
             </div>
           );
         })}
@@ -464,7 +507,8 @@ export default function Child2({
                   onClick={(e) => {
                     e.stopPropagation();
                     if (readAct) {
-                      onOpenPlayer(selectedPlanId, readAct, "/api/adaptive-plan");
+                      // Instead of onOpenPlayer => handleOpenPlanFetcher
+                      handleOpenPlanFetcher(selectedPlanId, readAct);
                     }
                   }}
                 >
@@ -478,7 +522,7 @@ export default function Child2({
                   onClick={(e) => {
                     e.stopPropagation();
                     if (quizAct) {
-                      onOpenPlayer(selectedPlanId, quizAct, "/api/adaptive-plan");
+                      handleOpenPlanFetcher(selectedPlanId, quizAct);
                     }
                   }}
                 >
@@ -492,7 +536,7 @@ export default function Child2({
                   onClick={(e) => {
                     e.stopPropagation();
                     if (reviseAct) {
-                      onOpenPlayer(selectedPlanId, reviseAct, "/api/adaptive-plan");
+                      handleOpenPlanFetcher(selectedPlanId, reviseAct);
                     }
                   }}
                 >

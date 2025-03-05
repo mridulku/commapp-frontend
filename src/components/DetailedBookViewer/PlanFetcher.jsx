@@ -1,81 +1,76 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { fetchPlan } from "./redux/planSlice"; // adjust path as needed
+import { fetchPlan } from "./redux/planSlice"; // adjust path if needed
 import LeftPanel from "./LeftPanel";
 import MainContent from "./MainContent";
 
+/**
+ * PlanFetcher
+ * -----------
+ * A Redux-based component that:
+ *  - Accepts `planId` as a prop
+ *  - Dispatches fetchPlan when planId changes
+ *  - Renders LeftPanel and MainContent side-by-side
+ *
+ * PROPS:
+ *  - planId (string): The plan ID to fetch from the server
+ *  - backendURL (string): optional override for the server base
+ *  - fetchUrl (string): optional override for the fetch endpoint
+ */
 export default function PlanFetcher({
+  planId,
   backendURL = "http://localhost:3001",
   fetchUrl = "/api/adaptive-plan",
 }) {
   const dispatch = useDispatch();
-  const { status, error } = useSelector((state) => state.plan);
+  const { status, error, planDoc } = useSelector((state) => state.plan);
 
-  const [planId, setPlanId] = useState("");
-
-  function handleFetch() {
-    if (!planId.trim()) {
-      alert("Please enter a Plan ID");
-      return;
+  // 1) Whenever planId changes => dispatch fetchPlan
+  useEffect(() => {
+    if (planId) {
+      dispatch(fetchPlan({ planId, backendURL, fetchUrl }));
     }
-    dispatch(fetchPlan({ planId, backendURL, fetchUrl }));
-  }
+  }, [planId, backendURL, fetchUrl, dispatch]);
 
   return (
     <div style={styles.appContainer}>
-      <h1>Redux-Based Plan Fetcher App</h1>
+      <h2 style={{ marginTop: 0 }}>Redux Plan Viewer</h2>
 
-      {/* Input row for planId */}
-      <div style={styles.inputRow}>
-        <input
-          style={styles.input}
-          placeholder="Enter Plan ID"
-          value={planId}
-          onChange={(e) => setPlanId(e.target.value)}
-        />
-        <button style={styles.button} onClick={handleFetch}>
-          Fetch Plan
-        </button>
-      </div>
-
-      {/* Status / error */}
+      {/* If we are loading */}
       {status === "loading" && <p>Loading plan...</p>}
       {error && <p style={{ color: "red" }}>{error}</p>}
 
-      {/* Once plan is fetched, show left panel & main content side by side */}
-      <div style={styles.mainArea}>
-        <div style={styles.leftPanelContainer}>
-          <LeftPanel />
+      {/* If no planDoc yet */}
+      {!planDoc && status !== "loading" && !error && (
+        <p>No plan loaded. Enter or pass a planId above.</p>
+      )}
+
+      {planDoc && (
+        <div style={styles.mainArea}>
+          {/* Left panel */}
+          <div style={styles.leftPanelContainer}>
+            <LeftPanel />
+          </div>
+
+          {/* Right panel */}
+          <div style={styles.rightPanelContainer}>
+            <MainContent />
+          </div>
         </div>
-        <div style={styles.rightPanelContainer}>
-          <MainContent />
-        </div>
-      </div>
+      )}
     </div>
   );
 }
 
 const styles = {
   appContainer: {
-    maxWidth: 900,
-    margin: "20px auto",
-    padding: 20,
     border: "1px solid #ccc",
     borderRadius: 8,
     backgroundColor: "#fafafa",
-  },
-  inputRow: {
-    display: "flex",
-    gap: 8,
-    marginBottom: 16,
-  },
-  input: {
-    flex: 1,
-    padding: 8,
-  },
-  button: {
-    padding: "8px 16px",
-    cursor: "pointer",
+    padding: 16,
+    marginTop: 16,
+    maxWidth: 1000,
+    margin: "0 auto",
   },
   mainArea: {
     display: "flex",

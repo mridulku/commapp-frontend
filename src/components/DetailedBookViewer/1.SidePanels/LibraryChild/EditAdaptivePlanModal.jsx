@@ -12,6 +12,8 @@ import {
   Step,
   StepLabel,
   CircularProgress,
+  Paper,
+  DialogActions,
 } from "@mui/material";
 import CheckIcon from "@mui/icons-material/Check";
 import axios from "axios";
@@ -22,8 +24,9 @@ import ChapterSelection from "./ChapterSelection";
 import PlanSelection from "./PlanSelection";
 import PlanRender from "./PlanRender";
 
-// The Player Modal
-import AdaptivePlayerModal from "../../3.AdaptiveModal/AdaptivePlayerModal";
+// REPLACE: (Remove) => import AdaptivePlayerModal from "../../3.AdaptiveModal/AdaptivePlayerModal";
+// NEW IMPORT: your Redux-based plan fetcher
+import PlanFetcher from "../../PlanFetcher";
 
 /**
  * EditAdaptivePlanModal
@@ -32,7 +35,7 @@ import AdaptivePlayerModal from "../../3.AdaptiveModal/AdaptivePlayerModal";
  *  1) Selects chapters
  *  2) Picks schedule (target date, daily reading, mastery level)
  *  3) Shows final plan summary
- *  4) On confirm => automatically opens the Adaptive Player
+ *  4) On confirm => automatically opens the (NEW) Plan Fetcher in a modal
  *
  * Props:
  *  - renderAsDialog (bool)
@@ -58,7 +61,6 @@ export default function EditAdaptivePlanModal({
 
   // Step 1: Chapter selection
   const [chapters, setChapters] = useState([]);
-
   useEffect(() => {
     async function fetchChapters() {
       try {
@@ -319,10 +321,13 @@ export default function EditAdaptivePlanModal({
   }
 
   // -------------------------------------------------
-  // (NEW) ADAPTIVE PLAYER MODAL STATE
+  // (OLD) ADAPTIVE PLAYER MODAL STATE - remove it?
   // -------------------------------------------------
   const [showPlayer, setShowPlayer] = useState(false);
   const [playerPlanId, setPlayerPlanId] = useState(null);
+
+  // We'll use a new MUI dialog for the PlanFetcher instead
+  const [showReduxPlanDialog, setShowReduxPlanDialog] = useState(false);
 
   // -------------------------------------------------
   // NAVIGATION
@@ -344,10 +349,10 @@ export default function EditAdaptivePlanModal({
       if (renderAsDialog && onClose) {
         onClose();
       }
-      // Then open the player automatically if we have a plan
+      // Then open the "player" => now it's the new PlanFetcher in a separate dialog
       if (serverPlan && serverPlan.id) {
         setPlayerPlanId(serverPlan.id);
-        setShowPlayer(true);
+        setShowReduxPlanDialog(true);
       }
     }
   };
@@ -400,7 +405,6 @@ export default function EditAdaptivePlanModal({
     }
   }
 
-  // main content
   const content = (
     <Box
       sx={
@@ -515,13 +519,28 @@ export default function EditAdaptivePlanModal({
         <Box>{content}</Box>
       )}
 
-      {/* Render the AdaptivePlayerModal (the cinematic player) */}
-      <AdaptivePlayerModal
-        isOpen={showPlayer}
-        onClose={() => setShowPlayer(false)}
-        planId={playerPlanId}
-        userId={userId}
-      />
+      {/* Instead of old <AdaptivePlayerModal> usage, we have a new dialog for PlanFetcher */}
+      <Dialog
+        open={showReduxPlanDialog}
+        onClose={() => setShowReduxPlanDialog(false)}
+        fullWidth
+        maxWidth="lg"
+      >
+        <DialogTitle>Plan Viewer</DialogTitle>
+        <DialogContent>
+          {playerPlanId ? (
+            <PlanFetcher
+              planId={playerPlanId}
+              // If needed, pass userId or other props
+            />
+          ) : (
+            <Typography>No planId found. Cannot load plan.</Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowReduxPlanDialog(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }
