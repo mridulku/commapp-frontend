@@ -74,12 +74,10 @@ export default function MainContent() {
   // 5) Render
   return (
     <div style={styles.container}>
-      <h2 style={styles.titleText}>
-        Selected Activity ({currentIndex + 1} / {flattenedActivities.length})
-      </h2>
-
+      {/* We removed the "Selected Activity (X / Y)" heading */}
       <div style={styles.contentArea}>
         {content}
+
         {/* Navigation Arrows */}
         <button
           style={{
@@ -97,9 +95,12 @@ export default function MainContent() {
           style={{
             ...styles.arrowButton,
             right: "10px",
-            opacity: currentIndex < flattenedActivities.length - 1 ? 1 : 0.3,
+            opacity:
+              currentIndex < flattenedActivities.length - 1 ? 1 : 0.3,
             pointerEvents:
-              currentIndex < flattenedActivities.length - 1 ? "auto" : "none",
+              currentIndex < flattenedActivities.length - 1
+                ? "auto"
+                : "none",
           }}
           onClick={handleNext}
         >
@@ -112,31 +113,23 @@ export default function MainContent() {
 
 const styles = {
   container: {
-    // Make this container match the dark background
-    backgroundColor: "#000", 
-    color: "#fff",
+    /* Occupy all available space, black background */
+    flex: 1,
     display: "flex",
     flexDirection: "column",
-    padding: 10,
+    backgroundColor: "#000",
+    color: "#fff",
     boxSizing: "border-box",
-    height: "100%",
-    width: "100%",
-  },
-  titleText: {
-    margin: 0,
-    marginBottom: 10,
-    fontSize: "1rem",
-    fontWeight: "bold",
+    /* No border, so it merges with left panel’s black background */
   },
   contentArea: {
-    // Remove the white border, make it dark
     position: "relative",
     flex: 1,
-    backgroundColor: "#1f1f1f",
-    border: "1px solid #333",
-    borderRadius: 6,
-    padding: 10,
+    /* Also black or very dark; remove the border and radius */
+    backgroundColor: "#000",
     overflow: "hidden",
+    /* You can add some padding if you like, or keep it minimal */
+    padding: "10px",
   },
   arrowButton: {
     position: "absolute",

@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { fetchPlan } from "./store/planSlice"; // adjust path if needed
+import { fetchPlan } from "./store/planSlice";
 import LeftPanel from "./LeftPanel";
 import MainContent from "./MainContent";
 
@@ -10,7 +10,7 @@ import MainContent from "./MainContent";
  * A Redux-based component that:
  *  - Accepts `planId` as a prop
  *  - Dispatches fetchPlan when planId changes
- *  - If an `initialActivityContext` is provided (subChapterId, type),
+ *  - If `initialActivityContext` is provided (subChapterId, type),
  *    it passes that to the plan slice so we can jump to the right activity.
  *  - Renders LeftPanel and MainContent side-by-side
  *
@@ -22,14 +22,14 @@ import MainContent from "./MainContent";
  */
 export default function PlanFetcher({
   planId,
-  initialActivityContext, // optional prop
+  initialActivityContext,
   backendURL = "http://localhost:3001",
   fetchUrl = "/api/adaptive-plan",
 }) {
   const dispatch = useDispatch();
   const { status, error, planDoc } = useSelector((state) => state.plan);
 
-  // useEffect: whenever planId or initialActivityContext changes => dispatch fetchPlan
+  // Whenever planId or initialActivityContext changes => dispatch fetchPlan
   useEffect(() => {
     if (!planId) return;
 
@@ -52,14 +52,10 @@ export default function PlanFetcher({
 
   return (
     <div style={styles.appContainer}>
-      {/* Remove or comment out the heading */}
-      {/* <h2 style={{ marginTop: 0 }}>Redux Plan Viewer</h2> */}
-
-      {status === "loading" && <p>Loading plan...</p>}
+      {status === "loading" && <p style={{ color: "#fff" }}>Loading plan...</p>}
       {error && <p style={{ color: "red" }}>{error}</p>}
-
       {!planDoc && status !== "loading" && !error && (
-        <p>No plan loaded. Pass a valid planId to load content.</p>
+        <p style={{ color: "#fff" }}>No plan loaded. Pass a valid planId to load content.</p>
       )}
 
       {planDoc && (
@@ -80,36 +76,33 @@ export default function PlanFetcher({
 }
 
 const styles = {
-  // Container for the whole PlanFetcher, with minimal or no styling:
   appContainer: {
-    // Removed background/border to blend with your modal
+    // Transparent or black to blend with the modal
     backgroundColor: "transparent",
     border: "none",
     padding: 0,
     margin: 0,
-    // You can keep or remove any of these if needed:
-    // maxWidth: 1000,
-    // margin: "0 auto",
+    // If you want it entirely black, use backgroundColor: "#000"
+    // Otherwise 'transparent' if the parent is black
   },
-
   mainArea: {
     display: "flex",
-    // Minimal styling for the area that holds LeftPanel & MainContent
     marginTop: 0,
     minHeight: 400,
     border: "none",
     borderRadius: 0,
     overflow: "hidden",
+    // Also let parent handle sizing if you prefer
   },
-
   leftPanelContainer: {
+    // If you want the left panel black, override the left panel's own styling
+    // or remove these lines:
     width: 300,
-    borderRight: "1px solid #ccc", // optional
-    backgroundColor: "#f5f5f5",     // optional
+    borderRight: "none", // or "1px solid #444"
+    backgroundColor: "transparent", // or "#000"
   },
-
   rightPanelContainer: {
     flex: 1,
-    backgroundColor: "#fff",       // optional
+    backgroundColor: "transparent", // or "#000"
   },
 };
