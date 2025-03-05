@@ -1,6 +1,6 @@
 import React from "react";
 import { useSelector, useDispatch } from "react-redux";
-import { setCurrentIndex } from "./redux/planSlice";
+import { setCurrentIndex } from "./store/planSlice";
 
 import ReadingView from "./ReadingView";
 import QuizView from "./QuizView";
@@ -10,7 +10,7 @@ export default function MainContent() {
   const dispatch = useDispatch();
   const { flattenedActivities, currentIndex } = useSelector((state) => state.plan);
 
-  // 1) If no activities
+  // 1) No activities
   if (!flattenedActivities || flattenedActivities.length === 0) {
     return <div style={styles.container}>No activities to display.</div>;
   }
@@ -64,7 +64,7 @@ export default function MainContent() {
       break;
     default:
       content = (
-        <div>
+        <div style={{ padding: 20, color: "#fff" }}>
           <h2>Unknown Activity: {currentAct.type}</h2>
           <pre>{JSON.stringify(currentAct, null, 2)}</pre>
         </div>
@@ -74,14 +74,13 @@ export default function MainContent() {
   // 5) Render
   return (
     <div style={styles.container}>
-      <h2>Selected Activity ({currentIndex + 1} / {flattenedActivities.length})</h2>
+      <h2 style={styles.titleText}>
+        Selected Activity ({currentIndex + 1} / {flattenedActivities.length})
+      </h2>
 
-      {/* Content area in a position: relative container,
-          so we can absolutely position the arrow buttons */}
       <div style={styles.contentArea}>
         {content}
-
-        {/* Left Arrow */}
+        {/* Navigation Arrows */}
         <button
           style={{
             ...styles.arrowButton,
@@ -94,7 +93,6 @@ export default function MainContent() {
           &lt;
         </button>
 
-        {/* Right Arrow */}
         <button
           style={{
             ...styles.arrowButton,
@@ -114,28 +112,46 @@ export default function MainContent() {
 
 const styles = {
   container: {
-    padding: 20,
-    // You can remove or customize to fit your layout
+    // Make this container match the dark background
+    backgroundColor: "#000", 
+    color: "#fff",
+    display: "flex",
+    flexDirection: "column",
+    padding: 10,
+    boxSizing: "border-box",
+    height: "100%",
+    width: "100%",
+  },
+  titleText: {
+    margin: 0,
+    marginBottom: 10,
+    fontSize: "1rem",
+    fontWeight: "bold",
   },
   contentArea: {
+    // Remove the white border, make it dark
     position: "relative",
-    minHeight: "300px", // just to have space for arrows to show in the middle
-    border: "1px solid #ccc",
-    borderRadius: 8,
-    padding: 16,
-    marginTop: 10,
+    flex: 1,
+    backgroundColor: "#1f1f1f",
+    border: "1px solid #333",
+    borderRadius: 6,
+    padding: 10,
+    overflow: "hidden",
   },
   arrowButton: {
     position: "absolute",
     top: "50%",
     transform: "translateY(-50%)",
-    width: "36px",
-    height: "36px",
+    width: "32px",
+    height: "32px",
     borderRadius: "50%",
-    border: "1px solid #ccc",
-    background: "#fff",
+    border: "1px solid #555",
+    backgroundColor: "#333",
+    color: "#fff",
     cursor: "pointer",
     fontSize: "1.2rem",
-    // You could add boxShadow or any hover styling
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
   },
 };

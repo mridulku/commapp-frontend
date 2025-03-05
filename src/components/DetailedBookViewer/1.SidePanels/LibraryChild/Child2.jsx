@@ -2,7 +2,15 @@
 
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button } from "@mui/material";
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  IconButton,
+} from "@mui/material";
+import CloseIcon from "@mui/icons-material/Close";
 import HistoryTab from "./HistoryTab";
 import PlanFetcher from "../../PlanFetcher"; // Adjust path if needed
 
@@ -192,7 +200,6 @@ export default function Child2({
   // ------------------------------------------
   // RENDER
   // ------------------------------------------
-  // Basic container
   const containerStyle = {
     backgroundColor: colorScheme.panelBg || "#0D0D0D",
     color: colorScheme.textColor || "#FFD700",
@@ -254,15 +261,53 @@ export default function Child2({
         onClose={() => setShowPlanDialog(false)}
         fullWidth
         maxWidth="lg"
+        // Darker backdrop
+        BackdropProps={{
+          style: {
+            backgroundColor: "rgba(0, 0, 0, 0.8)",
+          },
+        }}
+        // Make the modal dark
+        PaperProps={{
+          sx: {
+            backgroundColor: "#000", // black interior
+            color: "#fff",
+            boxShadow: "none",       // remove white outline
+            borderRadius: 2,        // slightly rounded corners
+            overflow: "hidden",     // no scrollbars showing at edges
+            // Optionally size the dialog more, e.g.
+            // width: "90%", height: "80%", margin: "0 auto",
+          },
+        }}
       >
-        <DialogTitle>Adaptive Plan Viewer</DialogTitle>
-        <DialogContent>
-          <p style={{ fontSize: "0.85rem", color: "#888" }}>
-            {`[Child2 -> PlanFetcher] planId: ${dialogPlanId}`}
-            <br />
-            {`initialActivityContext: ${JSON.stringify(dialogInitialActivity, null, 2)}`}
-          </p>
+        {/* Custom Title row with a close button */}
+        <DialogTitle
+          sx={{
+            backgroundColor: "#111", // darker than main
+            color: "#fff",
+            fontSize: "1rem",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <span>Plan Viewer</span>
+          {/* Close Button */}
+          <Button
+            variant="contained"
+            color="inherit"
+            onClick={() => setShowPlanDialog(false)}
+            sx={{
+              backgroundColor: "#444",
+              color: "#fff",
+              '&:hover': { backgroundColor: "#666" },
+            }}
+          >
+            Close
+          </Button>
+        </DialogTitle>
 
+        <DialogContent sx={{ padding: 0 }}>
           {dialogPlanId ? (
             <PlanFetcher
               planId={dialogPlanId}
@@ -270,12 +315,9 @@ export default function Child2({
               initialActivityContext={dialogInitialActivity}
             />
           ) : (
-            <p>No planId found. Cannot load plan.</p>
+            <p style={{ margin: "1rem" }}>No planId found. Cannot load plan.</p>
           )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowPlanDialog(false)}>Close</Button>
-        </DialogActions>
       </Dialog>
     </div>
   );

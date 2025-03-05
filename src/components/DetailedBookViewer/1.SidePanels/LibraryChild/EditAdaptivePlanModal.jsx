@@ -526,7 +526,7 @@ export default function EditAdaptivePlanModal({
         fullWidth
         maxWidth="lg"
       >
-        <DialogTitle>Plan Viewer</DialogTitle>
+      {/*   <DialogTitle>Plan Viewer</DialogTitle> */}
         <DialogContent>
           {playerPlanId ? (
             <PlanFetcher
