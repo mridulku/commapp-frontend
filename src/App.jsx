@@ -52,6 +52,7 @@ import CoursesMaterialManager from "./components/Archive/Archive 3/CoursesMateri
 import BooksViewer from "./components/Archive/Archive 1/BooksViewer";
 import BooksViewer2 from "./components/DetailedBookViewer/0.BooksViewerNew";
 
+import PlanFetcher from "./components/DetailedBookViewer/PlanFetcher";
 
 
 import PlanBrowser from "./components/DetailedBookViewer/PlanBrowser";
@@ -349,6 +350,15 @@ function App() {
           element={
             <PrivateRoute>
               <PlanBrowser />
+            </PrivateRoute>
+          }
+        />
+        {/* 15. AdaptiveStatsDashboard */}
+        <Route
+          path="/planfetcher"
+          element={
+            <PrivateRoute>
+              <PlanFetcher />
             </PrivateRoute>
           }
         />

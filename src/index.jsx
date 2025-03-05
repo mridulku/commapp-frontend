@@ -4,14 +4,20 @@ import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
 
+import { Provider } from 'react-redux';
+import { store } from './components/DetailedBookViewer/redux/store';
+// import PlanFetcher from './src/components/DetailedBookViewer/PlanFetcher'; // Only if needed here
+
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <App />
+    {/* Wrap your entire app in the Redux Provider */}
+    <Provider store={store}>
+      <App />
+      {/* If you want PlanFetcher directly here instead of inside App, uncomment below: */}
+      {/* <PlanFetcher /> */}
+    </Provider>
   </React.StrictMode>
 );
 
-// If you want to start measuring performance in your app, pass a function
-// to log results (for example: reportWebVitals(console.log))
-// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
 reportWebVitals();
