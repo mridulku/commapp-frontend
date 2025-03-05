@@ -1,75 +1,159 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
-import { setCurrentIndex } from "./redux/planSlice"; // Adjust import path as needed
+import { setCurrentIndex } from "./redux/planSlice";
 
+/**
+ * LeftPanel
+ * ---------
+ * - Single chain expansion
+ * - Manual toggle: user can open any day/book/ch/subch, which collapses previous chain
+ * - Auto sync: if currentIndex changes (via next/prev arrows in MainContent), we open that chain
+ */
 export default function LeftPanel() {
   const dispatch = useDispatch();
-  const { planDoc, currentIndex, status } = useSelector((state) => state.plan);
+  const { planDoc, flattenedActivities, currentIndex, status } = useSelector(
+    (state) => state.plan
+  );
 
-  // If planDoc not yet loaded:
+  const [selectedDayIndex, setSelectedDayIndex] = useState(0);
+
+  // Expanded stores the “open” keys:
+  // E.g. { "day-2": true, "book-b123": true, "ch-c456": true, "subch-s789": true }
+  const [expanded, setExpanded] = useState({});
+
   if (status !== "succeeded" || !planDoc) {
     return <div style={styles.container}>No plan loaded yet.</div>;
   }
 
-  // Extract info from planDoc
   const { planType = "adaptive", sessions = [] } = planDoc;
 
-  // If planType is "book", we skip day selection and show only one session
+  // ------------------------------------------------------------
+  // 1) Whenever currentIndex changes => auto-expand that chain
+  // ------------------------------------------------------------
+  useEffect(() => {
+    if (!flattenedActivities?.length) return;
+    if (currentIndex < 0 || currentIndex >= flattenedActivities.length) return;
+
+    const currentItem = flattenedActivities[currentIndex];
+    const { dayIndex, bookId, chapterId, subChapterId } = currentItem || {};
+
+    // If planType is "adaptive", auto-switch day selection
+    if (planType !== "book") {
+      setSelectedDayIndex(dayIndex || 0);
+    }
+
+    // Build the chain keys for this item
+    // e.g. { "day-2": true, "book-xyz": true, "ch-abc": true, "subch-123": true }
+    const newExpanded = buildChain(dayIndex, bookId, chapterId, subChapterId);
+
+    setExpanded(newExpanded);
+  }, [currentIndex, flattenedActivities, planType]);
+
+  // ------------------------------------------------------------
+  // 2) If user changes day from dropdown, just set selectedDayIndex
+  // ------------------------------------------------------------
+  function handleDayChange(e) {
+    setSelectedDayIndex(Number(e.target.value));
+    // We might optionally collapse everything or auto-open that day:
+    // If you want day to be auto expanded, do it here, e.g.:
+    const dayKey = `day-${e.target.value}`;
+    setExpanded({ [dayKey]: true });
+  }
+
+  // ------------------------------------------------------------
+  // 3) handleToggleExpand => user clicked a day/book/chapter/subch header
+  //    If user is "opening" that node => close all others, open that chain
+  //    If user is "closing" that node => simply close that node (and children).
+  // ------------------------------------------------------------
+  function handleToggleExpand(key, allActivities) {
+    const isCurrentlyOpen = expanded[key] === true;
+
+    if (isCurrentlyOpen) {
+      // Closing => just turn off this node and any deeper children
+      const nextExpanded = { ...expanded };
+      collapseNodeAndChildren(key, nextExpanded, allActivities);
+      setExpanded(nextExpanded);
+    } else {
+      // Opening => we want a single chain approach
+      //  1) figure out day/book/chapter/subch from 'key'
+      //  2) build a new object with only that chain open
+      //  3) preserve any ancestors (like day-2 if we are opening a book)
+
+      // If it's a day key => "day-2"
+      // If it's a book key => "book-xxx"
+      // etc. We'll parse them and open from root to that node.
+
+      const nextExpanded = {};
+
+      // If user clicked a day => open that day, collapse all else
+      // If user clicked a book => keep day open & that book, close others
+      // If user clicked a chapter => keep day & book open, open this chapter
+      // If user clicked a subch => keep day & book & chapter open, open subCh
+
+      // We'll find the "chain" from day -> book -> chapter -> subChapter
+      // If you have the associated dayIndex/bookId, etc. we can open them
+      // But we only know the 'key' that was clicked. So we parse and do partial logic.
+
+      // We'll do a simpler approach: we find dayIndex from selectedDayIndex (assuming user is in that day)
+      const dayKey = `day-${selectedDayIndex}`;
+      nextExpanded[dayKey] = true;
+
+      // If they clicked a "book-xxx"
+      if (key.startsWith("book-")) {
+        nextExpanded[key] = true;
+      }
+      // If they clicked "ch-xxx" => we want the parent's book open as well if we can find it
+      else if (key.startsWith("ch-")) {
+        // We can't know which book it's under unless we map. We'll do it below by searching.
+        nextExpanded[dayKey] = true;
+        nextExpanded[key] = true;
+        // We'll fill in the parent's "book-xxx" if we discover it
+        const parentBookKey = findParentBookKey(key, allActivities);
+        if (parentBookKey) {
+          nextExpanded[parentBookKey] = true;
+        }
+      }
+      // If they clicked subch => open day, open parent book, open parent chapter, open subch
+      else if (key.startsWith("subch-")) {
+        nextExpanded[dayKey] = true;
+        nextExpanded[key] = true;
+        const { parentBookKey, parentChapterKey } = findParentBookChKey(key, allActivities);
+        if (parentBookKey) nextExpanded[parentBookKey] = true;
+        if (parentChapterKey) nextExpanded[parentChapterKey] = true;
+      }
+
+      setExpanded(nextExpanded);
+    }
+  }
+
+  // For planType=book => skip day selection
   if (planType === "book") {
     const singleSession = sessions[0] || {};
     return (
       <div style={styles.container}>
-        <h3 style={styles.header}>Book Plan</h3>
+        <h3>Book Plan</h3>
         <BookPlanView
           activities={singleSession.activities || []}
           currentIndex={currentIndex}
           onSelectActivity={(flatIndex) => dispatch(setCurrentIndex(flatIndex))}
+          expanded={expanded}
+          onToggleExpand={handleToggleExpand}
         />
       </div>
     );
-  } else {
-    // "adaptive" or anything else => day-based selection
-    return <AdaptivePlanView sessions={sessions} currentIndex={currentIndex} />;
   }
-}
 
-/**
- * AdaptivePlanView
- * - Provides a dropdown to select which day
- * - Then displays the hierarchical expansions for that day’s activities
- */
-function AdaptivePlanView({ sessions, currentIndex }) {
-  const dispatch = useDispatch();
-  const [selectedDayIndex, setSelectedDayIndex] = useState(0);
-
-  // Expand/collapse states (keys like 'book-xxx', 'ch-xxx', 'subch-xxx', etc.)
-  const [expanded, setExpanded] = useState({});
-
-  const handleExpandToggle = (key) => {
-    setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  // The user picks a day from the dropdown
-  const handleDayChange = (e) => {
-    setSelectedDayIndex(Number(e.target.value));
-  };
-
+  // If "adaptive"
   const currentSession = sessions[selectedDayIndex] || {};
   const { activities = [], sessionLabel } = currentSession;
-
-  // Summaries
-  const dayLabel = sessionLabel || `Day ${selectedDayIndex + 1}`;
   const totalTime = activities.reduce((acc, a) => acc + (a.timeNeeded || 0), 0);
 
   return (
     <div style={styles.container}>
+      {/* Day selection */}
       <div style={styles.selectRow}>
         <label style={styles.selectLabel}>Day:</label>
-        <select
-          style={styles.select}
-          value={selectedDayIndex}
-          onChange={handleDayChange}
-        >
+        <select style={styles.select} value={selectedDayIndex} onChange={handleDayChange}>
           {sessions.map((sess, idx) => (
             <option key={idx} value={idx}>
               {sess.sessionLabel ? `Day ${sess.sessionLabel}` : `Day ${idx + 1}`}
@@ -78,29 +162,23 @@ function AdaptivePlanView({ sessions, currentIndex }) {
         </select>
       </div>
 
-      <div style={styles.dayHeader}>
-        <h3 style={styles.header}>
-          {dayLabel} (Total: {totalTime}m)
-        </h3>
-      </div>
+      <h3 style={styles.header}>
+        Day {sessionLabel || selectedDayIndex + 1} ({totalTime}m)
+      </h3>
 
-      {/* Now show the hierarchical expansions: Book -> Chapter -> SubChapter -> Activities */}
       <BookPlanView
         activities={activities}
         currentIndex={currentIndex}
         onSelectActivity={(flatIndex) => dispatch(setCurrentIndex(flatIndex))}
         expanded={expanded}
-        onToggleExpand={handleExpandToggle}
+        onToggleExpand={handleToggleExpand}
       />
     </div>
   );
 }
 
 /**
- * BookPlanView
- * - Group activities by book
- * - For each book => Chapter => Subchapter => Activities
- * - Expand/collapse is controlled via `expanded` and `onToggleExpand` if provided
+ * BookPlanView => group by book => chapters => subchapters => activities
  */
 function BookPlanView({
   activities,
@@ -109,49 +187,36 @@ function BookPlanView({
   expanded,
   onToggleExpand,
 }) {
-  // If expand/collapse not provided, we set up default local states
-  const [localExpanded, setLocalExpanded] = useState({});
-  const finalExpanded = expanded || localExpanded;
-  const toggleExpand = onToggleExpand
-    ? onToggleExpand
-    : (key) =>
-        setLocalExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
-
-  // Group by bookId
+  // We'll group by book
   const bookMap = new Map();
   for (const a of activities) {
     const bId = a.bookId || "_noBook";
     if (!bookMap.has(bId)) {
-      bookMap.set(bId, {
-        bookId: bId,
-        bookName: a.bookName || bId,
-        items: [],
-      });
+      bookMap.set(bId, { bookId: bId, bookName: a.bookName || bId, items: [] });
     }
     bookMap.get(bId).items.push(a);
   }
 
-  const books = Array.from(bookMap.values());
+  const books = [...bookMap.values()];
 
   return (
-    <div style={styles.innerContainer}>
+    <div>
       {books.map((bk) => {
-        const bookKey = `book-${bk.bookId}`;
-        const isBookOpen = !!finalExpanded[bookKey];
+        const bkKey = `book-${bk.bookId}`;
+        const isBookOpen = expanded[bkKey] === true;
         const totalBookTime = bk.items.reduce((acc, x) => acc + (x.timeNeeded || 0), 0);
 
         return (
-          <div key={bookKey} style={styles.block}>
-            {/* Book header */}
-            <div style={styles.blockHeader} onClick={() => toggleExpand(bookKey)}>
-              <span style={styles.chevron}>{isBookOpen ? "▼" : "▶"}</span>
-              <strong>{bk.bookName}</strong>
-              <span style={styles.timeBadge}>{totalBookTime}m</span>
+          <div key={bkKey} style={styles.block}>
+            <div
+              style={styles.blockHeader}
+              onClick={() => onToggleExpand(bkKey, activities)}
+            >
+              {isBookOpen ? "▼" : "▶"} {bk.bookName} ({totalBookTime}m)
             </div>
-
             {isBookOpen && (
               <div style={styles.blockContent}>
-                {renderChapters(bk.items, finalExpanded, toggleExpand, currentIndex, onSelectActivity)}
+                {renderChapters(bk.items, currentIndex, onSelectActivity, expanded, onToggleExpand)}
               </div>
             )}
           </div>
@@ -161,40 +226,34 @@ function BookPlanView({
   );
 }
 
-// Render the chapters
-function renderChapters(activities, expanded, toggleExpand, currentIndex, onSelectActivity) {
-  // Group by chapterId
-  const chapterMap = new Map();
-  for (const a of activities) {
-    const cId = a.chapterId || "_noChap";
-    if (!chapterMap.has(cId)) {
-      chapterMap.set(cId, {
-        chapterId: cId,
-        chapterName: a.chapterName || cId,
-        items: [],
-      });
+function renderChapters(activities, currentIndex, onSelectActivity, expanded, onToggleExpand) {
+  const chMap = new Map();
+  for (const act of activities) {
+    const cId = act.chapterId || "_noChap";
+    if (!chMap.has(cId)) {
+      chMap.set(cId, { chapterId: cId, chapterName: act.chapterName || cId, items: [] });
     }
-    chapterMap.get(cId).items.push(a);
+    chMap.get(cId).items.push(act);
   }
 
-  const chapters = Array.from(chapterMap.values());
+  const chapters = [...chMap.values()];
 
   return chapters.map((ch) => {
     const chKey = `ch-${ch.chapterId}`;
-    const isChOpen = !!expanded[chKey];
-    const totalChTime = ch.items.reduce((acc, x) => acc + (x.timeNeeded || 0), 0);
+    const isChOpen = expanded[chKey] === true;
+    const chTime = ch.items.reduce((acc, x) => acc + (x.timeNeeded || 0), 0);
 
     return (
       <div key={chKey} style={styles.subBlock}>
-        <div style={styles.blockHeader} onClick={() => toggleExpand(chKey)}>
-          <span style={styles.chevron}>{isChOpen ? "▼" : "▶"}</span>
-          <strong>{ch.chapterName}</strong>
-          <span style={styles.timeBadge}>{totalChTime}m</span>
+        <div
+          style={styles.blockHeader}
+          onClick={() => onToggleExpand(chKey, activities)}
+        >
+          {isChOpen ? "▼" : "▶"} {ch.chapterName} ({chTime}m)
         </div>
-
         {isChOpen && (
           <div style={styles.blockContent}>
-            {renderSubChapters(ch.items, expanded, toggleExpand, currentIndex, onSelectActivity)}
+            {renderSubChapters(ch.items, currentIndex, onSelectActivity, expanded, onToggleExpand)}
           </div>
         )}
       </div>
@@ -202,43 +261,35 @@ function renderChapters(activities, expanded, toggleExpand, currentIndex, onSele
   });
 }
 
-// Render the subChapters
-function renderSubChapters(activities, expanded, toggleExpand, currentIndex, onSelectActivity) {
-  // Group by subChapterId
-  const subMap = new Map();
-  for (const a of activities) {
-    const sId = a.subChapterId || "_noSubChap";
-    if (!subMap.has(sId)) {
-      subMap.set(sId, {
-        subChapterId: sId,
-        subChapterName: a.subChapterName || sId,
-        items: [],
-      });
+function renderSubChapters(activities, currentIndex, onSelectActivity, expanded, onToggleExpand) {
+  const sbMap = new Map();
+  for (const act of activities) {
+    const sbId = act.subChapterId || "_noSubCh";
+    if (!sbMap.has(sbId)) {
+      sbMap.set(sbId, { subChapterId: sbId, subChapterName: act.subChapterName || sbId, items: [] });
     }
-    subMap.get(sId).items.push(a);
+    sbMap.get(sbId).items.push(act);
   }
 
-  const subs = Array.from(subMap.values());
+  const subs = [...sbMap.values()];
 
   return subs.map((sb) => {
     const sbKey = `subch-${sb.subChapterId}`;
-    const isSbOpen = !!expanded[sbKey];
-    const totalSbTime = sb.items.reduce((acc, x) => acc + (x.timeNeeded || 0), 0);
+    const isSbOpen = expanded[sbKey] === true;
+    const sbTime = sb.items.reduce((acc, x) => acc + (x.timeNeeded || 0), 0);
 
     return (
       <div key={sbKey} style={styles.subBlock}>
-        <div style={styles.blockHeader} onClick={() => toggleExpand(sbKey)}>
-          <span style={styles.chevron}>{isSbOpen ? "▼" : "▶"}</span>
-          <strong>{sb.subChapterName}</strong>
-          <span style={styles.timeBadge}>{totalSbTime}m</span>
+        <div
+          style={styles.blockHeader}
+          onClick={() => onToggleExpand(sbKey, activities)}
+        >
+          {isSbOpen ? "▼" : "▶"} {sb.subChapterName} ({sbTime}m)
         </div>
-
         {isSbOpen && (
           <div style={styles.blockContent}>
             {sb.items.map((act, idx) => {
-              // Check if this activity is currently selected
               const isSelected = act.flatIndex === currentIndex;
-
               return (
                 <div
                   key={act.flatIndex ?? idx}
@@ -246,14 +297,12 @@ function renderSubChapters(activities, expanded, toggleExpand, currentIndex, onS
                     ...styles.activityRow,
                     backgroundColor: isSelected ? "#ffecb3" : "#fff",
                   }}
-                  onClick={() =>
-                    onSelectActivity && onSelectActivity(act.flatIndex)
-                  }
+                  onClick={() => onSelectActivity && onSelectActivity(act.flatIndex)}
                 >
-                  <span style={{ marginRight: "auto" }}>
+                  <span>
                     {act.type}: {act.subChapterName}
                   </span>
-                  <span>{act.timeNeeded || 0}m</span>
+                  <span style={{ marginLeft: "auto" }}>{act.timeNeeded || 0}m</span>
                 </div>
               );
             })}
@@ -265,53 +314,143 @@ function renderSubChapters(activities, expanded, toggleExpand, currentIndex, onS
 }
 
 //
+// HELPER FUNCTIONS
+//
+
+/**
+ * buildChain(dayIndex, bookId, chapterId, subChId)
+ * Returns an expanded object for that single chain.
+ */
+function buildChain(dayIndex, bookId, chapterId, subChId) {
+  // e.g. {
+  //   "day-2": true,
+  //   "book-xyz": true,
+  //   "ch-abc": true,
+  //   "subch-123": true
+  // }
+  const obj = {};
+  // If dayIndex is present
+  if (typeof dayIndex === "number") {
+    obj[`day-${dayIndex}`] = true;
+  }
+  if (bookId) obj[`book-${bookId}`] = true;
+  if (chapterId) obj[`ch-${chapterId}`] = true;
+  if (subChId) obj[`subch-${subChId}`] = true;
+  return obj;
+}
+
+/**
+ * collapseNodeAndChildren(key, expandedObj, allActivities)
+ * Sets expandedObj[key] = false + any children of this node false as well.
+ * We only do minimal recursion, because we store expansions by key.
+ */
+function collapseNodeAndChildren(key, expandedObj, allActs) {
+  if (expandedObj[key]) {
+    delete expandedObj[key];
+  }
+  // If user collapsed "ch-ABC", also subch-?? should close
+  // We can do a small loop: for each subch that belongs under "ch-ABC", remove it
+  // or for each item that belongs under book-??. This can be fairly involved if you want strict recursion.
+  // We'll do a quick approach: if "ch-xxx" is collapsed, also remove subch-yyy expansions if they exist in the same set.
+
+  if (key.startsWith("ch-")) {
+    // find subch within these activities that belong to this ch
+    const chId = key.substring(3);
+    allActs.forEach((act) => {
+      if (act.chapterId === chId && act.subChapterId) {
+        const subKey = `subch-${act.subChapterId}`;
+        delete expandedObj[subKey];
+      }
+    });
+  } else if (key.startsWith("book-")) {
+    // remove all ch- and subch- expansions under this book
+    const bookId = key.substring(5);
+    allActs.forEach((act) => {
+      if (act.bookId === bookId) {
+        if (act.chapterId) delete expandedObj[`ch-${act.chapterId}`];
+        if (act.subChapterId) delete expandedObj[`subch-${act.subChapterId}`];
+      }
+    });
+  } else if (key.startsWith("day-")) {
+    // remove everything under that day
+    const dayIdx = Number(key.substring(4));
+    allActs.forEach((act) => {
+      if (act.dayIndex === dayIdx) {
+        if (act.bookId) delete expandedObj[`book-${act.bookId}`];
+        if (act.chapterId) delete expandedObj[`ch-${act.chapterId}`];
+        if (act.subChapterId) delete expandedObj[`subch-${act.subChapterId}`];
+      }
+    });
+  }
+  else if (key.startsWith("subch-")) {
+    // Just remove that subch
+    // That is already done above. No deeper level.
+  }
+}
+
+/**
+ * findParentBookKey(chKey, allActivities)
+ * If user toggles "ch-xxx", we want to find the parent's book key if it exists.
+ */
+function findParentBookKey(chKey, allActs) {
+  const chId = chKey.substring(3);
+  // Find an item with chapterId=chId
+  // Then get its bookId => "book-xxx"
+  const item = allActs.find((a) => a.chapterId === chId);
+  if (item?.bookId) {
+    return `book-${item.bookId}`;
+  }
+  return null;
+}
+
+/**
+ * findParentBookChKey(subchKey, allActivities)
+ * If user toggles "subch-xxx", we want to find the parent's book and chapter if possible.
+ */
+function findParentBookChKey(subchKey, allActs) {
+  const subId = subchKey.substring(6);
+  const item = allActs.find((a) => a.subChapterId === subId);
+  if (!item) return {};
+  const parentBookKey = item.bookId ? `book-${item.bookId}` : null;
+  const parentChapterKey = item.chapterId ? `ch-${item.chapterId}` : null;
+  return { parentBookKey, parentChapterKey };
+}
+
+//
 // Styles
 //
 const styles = {
   container: {
-    width: "100%",
     padding: 10,
-    boxSizing: "border-box",
     fontSize: "0.9rem",
   },
   selectRow: {
     display: "flex",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 6,
   },
   selectLabel: {
-    marginRight: 6,
+    marginRight: 4,
   },
   select: {
     padding: 4,
   },
-  dayHeader: {
-    marginBottom: 8,
-  },
   header: {
-    marginTop: 0,
-    marginBottom: 6,
+    margin: "6px 0",
   },
-
-  innerContainer: {
-    paddingLeft: 6,
-  },
-
   block: {
     border: "1px solid #ccc",
     borderRadius: 4,
     marginBottom: 8,
+    overflow: "hidden",
   },
   blockHeader: {
-    display: "flex",
-    alignItems: "center",
     backgroundColor: "#eee",
     padding: "4px 6px",
     cursor: "pointer",
   },
   blockContent: {
-    padding: 6,
-    paddingLeft: 12,
+    padding: "4px 8px",
   },
   subBlock: {
     marginTop: 6,
@@ -320,22 +459,10 @@ const styles = {
   },
   activityRow: {
     display: "flex",
-    alignItems: "center",
-    marginTop: 2,
     padding: "2px 6px",
+    marginBottom: 4,
+    border: "1px solid #eee",
     borderRadius: 4,
     cursor: "pointer",
-    border: "1px solid #eee",
-  },
-  chevron: {
-    marginRight: 4,
-  },
-  timeBadge: {
-    marginLeft: "auto",
-    padding: "2px 4px",
-    backgroundColor: "#333",
-    color: "#fff",
-    borderRadius: 4,
-    fontSize: "0.8rem",
   },
 };
