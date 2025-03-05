@@ -1,38 +1,52 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchPlan } from "./store/planSlice";
 import LeftPanel from "./LeftPanel";
 import MainContent from "./MainContent";
 
+// Import your custom bars
+import TopBar from "./TopBar";
+import BottomBar from "./BottomBar";
+
 /**
  * PlanFetcher
  * -----------
- * A Redux-based component that:
- *  - Accepts `planId` as a prop
- *  - Dispatches fetchPlan when planId changes
- *  - If `initialActivityContext` is provided (subChapterId, type),
- *    it passes that to the plan slice so we can jump to the right activity.
- *  - Renders LeftPanel and MainContent side-by-side
- *
- * PROPS:
- *  - planId (string): The plan ID to fetch from the server
- *  - initialActivityContext (object): { subChapterId, type } optional
- *  - backendURL (string): optional override for the server base
- *  - fetchUrl (string): optional override for the fetch endpoint
+ * - fetchPlan logic
+ * - Render: TopBar, mainArea (LeftPanel + MainContent), BottomBar
+ * - Example props for TopBar: daysUntilExam, sessionLength, secondsLeft
+ * - Example progress calculation for BottomBar from flattenedActivities + currentIndex
  */
 export default function PlanFetcher({
   planId,
   initialActivityContext,
   backendURL = "http://localhost:3001",
   fetchUrl = "/api/adaptive-plan",
+  // Additional props if needed for top/bottom bars
+  daysUntilExam = 10,
+  sessionLength = 30,
+  initialSeconds = 1500, // 25 min
+  onClose = () => {},
 }) {
   const dispatch = useDispatch();
-  const { status, error, planDoc } = useSelector((state) => state.plan);
+  const { status, error, planDoc, flattenedActivities, currentIndex } = useSelector(
+    (state) => state.plan
+  );
 
-  // Whenever planId or initialActivityContext changes => dispatch fetchPlan
+  // Example local state for the countdown timer
+  const [secondsLeft, setSecondsLeft] = useState(initialSeconds);
+
+  // Start a simple timer effect to decrement secondsLeft
+  useEffect(() => {
+    const timerId = setInterval(() => {
+      setSecondsLeft((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+
+    return () => clearInterval(timerId);
+  }, []);
+
+  // Fetch Plan whenever planId changes
   useEffect(() => {
     if (!planId) return;
-
     console.log("[PlanFetcher] dispatching fetchPlan =>", {
       planId,
       backendURL,
@@ -50,14 +64,32 @@ export default function PlanFetcher({
     );
   }, [planId, backendURL, fetchUrl, initialActivityContext, dispatch]);
 
+  // Calculate progress for the BottomBar
+  let totalSteps = flattenedActivities?.length || 0;
+  let currentStep = currentIndex >= 0 ? currentIndex + 1 : 0;
+  let stepPercent =
+    totalSteps > 0 ? Math.floor((currentStep / totalSteps) * 100) : 0;
+
   return (
     <div style={styles.appContainer}>
-      {status === "loading" && <p style={{ color: "#fff" }}>Loading plan...</p>}
-      {error && <p style={{ color: "red" }}>{error}</p>}
+      {/* If you want to hide the top bar entirely, just remove <TopBar /> */}
+      <TopBar
+        daysUntilExam={daysUntilExam}
+        sessionLength={sessionLength}
+        secondsLeft={secondsLeft}
+        onClose={onClose}
+      />
+
+      {/* If plan is still loading or error */}
+      {status === "loading" && <p style={{ color: "#fff", margin: 8 }}>Loading plan...</p>}
+      {error && <p style={{ color: "red", margin: 8 }}>{error}</p>}
       {!planDoc && status !== "loading" && !error && (
-        <p style={{ color: "#fff" }}>No plan loaded. Pass a valid planId to load content.</p>
+        <p style={{ color: "#fff", margin: 8 }}>
+          No plan loaded. Pass a valid planId to load content.
+        </p>
       )}
 
+      {/* The main area => LeftPanel & MainContent side by side */}
       {planDoc && (
         <div style={styles.mainArea}>
           {/* Left panel */}
@@ -71,38 +103,49 @@ export default function PlanFetcher({
           </div>
         </div>
       )}
+
+      {/* BottomBar for progress */}
+      <BottomBar
+        stepPercent={stepPercent}
+        currentIndex={currentIndex}
+        totalSteps={totalSteps}
+      />
     </div>
   );
 }
 
 const styles = {
   appContainer: {
-    // Transparent or black to blend with the modal
-    backgroundColor: "transparent",
-    border: "none",
-    padding: 0,
+    // Fix or % height so it doesn't shrink/grow with content
+    height: "80vh",
+    display: "flex",
+    flexDirection: "column",
+    backgroundColor: "#000",
+    // Or transparent if parent is black
+    color: "#fff",
+    // Remove default margins
     margin: 0,
-    // If you want it entirely black, use backgroundColor: "#000"
-    // Otherwise 'transparent' if the parent is black
+    padding: 0,
+    boxSizing: "border-box",
   },
   mainArea: {
+    // Occupies all vertical space except top/bottom bars
+    flex: 1,
     display: "flex",
-    marginTop: 0,
-    minHeight: 400,
-    border: "none",
-    borderRadius: 0,
     overflow: "hidden",
-    // Also let parent handle sizing if you prefer
   },
   leftPanelContainer: {
-    // If you want the left panel black, override the left panel's own styling
-    // or remove these lines:
     width: 300,
-    borderRight: "none", // or "1px solid #444"
-    backgroundColor: "transparent", // or "#000"
+    height: "100%",
+    overflowY: "auto",
+    backgroundColor: "#000", // or transparent
+    // optional borderRight
+    // borderRight: "1px solid #444"
   },
   rightPanelContainer: {
     flex: 1,
-    backgroundColor: "transparent", // or "#000"
+    height: "100%",
+    overflowY: "auto",
+    backgroundColor: "#000", // or transparent
   },
 };

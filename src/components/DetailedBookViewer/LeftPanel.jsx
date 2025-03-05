@@ -1,5 +1,4 @@
 // UpdatedLeftPanel.jsx
-
 import React, { useEffect, useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { setCurrentIndex } from "./store/planSlice";
@@ -30,8 +29,7 @@ function getActivityStyle(type, isSelected) {
 
 /**
  * A small pill that displays time in minutes, e.g. "5m".
- * We'll place it on the right for chapters/sub-chapters (before arrow),
- * and also on the right for final activity lines.
+ * Usually placed on the right side (chapters/sub-ch).
  */
 function TimePill({ minutes = 0 }) {
   return (
@@ -42,8 +40,7 @@ function TimePill({ minutes = 0 }) {
 }
 
 /**
- * TruncateTooltip => show text truncated with an ellipsis,
- * plus a tooltip on hover.
+ * TruncateTooltip => show text truncated with an ellipsis, plus a tooltip on hover.
  */
 function TruncateTooltip({ text, sx }) {
   return (
@@ -63,9 +60,8 @@ function TruncateTooltip({ text, sx }) {
 }
 
 /**
- * parseTitlePill => extracts a leading digit (if present) from "1. Something"
- * and places it in a colored box (different color by 'level').
- * The rest is truncated text.
+ * parseTitlePill => extracts a leading digit (if present), e.g. "1. Intro"
+ * and places it in a small colored box. The rest is truncated text.
  */
 function parseTitlePill(fullTitle, level) {
   const splitted = fullTitle.split(".");
@@ -89,7 +85,7 @@ function parseTitlePill(fullTitle, level) {
         alignItems: "center",
         gap: 1,
         flex: 1,
-        minWidth: 0, // so truncated text can shrink if needed
+        minWidth: 0,
         overflow: "hidden",
       }}
     >
@@ -123,10 +119,13 @@ function parseTitlePill(fullTitle, level) {
 /**
  * LeftPanel
  * ---------
- * - Centered Day dropdown if planType="adaptive"
+ * - Occupies full height of the parent (height: "100%")
+ * - Has a small row for day selection if planType="adaptive"
+ * - Then a scrollable area for the chapters (flex:1, overflowY:"auto")
  * - Hides book level if only one book
- * - The time pill is at the right side for chapters/sub-ch, just before expand arrow
- * - The time pill is also at the rightmost side for final activities (READ/QUIZ/REV).
+ * - Time pill on the right side for chapters/sub-ch
+ * - Activities have time pill at the far right
+ * - Selected activity is highlighted in red
  */
 export default function LeftPanel() {
   const dispatch = useDispatch();
@@ -135,9 +134,9 @@ export default function LeftPanel() {
   );
 
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
-  // expanded => which keys ("ch-xx", "subch-yy") are open
   const [expanded, setExpanded] = useState({});
 
+  // If plan not loaded
   if (status !== "succeeded" || !planDoc) {
     return (
       <Box sx={containerSx}>
@@ -148,7 +147,7 @@ export default function LeftPanel() {
 
   const { planType = "adaptive", sessions = [] } = planDoc;
 
-  // Whenever currentIndex changes => auto-expand
+  // Whenever currentIndex changes => auto-expand chain
   useEffect(() => {
     if (!flattenedActivities?.length) return;
     if (currentIndex < 0 || currentIndex >= flattenedActivities.length) return;
@@ -163,12 +162,14 @@ export default function LeftPanel() {
     setExpanded(newExpanded);
   }, [currentIndex, flattenedActivities, planType]);
 
+  // Day selection
   function handleDayChange(e) {
     const val = Number(e.target.value);
     setSelectedDayIndex(val);
     setExpanded({ [`day-${val}`]: true });
   }
 
+  // Expand/collapse toggling
   function handleToggleExpand(key, allActs) {
     const isOpen = expanded[key] === true;
     if (isOpen) {
@@ -191,7 +192,10 @@ export default function LeftPanel() {
       } else if (key.startsWith("subch-")) {
         nextExpanded[dayKey] = true;
         nextExpanded[key] = true;
-        const { parentBookKey, parentChapterKey } = findParentBookChKey(key, allActs);
+        const { parentBookKey, parentChapterKey } = findParentBookChKey(
+          key,
+          allActs
+        );
         if (parentBookKey) nextExpanded[parentBookKey] = true;
         if (parentChapterKey) nextExpanded[parentChapterKey] = true;
       }
@@ -208,6 +212,7 @@ export default function LeftPanel() {
         <Box sx={{ display: "flex", justifyContent: "center", mb: 1 }}>
           <Typography sx={titleSx}>Book Plan</Typography>
         </Box>
+        {/* Scrollable area for the chapters */}
         <Box sx={{ flex: 1, overflowY: "auto" }}>
           <BookPlanView
             activities={activities}
@@ -227,7 +232,7 @@ export default function LeftPanel() {
 
   return (
     <Box sx={containerSx}>
-      {/* Centered day dropdown, no label */}
+      {/* Day dropdown row */}
       <Box sx={{ display: "flex", justifyContent: "center", mb: 1 }}>
         <FormControl variant="standard" sx={{ minWidth: 60 }}>
           <Select
@@ -253,6 +258,7 @@ export default function LeftPanel() {
         </FormControl>
       </Box>
 
+      {/* Scrollable list */}
       <Box sx={{ flex: 1, overflowY: "auto" }}>
         <BookPlanView
           activities={activities}
@@ -288,7 +294,7 @@ function BookPlanView({
   }
   const books = [...bookMap.values()];
 
-  // If only 1 book => skip
+  // If only 1 book => skip the book level
   if (books.length === 1) {
     return (
       <List sx={{ p: 0 }} dense>
@@ -316,9 +322,7 @@ function BookPlanView({
               sx={listItemButtonSx}
               onClick={() => onToggleExpand(bkKey, activities)}
             >
-              {/* Title + expand arrow on far right */}
               {parseTitlePill(bk.bookName, "book")}
-              {/* Chapter time pill => at the right side, then arrow */}
               <TimePill minutes={totalTime} />
               {isBookOpen ? (
                 <ExpandLessIcon sx={{ fontSize: "1rem", ml: 0.5 }} />
@@ -344,7 +348,7 @@ function BookPlanView({
 }
 
 /**
- * Chapters => subCh => final activities
+ * Renders chapters => subCh => final activities
  */
 function renderChapters(
   activities,
@@ -402,7 +406,7 @@ function renderChapters(
 }
 
 /**
- * SubCh => final activities
+ * Renders subCh => final activities
  */
 function renderSubChapters(
   activities,
@@ -448,9 +452,10 @@ function renderSubChapters(
         <Collapse in={isSbOpen} timeout="auto" unmountOnExit>
           <List dense sx={{ p: 0 }}>
             {sb.items.map((act) => {
+              const isSelected = act.flatIndex === currentIndex;
               const { bgColor, textColor } = getActivityStyle(
                 act.type,
-                act.flatIndex === currentIndex
+                isSelected
               );
               const timeNeeded = act.timeNeeded || 0;
 
@@ -465,10 +470,7 @@ function renderSubChapters(
                     color: textColor,
                   }}
                 >
-                  {/* 
-                    For final activities, place the time pill 
-                    on the rightmost side (the user requested).
-                  */}
+                  {/* final activities => time pill on the rightmost side */}
                   <Box
                     sx={{
                       display: "flex",
@@ -494,7 +496,7 @@ function renderSubChapters(
   });
 }
 
-// ---------------------- Expansion Helpers ----------------------
+/* ---------------------- Expansion Helpers ---------------------- */
 function buildChain(dayIndex, bookId, chapterId, subChId) {
   const obj = {};
   if (typeof dayIndex === "number") obj[`day-${dayIndex}`] = true;
@@ -550,18 +552,17 @@ function findParentBookChKey(subchKey, allActs) {
   return { parentBookKey, parentChapterKey };
 }
 
-// ---------------------- STYLES ----------------------
+/* ---------------------- STYLES ---------------------- */
 const containerSx = {
   width: 300,
   minWidth: 250,
+  // Occupy the full parent's height so it won't shrink
+  height: "100%",
   bgcolor: "#1A1A1A",
   color: "#fff",
-  // remove or keep border if you want
-  // borderRight: "1px solid #333",
   display: "flex",
   flexDirection: "column",
   p: 1,
-  height: "100%",
   boxSizing: "border-box",
 };
 
@@ -605,5 +606,5 @@ const timePillSx = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  flexShrink: 0, // so it doesn't shrink away
+  flexShrink: 0,
 };

@@ -14,20 +14,6 @@ import CloseIcon from "@mui/icons-material/Close";
 import HistoryTab from "./HistoryTab";
 import PlanFetcher from "../../PlanFetcher"; // Adjust path if needed
 
-/**
- * Child2
- *  - Renders "Adaptive Plan" heading
- *  - Has a "History" tab plus sessions as tabs
- *  - On user click of "Read"/"Quiz"/"Revise", opens a MUI Dialog with PlanFetcher
- *    passing initialActivityContext (subChapterId, type).
- *
- * Props:
- *  - userId: string
- *  - bookId: string
- *  - planIds: string[]
- *  - onOverviewSelect: function(activity) => void  (unused, left in for compatibility)
- *  - colorScheme: { panelBg, textColor, borderColor, heading }
- */
 export default function Child2({
   userId = null,
   bookId = "",
@@ -35,9 +21,6 @@ export default function Child2({
   onOverviewSelect = () => {},
   colorScheme = {},
 }) {
-  // ------------------------------------------
-  // STYLES & HELPER
-  // ------------------------------------------
   function activityButtonStyle(isEnabled) {
     return {
       backgroundColor: isEnabled ? (colorScheme.heading || "#FFD700") : "#777777",
@@ -77,9 +60,7 @@ export default function Child2({
         return;
       }
 
-      console.log(
-        `[Child2] fetching plan IDs for userId="${userId}" bookId="${bookId}"...`
-      );
+      console.log(`[Child2] fetching plan IDs for userId="${userId}" bookId="${bookId}"...`);
 
       try {
         const url = `${import.meta.env.VITE_BACKEND_URL}/api/adaptive-plan-id`;
@@ -173,7 +154,7 @@ export default function Child2({
   const [dialogPlanId, setDialogPlanId] = useState("");
   const [dialogInitialActivity, setDialogInitialActivity] = useState(null);
 
-  // This function is triggered on "Read"/"Quiz"/"Revise" click
+  // Triggered on "Read"/"Quiz"/"Revise" click
   function handleOpenPlanFetcher(planId, activity) {
     console.log("[Child2] handleOpenPlanFetcher => planId:", planId, "activity:", activity);
 
@@ -255,7 +236,7 @@ export default function Child2({
         renderPlan(plan)
       )}
 
-      {/* The new Redux-based PlanFetcher dialog */}
+      {/* The Redux-based PlanFetcher dialog */}
       <Dialog
         open={showPlanDialog}
         onClose={() => setShowPlanDialog(false)}
@@ -267,23 +248,25 @@ export default function Child2({
             backgroundColor: "rgba(0, 0, 0, 0.8)",
           },
         }}
-        // Make the modal dark
+        // Fix the dialog height and allow internal scroll
         PaperProps={{
           sx: {
+            // For example, 80% of viewport height
+            height: "80vh",
+            display: "flex",
+            flexDirection: "column",
             backgroundColor: "#000", // black interior
             color: "#fff",
-            boxShadow: "none",       // remove white outline
-            borderRadius: 2,        // slightly rounded corners
-            overflow: "hidden",     // no scrollbars showing at edges
-            // Optionally size the dialog more, e.g.
-            // width: "90%", height: "80%", margin: "0 auto",
+            boxShadow: "none",
+            borderRadius: 2,
+            overflow: "hidden",
           },
         }}
       >
-        {/* Custom Title row with a close button */}
+        {/* Title row with a close button */}
         <DialogTitle
           sx={{
-            backgroundColor: "#111", // darker than main
+            backgroundColor: "#111",
             color: "#fff",
             fontSize: "1rem",
             display: "flex",
@@ -292,7 +275,6 @@ export default function Child2({
           }}
         >
           <span>Plan Viewer</span>
-          {/* Close Button */}
           <Button
             variant="contained"
             color="inherit"
@@ -300,18 +282,26 @@ export default function Child2({
             sx={{
               backgroundColor: "#444",
               color: "#fff",
-              '&:hover': { backgroundColor: "#666" },
+              "&:hover": { backgroundColor: "#666" },
             }}
           >
             Close
           </Button>
         </DialogTitle>
 
-        <DialogContent sx={{ padding: 0 }}>
+        {/* The main scrollable content area */}
+        <DialogContent
+          sx={{
+            // Make it fill remaining space & scroll if needed
+            flex: 1,
+            overflowY: "auto",
+            p: 0,
+            backgroundColor: "#000", // ensure black behind PlanFetcher
+          }}
+        >
           {dialogPlanId ? (
             <PlanFetcher
               planId={dialogPlanId}
-              // pass the initialActivityContext to help jump to the correct subchapter
               initialActivityContext={dialogInitialActivity}
             />
           ) : (
