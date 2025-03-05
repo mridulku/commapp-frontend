@@ -4,13 +4,9 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import {
   Dialog,
-  DialogTitle,
   DialogContent,
-  DialogActions,
   Button,
-  IconButton,
 } from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
 import HistoryTab from "./HistoryTab";
 import PlanFetcher from "../../PlanFetcher"; // Adjust path if needed
 
@@ -53,7 +49,7 @@ export default function Child2({
   useEffect(() => {
     async function fetchPlansForBook() {
       if (!userId || !bookId) {
-        console.log("[Child2] fetchPlansForBook => missing userId or bookId");
+        console.log("[Child2] Missing userId or bookId => clearing plan data");
         setLocalPlanIds([]);
         setSelectedPlanId("");
         setPlan(null);
@@ -73,7 +69,7 @@ export default function Child2({
           setLocalPlanIds([]);
         }
       } catch (error) {
-        console.error("[Child2] Error fetching plan IDs by bookId =>", error);
+        console.error("[Child2] Error fetching plan IDs =>", error);
         setLocalPlanIds([]);
       }
     }
@@ -94,7 +90,7 @@ export default function Child2({
   }, [localPlanIds]);
 
   // ------------------------------------------
-  // 3) Fetched Plan (in local state) – for local display/tabs
+  // 3) Fetched Plan (in local state)
   // ------------------------------------------
   useEffect(() => {
     if (!selectedPlanId) {
@@ -135,7 +131,7 @@ export default function Child2({
     setActiveSessionIndex(0);
   }, [plan]);
 
-  // Expand/Collapse
+  // Expand/Collapse (only used for local plan display, not the Redux PlanFetcher)
   const [expandedChapters, setExpandedChapters] = useState([]);
   useEffect(() => {
     setExpandedChapters([]);
@@ -163,24 +159,15 @@ export default function Child2({
       console.warn("[Child2] handleOpenPlanFetcher => no activity provided");
       setDialogInitialActivity(null);
     } else {
-      const subChId = activity.subChapterId;
-      const actType = activity.type;
-      console.log("[Child2] Setting dialogInitialActivity =>", {
-        subChapterId: subChId,
-        type: actType,
-      });
       setDialogInitialActivity({
-        subChapterId: subChId,
-        type: actType,
+        subChapterId: activity.subChapterId,
+        type: activity.type,
       });
     }
 
     setShowPlanDialog(true);
   }
 
-  // ------------------------------------------
-  // RENDER
-  // ------------------------------------------
   const containerStyle = {
     backgroundColor: colorScheme.panelBg || "#0D0D0D",
     color: colorScheme.textColor || "#FFD700",
@@ -199,9 +186,7 @@ export default function Child2({
     return (
       <div style={containerStyle}>
         <h2 style={headingStyle}>Adaptive Plan</h2>
-        <div>
-          No plan IDs found for userId="{userId}" and bookId="{bookId}".
-        </div>
+        <div>No plan IDs found for userId="{userId}" and bookId="{bookId}".</div>
       </div>
     );
   }
@@ -233,10 +218,11 @@ export default function Child2({
       ) : !plan ? (
         <div>Loading plan data...</div>
       ) : (
-        renderPlan(plan)
+        renderLocalPlan(plan)
       )}
 
-      {/* The Redux-based PlanFetcher dialog */}
+      {/* We use a MUI Dialog, but without any "Plan Viewer" heading or local close. 
+          The close is up to the PARENT or the parent's close callback. */}
       <Dialog
         open={showPlanDialog}
         onClose={() => setShowPlanDialog(false)}
@@ -248,10 +234,8 @@ export default function Child2({
             backgroundColor: "rgba(0, 0, 0, 0.8)",
           },
         }}
-        // Fix the dialog height and allow internal scroll
         PaperProps={{
           sx: {
-            // For example, 80% of viewport height
             height: "80vh",
             display: "flex",
             flexDirection: "column",
@@ -263,40 +247,14 @@ export default function Child2({
           },
         }}
       >
-        {/* Title row with a close button */}
-        <DialogTitle
-          sx={{
-            backgroundColor: "#111",
-            color: "#fff",
-            fontSize: "1rem",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <span>Plan Viewer</span>
-          <Button
-            variant="contained"
-            color="inherit"
-            onClick={() => setShowPlanDialog(false)}
-            sx={{
-              backgroundColor: "#444",
-              color: "#fff",
-              "&:hover": { backgroundColor: "#666" },
-            }}
-          >
-            Close
-          </Button>
-        </DialogTitle>
-
-        {/* The main scrollable content area */}
+        {/* We REMOVED the entire <DialogTitle> "Plan Viewer" block 
+            so there's no local heading or local close button. */}
         <DialogContent
           sx={{
-            // Make it fill remaining space & scroll if needed
             flex: 1,
             overflowY: "auto",
             p: 0,
-            backgroundColor: "#000", // ensure black behind PlanFetcher
+            backgroundColor: "#000",
           }}
         >
           {dialogPlanId ? (
@@ -313,9 +271,9 @@ export default function Child2({
   );
 
   // ------------------------------------------
-  // renderPlan => Show local plan's sessions
+  // renderLocalPlan => local plan in Child2
   // ------------------------------------------
-  function renderPlan(planObj) {
+  function renderLocalPlan(planObj) {
     const { sessions = [] } = planObj;
     if (sessions.length === 0) {
       return <div>No sessions found in this plan.</div>;
