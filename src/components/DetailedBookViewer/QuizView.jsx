@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useSelector } from "react-redux";
 import axios from "axios";
 
-// Two distinct GPT prompts
+// Two distinct GPT prompts (unchanged)
 const PROMPT_3_QUESTIONS = `You are a helpful assistant. Given the following text, generate 3 multiple-choice questions 
 that test basic recall (Bloom's Remember/Understand). 
 Return ONLY valid JSON with the structure:
@@ -46,28 +46,21 @@ Just return valid JSON.
 /**
  * QuizView (Redux-based)
  * -----------------------
- * 1) Reads activity.subChapterId, etc. from props.
- * 2) Reads userId from Redux (or fallback).
- * 3) Fetches subchapter data, existing quiz doc, or calls GPT to generate quiz.
- * 4) Renders multiple-choice quiz with local states: loading, questions, selectedAnswers, score, etc.
+ *  - No subchapter name / level displayed
+ *  - The quiz starts immediately
+ *  - "Submit" button centered below questions
+ *  - All GPT-based logic, existing fetch code remain the same
  */
 export default function QuizView({ activity }) {
-  // 1) Extract quiz-related info from the activity object
+  // 1) Extract quiz-related info
   const subChapterId = activity.subChapterId;
-  const subChapterName = activity.subChapterName || "Untitled Subchapter";
   const level = activity.level || "basic"; // "mastery" => 5 Qs, else 3 Qs
 
-  // 2) Suppose you store user info in Redux (auth slice or user slice).
-  //    Adjust the selector path to match your store. For example:
-  const userId = useSelector((state) => state.auth?.userId || "demoUser"); 
+  // 2) Read user info from Redux
+  const userId = useSelector((state) => state.auth?.userId || "demoUser");
 
-  // Alternatively, if you'd prefer a prop:
-  //   function QuizView({ activity, userId, ... })
-  //   - remove the useSelector line
-
-  // 3) We can also read the base URL from Redux or an env var:
+  // 3) We can define a backend URL from env or Redux
   const backendURL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
-  // Or from a Redux store, or pass as prop
 
   // ---------- State Variables ----------
   const [loading, setLoading] = useState(false);
@@ -79,8 +72,8 @@ export default function QuizView({ activity }) {
   const [score, setScore] = useState(null);
   const [readOnly, setReadOnly] = useState(false);
 
-  // For GPT key (if you want to store in Redux or .env)
-  const apiKey = import.meta.env.VITE_OPENAI_KEY; 
+  // For GPT key
+  const apiKey = import.meta.env.VITE_OPENAI_KEY;
 
   // -----------------------------------
   // Lifecycle: Fetch data & set up quiz
@@ -304,24 +297,9 @@ export default function QuizView({ activity }) {
   // -----------------------------------
   // Render
   // -----------------------------------
-  const quizTitle = subChapter?.subChapterName || subChapterName || subChapterId;
-
   return (
-    <div style={outerContainer}>
-      {/* Header */}
-      <div style={headerSection}>
-        <h2 style={{ margin: 0 }}>
-          Quiz for SubChapter: {quizTitle}
-        </h2>
-        {level && (
-          <p style={{ margin: 0, fontStyle: "italic", fontSize: "0.9rem" }}>
-            Level: {level}
-          </p>
-        )}
-      </div>
-
-      {/* Main content area */}
-      <div style={quizContentArea}>
+    <div style={styles.outerContainer}>
+      <div style={styles.quizContentArea}>
         {loading && <p>Loading quiz data...</p>}
 
         {error && (
@@ -334,8 +312,8 @@ export default function QuizView({ activity }) {
         {!loading && !error && questions.length > 0 && (
           <div>
             {questions.map((q, qIndex) => (
-              <div key={qIndex} style={questionBlock}>
-                <strong>
+              <div key={qIndex} style={styles.questionBlock}>
+                <strong style={styles.questionText}>
                   Q{qIndex + 1}: {q.question}
                 </strong>
                 <div style={{ marginTop: "0.5rem" }}>
@@ -371,9 +349,11 @@ export default function QuizView({ activity }) {
 
             {/* Submit button only if not readOnly & no score yet */}
             {!readOnly && score === null && (
-              <button style={quizButtonStyle} onClick={handleSubmit}>
-                Submit
-              </button>
+              <div style={styles.submitRow}>
+                <button style={styles.quizButtonStyle} onClick={handleSubmit}>
+                  Submit
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -388,42 +368,48 @@ export default function QuizView({ activity }) {
 }
 
 // --------------------- Styles ---------------------
-
-const outerContainer = {
-  width: "100%",
-  height: "100%",
-  backgroundColor: "#000",
-  color: "#fff",
-  display: "flex",
-  flexDirection: "column",
-  boxSizing: "border-box",
-  padding: "20px",
+const styles = {
+  outerContainer: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#000",
+    color: "#fff",
+    display: "flex",
+    flexDirection: "column",
+    boxSizing: "border-box",
+    padding: "20px",
+    // If you want a certain font family or bigger base text:
+    fontFamily: `'Inter', 'Roboto', sans-serif`,
+  },
+  quizContentArea: {
+    flex: 1,
+    overflowY: "auto",
+    // narrower reading column:
+    maxWidth: "60ch",
+    margin: "0 auto",
+    lineHeight: 1.6,
+    fontSize: "1rem",
+  },
+  questionBlock: {
+    marginBottom: "1.5rem",
+  },
+  questionText: {
+    fontSize: "1rem",
+  },
+  quizButtonStyle: {
+    padding: "8px 16px",
+    borderRadius: "4px",
+    border: "none",
+    backgroundColor: "#444",
+    color: "#fff",
+    fontWeight: "bold",
+    cursor: "pointer",
+    fontSize: "0.9rem",
+    marginTop: "10px",
+  },
+  submitRow: {
+    display: "flex",
+    justifyContent: "center",
+    marginTop: "1rem",
+  },
 };
-
-const headerSection = {
-  marginBottom: "16px",
-};
-
-const quizContentArea = {
-  flex: 1,
-  overflowY: "auto",
-};
-
-const questionBlock = {
-  marginBottom: "1rem",
-};
-
-const quizButtonStyle = {
-  padding: "8px 16px",
-  borderRadius: "4px",
-  border: "none",
-  backgroundColor: "#444",
-  color: "#fff",
-  fontWeight: "bold",
-  cursor: "pointer",
-  marginTop: "10px",
-  fontSize: "0.9rem",
-};
-
-
-

@@ -1,4 +1,3 @@
-// UpdatedLeftPanel.jsx
 import React, { useEffect, useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { setCurrentIndex } from "./store/planSlice";
@@ -12,25 +11,19 @@ import {
   ListItemButton,
   Collapse,
   Tooltip,
+  IconButton,
 } from "@mui/material";
+import MenuIcon from "@mui/icons-material/Menu";
 import ExpandLessIcon from "@mui/icons-material/KeyboardArrowUp";
 import ExpandMoreIcon from "@mui/icons-material/KeyboardArrowDown";
 
-/**
- * If selected => highlight in red (#EF5350).
- * Otherwise => medium gray (#555).
- */
+/* If selected => highlight in red (#EF5350); otherwise => #555 */
 function getActivityStyle(type, isSelected) {
-  if (isSelected) {
-    return { bgColor: "#EF5350", textColor: "#fff" };
-  }
+  if (isSelected) return { bgColor: "#EF5350", textColor: "#fff" };
   return { bgColor: "#555", textColor: "#fff" };
 }
 
-/**
- * A small pill that displays time in minutes, e.g. "5m".
- * Usually placed on the right side (chapters/sub-ch).
- */
+/* A small pill for e.g. "5m" */
 function TimePill({ minutes = 0 }) {
   return (
     <Box sx={timePillSx}>
@@ -39,9 +32,7 @@ function TimePill({ minutes = 0 }) {
   );
 }
 
-/**
- * TruncateTooltip => show text truncated with an ellipsis, plus a tooltip on hover.
- */
+/* TruncateTooltip => truncated text with ellipsis + tooltip */
 function TruncateTooltip({ text, sx }) {
   return (
     <Tooltip title={text} arrow>
@@ -59,10 +50,7 @@ function TruncateTooltip({ text, sx }) {
   );
 }
 
-/**
- * parseTitlePill => extracts a leading digit (if present), e.g. "1. Intro"
- * and places it in a small colored box. The rest is truncated text.
- */
+/* parseTitlePill => extracts leading digit, places in small colored box, rest truncated. */
 function parseTitlePill(fullTitle, level) {
   const splitted = fullTitle.split(".");
   let indexToken = splitted[0];
@@ -119,15 +107,16 @@ function parseTitlePill(fullTitle, level) {
 /**
  * LeftPanel
  * ---------
- * - Occupies full height of the parent (height: "100%")
- * - Has a small row for day selection if planType="adaptive"
- * - Then a scrollable area for the chapters (flex:1, overflowY:"auto")
- * - Hides book level if only one book
- * - Time pill on the right side for chapters/sub-ch
- * - Activities have time pill at the far right
- * - Selected activity is highlighted in red
+ * - Collapsible (width handled by parent via isCollapsed)
+ * - A single top row with:
+ *   1) Hamburger at far-left
+ *   2) Day dropdown in center (if expanded)
+ * - If collapsed => hide day dropdown & plan expansions
  */
-export default function LeftPanel() {
+export default function LeftPanel({
+  isCollapsed = false,
+  onToggleCollapse = () => {},
+}) {
   const dispatch = useDispatch();
   const { planDoc, flattenedActivities, currentIndex, status } = useSelector(
     (state) => state.plan
@@ -147,7 +136,7 @@ export default function LeftPanel() {
 
   const { planType = "adaptive", sessions = [] } = planDoc;
 
-  // Whenever currentIndex changes => auto-expand chain
+  // On currentIndex change => auto-expand chain
   useEffect(() => {
     if (!flattenedActivities?.length) return;
     if (currentIndex < 0 || currentIndex >= flattenedActivities.length) return;
@@ -169,7 +158,7 @@ export default function LeftPanel() {
     setExpanded({ [`day-${val}`]: true });
   }
 
-  // Expand/collapse toggling
+  // Expand/collapse toggling for chapters
   function handleToggleExpand(key, allActs) {
     const isOpen = expanded[key] === true;
     if (isOpen) {
@@ -177,7 +166,6 @@ export default function LeftPanel() {
       collapseNodeAndChildren(key, nextExpanded, allActs);
       setExpanded(nextExpanded);
     } else {
-      // open + chain
       const nextExpanded = {};
       const dayKey = `day-${selectedDayIndex}`;
       nextExpanded[dayKey] = true;
@@ -209,11 +197,39 @@ export default function LeftPanel() {
     const { activities = [] } = singleSession;
     return (
       <Box sx={containerSx}>
-        <Box sx={{ display: "flex", justifyContent: "center", mb: 1 }}>
-          <Typography sx={titleSx}>Book Plan</Typography>
-        </Box>
-        {/* Scrollable area for the chapters */}
+        {renderTopRow()} 
+        {!isCollapsed && (
+          <Box sx={{ display: "flex", justifyContent: "center", mb: 1 }}>
+            <Typography sx={titleSx}>Book Plan</Typography>
+          </Box>
+        )}
+
         <Box sx={{ flex: 1, overflowY: "auto" }}>
+          {!isCollapsed && (
+            <BookPlanView
+              activities={activities}
+              currentIndex={currentIndex}
+              onSelectActivity={(idx) => dispatch(setCurrentIndex(idx))}
+              expanded={expanded}
+              onToggleExpand={handleToggleExpand}
+            />
+          )}
+        </Box>
+      </Box>
+    );
+  }
+
+  // If "adaptive"
+  const currentSession = sessions[selectedDayIndex] || {};
+  const { activities = [] } = currentSession;
+
+  return (
+    <Box sx={containerSx}>
+      {renderTopRow()}
+
+      {/* Only show plan expansions if not collapsed */}
+      <Box sx={{ flex: 1, overflowY: "auto" }}>
+        {!isCollapsed && (
           <BookPlanView
             activities={activities}
             currentIndex={currentIndex}
@@ -221,69 +237,82 @@ export default function LeftPanel() {
             expanded={expanded}
             onToggleExpand={handleToggleExpand}
           />
-        </Box>
-      </Box>
-    );
-  }
-
-  // "adaptive"
-  const currentSession = sessions[selectedDayIndex] || {};
-  const { activities = [] } = currentSession;
-
-  return (
-    <Box sx={containerSx}>
-      {/* Day dropdown row */}
-      <Box sx={{ display: "flex", justifyContent: "center", mb: 1 }}>
-        <FormControl variant="standard" sx={{ minWidth: 60 }}>
-          <Select
-            value={selectedDayIndex}
-            onChange={handleDayChange}
-            disableUnderline
-            sx={selectSx}
-            MenuProps={{
-              PaperProps: {
-                sx: {
-                  bgcolor: "#222",
-                  color: "#fff",
-                },
-              },
-            }}
-          >
-            {sessions.map((sess, idx) => (
-              <MenuItem key={idx} value={idx}>
-                Day {sess.sessionLabel || idx + 1}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      </Box>
-
-      {/* Scrollable list */}
-      <Box sx={{ flex: 1, overflowY: "auto" }}>
-        <BookPlanView
-          activities={activities}
-          currentIndex={currentIndex}
-          onSelectActivity={(idx) => dispatch(setCurrentIndex(idx))}
-          expanded={expanded}
-          onToggleExpand={handleToggleExpand}
-        />
+        )}
       </Box>
     </Box>
   );
+
+  // Renders single row with hamburger (left) + day dropdown (center if expanded)
+  function renderTopRow() {
+    return (
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          mb: 1,
+          position: "relative", // so we can absolutely center the dropdown
+          height: 32, // a fixed row height
+        }}
+      >
+        {/* HAMBURGER => left */}
+        <IconButton
+          size="small"
+          onClick={onToggleCollapse}
+          sx={{
+            color: "#fff",
+            // keep to the left
+            marginRight: 1,
+            zIndex: 2, // ensure it stays above if needed
+          }}
+        >
+          <MenuIcon />
+        </IconButton>
+
+        {/* Day dropdown => absolute center if expanded */}
+        {!isCollapsed && (
+          <Box
+            sx={{
+              position: "absolute",
+              left: "50%",
+              transform: "translateX(-50%)",
+              zIndex: 1, // so it doesn't appear behind hamburger
+            }}
+          >
+            {planType !== "book" && (
+              <FormControl variant="standard" sx={{ minWidth: 60 }}>
+                <Select
+                  value={selectedDayIndex}
+                  onChange={handleDayChange}
+                  disableUnderline
+                  sx={selectSx}
+                  MenuProps={{
+                    PaperProps: {
+                      sx: {
+                        bgcolor: "#222",
+                        color: "#fff",
+                      },
+                    },
+                  }}
+                >
+                  {sessions.map((sess, idx) => (
+                    <MenuItem key={idx} value={idx}>
+                      Day {sess.sessionLabel || idx + 1}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+          </Box>
+        )}
+      </Box>
+    );
+  }
 }
 
-/**
- * BookPlanView => group by book => chapters => subchap => activities
- * If only 1 book => skip that level
- */
-function BookPlanView({
-  activities,
-  currentIndex,
-  onSelectActivity,
-  expanded,
-  onToggleExpand,
-}) {
-  // Group by book
+/* 
+------------------- BookPlanView, etc. (unchanged) -------------------
+*/
+function BookPlanView({ activities, currentIndex, onSelectActivity, expanded, onToggleExpand }) {
   const bookMap = new Map();
   for (const a of activities) {
     const bId = a.bookId || "_noBook";
@@ -294,17 +323,10 @@ function BookPlanView({
   }
   const books = [...bookMap.values()];
 
-  // If only 1 book => skip the book level
   if (books.length === 1) {
     return (
       <List sx={{ p: 0 }} dense>
-        {renderChapters(
-          books[0].items,
-          currentIndex,
-          onSelectActivity,
-          expanded,
-          onToggleExpand
-        )}
+        {renderChapters(books[0].items, currentIndex, onSelectActivity, expanded, onToggleExpand)}
       </List>
     );
   }
@@ -330,15 +352,8 @@ function BookPlanView({
                 <ExpandMoreIcon sx={{ fontSize: "1rem", ml: 0.5 }} />
               )}
             </ListItemButton>
-
             <Collapse in={isBookOpen} timeout="auto" unmountOnExit>
-              {renderChapters(
-                bk.items,
-                currentIndex,
-                onSelectActivity,
-                expanded,
-                onToggleExpand
-              )}
+              {renderChapters(bk.items, currentIndex, onSelectActivity, expanded, onToggleExpand)}
             </Collapse>
           </Box>
         );
@@ -347,25 +362,12 @@ function BookPlanView({
   );
 }
 
-/**
- * Renders chapters => subCh => final activities
- */
-function renderChapters(
-  activities,
-  currentIndex,
-  onSelectActivity,
-  expanded,
-  onToggleExpand
-) {
+function renderChapters(activities, currentIndex, onSelectActivity, expanded, onToggleExpand) {
   const chMap = new Map();
   for (const act of activities) {
     const cId = act.chapterId || "_noChap";
     if (!chMap.has(cId)) {
-      chMap.set(cId, {
-        chapterId: cId,
-        chapterName: act.chapterName || cId,
-        items: [],
-      });
+      chMap.set(cId, { chapterId: cId, chapterName: act.chapterName || cId, items: [] });
     }
     chMap.get(cId).items.push(act);
   }
@@ -390,31 +392,15 @@ function renderChapters(
             <ExpandMoreIcon sx={{ fontSize: "1rem", ml: 0.5 }} />
           )}
         </ListItemButton>
-
         <Collapse in={isChOpen} timeout="auto" unmountOnExit>
-          {renderSubChapters(
-            ch.items,
-            currentIndex,
-            onSelectActivity,
-            expanded,
-            onToggleExpand
-          )}
+          {renderSubChapters(ch.items, currentIndex, onSelectActivity, expanded, onToggleExpand)}
         </Collapse>
       </Box>
     );
   });
 }
 
-/**
- * Renders subCh => final activities
- */
-function renderSubChapters(
-  activities,
-  currentIndex,
-  onSelectActivity,
-  expanded,
-  onToggleExpand
-) {
+function renderSubChapters(activities, currentIndex, onSelectActivity, expanded, onToggleExpand) {
   const sbMap = new Map();
   for (const act of activities) {
     const sbId = act.subChapterId || "_noSub";
@@ -448,15 +434,11 @@ function renderSubChapters(
             <ExpandMoreIcon sx={{ fontSize: "1rem", ml: 0.5 }} />
           )}
         </ListItemButton>
-
         <Collapse in={isSbOpen} timeout="auto" unmountOnExit>
           <List dense sx={{ p: 0 }}>
             {sb.items.map((act) => {
               const isSelected = act.flatIndex === currentIndex;
-              const { bgColor, textColor } = getActivityStyle(
-                act.type,
-                isSelected
-              );
+              const { bgColor, textColor } = getActivityStyle(act.type, isSelected);
               const timeNeeded = act.timeNeeded || 0;
 
               return (
@@ -470,7 +452,6 @@ function renderSubChapters(
                     color: textColor,
                   }}
                 >
-                  {/* final activities => time pill on the rightmost side */}
                   <Box
                     sx={{
                       display: "flex",
@@ -496,7 +477,7 @@ function renderSubChapters(
   });
 }
 
-/* ---------------------- Expansion Helpers ---------------------- */
+/* Expansion & collapse helpers */
 function buildChain(dayIndex, bookId, chapterId, subChId) {
   const obj = {};
   if (typeof dayIndex === "number") obj[`day-${dayIndex}`] = true;
@@ -535,6 +516,7 @@ function collapseNodeAndChildren(key, expandedObj, allActs) {
       }
     });
   }
+  // subch => no deeper
 }
 
 function findParentBookKey(chKey, allActs) {
@@ -552,11 +534,8 @@ function findParentBookChKey(subchKey, allActs) {
   return { parentBookKey, parentChapterKey };
 }
 
-/* ---------------------- STYLES ---------------------- */
+/* STYLES */
 const containerSx = {
-  width: 300,
-  minWidth: 250,
-  // Occupy the full parent's height so it won't shrink
   height: "100%",
   bgcolor: "#1A1A1A",
   color: "#fff",
@@ -564,6 +543,21 @@ const containerSx = {
   flexDirection: "column",
   p: 1,
   boxSizing: "border-box",
+  // parent's PlanFetcher sets width via: isCollapsed ? 60 : 300
+};
+
+const timePillSx = {
+  ml: 1,
+  bgcolor: "#424242",
+  color: "#fff",
+  fontSize: "0.7rem",
+  px: 0.6,
+  py: 0.2,
+  borderRadius: "0.2rem",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  flexShrink: 0,
 };
 
 const titleSx = {
@@ -591,20 +585,5 @@ const listItemButtonSx = {
   "&:hover": { bgcolor: "#444" },
   display: "flex",
   alignItems: "center",
-  // so text can truncate
   overflow: "hidden",
-};
-
-const timePillSx = {
-  ml: 1,
-  bgcolor: "#424242",
-  color: "#fff",
-  fontSize: "0.7rem",
-  px: 0.6,
-  py: 0.2,
-  borderRadius: "0.2rem",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  flexShrink: 0,
 };
