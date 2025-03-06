@@ -44,6 +44,9 @@ export default function ReadingView({ activity }) {
   const [readingSeconds, setReadingSeconds] = useState(0);
   const [finalReadingTime, setFinalReadingTime] = useState(null);
 
+  // ---- NEW: For debug hover overlay ----
+  const [showDebug, setShowDebug] = useState(false);
+
   // ==================== A) Fetch subchapter data ====================
   useEffect(() => {
     if (!subChapterId) return;
@@ -88,7 +91,7 @@ export default function ReadingView({ activity }) {
         const diff = now - localStartMs;
         setReadingSeconds(diff > 0 ? Math.floor(diff / 1000) : 0);
       };
-      tick(); 
+      tick();
       const timerId = setInterval(tick, 1000);
       return () => clearInterval(timerId);
     } else {
@@ -213,6 +216,31 @@ export default function ReadingView({ activity }) {
           </button>
         )}
       </div>
+
+      {/* -- NEW: Eye/Debug Container at top-right, on hover reveals debug info -- */}
+      <div
+        style={styles.debugEyeContainer}
+        onMouseEnter={() => setShowDebug(true)}
+        onMouseLeave={() => setShowDebug(false)}
+      >
+        {/* The small "i" button */}
+        <div style={styles.debugEyeIcon}>i</div>
+
+        {/* When hovered, show debug overlay */}
+        {showDebug && (
+          <div style={styles.debugOverlay}>
+            <h4 style={{ marginTop: 0 }}>Debug Info</h4>
+            <div style={styles.debugBlock}>
+              <strong>Activity:</strong>
+              <pre style={styles.debugPre}>{JSON.stringify(activity, null, 2)}</pre>
+            </div>
+            <div style={styles.debugBlock}>
+              <strong>SubChapter:</strong>
+              <pre style={styles.debugPre}>{JSON.stringify(subChapter, null, 2)}</pre>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 
@@ -261,7 +289,7 @@ const styles = {
     boxSizing: "border-box",
     padding: "20px",
     fontFamily: `'Inter', 'Roboto', 'Helvetica Neue', sans-serif`,
-
+    position: "relative", // so the debug "i" can be positioned absolutely
   },
   readingContentArea: {
     flex: 1,
@@ -291,5 +319,50 @@ const styles = {
   readingDoneMsg: {
     fontSize: "0.9rem",
     fontStyle: "italic",
+  },
+
+  // --- NEW Debug styles ---
+  debugEyeContainer: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+  },
+  debugEyeIcon: {
+    width: "24px",
+    height: "24px",
+    backgroundColor: "#333",
+    borderRadius: "50%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#fff",
+    fontSize: "0.8rem",
+    cursor: "pointer",
+    border: "1px solid #555",
+    textTransform: "uppercase",
+  },
+  debugOverlay: {
+    position: "absolute",
+    top: "30px", // so it appears below the "i" icon
+    right: 0,
+    width: "300px",
+    backgroundColor: "#222",
+    border: "1px solid #444",
+    borderRadius: "4px",
+    padding: "8px",
+    zIndex: 9999,
+    fontSize: "0.8rem",
+  },
+  debugBlock: {
+    marginBottom: "8px",
+  },
+  debugPre: {
+    backgroundColor: "#333",
+    padding: "6px",
+    borderRadius: "4px",
+    maxHeight: "120px",
+    overflowY: "auto",
+    whiteSpace: "pre-wrap",
+    marginTop: "4px",
   },
 };
