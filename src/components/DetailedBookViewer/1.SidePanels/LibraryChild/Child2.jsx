@@ -1,4 +1,6 @@
+//
 // src/components/DetailedBookViewer/Child2.jsx
+//
 
 import React, { useEffect, useState } from "react";
 import axios from "axios";
@@ -28,6 +30,7 @@ export default function Child2({
       fontWeight: "bold",
       fontSize: "0.9rem",
       minWidth: "75px",
+      margin: "2px 0", // small vertical spacing
     };
   }
 
@@ -131,7 +134,7 @@ export default function Child2({
     setActiveSessionIndex(0);
   }, [plan]);
 
-  // Expand/Collapse (only used for local plan display, not the Redux PlanFetcher)
+  // Expand/Collapse (only used for local plan display)
   const [expandedChapters, setExpandedChapters] = useState([]);
   useEffect(() => {
     setExpandedChapters([]);
@@ -150,7 +153,6 @@ export default function Child2({
   const [dialogPlanId, setDialogPlanId] = useState("");
   const [dialogInitialActivity, setDialogInitialActivity] = useState(null);
 
-  // Triggered on "Read"/"Quiz"/"Revise" click
   function handleOpenPlanFetcher(planId, activity) {
     console.log("[Child2] handleOpenPlanFetcher => planId:", planId, "activity:", activity);
 
@@ -162,12 +164,14 @@ export default function Child2({
       setDialogInitialActivity({
         subChapterId: activity.subChapterId,
         type: activity.type,
+        stage: activity.quizStage || activity.reviseStage || null
       });
     }
 
     setShowPlanDialog(true);
   }
 
+  // UI styling
   const containerStyle = {
     backgroundColor: colorScheme.panelBg || "#0D0D0D",
     color: colorScheme.textColor || "#FFD700",
@@ -195,7 +199,6 @@ export default function Child2({
     <div style={containerStyle}>
       <h2 style={headingStyle}>Adaptive Plan</h2>
 
-      {/* If there's more than 1 plan ID => show a dropdown */}
       {localPlanIds.length > 1 && (
         <div style={{ marginBottom: "1rem" }}>
           <label>Select Plan:</label>
@@ -221,25 +224,20 @@ export default function Child2({
         renderLocalPlan(plan)
       )}
 
-      {/* We use a MUI Dialog, but without any "Plan Viewer" heading or local close. 
-          The close is up to the PARENT or the parent's close callback. */}
       <Dialog
         open={showPlanDialog}
         onClose={() => setShowPlanDialog(false)}
         fullWidth
         maxWidth="lg"
-        // Darker backdrop
         BackdropProps={{
-          style: {
-            backgroundColor: "rgba(0, 0, 0, 0.8)",
-          },
+          style: { backgroundColor: "rgba(0, 0, 0, 0.8)" },
         }}
         PaperProps={{
           sx: {
             height: "80vh",
             display: "flex",
             flexDirection: "column",
-            backgroundColor: "#000", // black interior
+            backgroundColor: "#000",
             color: "#fff",
             boxShadow: "none",
             borderRadius: 2,
@@ -247,8 +245,6 @@ export default function Child2({
           },
         }}
       >
-        {/* We REMOVED the entire <DialogTitle> "Plan Viewer" block 
-            so there's no local heading or local close button. */}
         <DialogContent
           sx={{
             flex: 1,
@@ -270,9 +266,7 @@ export default function Child2({
     </div>
   );
 
-  // ------------------------------------------
   // renderLocalPlan => local plan in Child2
-  // ------------------------------------------
   function renderLocalPlan(planObj) {
     const { sessions = [] } = planObj;
     if (sessions.length === 0) {
@@ -281,9 +275,7 @@ export default function Child2({
 
     return (
       <>
-        {/* TABS container */}
         <div style={{ display: "flex", marginBottom: "1rem" }}>
-          {/* Tab 0 => History */}
           <div
             style={tabStyle(activeSessionIndex === 0)}
             onClick={() => setActiveSessionIndex(0)}
@@ -293,8 +285,8 @@ export default function Child2({
 
           {sessions.map((sess, index) => {
             const tabIndex = index + 1;
-            let sessionDisplayName;
             const sLabel = Number(sess.sessionLabel);
+            let sessionDisplayName;
             if (sLabel === 1) sessionDisplayName = "Today";
             else if (sLabel === 2) sessionDisplayName = "Tomorrow";
             else sessionDisplayName = `Day ${sLabel}`;
@@ -324,7 +316,6 @@ export default function Child2({
     );
   }
 
-  // Style for each tab
   function tabStyle(isActive) {
     return {
       padding: "0.5rem 1rem",
@@ -427,6 +418,17 @@ export default function Child2({
     );
   }
 
+  /**
+   * Renders a row for each sub-chapter with 5 "stages":
+   *  1) Reading
+   *  2) Remember
+   *  3) Understand
+   *  4) Apply
+   *  5) Analyze
+   *  - For each of the last 4 stages, we have 2 potential tasks => QUIZ or REVISE
+   *  - For Reading stage, 1 potential task => "READ"
+   *  If the plan doc doesn't have them, the button is disabled.
+   */
   function renderSubChapterCards(chapterActivities) {
     const subMap = new Map();
     for (const act of chapterActivities) {
@@ -439,10 +441,26 @@ export default function Child2({
     return (
       <div style={{ marginTop: "0.5rem", marginLeft: "1.5rem" }}>
         {[...subMap.entries()].map(([subId, subActs]) => {
-          const readAct = subActs.find((a) => a.type === "READ");
-          const quizAct = subActs.find((a) => a.type === "QUIZ");
-          const reviseAct = subActs.find((a) => a.type === "REVISE");
           const subName = subActs[0]?.subChapterName || `Sub-Chapter (${subId})`;
+
+          // We'll collect any real tasks that exist
+          const readActivity = subActs.find((a) => a.type === "READ");
+          
+          // For Remember
+          const quizRemember = subActs.find((a) => a.type === "QUIZ" && a.quizStage === "remember");
+          const reviseRemember = subActs.find((a) => a.type === "REVISE" && a.reviseStage === "remember");
+
+          // For Understand
+          const quizUnderstand = subActs.find((a) => a.type === "QUIZ" && a.quizStage === "understand");
+          const reviseUnderstand = subActs.find((a) => a.type === "REVISE" && a.reviseStage === "understand");
+
+          // For Apply
+          const quizApply = subActs.find((a) => a.type === "QUIZ" && a.quizStage === "apply");
+          const reviseApply = subActs.find((a) => a.type === "REVISE" && a.reviseStage === "apply");
+
+          // For Analyze
+          const quizAnalyze = subActs.find((a) => a.type === "QUIZ" && a.quizStage === "analyze");
+          const reviseAnalyze = subActs.find((a) => a.type === "REVISE" && a.reviseStage === "analyze");
 
           return (
             <div
@@ -464,51 +482,155 @@ export default function Child2({
               >
                 {subName}
               </div>
-              <div style={{ display: "flex", gap: "1rem" }}>
-                {/* READ */}
-                <button
-                  style={activityButtonStyle(!!readAct)}
-                  disabled={!readAct}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (readAct) {
-                      console.log("[Child2] 'READ' clicked =>", readAct);
-                      handleOpenPlanFetcher(selectedPlanId, readAct);
-                    }
-                  }}
-                >
-                  {readAct ? `Read (${readAct.timeNeeded || 0}m)` : "Read"}
-                </button>
 
-                {/* QUIZ */}
-                <button
-                  style={activityButtonStyle(!!quizAct)}
-                  disabled={!quizAct}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (quizAct) {
-                      console.log("[Child2] 'QUIZ' clicked =>", quizAct);
-                      handleOpenPlanFetcher(selectedPlanId, quizAct);
-                    }
-                  }}
-                >
-                  {quizAct ? `Quiz (${quizAct.timeNeeded || 0}m)` : "Quiz"}
-                </button>
+              {/* The 5-stage row */}
+              <div style={{
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: "1rem",
+                flexWrap: "wrap"
+              }}>
+                {/* 1) Reading Stage */}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                  <div>Reading</div>
+                  <button
+                    style={activityButtonStyle(!!readActivity)}
+                    disabled={!readActivity}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (readActivity) {
+                        handleOpenPlanFetcher(selectedPlanId, readActivity);
+                      }
+                    }}
+                  >
+                    Read
+                  </button>
+                </div>
 
-                {/* REVISE */}
-                <button
-                  style={activityButtonStyle(!!reviseAct)}
-                  disabled={!reviseAct}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (reviseAct) {
-                      console.log("[Child2] 'REVISE' clicked =>", reviseAct);
-                      handleOpenPlanFetcher(selectedPlanId, reviseAct);
-                    }
-                  }}
-                >
-                  {reviseAct ? `Revise (${reviseAct.timeNeeded || 0}m)` : "Revise"}
-                </button>
+                {/* 2) Remember Stage */}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                  <div>Remember</div>
+                  {/* Quiz(remember) */}
+                  <button
+                    style={activityButtonStyle(!!quizRemember)}
+                    disabled={!quizRemember}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (quizRemember) {
+                        handleOpenPlanFetcher(selectedPlanId, quizRemember);
+                      }
+                    }}
+                  >
+                    Quiz
+                  </button>
+                  {/* Revise(remember) */}
+                  <button
+                    style={activityButtonStyle(!!reviseRemember)}
+                    disabled={!reviseRemember}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (reviseRemember) {
+                        handleOpenPlanFetcher(selectedPlanId, reviseRemember);
+                      }
+                    }}
+                  >
+                    Revise
+                  </button>
+                </div>
+
+                {/* 3) Understand Stage */}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                  <div>Understand</div>
+                  {/* Quiz(understand) */}
+                  <button
+                    style={activityButtonStyle(!!quizUnderstand)}
+                    disabled={!quizUnderstand}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (quizUnderstand) {
+                        handleOpenPlanFetcher(selectedPlanId, quizUnderstand);
+                      }
+                    }}
+                  >
+                    Quiz
+                  </button>
+                  {/* Revise(understand) */}
+                  <button
+                    style={activityButtonStyle(!!reviseUnderstand)}
+                    disabled={!reviseUnderstand}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (reviseUnderstand) {
+                        handleOpenPlanFetcher(selectedPlanId, reviseUnderstand);
+                      }
+                    }}
+                  >
+                    Revise
+                  </button>
+                </div>
+
+                {/* 4) Apply Stage */}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                  <div>Apply</div>
+                  {/* Quiz(apply) */}
+                  <button
+                    style={activityButtonStyle(!!quizApply)}
+                    disabled={!quizApply}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (quizApply) {
+                        handleOpenPlanFetcher(selectedPlanId, quizApply);
+                      }
+                    }}
+                  >
+                    Quiz
+                  </button>
+                  {/* Revise(apply) */}
+                  <button
+                    style={activityButtonStyle(!!reviseApply)}
+                    disabled={!reviseApply}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (reviseApply) {
+                        handleOpenPlanFetcher(selectedPlanId, reviseApply);
+                      }
+                    }}
+                  >
+                    Revise
+                  </button>
+                </div>
+
+                {/* 5) Analyze Stage */}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                  <div>Analyze</div>
+                  {/* Quiz(analyze) */}
+                  <button
+                    style={activityButtonStyle(!!quizAnalyze)}
+                    disabled={!quizAnalyze}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (quizAnalyze) {
+                        handleOpenPlanFetcher(selectedPlanId, quizAnalyze);
+                      }
+                    }}
+                  >
+                    Quiz
+                  </button>
+                  {/* Revise(analyze) */}
+                  <button
+                    style={activityButtonStyle(!!reviseAnalyze)}
+                    disabled={!reviseAnalyze}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (reviseAnalyze) {
+                        handleOpenPlanFetcher(selectedPlanId, reviseAnalyze);
+                      }
+                    }}
+                  >
+                    Revise
+                  </button>
+                </div>
               </div>
             </div>
           );
