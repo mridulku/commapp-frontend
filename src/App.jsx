@@ -12,6 +12,7 @@ import { loadUsetifulScript, setUsetifulTags } from "usetiful-sdk";
 import LandingPage from "./components/PreLogin/LandingPage";
 
 import OnboardingCarousel from "./components/OnboardingCarousel";
+import PromptManager from "./components/PromptManager";
 
 
 import BooksOverview from "./components/Archive/Archive 4/BooksOverview";
@@ -383,6 +384,16 @@ function App() {
           element={
             <PrivateRoute>
               <OnboardingCarousel />
+            </PrivateRoute>
+          }
+        />
+
+
+        <Route
+          path="/promptmanager"
+          element={
+            <PrivateRoute>
+              <PromptManager />
             </PrivateRoute>
           }
         />
