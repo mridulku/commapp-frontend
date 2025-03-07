@@ -12,6 +12,9 @@ import {
 import HistoryTab from "./HistoryTab";
 import PlanFetcher from "../../PlanFetcher"; // Adjust path if needed
 
+// We define an ordered array of the 5 possible "stages" (including "Reading")
+const STAGE_ORDER = ["Reading", "Remember", "Understand", "Apply", "Analyze"];
+
 export default function Child2({
   userId = null,
   bookId = "",
@@ -19,18 +22,35 @@ export default function Child2({
   onOverviewSelect = () => {},
   colorScheme = {},
 }) {
-  function activityButtonStyle(isEnabled) {
+  // ------------------------------------------
+  // Basic styles
+  // ------------------------------------------
+  const containerStyle = {
+    backgroundColor: colorScheme.panelBg || "#0D0D0D",
+    color: colorScheme.textColor || "#FFD700",
+    padding: "1rem",
+    minHeight: "100vh",
+  };
+
+  const headingStyle = {
+    fontWeight: "bold",
+    marginBottom: "15px",
+    fontSize: "1.25rem",
+    color: colorScheme.heading || "#FFD700",
+  };
+
+  function activityButtonStyle() {
     return {
-      backgroundColor: isEnabled ? (colorScheme.heading || "#FFD700") : "#777777",
-      color: isEnabled ? "#000" : "#ccc",
+      backgroundColor: colorScheme.heading || "#FFD700",
+      color: "#000",
       border: "none",
       borderRadius: "4px",
-      padding: "6px 10px",
-      cursor: isEnabled ? "pointer" : "not-allowed",
+      padding: "4px 8px",
+      cursor: "pointer",
       fontWeight: "bold",
-      fontSize: "0.9rem",
-      minWidth: "75px",
-      margin: "2px 0", // small vertical spacing
+      fontSize: "0.85rem",
+      minWidth: "60px",
+      marginLeft: "6px",
     };
   }
 
@@ -52,27 +72,20 @@ export default function Child2({
   useEffect(() => {
     async function fetchPlansForBook() {
       if (!userId || !bookId) {
-        console.log("[Child2] Missing userId or bookId => clearing plan data");
         setLocalPlanIds([]);
         setSelectedPlanId("");
         setPlan(null);
         return;
       }
-
-      console.log(`[Child2] fetching plan IDs for userId="${userId}" bookId="${bookId}"...`);
-
       try {
         const url = `${import.meta.env.VITE_BACKEND_URL}/api/adaptive-plan-id`;
         const res = await axios.get(url, { params: { userId, bookId } });
         if (res.data && res.data.planIds) {
-          console.log("[Child2] planIds returned =>", res.data.planIds);
           setLocalPlanIds(res.data.planIds);
         } else {
-          console.warn("[Child2] No planIds returned =>", res.data);
           setLocalPlanIds([]);
         }
       } catch (error) {
-        console.error("[Child2] Error fetching plan IDs =>", error);
         setLocalPlanIds([]);
       }
     }
@@ -83,10 +96,8 @@ export default function Child2({
   // Whenever localPlanIds changes => pick the first or reset
   useEffect(() => {
     if (localPlanIds.length > 0) {
-      console.log("[Child2] localPlanIds changed => picking first =>", localPlanIds[0]);
       setSelectedPlanId(localPlanIds[0]);
     } else {
-      console.log("[Child2] localPlanIds empty => clearing planId");
       setSelectedPlanId("");
       setPlan(null);
     }
@@ -102,21 +113,17 @@ export default function Child2({
     }
 
     async function fetchPlanDoc() {
-      console.log("[Child2] fetching planDoc => planId:", selectedPlanId);
       try {
         const res = await axios.get(
           `${import.meta.env.VITE_BACKEND_URL}/api/adaptive-plan`,
           { params: { planId: selectedPlanId } }
         );
         if (res.data && res.data.planDoc) {
-          console.log("[Child2] planDoc fetched =>", res.data.planDoc);
           setPlan(res.data.planDoc);
         } else {
-          console.error("[Child2] No planDoc in response =>", res.data);
           setPlan(null);
         }
       } catch (err) {
-        console.error("[Child2] Error fetching planDoc =>", err);
         setPlan(null);
       }
     }
@@ -129,20 +136,21 @@ export default function Child2({
   // ------------------------------------------
   const [activeSessionIndex, setActiveSessionIndex] = useState(0);
 
-  // Reset the active tab if plan changes
   useEffect(() => {
     setActiveSessionIndex(0);
   }, [plan]);
 
-  // Expand/Collapse (only used for local plan display)
+  // Expand/Collapse for chapters
   const [expandedChapters, setExpandedChapters] = useState([]);
   useEffect(() => {
     setExpandedChapters([]);
   }, [plan]);
 
-  function toggleChapter(key) {
+  function toggleChapter(chapterKey) {
     setExpandedChapters((prev) =>
-      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+      prev.includes(chapterKey)
+        ? prev.filter((k) => k !== chapterKey)
+        : [...prev, chapterKey]
     );
   }
 
@@ -154,43 +162,25 @@ export default function Child2({
   const [dialogInitialActivity, setDialogInitialActivity] = useState(null);
 
   function handleOpenPlanFetcher(planId, activity) {
-    console.log("[Child2] handleOpenPlanFetcher => planId:", planId, "activity:", activity);
-
     setDialogPlanId(planId);
     if (!activity) {
-      console.warn("[Child2] handleOpenPlanFetcher => no activity provided");
       setDialogInitialActivity(null);
     } else {
       setDialogInitialActivity({
         subChapterId: activity.subChapterId,
-        type: activity.type,
-        stage: activity.quizStage || activity.reviseStage || null
+        type: activity.type, // "READ" | "QUIZ"
+        stage: activity.quizStage || null,
       });
     }
-
     setShowPlanDialog(true);
   }
 
-  // UI styling
-  const containerStyle = {
-    backgroundColor: colorScheme.panelBg || "#0D0D0D",
-    color: colorScheme.textColor || "#FFD700",
-    padding: "1rem",
-    minHeight: "100vh",
-  };
-
-  const headingStyle = {
-    fontWeight: "bold",
-    marginBottom: "15px",
-    fontSize: "1.25rem",
-    color: colorScheme.heading || "#FFD700",
-  };
-
+  // Render
   if (localPlanIds.length === 0 && !plan) {
     return (
       <div style={containerStyle}>
         <h2 style={headingStyle}>Adaptive Plan</h2>
-        <div>No plan IDs found for userId="{userId}" and bookId="{bookId}".</div>
+        <div>No plan IDs found for user/book.</div>
       </div>
     );
   }
@@ -266,7 +256,9 @@ export default function Child2({
     </div>
   );
 
-  // renderLocalPlan => local plan in Child2
+  // -----------------------------------------------
+  // RENDER LOCAL PLAN
+  // -----------------------------------------------
   function renderLocalPlan(planObj) {
     const { sessions = [] } = planObj;
     if (sessions.length === 0) {
@@ -331,47 +323,12 @@ export default function Child2({
     };
   }
 
+  // Render a single session => we skip “book name” since only 1 book
   function renderSessionContent(session) {
     if (!session) return null;
     const { activities = [] } = session;
 
-    // Group by book
-    const bookMap = new Map();
-    for (const act of activities) {
-      if (!bookMap.has(act.bookId)) {
-        bookMap.set(act.bookId, []);
-      }
-      bookMap.get(act.bookId).push(act);
-    }
-    const uniqueBooks = [...bookMap.keys()];
-
-    if (uniqueBooks.length === 1) {
-      const singleBookId = uniqueBooks[0];
-      const singleBookActivities = bookMap.get(singleBookId) || [];
-      return renderChaptersLayer(singleBookActivities, singleBookId, true);
-    }
-
-    return (
-      <div style={{ marginTop: "1rem" }}>
-        {uniqueBooks.map((bId) => {
-          const acts = bookMap.get(bId) || [];
-          const bookName = acts[0]?.bookName || `Book (${bId})`;
-          const totalBookTime = acts.reduce((acc, a) => acc + (a.timeNeeded || 0), 0);
-
-          return (
-            <div key={bId} style={{ marginBottom: "1rem" }}>
-              <h3 style={{ fontWeight: "bold", margin: "0.75rem 0 0.25rem" }}>
-                {bookName} ({totalBookTime} min)
-              </h3>
-              {renderChaptersLayer(acts, bId, false)}
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
-
-  function renderChaptersLayer(activities, bookId, skipBookLayer) {
+    // group by chapter
     const chapterMap = new Map();
     for (const act of activities) {
       if (!chapterMap.has(act.chapterId)) {
@@ -380,37 +337,55 @@ export default function Child2({
       chapterMap.get(act.chapterId).push(act);
     }
 
-    return (
-      <div style={{ marginLeft: skipBookLayer ? 0 : "1rem" }}>
-        {[...chapterMap.entries()].map(([chapterId, cActs]) => {
-          const chapterKey = `book${bookId}-chap${chapterId}`;
-          const isChapterOpen = expandedChapters.includes(chapterKey);
+    const chapterIds = [...chapterMap.keys()];
 
-          const chapterName = cActs[0]?.chapterName || `Chapter (${chapterId})`;
-          const totalChapterTime = cActs.reduce(
-            (acc, a) => acc + (a.timeNeeded || 0),
-            0
-          );
-          const chapterLabel = `${chapterName} (${totalChapterTime} min)`;
+    return (
+      <div style={{ marginTop: "1rem" }}>
+        {chapterIds.map((chapterId) => {
+          const cActs = chapterMap.get(chapterId) || [];
+          const chapterName = cActs[0]?.chapterName || `Chapter(${chapterId})`;
+
+          const sumTime = cActs.reduce((acc, x) => acc + (x.timeNeeded || 0), 0);
+          const chapterKey = `chap-${chapterId}`;
+          const isExpanded = expandedChapters.includes(chapterKey);
 
           return (
             <div key={chapterId} style={{ marginBottom: "1rem" }}>
+              {/* Chapter header row => name + colored time box on right */}
               <div
                 style={{
                   cursor: "pointer",
                   padding: "8px 12px",
-                  margin: "6px 0",
                   backgroundColor: "#2F2F2F",
                   borderRadius: "4px",
                   border: `1px solid ${colorScheme.borderColor || "#FFD700"}`,
                   fontWeight: "bold",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
                 }}
                 onClick={() => toggleChapter(chapterKey)}
               >
-                {isChapterOpen ? "▾" : "▸"}{" "}
-                <span style={{ marginLeft: 5 }}>{chapterLabel}</span>
+                <div>{isExpanded ? "▾ " : "▸ "}{chapterName}</div>
+                <div
+                  style={{
+                    backgroundColor: colorScheme.heading || "#FFD700",
+                    color: "#000",
+                    borderRadius: "4px",
+                    padding: "2px 6px",
+                    fontSize: "0.8rem",
+                    fontWeight: "bold",
+                  }}
+                >
+                  {sumTime} min
+                </div>
               </div>
-              {isChapterOpen && renderSubChapterCards(cActs)}
+
+              {isExpanded && (
+                <div style={{ marginLeft: "1.5rem", marginTop: "4px" }}>
+                  {renderChapterActivities(cActs)}
+                </div>
+              )}
             </div>
           );
         })}
@@ -418,224 +393,110 @@ export default function Child2({
     );
   }
 
-  /**
-   * Renders a row for each sub-chapter with 5 "stages":
-   *  1) Reading
-   *  2) Remember
-   *  3) Understand
-   *  4) Apply
-   *  5) Analyze
-   *  - For each of the last 4 stages, we have 2 potential tasks => QUIZ or REVISE
-   *  - For Reading stage, 1 potential task => "READ"
-   *  If the plan doc doesn't have them, the button is disabled.
-   */
-  function renderSubChapterCards(chapterActivities) {
+  // For each chapter => show each activity. We'll group them by subchapter as well, or
+  // simply list them in order. We'll do sub-ch grouping if you like. Let's do it quickly.
+  function renderChapterActivities(chapterActivities) {
+    // group by sub-chapter
     const subMap = new Map();
-    for (const act of chapterActivities) {
-      if (!subMap.has(act.subChapterId)) {
-        subMap.set(act.subChapterId, []);
+    for (const a of chapterActivities) {
+      if (!subMap.has(a.subChapterId)) {
+        subMap.set(a.subChapterId, []);
       }
-      subMap.get(act.subChapterId).push(act);
+      subMap.get(a.subChapterId).push(a);
     }
 
-    return (
-      <div style={{ marginTop: "0.5rem", marginLeft: "1.5rem" }}>
-        {[...subMap.entries()].map(([subId, subActs]) => {
-          const subName = subActs[0]?.subChapterName || `Sub-Chapter (${subId})`;
+    const subIds = [...subMap.keys()];
 
-          // We'll collect any real tasks that exist
-          const readActivity = subActs.find((a) => a.type === "READ");
-          
-          // For Remember
-          const quizRemember = subActs.find((a) => a.type === "QUIZ" && a.quizStage === "remember");
-          const reviseRemember = subActs.find((a) => a.type === "REVISE" && a.reviseStage === "remember");
+    return subIds.map(subId => {
+      const sActs = subMap.get(subId) || [];
+      const subName = sActs[0]?.subChapterName || `SubCh (${subId})`;
 
-          // For Understand
-          const quizUnderstand = subActs.find((a) => a.type === "QUIZ" && a.quizStage === "understand");
-          const reviseUnderstand = subActs.find((a) => a.type === "REVISE" && a.reviseStage === "understand");
-
-          // For Apply
-          const quizApply = subActs.find((a) => a.type === "QUIZ" && a.quizStage === "apply");
-          const reviseApply = subActs.find((a) => a.type === "REVISE" && a.reviseStage === "apply");
-
-          // For Analyze
-          const quizAnalyze = subActs.find((a) => a.type === "QUIZ" && a.quizStage === "analyze");
-          const reviseAnalyze = subActs.find((a) => a.type === "REVISE" && a.reviseStage === "analyze");
-
-          return (
+      return (
+        <div key={subId} style={{ marginBottom: "8px" }}>
+          <div style={{ fontWeight: "bold", margin: "6px 0, 4px 0" }}>
+            {subName}
+          </div>
+          {/* list each activity as one line => subchapter name on left? we already did subName above,
+              so let's do each line with the "timeline" on right */}
+          {sActs.map((act, index) => (
             <div
-              key={subId}
+              key={`${act.type}-${act.quizStage || ""}-${index}`}
               style={{
-                backgroundColor: "#3D3D3D",
-                border: `1px solid ${colorScheme.borderColor || "#FFD700"}`,
-                borderRadius: "6px",
-                padding: "1rem",
-                margin: "0.5rem 0",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                backgroundColor: "#2F2F2F",
+                borderRadius: "4px",
+                margin: "4px 0",
+                padding: "6px 8px",
               }}
             >
-              <div
-                style={{
-                  fontSize: "0.95rem",
-                  fontWeight: "bold",
-                  marginBottom: "0.5rem",
-                }}
-              >
-                {subName}
+              {/* Left: we can show "timeNeeded" or hide */}
+              <div style={{ fontSize: "0.85rem", marginRight: "6px" }}>
+                {act.timeNeeded || 0} min
               </div>
 
-              {/* The 5-stage row */}
-              <div style={{
-                display: "flex",
-                alignItems: "flex-start",
-                justifyContent: "space-between",
-                gap: "1rem",
-                flexWrap: "wrap"
-              }}>
-                {/* 1) Reading Stage */}
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                  <div>Reading</div>
-                  <button
-                    style={activityButtonStyle(!!readActivity)}
-                    disabled={!readActivity}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (readActivity) {
-                        handleOpenPlanFetcher(selectedPlanId, readActivity);
-                      }
-                    }}
-                  >
-                    Read
-                  </button>
-                </div>
-
-                {/* 2) Remember Stage */}
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                  <div>Remember</div>
-                  {/* Quiz(remember) */}
-                  <button
-                    style={activityButtonStyle(!!quizRemember)}
-                    disabled={!quizRemember}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (quizRemember) {
-                        handleOpenPlanFetcher(selectedPlanId, quizRemember);
-                      }
-                    }}
-                  >
-                    Quiz
-                  </button>
-                  {/* Revise(remember) */}
-                  <button
-                    style={activityButtonStyle(!!reviseRemember)}
-                    disabled={!reviseRemember}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (reviseRemember) {
-                        handleOpenPlanFetcher(selectedPlanId, reviseRemember);
-                      }
-                    }}
-                  >
-                    Revise
-                  </button>
-                </div>
-
-                {/* 3) Understand Stage */}
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                  <div>Understand</div>
-                  {/* Quiz(understand) */}
-                  <button
-                    style={activityButtonStyle(!!quizUnderstand)}
-                    disabled={!quizUnderstand}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (quizUnderstand) {
-                        handleOpenPlanFetcher(selectedPlanId, quizUnderstand);
-                      }
-                    }}
-                  >
-                    Quiz
-                  </button>
-                  {/* Revise(understand) */}
-                  <button
-                    style={activityButtonStyle(!!reviseUnderstand)}
-                    disabled={!reviseUnderstand}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (reviseUnderstand) {
-                        handleOpenPlanFetcher(selectedPlanId, reviseUnderstand);
-                      }
-                    }}
-                  >
-                    Revise
-                  </button>
-                </div>
-
-                {/* 4) Apply Stage */}
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                  <div>Apply</div>
-                  {/* Quiz(apply) */}
-                  <button
-                    style={activityButtonStyle(!!quizApply)}
-                    disabled={!quizApply}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (quizApply) {
-                        handleOpenPlanFetcher(selectedPlanId, quizApply);
-                      }
-                    }}
-                  >
-                    Quiz
-                  </button>
-                  {/* Revise(apply) */}
-                  <button
-                    style={activityButtonStyle(!!reviseApply)}
-                    disabled={!reviseApply}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (reviseApply) {
-                        handleOpenPlanFetcher(selectedPlanId, reviseApply);
-                      }
-                    }}
-                  >
-                    Revise
-                  </button>
-                </div>
-
-                {/* 5) Analyze Stage */}
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                  <div>Analyze</div>
-                  {/* Quiz(analyze) */}
-                  <button
-                    style={activityButtonStyle(!!quizAnalyze)}
-                    disabled={!quizAnalyze}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (quizAnalyze) {
-                        handleOpenPlanFetcher(selectedPlanId, quizAnalyze);
-                      }
-                    }}
-                  >
-                    Quiz
-                  </button>
-                  {/* Revise(analyze) */}
-                  <button
-                    style={activityButtonStyle(!!reviseAnalyze)}
-                    disabled={!reviseAnalyze}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (reviseAnalyze) {
-                        handleOpenPlanFetcher(selectedPlanId, reviseAnalyze);
-                      }
-                    }}
-                  >
-                    Revise
-                  </button>
-                </div>
+              {/* The timeline bar => reading, remember, etc. */}
+              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                {renderTimelineStages(act)}
               </div>
             </div>
-          );
-        })}
-      </div>
-    );
+          ))}
+        </div>
+      );
+    });
+  }
+
+  // Renders the 5-stage timeline. The "active" stage is the one that is a button (READ or QUIZ).
+  function renderTimelineStages(activity) {
+    // figure out which stage is "active" from the activity
+    // If type=READ => active="Reading"
+    // If type=QUIZ => active = capitalized quizStage e.g. "Remember","Understand" etc.
+    let activeStage = "";
+    if (activity.type === "READ") {
+      activeStage = "Reading";
+    } else if (activity.type === "QUIZ") {
+      if (activity.quizStage) {
+        // e.g. "remember" => "Remember"
+        activeStage =
+          activity.quizStage.charAt(0).toUpperCase() +
+          activity.quizStage.slice(1);
+      } else {
+        activeStage = "Quiz";
+      }
+    }
+
+    return STAGE_ORDER.map((stageName, idx) => {
+      // if this stageName == activeStage => make it a button
+      const isActive = (stageName.toLowerCase() === activeStage.toLowerCase());
+      // We'll separate each stage with ">" or something
+      const stageElem = isActive ? (
+        <button
+          key={idx}
+          style={activityButtonStyle()}
+          onClick={(e) => {
+            e.stopPropagation();
+            // open the plan fetcher
+            handleOpenPlanFetcher(selectedPlanId, activity);
+          }}
+        >
+          {stageName}
+        </button>
+      ) : (
+        <div key={idx} style={{ fontSize: "0.85rem", opacity: 0.6 }}>
+          {stageName}
+        </div>
+      );
+
+      if (idx < STAGE_ORDER.length - 1) {
+        return (
+          <React.Fragment key={`${stageName}-${idx}`}>
+            {stageElem}
+            <div style={{ color: "#999", fontSize: "0.7rem" }}>➔</div>
+          </React.Fragment>
+        );
+      }
+      return stageElem;
+    });
   }
 }
