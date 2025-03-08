@@ -9,58 +9,57 @@ import "slick-carousel/slick/slick-theme.css";
 import { loadUsetifulScript, setUsetifulTags } from "usetiful-sdk";
 
 // NEW: Landing Page (public)
-import LandingPage from "./components/PreLogin/LandingPage";
+import LandingPage from "./components/Main/0.PreLogin/0.LandingPage";
 
-import OnboardingCarousel from "./components/OnboardingCarousel";
-import PromptManager from "./components/PromptManager";
-import PromptInput from "./components/PromptInput";
-
-
-import BooksOverview from "./components/Archive/Archive 4/BooksOverview";
-import ReadingPlan from "./components/Archive/Archive 4/ReadingPlan";
-
-import AdaptiveStatsDashboard from "./components/Archive/Archive 11/AdaptiveStatsDashboard";
-import GptQuestionGenerator from "./components/Archive/Archive 10/GptQuestionGenerator";
-import BooksViewer3 from "./components/Archive/Archive 9/BooksViewer3";
-
-import AuthLogin from "./components/Archive/AuthLogin";
-import AuthSignGoogle from "./components/Archive/AuthSignGoogle";
-import AuthSignIn from "./components/PreLogin/AuthSignIn";
+import PromptManager from "./components/zTesting/PromptManager";
+import PromptInput from "./components/zTesting/PromptInput";
 
 
-import PrivateRoute from "./components/PreLogin/PrivateRoute";
-import Login from "./components/Archive/Archive 5/Login";
-import ChatInterface from "./components/Archive/Archive 5/ChatInterface";
-import Onboarding from "./components/Archive/Archive 1/Onboarding";
-import PdfUploader from "./components/Archive/Archive 2/PdfUploader";
-import SubChaptersUploader from "./components/Archive/Archive 2/SubChaptersUploader";
-import ChaptersUploader from "./components/Archive/Archive 2/ChaptersUploader";
-import BookTextViewer from "./components/Archive/Archive 2/BookTextViewer";
-import AdminDashboard from "./components/Archive/Archive 2/AdminDashboard";
-import SubchapterNameUploader from "./components/Archive/Archive 2/SubchapterNameUploader";
-import PlatformIntro from "./components/Archive/Archive 8/PlatformIntro";
-import PersonalizationProgress from "./components/Archive/Archive 8/PersonalizationProgress";
+import BooksOverview from "./components/zArchive/Archive 4/BooksOverview";
+import ReadingPlan from "./components/zArchive/Archive 4/ReadingPlan";
 
-import Home from "./components/Archive/Archive 7/Home";
+import AdaptiveStatsDashboard from "./components/zArchive/Archive 11/AdaptiveStatsDashboard";
+import GptQuestionGenerator from "./components/zArchive/Archive 10/GptQuestionGenerator";
+import BooksViewer3 from "./components/zArchive/Archive 9/BooksViewer3";
 
-import LearnerPersonaForm from "./components/Archive/Archive 8/LearnerPersonaForm";
-import OnboardingAssessment from "./components/Archive/Archive 8/OnboardingAssessment";
-
-import TestView from "./components/Archive/Archive 11/TestView";
-import GamificationDashboard from "./components/Archive/Archive 6/GamificationDashboard";
-import MaterialUploadWizard from "./components/Archive/Archive 3/MaterialUploadWizard";
-import CoursesMaterialManager from "./components/Archive/Archive 3/CoursesMaterialManager";
-
-import BooksViewer from "./components/Archive/Archive 1/BooksViewer";
-import BooksViewer2 from "./components/DetailedBookViewer/0.BooksViewerNew";
-
-import StageTimeline from "./components/DetailedBookViewer/StageTimeline";
+import AuthLogin from "./components/zArchive/AuthLogin";
+import AuthSignGoogle from "./components/zArchive/AuthSignGoogle";
+import AuthSignIn from "./components/Main/0.PreLogin/1.AuthSignIn";
 
 
-import PlanFetcher from "./components/DetailedBookViewer/PlanFetcher";
+import PrivateRoute from "./components/Main/0.BaseFiles/PrivateRoute";
+import Login from "./components/zArchive/Archive 5/Login";
+import ChatInterface from "./components/zArchive/Archive 5/ChatInterface";
+import Onboarding from "./components/zArchive/Archive 1/Onboarding";
+import PdfUploader from "./components/zArchive/Archive 2/PdfUploader";
+import SubChaptersUploader from "./components/zArchive/Archive 2/SubChaptersUploader";
+import ChaptersUploader from "./components/zArchive/Archive 2/ChaptersUploader";
+import BookTextViewer from "./components/zArchive/Archive 2/BookTextViewer";
+import AdminDashboard from "./components/zArchive/Archive 2/AdminDashboard";
+import SubchapterNameUploader from "./components/zArchive/Archive 2/SubchapterNameUploader";
+import PlatformIntro from "./components/zArchive/Archive 8/PlatformIntro";
+import PersonalizationProgress from "./components/zArchive/Archive 8/PersonalizationProgress";
+
+import Home from "./components/zArchive/Archive 7/Home";
+
+import LearnerPersonaForm from "./components/zArchive/Archive 8/LearnerPersonaForm";
+import OnboardingAssessment from "./components/zArchive/Archive 8/OnboardingAssessment";
+
+import TestView from "./components/zArchive/Archive 11/TestView";
+import GamificationDashboard from "./components/zArchive/Archive 6/GamificationDashboard";
+import MaterialUploadWizard from "./components/zArchive/Archive 3/MaterialUploadWizard";
+import CoursesMaterialManager from "./components/zArchive/Archive 3/CoursesMaterialManager";
+
+import BooksViewer from "./components/zArchive/Archive 1/BooksViewer";
+import BooksViewer2 from "./components/Main/0.BaseFiles/Dashboard";
+
+import StageTimeline from "./components/Main/5.StudyModal/0.components/StageTimeline";
 
 
-import PlanBrowser from "./components/DetailedBookViewer/PlanBrowser";
+import PlanFetcher from "./components/Main/5.StudyModal/StudyModal";
+
+
+import PlanBrowser from "./components/Main/5.StudyModal/0.test/PlanBrowser";
 
 
 function App() {
@@ -380,14 +379,7 @@ function App() {
 
 
 
-        <Route
-          path="/onboardingcarousel"
-          element={
-            <PrivateRoute>
-              <OnboardingCarousel />
-            </PrivateRoute>
-          }
-        />
+        
 
 
         <Route

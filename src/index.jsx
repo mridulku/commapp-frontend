@@ -5,7 +5,7 @@ import App from './App';
 import reportWebVitals from './reportWebVitals';
 
 import { Provider } from 'react-redux';
-import { store } from './components/DetailedBookViewer/store/store';
+import { store } from './components/Main/5.StudyModal/0.store/store';
 // import PlanFetcher from './src/components/DetailedBookViewer/PlanFetcher'; // Only if needed here
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
