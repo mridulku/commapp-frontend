@@ -15,8 +15,8 @@ export default function ReviseApply({ onRevisionDone }) {
     flattenedActivities && currentIndex >= 0 ? flattenedActivities[currentIndex] : null;
   const subchapterId = currentActivity ? currentActivity.subChapterId : "";
 
-  // Hard-coded prompt ID
-  const promptId = "Hv1dsxLiZHVmCtXd2FRy";
+  // Hard-coded prompt key
+  const promptKey = "revise"; // <== CHANGED: using promptKey instead of promptId
 
   const [responseData, setResponseData] = useState(null); // { finalPrompt, result, UIconfig }
   const [error, setError] = useState("");
@@ -33,7 +33,7 @@ export default function ReviseApply({ onRevisionDone }) {
       .post("http://localhost:3001/api/generate", {
         userId,
         subchapterId,
-        promptId,
+        promptKey, // <== CHANGED: now sending promptKey
       })
       .then((res) => {
         setResponseData(res.data);
@@ -45,7 +45,7 @@ export default function ReviseApply({ onRevisionDone }) {
       .finally(() => {
         setLoading(false);
       });
-  }, [subchapterId, userId, promptId]);
+  }, [subchapterId, userId, promptKey]);
 
   // Early returns for states
   if (!subchapterId || !userId) {
@@ -133,7 +133,6 @@ const styles = {
     backgroundColor: "transparent",
     padding: "1rem",
     color: "#fff",
-    // remove borders to blend with black background
   },
   heading: {
     margin: 0,
@@ -174,9 +173,7 @@ const styles = {
     marginBottom: "0.25rem",
   },
   fieldValue: {
-    // default styling for bullet items
     backgroundColor: "transparent",
     color: "#fff",
-    // remove borders or padding if you prefer a truly minimal look
   },
 };
