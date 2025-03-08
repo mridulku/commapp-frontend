@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 
-function PromptInput() {
+function PromptIdInput() {
   const [userId, setUserId] = useState('');
   const [subchapterId, setSubchapterId] = useState('');
-  const [prompt, setPrompt] = useState('');
+  const [promptId, setPromptId] = useState('');
   const [finalPrompt, setFinalPrompt] = useState('');
   const [response, setResponse] = useState('');
 
@@ -12,7 +12,7 @@ function PromptInput() {
       const res = await fetch('http://localhost:3001/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, subchapterId, prompt }),
+        body: JSON.stringify({ userId, subchapterId, promptId }),
       });
       const data = await res.json();
       setFinalPrompt(data.finalPrompt);
@@ -24,7 +24,7 @@ function PromptInput() {
 
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto' }}>
-      <h1>Send Prompt</h1>
+      <h1>Send Prompt by Prompt ID</h1>
       <div style={{ marginBottom: '1rem' }}>
         <input
           type="text"
@@ -44,11 +44,11 @@ function PromptInput() {
         />
       </div>
       <div style={{ marginBottom: '1rem' }}>
-        <textarea
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Type your prompt here"
-          rows={5}
+        <input
+          type="text"
+          value={promptId}
+          onChange={(e) => setPromptId(e.target.value)}
+          placeholder="Enter prompt ID"
           style={{ width: '100%', padding: '8px' }}
         />
       </div>
@@ -67,4 +67,4 @@ function PromptInput() {
   );
 }
 
-export default PromptInput;
+export default PromptIdInput;
