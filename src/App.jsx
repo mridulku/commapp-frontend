@@ -13,6 +13,7 @@ import LandingPage from "./components/PreLogin/LandingPage";
 
 import OnboardingCarousel from "./components/OnboardingCarousel";
 import PromptManager from "./components/PromptManager";
+import PromptInput from "./components/PromptInput";
 
 
 import BooksOverview from "./components/Archive/Archive 4/BooksOverview";
@@ -394,6 +395,15 @@ function App() {
           element={
             <PrivateRoute>
               <PromptManager />
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/promptinput"
+          element={
+            <PrivateRoute>
+              <PromptInput />
             </PrivateRoute>
           }
         />
