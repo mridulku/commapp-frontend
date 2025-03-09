@@ -1,270 +1,195 @@
 import React, { useEffect, useState } from "react";
+import axios from "axios";
+import { useSelector } from "react-redux"; // <-- to get userId from Redux
 import QuizAnalyze from "./QuizAnalyze";
 import ReviseAnalyze from "./ReviseAnalyze";
 
 /**
- * Example statuses for the Analyze stage:
- * - "NOT_STARTED"  : user hasn't taken the quiz yet
- * - "QUIZ_FAILED"  : user failed => show revise
- * - "REVISION_DONE": user finished revision => can quiz again
- * - "QUIZ_COMPLETED": user passed => success message
+ * AnalyzeView
+ * -----------
+ * 1) On mount, fetch quiz attempts (/api/getQuiz) + revision attempts (/api/getRevisions).
+ * 2) Decide user state (no quizzes yet? last quiz pass? last quiz fail + revision done?).
+ * 3) Render the appropriate step.
  */
 
-// A small placeholder for attempt history items
-function AttemptHistoryItem({ attempt }) {
-  // e.g. attempt = { attemptNum, date, score, threshold, status: "pass"|"fail" }
-  return (
-    <div style={histStyles.historyItem}>
-      <strong>Attempt #{attempt.attemptNum}</strong> on {attempt.date} <br />
-      Score: {attempt.score} / {attempt.threshold} —{" "}
-      {attempt.status.toUpperCase()}
-    </div>
-  );
-}
-
 export default function AnalyzeView({ activity }) {
-  // We'll assume `activity` contains at least { subChapterId }
-  const subChapterId = activity?.subChapterId || "N/A";
+  // Suppose each activity has { subChapterId }
+  const subChapterId = activity?.subChapterId || "";
 
-  // Stage status for the quiz flow
-  const [status, setStatus] = useState("NOT_STARTED");
+  // Option A: get userId from Redux
+  // const userId = useSelector((state) => state.auth?.userId);
+  // if you want to fallback => "demoUser":
+  //   const userId = useSelector((state) => state.auth?.userId) || "demoUser";
 
-  // Example pass threshold – user needs 4 or 5 out of 5 to pass
-  const passThreshold = 4;
+  // Option B: or you might pass userId as a prop if you prefer:
+  // but let's assume Redux approach:
+  const userId = useSelector((state) => state.auth?.userId);
 
-  // Example local attempt data (simulate a user with 2 attempts)
-  const [attemptHistory, setAttemptHistory] = useState([
-    {
-      attemptNum: 1,
-      date: "2025-03-01",
-      score: 2,
-      threshold: passThreshold,
-      status: "fail",
-    },
-    {
-      attemptNum: 2,
-      date: "2025-03-02",
-      score: 4,
-      threshold: passThreshold,
-      status: "pass",
-    },
-  ]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  // Controls whether the "History Panel" is visible
-  const [showHistoryPanel, setShowHistoryPanel] = useState(false);
+  const [quizAttempts, setQuizAttempts] = useState([]);       // from /api/getQuiz
+  const [revisionAttempts, setRevisionAttempts] = useState([]); // from /api/getRevisions
 
-  // On mount (or whenever subChapterId changes), reset status
+  // mode => "NO_QUIZ_YET", "QUIZ_COMPLETED", "NEED_REVISION", "CAN_TAKE_NEXT_QUIZ"
+  const [mode, setMode] = useState("LOADING");
+
+  // We'll track the user's last quiz attempt doc
+  const [lastQuizAttempt, setLastQuizAttempt] = useState(null);
+
+  // Re-fetch on subChapterId or userId changes
   useEffect(() => {
-    setStatus("NOT_STARTED");
-    // In real code, you might also fetch the attempt history from Firestore or an API
-  }, [subChapterId]);
+    if (!subChapterId || !userId) return;
+    fetchData();
+  }, [subChapterId, userId]);
 
-  // --- Handlers from child components ---
+  async function fetchData() {
+    try {
+      setLoading(true);
+      setError("");
+
+      // 1) get quiz attempts
+      const quizRes = await axios.get("http://localhost:3001/api/getQuiz", {
+        params: {
+          userId,                  // <--- use real userId from Redux
+          subchapterId: subChapterId,
+          quizType: "analyze",
+        },
+      });
+      const quizArr = quizRes.data.attempts || [];
+
+      // 2) get revision attempts
+      const revRes = await axios.get("http://localhost:3001/api/getRevisions", {
+        params: {
+          userId,                  // <--- same here
+          subchapterId: subChapterId,
+          revisionType: "analyze",
+        },
+      });
+      const revArr = revRes.data.revisions || [];
+
+      setQuizAttempts(quizArr);
+      setRevisionAttempts(revArr);
+      computeState(quizArr, revArr);
+    } catch (err) {
+      console.error("Error fetching attempts:", err);
+      setError(err.message || "Error fetching data");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function computeState(quizArr, revArr) {
+    if (quizArr.length === 0) {
+      // no quiz attempts => user does attempt #1
+      setMode("NO_QUIZ_YET");
+      setLastQuizAttempt(null);
+      return;
+    }
+
+    // quizArr is sorted by attemptNumber desc in the backend
+    const [latestQuiz] = quizArr; // first item is the newest
+    setLastQuizAttempt(latestQuiz);
+
+    // parse the score => e.g. "3 / 5"
+    const numericScore = parseInt(latestQuiz.score.split("/")[0], 10);
+    const passThreshold = 4; // your logic
+    const passed = numericScore >= passThreshold;
+    const attemptNum = latestQuiz.attemptNumber;
+
+    if (passed) {
+      setMode("QUIZ_COMPLETED");
+      return;
+    }
+
+    // user fail => check if revision for that attempt
+    const matchingRev = revArr.find((r) => r.revisionNumber === attemptNum);
+    if (!matchingRev) {
+      setMode("NEED_REVISION");
+    } else {
+      setMode("CAN_TAKE_NEXT_QUIZ");
+    }
+  }
+
+  // Called when user finishes or fails the quiz => re-fetch
   function handleQuizComplete() {
-    // user passed => set to QUIZ_COMPLETED
-    setStatus("QUIZ_COMPLETED");
-
-    // You might also push a new attempt record in real code
-    // e.g. setAttemptHistory([...attemptHistory, newAttempt]);
+    fetchData();
   }
-
   function handleQuizFail() {
-    // user failed => show revise
-    setStatus("QUIZ_FAILED");
-    // also store the fail attempt, etc.
+    fetchData();
   }
 
+  // Called when user finishes revision => re-fetch
   function handleRevisionDone() {
-    // after revise, let them try the quiz again
-    setStatus("REVISION_DONE");
+    fetchData();
   }
 
-  function handleSecondQuizComplete() {
-    // if they pass after revision
-    setStatus("QUIZ_COMPLETED");
-  }
-
-  function handleSecondQuizFail() {
-    // if they fail again
-    setStatus("QUIZ_FAILED");
-  }
-
-  // A) Renders a small rectangular “Attempt #” pill in the top-right
-  //    that toggles the side panel.
-  function renderAttemptPill() {
-    const totalAttempts = attemptHistory.length;
-    const lastAttemptNum =
-      totalAttempts > 0
-        ? attemptHistory[attemptHistory.length - 1].attemptNum
-        : 0;
-
-    const pillLabel =
-      totalAttempts === 0 ? "No Attempts" : `Attempt #${lastAttemptNum}`;
-
+  // If subChapterId or userId is missing, we can't load
+  if (!subChapterId || !userId) {
     return (
-      <div style={styles.attemptPill} onClick={() => setShowHistoryPanel(true)}>
-        {pillLabel}
+      <div style={{ color: "#fff" }}>
+        No valid subChapterId or userId. Please ensure both are set.
       </div>
     );
   }
-
-  // B) The side panel that slides in from the right
-  function renderHistoryPanel() {
-    return (
-      <div style={styles.historyPanel}>
-        <div style={styles.panelHeader}>
-          <h4 style={{ margin: 0 }}>Analyze Stage Attempts</h4>
-          <button style={styles.closeBtn} onClick={() => setShowHistoryPanel(false)}>
-            ✕
-          </button>
-        </div>
-        <p style={{ margin: 0, fontSize: "0.85rem" }}>
-          Pass if score ≥ {passThreshold}
-        </p>
-        <div style={histStyles.historyList}>
-          {attemptHistory.length === 0 ? (
-            <p style={{ margin: 0 }}>No attempts yet.</p>
-          ) : (
-            attemptHistory.map((att, idx) => (
-              <AttemptHistoryItem attempt={att} key={idx} />
-            ))
-          )}
-        </div>
-      </div>
-    );
+  if (loading) {
+    return <div style={{ color: "#fff" }}>Loading attempts...</div>;
+  }
+  if (error) {
+    return <div style={{ color: "red" }}>Error: {error}</div>;
   }
 
   return (
-    <div style={styles.outerContainer}>
-      {/* A) The top bar area: title + attempt pill on top-right */}
-      <div style={styles.topBar}>
-        <h2 style={styles.titleText}>
-          [Analyze View] SubChapter ID: {subChapterId}
-        </h2>
-        {renderAttemptPill()}
-      </div>
+    <div style={{ color: "#fff", padding: "1rem" }}>
+      <h2>Analyze Flow for subChapter: {subChapterId}</h2>
 
-      {/* B) The main content area => quiz or revision or success */}
-      <div style={styles.contentArea}>
-        {status === "NOT_STARTED" && (
+      {mode === "NO_QUIZ_YET" && (
+        <div>
+          <p>No quiz attempts yet. Let's do attempt #1</p>
           <QuizAnalyze
             subChapterId={subChapterId}
+            attemptNumber={1}
             onQuizComplete={handleQuizComplete}
             onQuizFail={handleQuizFail}
           />
-        )}
+        </div>
+      )}
 
-        {status === "QUIZ_FAILED" && (
+      {mode === "QUIZ_COMPLETED" && (
+        <div style={{ color: "lightgreen" }}>
+          <h3>Quiz Completed Successfully!</h3>
+          <p>You passed the Analyze stage for sub-chapter {subChapterId}.</p>
+        </div>
+      )}
+
+      {mode === "NEED_REVISION" && lastQuizAttempt && (
+        <div>
+          <p>
+            Your last quiz attempt #{lastQuizAttempt.attemptNumber} was a fail.
+            Please do the revision for attempt #{lastQuizAttempt.attemptNumber}.
+          </p>
           <ReviseAnalyze
             subChapterId={subChapterId}
+            revisionNumber={lastQuizAttempt.attemptNumber}
             onRevisionDone={handleRevisionDone}
           />
-        )}
+        </div>
+      )}
 
-        {status === "REVISION_DONE" && (
-          <div style={{ marginBottom: "1rem", color: "#f90" }}>
-            <p>Revision complete. Attempt quiz again:</p>
-            <QuizAnalyze
-              subChapterId={subChapterId}
-              onQuizComplete={handleSecondQuizComplete}
-              onQuizFail={handleSecondQuizFail}
-            />
-          </div>
-        )}
-
-        {status === "QUIZ_COMPLETED" && (
-          <div style={{ marginBottom: "1rem", color: "lightgreen" }}>
-            <h3>Quiz Completed Successfully!</h3>
-            <p>Congrats, you passed the Analyze stage for sub-chapter {subChapterId}.</p>
-          </div>
-        )}
-      </div>
-
-      {/* C) Conditionally render the side panel if showHistoryPanel=true */}
-      {showHistoryPanel && renderHistoryPanel()}
+      {mode === "CAN_TAKE_NEXT_QUIZ" && lastQuizAttempt && (
+        <div>
+          <p>
+            You've completed revision for quiz attempt #
+            {lastQuizAttempt.attemptNumber}. Take next quiz attempt!
+          </p>
+          <QuizAnalyze
+            subChapterId={subChapterId}
+            attemptNumber={lastQuizAttempt.attemptNumber + 1}
+            onQuizComplete={handleQuizComplete}
+            onQuizFail={handleQuizFail}
+          />
+        </div>
+      )}
     </div>
   );
 }
-
-// STYLES
-const styles = {
-  outerContainer: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: "#000",
-    color: "#fff",
-    display: "flex",
-    flexDirection: "column",
-    boxSizing: "border-box",
-    fontFamily: `'Inter', 'Roboto', sans-serif`,
-    position: "relative",
-  },
-  topBar: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: "20px",
-    borderBottom: "1px solid #333",
-  },
-  titleText: {
-    margin: 0,
-  },
-  attemptPill: {
-    backgroundColor: "#444",
-    color: "#fff",
-    padding: "6px 12px",
-    borderRadius: "4px",
-    cursor: "pointer",
-    fontSize: "0.85rem",
-    fontWeight: "bold",
-  },
-  contentArea: {
-    flex: 1,
-    padding: "20px",
-    overflowY: "auto",
-    maxWidth: "60ch",
-    margin: "0 auto",
-    lineHeight: 1.6,
-    fontSize: "1rem",
-  },
-  historyPanel: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    width: "300px",
-    height: "100%",
-    backgroundColor: "#222",
-    borderLeft: "1px solid #555",
-    padding: "12px",
-    zIndex: 999,
-    boxSizing: "border-box",
-  },
-  panelHeader: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: "8px",
-  },
-  closeBtn: {
-    background: "none",
-    border: "none",
-    color: "#fff",
-    fontSize: "1rem",
-    cursor: "pointer",
-  },
-};
-
-const histStyles = {
-  historyList: {
-    marginTop: "6px",
-    maxHeight: "50vh",
-    overflowY: "auto",
-    borderTop: "1px solid #555",
-    paddingTop: "6px",
-  },
-  historyItem: {
-    marginBottom: "8px",
-    fontSize: "0.8rem",
-    lineHeight: 1.4,
-  },
-};
