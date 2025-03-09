@@ -1,275 +1,321 @@
-// QuizApply.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useSelector } from "react-redux";
+import axios from "axios";
 
-/**
- * This component is a more "comprehensive" quiz example for the "Apply" stage.
- * 
- * It includes:
- *  - MCQ questions,
- *  - Explanation / short-answer questions,
- *  - Reflection prompts.
- * 
- * You can integrate real GPT logic or form handling as needed.
- */
-export default function QuizApply({ subChapterId, onQuizComplete, onQuizFail }) {
-  // Example local states for user inputs:
-  const [mcqAnswers, setMcqAnswers] = useState({});
-  const [explanationAnswers, setExplanationAnswers] = useState({});
-  const [reflectionAnswers, setReflectionAnswers] = useState({});
+// Helper to remove markdown fences (```json) from GPT's response
+function stripMarkdownFences(text) {
+  return text.replace(/```(json)?/gi, "").trim();
+}
 
-  // 1) Handle user selecting MCQ options
-  function handleMcqChange(questionId, optionIndex) {
-    setMcqAnswers((prev) => ({
-      ...prev,
-      [questionId]: optionIndex,
-    }));
+export default function QuizAnalyze({ onQuizDone }) {
+  // 1. Grabbing user/subchapter from Redux
+  const userId = useSelector((state) => state.auth?.userId) || "demoUser";
+  const { flattenedActivities, currentIndex } = useSelector((state) => state.plan);
+  const currentActivity =
+    flattenedActivities && currentIndex >= 0 ? flattenedActivities[currentIndex] : null;
+  const subchapterId = currentActivity ? currentActivity.subChapterId : "";
+
+  // 2. Hard-coded prompt key & quiz type
+  const promptKey = "quizAnalyze";
+  const quizType = "analyze"; // or pass this as a prop if needed
+
+  // 3. Local states for either existing quiz data or GPT data
+  const [existingQuiz, setExistingQuiz] = useState(null);  // If we find a quiz in Firestore
+  const [responseData, setResponseData] = useState(null);  // GPT response
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  // 4. Additional states for quiz
+  const [selectedAnswers, setSelectedAnswers] = useState([]); // array of user-selected option indices
+  const [score, setScore] = useState(null);
+
+  // -------------------------------------------------------------------
+  // A) Reset local states whenever subchapter/user/quizType changes,
+  //    so we don't show old data from the previous subchapter.
+  // -------------------------------------------------------------------
+  useEffect(() => {
+    setExistingQuiz(null);
+    setResponseData(null);
+    setScore(null);
+  }, [subchapterId, userId, quizType]);
+
+  // -------------------------------------------------------------------
+  // B) Check if we already have a quiz submission
+  // -------------------------------------------------------------------
+  useEffect(() => {
+    if (!subchapterId || !userId) return;
+
+    (async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const res = await axios.get("http://localhost:3001/api/getQuiz", {
+          params: { userId, subchapterId, quizType },
+        });
+        if (res.data.quizExists) {
+          // We already have a quiz => store it in existingQuiz
+          setExistingQuiz(res.data.quizData);
+        } else {
+          // No existing quiz => proceed to GPT generate
+          await fetchQuizFromGPT();
+        }
+      } catch (err) {
+        console.error("Error checking existing quiz:", err);
+        setError(err.message || "Error checking existing quiz");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [subchapterId, userId, quizType]);
+
+  // -------------------------------------------------------------------
+  // C) Helper to fetch GPT-based quiz if no existing quiz
+  // -------------------------------------------------------------------
+  async function fetchQuizFromGPT() {
+    try {
+      setLoading(true);
+      setResponseData(null);
+      setError("");
+
+      const generateRes = await axios.post("http://localhost:3001/api/generate", {
+        userId,
+        subchapterId,
+        promptKey,
+      });
+
+      setResponseData(generateRes.data);
+    } catch (err) {
+      console.error("Error fetching GPT quiz data:", err);
+      setError(err.message || "Error fetching GPT quiz data");
+    } finally {
+      setLoading(false);
+    }
   }
 
-  // 2) Handle user typing in short "explanation" answers
-  function handleExplanationChange(questionId, text) {
-    setExplanationAnswers((prev) => ({
-      ...prev,
-      [questionId]: text,
-    }));
+  // -------------------------------------------------------------------
+  // Early returns for loading / error / no user
+  // -------------------------------------------------------------------
+  if (!subchapterId || !userId) {
+    return <div style={styles.text}>Please ensure you have valid user and subchapter info.</div>;
+  }
+  if (loading) {
+    return <div style={styles.text}>Loading...</div>;
+  }
+  if (error) {
+    return (
+      <div style={styles.textError}>
+        Error: {error}
+      </div>
+    );
   }
 
-  // 3) Reflection prompts
-  function handleReflectionChange(promptId, text) {
-    setReflectionAnswers((prev) => ({
-      ...prev,
-      [promptId]: text,
-    }));
+  // -------------------------------------------------------------------
+  // CASE A: If quiz already exists, show stored results
+  // -------------------------------------------------------------------
+  if (existingQuiz) {
+    return (
+      <div style={styles.container}>
+        <h3 style={styles.heading}>Quiz Already Attempted</h3>
+        <p style={styles.text}>You scored: {existingQuiz.score}</p>
+        <button onClick={onQuizDone} style={styles.button}>
+          Done with Quiz
+        </button>
+      </div>
+    );
   }
 
+  // -------------------------------------------------------------------
+  // CASE B: No existing quiz => Show GPT-based quiz
+  // -------------------------------------------------------------------
+  if (!responseData) {
+    // Possibly means we had an error or still loading.
+    return (
+      <div style={styles.text}>
+        No quiz data available yet.
+      </div>
+    );
+  }
+
+  // 6. Parse the GPT JSON result
+  let rawResult = responseData.result || "";
+  if (rawResult.startsWith("```")) {
+    rawResult = stripMarkdownFences(rawResult);
+  }
+
+  let parsedResult;
+  try {
+    parsedResult = JSON.parse(rawResult);
+  } catch (err) {
+    return (
+      <div style={styles.container}>
+        <h3 style={styles.heading}>Quiz (Analyze Stage) for SubChapter: {subchapterId}</h3>
+        <p style={{ ...styles.text, color: "red" }}>
+          GPT response is not valid JSON. Showing raw text:
+        </p>
+        <pre style={styles.pre}>{rawResult}</pre>
+        <button onClick={onQuizDone} style={styles.button}>
+          Done with Quiz
+        </button>
+      </div>
+    );
+  }
+
+  // 7. Identify UI fields from the response
+  const { UIconfig = {} } = responseData;
+  const { fields = [] } = UIconfig;
+
+  const quizFieldConfig = fields.find((f) => f.component === "quiz");
+  if (!quizFieldConfig) {
+    // If there's no quiz field defined, fallback to raw JSON
+    return (
+      <div style={styles.container}>
+        <h3 style={styles.heading}>Quiz (Analyze Stage)</h3>
+        <p style={styles.text}>No quiz field found in UIconfig. Showing raw JSON:</p>
+        <pre style={styles.pre}>{JSON.stringify(parsedResult, null, 2)}</pre>
+        <button onClick={onQuizDone} style={styles.button}>
+          Done with Quiz
+        </button>
+      </div>
+    );
+  }
+
+  // 8. The array of questions in the JSON (quizQuestions)
+  const quizQuestions = parsedResult[quizFieldConfig.field] || [];
+  const totalQuestions = quizQuestions.length;
+
+  // 9. Handler for selecting an answer
+  function handleSelectAnswer(questionIndex, optionIndex) {
+    const updated = [...selectedAnswers];
+    updated[questionIndex] = optionIndex;
+    setSelectedAnswers(updated);
+  }
+
+  // 10. Handler for submitting the quiz
+  async function handleSubmit() {
+    let correctCount = 0;
+
+    // We'll build a "quizSubmission" array for storing
+    const quizSubmission = quizQuestions.map((question, qIndex) => {
+      const userAnswer = selectedAnswers[qIndex];
+      const isCorrect = userAnswer === question.correctAnswerIndex;
+      if (isCorrect) correctCount++;
+
+      return {
+        question: question.question,
+        options: question.options,
+        correctAnswerIndex: question.correctAnswerIndex,
+        userAnswer: typeof userAnswer === "number" ? userAnswer : null,
+        isCorrect,
+      };
+    });
+
+    const finalScore = `${correctCount} / ${totalQuestions}`;
+    setScore(finalScore);
+
+    // 10a. Now post the quiz submission to the server
+    try {
+      await axios.post("http://localhost:3001/api/submitQuiz", {
+        userId,
+        subchapterId,
+        quizType,
+        quizSubmission,
+        score: finalScore,
+        totalQuestions,
+      });
+    } catch (err) {
+      console.error("Error saving quiz submission:", err);
+      // optionally show some UI error
+    }
+  }
+
+  // 11. If we have a final score, show results
+  if (score !== null) {
+    return (
+      <div style={styles.container}>
+        <h3 style={styles.heading}>Quiz Results</h3>
+        <p style={styles.text}>You scored: {score}</p>
+        <button onClick={onQuizDone} style={styles.button}>
+          Done with Quiz
+        </button>
+      </div>
+    );
+  }
+
+  // 12. Render the new GPT-based quiz
   return (
     <div style={styles.container}>
-      <h3 style={styles.heading}>Quiz (Apply Stage) for SubChapter: {subChapterId}</h3>
-
-      <p style={styles.desc}>
-        Below is a <strong>mixed demo</strong> of how multiple question types might appear.
-      </p>
-
-      {/******************************************************************
-       * SECTION A: MCQ-STYLE QUESTIONS
-       *****************************************************************/}
-      <div style={styles.section}>
-        <h4 style={styles.sectionTitle}>Section A: MCQ Questions</h4>
-
-        {/* MCQ Question #1 */}
-        <div style={styles.questionBlock}>
-          <p style={styles.questionText}>
-            <strong>Q1 (MCQ)</strong>: Which of the following is an example of an "apply"-level learning task?
-          </p>
-          <div style={styles.optionsArea}>
-            {[
-              "Reading and memorizing definitions",
-              "Selecting the correct definition from multiple choices",
-              "Using a concept in a real-world scenario",
-              "Reflecting on personal learning goals",
-            ].map((opt, idx) => {
-              const checked = mcqAnswers["q1"] === idx;
-              return (
-                <label key={idx} style={styles.optionLabel}>
-                  <input
-                    type="radio"
-                    name="q1"
-                    checked={checked}
-                    onChange={() => handleMcqChange("q1", idx)}
-                  />
-                  {opt}
-                </label>
-              );
-            })}
-          </div>
+      <h3 style={styles.heading}>{quizFieldConfig.label || "Quiz"}</h3>
+      {quizQuestions.map((question, qIndex) => (
+        <div key={qIndex} style={styles.questionBlock}>
+          <p style={styles.questionText}>{`Q${qIndex + 1}: ${question.question}`}</p>
+          {question.options.map((opt, optIndex) => (
+            <label key={optIndex} style={styles.optionLabel}>
+              <input
+                type="radio"
+                name={`question-${qIndex}`}
+                value={optIndex}
+                checked={selectedAnswers[qIndex] === optIndex}
+                onChange={() => handleSelectAnswer(qIndex, optIndex)}
+              />
+              {opt}
+            </label>
+          ))}
         </div>
+      ))}
 
-        {/* MCQ Question #2 */}
-        <div style={styles.questionBlock}>
-          <p style={styles.questionText}>
-            <strong>Q2 (MCQ)</strong>: Which color is often used to indicate success messages in this app?
-          </p>
-          <div style={styles.optionsArea}>
-            {["Red", "Lightgreen", "Blue", "Yellow"].map((opt, idx) => {
-              const checked = mcqAnswers["q2"] === idx;
-              return (
-                <label key={idx} style={styles.optionLabel}>
-                  <input
-                    type="radio"
-                    name="q2"
-                    checked={checked}
-                    onChange={() => handleMcqChange("q2", idx)}
-                  />
-                  {opt}
-                </label>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/******************************************************************
-       * SECTION B: EXPLANATION / SHORT ANSWER
-       *****************************************************************/}
-      <div style={styles.section}>
-        <h4 style={styles.sectionTitle}>Section B: Short Explanations</h4>
-        
-        {/* Explanation #1 */}
-        <div style={styles.questionBlock}>
-          <p style={styles.questionText}>
-            <strong>Q3 (Explanation)</strong>: In a few sentences, 
-            <em>explain</em> why "apply" stage tasks might be more challenging than 
-            "remember" stage tasks.
-          </p>
-          <textarea
-            style={styles.textArea}
-            rows={3}
-            placeholder="Type your explanation here..."
-            value={explanationAnswers["q3"] || ""}
-            onChange={(e) => handleExplanationChange("q3", e.target.value)}
-          />
-        </div>
-
-        {/* Explanation #2 */}
-        <div style={styles.questionBlock}>
-          <p style={styles.questionText}>
-            <strong>Q4 (Explanation)</strong>: Summarize how you might create 
-            a scenario-based question for an 'apply' level quiz.
-          </p>
-          <textarea
-            style={styles.textArea}
-            rows={3}
-            placeholder="Briefly describe your approach..."
-            value={explanationAnswers["q4"] || ""}
-            onChange={(e) => handleExplanationChange("q4", e.target.value)}
-          />
-        </div>
-      </div>
-
-      {/******************************************************************
-       * SECTION C: REFLECTION PROMPTS
-       *****************************************************************/}
-      <div style={styles.section}>
-        <h4 style={styles.sectionTitle}>Section C: Reflection Prompts</h4>
-
-        {/* Reflection #1 */}
-        <div style={styles.questionBlock}>
-          <p style={styles.questionText}>
-            <strong>Q5 (Reflection)</strong>: What aspect of 'apply'-level 
-            questions do you find most challenging?
-          </p>
-          <textarea
-            style={styles.textArea}
-            rows={3}
-            placeholder="Reflect on your personal challenge..."
-            value={reflectionAnswers["r1"] || ""}
-            onChange={(e) => handleReflectionChange("r1", e.target.value)}
-          />
-        </div>
-
-        {/* Reflection #2 */}
-        <div style={styles.questionBlock}>
-          <p style={styles.questionText}>
-            <strong>Q6 (Reflection)</strong>: Suggest one real-world scenario 
-            where you can practice applying a concept from this sub-chapter.
-          </p>
-          <textarea
-            style={styles.textArea}
-            rows={3}
-            placeholder="Share a real-world scenario..."
-            value={reflectionAnswers["r2"] || ""}
-            onChange={(e) => handleReflectionChange("r2", e.target.value)}
-          />
-        </div>
-      </div>
-
-      {/******************************************************************
-       * BOTTOM CONTROLS
-       *****************************************************************/}
-      <div style={styles.buttonRow}>
-        <button style={styles.btn} onClick={onQuizComplete}>
-          Pass Quiz
-        </button>
-        <button style={styles.btn} onClick={onQuizFail}>
-          Fail Quiz
-        </button>
-      </div>
+      <button onClick={handleSubmit} style={styles.button}>
+        Submit Quiz
+      </button>
     </div>
   );
 }
 
-/** STYLES */
+// Styles
 const styles = {
   container: {
-    border: "1px solid #666",
+    backgroundColor: "transparent",
     padding: "1rem",
-    marginBottom: "1rem",
-    borderRadius: "4px",
-    backgroundColor: "#1E1E1E",
+    color: "#fff",
   },
   heading: {
-    margin: "0 0 0.5rem 0",
-  },
-  desc: {
-    margin: "0 0 1rem 0",
-    fontSize: "0.9rem",
-    color: "#ccc",
-  },
-  section: {
-    marginBottom: "1rem",
-    backgroundColor: "#2A2A2A",
-    padding: "0.8rem",
-    borderRadius: "4px",
-  },
-  sectionTitle: {
-    margin: "0 0 0.5rem 0",
-    fontSize: "1rem",
-    color: "#fff",
-    fontWeight: "bold",
-    borderBottom: "1px solid #444",
-    paddingBottom: "4px",
-  },
-  questionBlock: {
-    marginBottom: "0.8rem",
-  },
-  questionText: {
     margin: 0,
-    fontSize: "0.9rem",
-    color: "#f2f2f2",
-  },
-  optionsArea: {
-    marginTop: "0.5rem",
-    marginLeft: "1rem",
-  },
-  optionLabel: {
-    display: "block",
-    marginBottom: "0.4rem",
-    cursor: "pointer",
-    fontSize: "0.85rem",
-    color: "#ccc",
-  },
-  textArea: {
-    width: "100%",
-    marginTop: "0.5rem",
-    fontFamily: "inherit",
-    fontSize: "0.85rem",
-    backgroundColor: "#333",
+    marginBottom: "1rem",
+    fontSize: "1.2rem",
     color: "#fff",
-    border: "1px solid #555",
-    borderRadius: "4px",
-    padding: "6px",
   },
-  buttonRow: {
-    marginTop: "1.2rem",
-    display: "flex",
-    gap: "8px",
+  text: {
+    color: "#fff",
   },
-  btn: {
+  textError: {
+    color: "red",
+    padding: "1rem",
+  },
+  pre: {
+    backgroundColor: "transparent",
+    color: "#fff",
+    border: "none",
+    padding: 0,
+    margin: "1rem 0",
+    whiteSpace: "pre-wrap",
+  },
+  button: {
+    marginTop: "1rem",
+    padding: "8px 16px",
+    cursor: "pointer",
     backgroundColor: "#444",
     color: "#fff",
     border: "none",
     borderRadius: "4px",
-    padding: "6px 12px",
-    cursor: "pointer",
-    fontSize: "0.85rem",
+  },
+  questionBlock: {
+    marginBottom: "1rem",
+  },
+  questionText: {
+    fontWeight: "bold",
+    marginBottom: "0.5rem",
+  },
+  optionLabel: {
+    display: "block",
+    marginLeft: "1rem",
   },
 };

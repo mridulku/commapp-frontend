@@ -531,6 +531,7 @@ export default function EditAdaptivePlanModal({
           {playerPlanId ? (
             <PlanFetcher
               planId={playerPlanId}
+              userId={userId}
               // If needed, pass userId or other props
             />
           ) : (

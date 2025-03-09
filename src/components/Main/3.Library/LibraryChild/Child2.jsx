@@ -247,6 +247,7 @@ export default function Child2({
             <PlanFetcher
               planId={dialogPlanId}
               initialActivityContext={dialogInitialActivity}
+              userId={userId}
             />
           ) : (
             <p style={{ margin: "1rem" }}>No planId found. Cannot load plan.</p>

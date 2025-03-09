@@ -337,7 +337,7 @@ function PanelC({ userId = "demoUser123", onOpenOnboarding = () => {} }) {
         <DialogTitle>Plan Viewer</DialogTitle>
         <DialogContent>
           {currentPlanId ? (
-            <PlanFetcher planId={currentPlanId} />
+            <PlanFetcher planId={currentPlanId} userId={userId} />
           ) : (
             <p>No planId found. Cannot load plan.</p>
           )}

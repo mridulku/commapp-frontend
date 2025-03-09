@@ -2,6 +2,9 @@ import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchPlan } from "./0.store/planSlice";
 
+// Import your setUserId action from the auth slice
+import { setUserId } from "./0.store/authSlice";
+
 import TopBar from "./0.components/TopBar";
 import BottomBar from "./0.components/BottomBar";
 import LeftPanel from "./0.components/LeftPanel";
@@ -10,6 +13,7 @@ import MainContent from "./0.components/MainContent";
 export default function PlanFetcher({
   planId,
   initialActivityContext,
+  userId = null,           // <-- NEW: accept userId as a prop
   backendURL = "http://localhost:3001",
   fetchUrl = "/api/adaptive-plan",
 
@@ -27,7 +31,7 @@ export default function PlanFetcher({
     error,
     planDoc,
     flattenedActivities,
-    currentIndex
+    currentIndex,
   } = useSelector((state) => state.plan);
 
   // A simple local countdown for session
@@ -44,6 +48,13 @@ export default function PlanFetcher({
 
     return () => clearInterval(timerId);
   }, []);
+
+  // NEW: Store userId in Redux (if provided)
+  useEffect(() => {
+    if (userId) {
+      dispatch(setUserId(userId));
+    }
+  }, [userId, dispatch]);
 
   // On mount or planId change => fetchPlan
   useEffect(() => {
@@ -72,7 +83,6 @@ export default function PlanFetcher({
         sessionLength={sessionLength}
         secondsLeft={secondsLeft}
         onClose={onClose}
-        // pass currentAct if needed
       />
 
       {status === "loading" && (
