@@ -1,63 +1,86 @@
 import React, { useState, useEffect } from "react";
-import { useSelector } from "react-redux";
 import axios from "axios";
+import { useSelector } from "react-redux";
 
-// Helper to remove markdown fences (```json) from GPT's response
+/**
+ * QuizAnalyze
+ * -----------
+ * 1) Checks Firestore (/api/getQuiz) for an existing submission for (userId, subChapterId, "analyze").
+ * 2) If found, we parse the existing score, and show a pass/fail result right away in *this* component.
+ *    The user can then click a button => onQuizComplete() or onQuizFail().
+ * 3) If not found, fetch GPT quiz, let user take it, show result screen locally.
+ *    Again, user clicks pass/fail button => triggers parent's flow.
+ *
+ * Props:
+ *   subChapterId   (String)
+ *   onQuizComplete (Function) - called after user sees pass result and clicks "Done"
+ *   onQuizFail     (Function) - called after user sees fail result and clicks "Revise"
+ */
+
+// Helper: remove markdown fences (```json) from GPT response
 function stripMarkdownFences(text) {
   return text.replace(/```(json)?/gi, "").trim();
 }
 
-export default function QuizAnalyze({ onQuizDone }) {
-  // 1. Grabbing user/subchapter from Redux
+export default function QuizAnalyze({
+  subChapterId,
+  onQuizComplete,
+  onQuizFail,
+}) {
+  // 1. Get user ID from Redux (fallback = "demoUser" if none)
   const userId = useSelector((state) => state.auth?.userId) || "demoUser";
-  const { flattenedActivities, currentIndex } = useSelector((state) => state.plan);
-  const currentActivity =
-    flattenedActivities && currentIndex >= 0 ? flattenedActivities[currentIndex] : null;
-  const subchapterId = currentActivity ? currentActivity.subChapterId : "";
 
-  // 2. Hard-coded prompt key & quiz type
+  // 2. Hard-coded quiz type and promptKey
+  const quizType = "analyze";
   const promptKey = "quizAnalyze";
-  const quizType = "analyze"; // or pass this as a prop if needed
 
-  // 3. Local states for either existing quiz data or GPT data
-  const [existingQuiz, setExistingQuiz] = useState(null);  // If we find a quiz in Firestore
-  const [responseData, setResponseData] = useState(null);  // GPT response
+  // 3. Local states
+  const [existingQuiz, setExistingQuiz] = useState(null);  // If found in Firestore
+  const [responseData, setResponseData] = useState(null);  // GPT quiz data
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // 4. Additional states for quiz
-  const [selectedAnswers, setSelectedAnswers] = useState([]); // array of user-selected option indices
-  const [score, setScore] = useState(null);
+  // For user-selected answers (we only store local, not in Firestore)
+  const [selectedAnswers, setSelectedAnswers] = useState([]);
 
-  // -------------------------------------------------------------------
-  // A) Reset local states whenever subchapter/user/quizType changes,
-  //    so we don't show old data from the previous subchapter.
-  // -------------------------------------------------------------------
+  // After submission, we store a local "score" string, e.g. "3 / 5"
+  // so we can show a result screen before calling onQuizFail/onQuizComplete.
+  const [finalScore, setFinalScore] = useState(null);
+
+  // ------------------------------------------------------------------
+  // Reset local states when subChapterId / userId changes
+  // ------------------------------------------------------------------
   useEffect(() => {
     setExistingQuiz(null);
     setResponseData(null);
-    setScore(null);
-  }, [subchapterId, userId, quizType]);
+    setFinalScore(null);
+  }, [subChapterId, userId]);
 
-  // -------------------------------------------------------------------
-  // B) Check if we already have a quiz submission
-  // -------------------------------------------------------------------
+  // ------------------------------------------------------------------
+  // A) Check Firestore for an existing quiz
+  // ------------------------------------------------------------------
   useEffect(() => {
-    if (!subchapterId || !userId) return;
+    if (!subChapterId || !userId) return;
 
     (async () => {
       setLoading(true);
       setError("");
       try {
+        // 1) Check if quiz doc exists
         const res = await axios.get("http://localhost:3001/api/getQuiz", {
-          params: { userId, subchapterId, quizType },
+          params: {
+            userId,
+            subchapterId: subChapterId,
+            quizType,
+          },
         });
+
         if (res.data.quizExists) {
-          // We already have a quiz => store it in existingQuiz
+          // If we have an existing quiz => store it
           setExistingQuiz(res.data.quizData);
         } else {
-          // No existing quiz => proceed to GPT generate
-          await fetchQuizFromGPT();
+          // Otherwise, fetch GPT-based quiz
+          await fetchGPTQuiz();
         }
       } catch (err) {
         console.error("Error checking existing quiz:", err);
@@ -66,24 +89,19 @@ export default function QuizAnalyze({ onQuizDone }) {
         setLoading(false);
       }
     })();
-  }, [subchapterId, userId, quizType]);
+  }, [subChapterId, userId, quizType]);
 
-  // -------------------------------------------------------------------
-  // C) Helper to fetch GPT-based quiz if no existing quiz
-  // -------------------------------------------------------------------
-  async function fetchQuizFromGPT() {
+  // Helper to fetch from /api/generate if no existing quiz
+  async function fetchGPTQuiz() {
     try {
       setLoading(true);
       setResponseData(null);
-      setError("");
-
-      const generateRes = await axios.post("http://localhost:3001/api/generate", {
+      const genRes = await axios.post("http://localhost:3001/api/generate", {
         userId,
-        subchapterId,
+        subchapterId: subChapterId,
         promptKey,
       });
-
-      setResponseData(generateRes.data);
+      setResponseData(genRes.data);
     } catch (err) {
       console.error("Error fetching GPT quiz data:", err);
       setError(err.message || "Error fetching GPT quiz data");
@@ -92,14 +110,14 @@ export default function QuizAnalyze({ onQuizDone }) {
     }
   }
 
-  // -------------------------------------------------------------------
-  // Early returns for loading / error / no user
-  // -------------------------------------------------------------------
-  if (!subchapterId || !userId) {
-    return <div style={styles.text}>Please ensure you have valid user and subchapter info.</div>;
+  // ------------------------------------------------------------------
+  // Early return states
+  // ------------------------------------------------------------------
+  if (!subChapterId || !userId) {
+    return <div style={styles.text}>No valid user/subchapter info.</div>;
   }
   if (loading) {
-    return <div style={styles.text}>Loading...</div>;
+    return <div style={styles.text}>Loading quiz data...</div>;
   }
   if (error) {
     return (
@@ -109,34 +127,28 @@ export default function QuizAnalyze({ onQuizDone }) {
     );
   }
 
-  // -------------------------------------------------------------------
-  // CASE A: If quiz already exists, show stored results
-  // -------------------------------------------------------------------
-  if (existingQuiz) {
-    return (
-      <div style={styles.container}>
-        <h3 style={styles.heading}>Quiz Already Attempted</h3>
-        <p style={styles.text}>You scored: {existingQuiz.score}</p>
-        <button onClick={onQuizDone} style={styles.button}>
-          Done with Quiz
-        </button>
-      </div>
-    );
+  // ------------------------------------------------------------------
+  // CASE A: If we have an existing quiz => show pass/fail result
+  // ------------------------------------------------------------------
+  if (existingQuiz && !finalScore) {
+    // existingQuiz.score e.g. "3 / 5"
+    // We'll parse it and show a small results screen
+    return renderResultsScreen(existingQuiz.score);
   }
 
-  // -------------------------------------------------------------------
+  // If we have finalScore from a new attempt, show that result screen as well
+  if (finalScore) {
+    return renderResultsScreen(finalScore);
+  }
+
+  // ------------------------------------------------------------------
   // CASE B: No existing quiz => Show GPT-based quiz
-  // -------------------------------------------------------------------
+  // ------------------------------------------------------------------
   if (!responseData) {
-    // Possibly means we had an error or still loading.
-    return (
-      <div style={styles.text}>
-        No quiz data available yet.
-      </div>
-    );
+    return <div style={styles.text}>No quiz data available yet.</div>;
   }
 
-  // 6. Parse the GPT JSON result
+  // Parse the GPT JSON
   let rawResult = responseData.result || "";
   if (rawResult.startsWith("```")) {
     rawResult = stripMarkdownFences(rawResult);
@@ -148,103 +160,77 @@ export default function QuizAnalyze({ onQuizDone }) {
   } catch (err) {
     return (
       <div style={styles.container}>
-        <h3 style={styles.heading}>Quiz (Analyze Stage) for SubChapter: {subchapterId}</h3>
+        <h3 style={styles.heading}>Quiz (Analyze) for SubChapter: {subChapterId}</h3>
         <p style={{ ...styles.text, color: "red" }}>
           GPT response is not valid JSON. Showing raw text:
         </p>
         <pre style={styles.pre}>{rawResult}</pre>
-        <button onClick={onQuizDone} style={styles.button}>
-          Done with Quiz
-        </button>
       </div>
     );
   }
 
-  // 7. Identify UI fields from the response
   const { UIconfig = {} } = responseData;
   const { fields = [] } = UIconfig;
-
   const quizFieldConfig = fields.find((f) => f.component === "quiz");
   if (!quizFieldConfig) {
-    // If there's no quiz field defined, fallback to raw JSON
     return (
       <div style={styles.container}>
-        <h3 style={styles.heading}>Quiz (Analyze Stage)</h3>
+        <h3 style={styles.heading}>Quiz (Analyze)</h3>
         <p style={styles.text}>No quiz field found in UIconfig. Showing raw JSON:</p>
         <pre style={styles.pre}>{JSON.stringify(parsedResult, null, 2)}</pre>
-        <button onClick={onQuizDone} style={styles.button}>
-          Done with Quiz
-        </button>
       </div>
     );
   }
 
-  // 8. The array of questions in the JSON (quizQuestions)
   const quizQuestions = parsedResult[quizFieldConfig.field] || [];
   const totalQuestions = quizQuestions.length;
 
-  // 9. Handler for selecting an answer
+  // Handler for user selecting an answer
   function handleSelectAnswer(questionIndex, optionIndex) {
     const updated = [...selectedAnswers];
     updated[questionIndex] = optionIndex;
     setSelectedAnswers(updated);
   }
 
-  // 10. Handler for submitting the quiz
+  // Handler for submit
   async function handleSubmit() {
     let correctCount = 0;
 
-    // We'll build a "quizSubmission" array for storing
-    const quizSubmission = quizQuestions.map((question, qIndex) => {
-      const userAnswer = selectedAnswers[qIndex];
-      const isCorrect = userAnswer === question.correctAnswerIndex;
+    const quizSubmission = quizQuestions.map((q, idx) => {
+      const userAnswer = selectedAnswers[idx];
+      const isCorrect = userAnswer === q.correctAnswerIndex;
       if (isCorrect) correctCount++;
-
       return {
-        question: question.question,
-        options: question.options,
-        correctAnswerIndex: question.correctAnswerIndex,
+        question: q.question,
+        options: q.options,
+        correctAnswerIndex: q.correctAnswerIndex,
         userAnswer: typeof userAnswer === "number" ? userAnswer : null,
         isCorrect,
       };
     });
 
-    const finalScore = `${correctCount} / ${totalQuestions}`;
-    setScore(finalScore);
+    const scoreString = `${correctCount} / ${totalQuestions}`;
+    setFinalScore(scoreString);
 
-    // 10a. Now post the quiz submission to the server
+    // Save to Firestore
     try {
       await axios.post("http://localhost:3001/api/submitQuiz", {
         userId,
-        subchapterId,
+        subchapterId: subChapterId,
         quizType,
         quizSubmission,
-        score: finalScore,
+        score: scoreString,
         totalQuestions,
       });
     } catch (err) {
       console.error("Error saving quiz submission:", err);
-      // optionally show some UI error
     }
   }
 
-  // 11. If we have a final score, show results
-  if (score !== null) {
-    return (
-      <div style={styles.container}>
-        <h3 style={styles.heading}>Quiz Results</h3>
-        <p style={styles.text}>You scored: {score}</p>
-        <button onClick={onQuizDone} style={styles.button}>
-          Done with Quiz
-        </button>
-      </div>
-    );
-  }
-
-  // 12. Render the new GPT-based quiz
+  // RENDER QUIZ UI
   return (
     <div style={styles.container}>
-      <h3 style={styles.heading}>{quizFieldConfig.label || "Quiz"}</h3>
+      <h3 style={styles.heading}>Quiz (Analyze) for SubChapter: {subChapterId}</h3>
       {quizQuestions.map((question, qIndex) => (
         <div key={qIndex} style={styles.questionBlock}>
           <p style={styles.questionText}>{`Q${qIndex + 1}: ${question.question}`}</p>
@@ -268,9 +254,46 @@ export default function QuizAnalyze({ onQuizDone }) {
       </button>
     </div>
   );
+
+  // ------------------------------------------------------------------
+  // Helper: Render pass/fail results screen, let user click "Revise" or "Done"
+  // ------------------------------------------------------------------
+  function renderResultsScreen(scoreString) {
+    const correctCount = parseInt(scoreString.split("/")[0].trim(), 10);
+    const total = parseInt(scoreString.split("/")[1].trim(), 10);
+    const passThreshold = 4; // Hard-coded
+
+    const passed = correctCount >= passThreshold;
+
+    return (
+      <div style={styles.container}>
+        <h3 style={styles.heading}>Quiz Results</h3>
+        <p style={styles.text}>You scored: {scoreString}</p>
+        {passed ? (
+          <>
+            <p style={styles.text}>
+              Congratulations! You passed this quiz.
+            </p>
+            <button onClick={onQuizComplete} style={styles.button}>
+              Done
+            </button>
+          </>
+        ) : (
+          <>
+            <p style={styles.text}>
+              You need more practice. Let's revise now!
+            </p>
+            <button onClick={onQuizFail} style={styles.button}>
+              Revise
+            </button>
+          </>
+        )}
+      </div>
+    );
+  }
 }
 
-// Styles
+// Basic styles
 const styles = {
   container: {
     backgroundColor: "transparent",
@@ -298,15 +321,6 @@ const styles = {
     margin: "1rem 0",
     whiteSpace: "pre-wrap",
   },
-  button: {
-    marginTop: "1rem",
-    padding: "8px 16px",
-    cursor: "pointer",
-    backgroundColor: "#444",
-    color: "#fff",
-    border: "none",
-    borderRadius: "4px",
-  },
   questionBlock: {
     marginBottom: "1rem",
   },
@@ -317,5 +331,14 @@ const styles = {
   optionLabel: {
     display: "block",
     marginLeft: "1rem",
+  },
+  button: {
+    marginTop: "1rem",
+    padding: "8px 16px",
+    cursor: "pointer",
+    backgroundColor: "#444",
+    color: "#fff",
+    border: "none",
+    borderRadius: "4px",
   },
 };

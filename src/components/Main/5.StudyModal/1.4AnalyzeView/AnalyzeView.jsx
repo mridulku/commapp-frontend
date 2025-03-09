@@ -1,14 +1,12 @@
-// ApplyView.jsx
-
 import React, { useEffect, useState } from "react";
 import QuizAnalyze from "./QuizAnalyze";
 import ReviseAnalyze from "./ReviseAnalyze";
 
 /**
- * Example statuses for the Apply stage:
- * - "NOT_STARTED" : user hasn't done any quiz
- * - "QUIZ_FAILED" : user failed => show revision
- * - "REVISION_DONE": user finished revision => quiz again
+ * Example statuses for the Analyze stage:
+ * - "NOT_STARTED"  : user hasn't taken the quiz yet
+ * - "QUIZ_FAILED"  : user failed => show revise
+ * - "REVISION_DONE": user finished revision => can quiz again
  * - "QUIZ_COMPLETED": user passed => success message
  */
 
@@ -24,14 +22,15 @@ function AttemptHistoryItem({ attempt }) {
   );
 }
 
-export default function RememberView({ activity }) {
+export default function AnalyzeView({ activity }) {
+  // We'll assume `activity` contains at least { subChapterId }
   const subChapterId = activity?.subChapterId || "N/A";
 
-  // Stage status (dummy logic for demonstration)
+  // Stage status for the quiz flow
   const [status, setStatus] = useState("NOT_STARTED");
 
-  // Example pass threshold
-  const passThreshold = 3;
+  // Example pass threshold – user needs 4 or 5 out of 5 to pass
+  const passThreshold = 4;
 
   // Example local attempt data (simulate a user with 2 attempts)
   const [attemptHistory, setAttemptHistory] = useState([
@@ -45,7 +44,7 @@ export default function RememberView({ activity }) {
     {
       attemptNum: 2,
       date: "2025-03-02",
-      score: 3,
+      score: 4,
       threshold: passThreshold,
       status: "pass",
     },
@@ -54,47 +53,53 @@ export default function RememberView({ activity }) {
   // Controls whether the "History Panel" is visible
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
 
-  // On mount, simulate fetching data
+  // On mount (or whenever subChapterId changes), reset status
   useEffect(() => {
-    // e.g. setStatus("QUIZ_FAILED") if user last failed, etc.
-    // setAttemptHistory(...) from your DB
     setStatus("NOT_STARTED");
+    // In real code, you might also fetch the attempt history from Firestore or an API
   }, [subChapterId]);
 
-  // Child handlers
+  // --- Handlers from child components ---
   function handleQuizComplete() {
+    // user passed => set to QUIZ_COMPLETED
     setStatus("QUIZ_COMPLETED");
-    // In real code, store quiz pass in DB, push new attempt record
+
+    // You might also push a new attempt record in real code
+    // e.g. setAttemptHistory([...attemptHistory, newAttempt]);
   }
 
   function handleQuizFail() {
+    // user failed => show revise
     setStatus("QUIZ_FAILED");
-    // store fail attempt, etc.
+    // also store the fail attempt, etc.
   }
 
   function handleRevisionDone() {
+    // after revise, let them try the quiz again
     setStatus("REVISION_DONE");
   }
 
   function handleSecondQuizComplete() {
+    // if they pass after revision
     setStatus("QUIZ_COMPLETED");
   }
 
   function handleSecondQuizFail() {
+    // if they fail again
     setStatus("QUIZ_FAILED");
   }
 
-  // A) Renders a small rectangular “Attempt #” pill in top-right
-  //    that toggles the side panel
+  // A) Renders a small rectangular “Attempt #” pill in the top-right
+  //    that toggles the side panel.
   function renderAttemptPill() {
-    // e.g. let's say the last attempt was #2, or we can show total attempts
     const totalAttempts = attemptHistory.length;
-    const lastAttemptNum = totalAttempts > 0 ? attemptHistory[attemptHistory.length - 1].attemptNum : 0;
+    const lastAttemptNum =
+      totalAttempts > 0
+        ? attemptHistory[attemptHistory.length - 1].attemptNum
+        : 0;
 
-    // If you want to show "Attempts: 2" or "Attempt #2" – up to you:
-    const pillLabel = totalAttempts === 0
-      ? "No Attempts"
-      : `Attempt #${lastAttemptNum}`;
+    const pillLabel =
+      totalAttempts === 0 ? "No Attempts" : `Attempt #${lastAttemptNum}`;
 
     return (
       <div style={styles.attemptPill} onClick={() => setShowHistoryPanel(true)}>
@@ -108,7 +113,7 @@ export default function RememberView({ activity }) {
     return (
       <div style={styles.historyPanel}>
         <div style={styles.panelHeader}>
-          <h4 style={{ margin: 0 }}>Apply Stage Attempts</h4>
+          <h4 style={{ margin: 0 }}>Analyze Stage Attempts</h4>
           <button style={styles.closeBtn} onClick={() => setShowHistoryPanel(false)}>
             ✕
           </button>
@@ -134,7 +139,7 @@ export default function RememberView({ activity }) {
       {/* A) The top bar area: title + attempt pill on top-right */}
       <div style={styles.topBar}>
         <h2 style={styles.titleText}>
-          [Apply View] SubChapter ID: {subChapterId}
+          [Analyze View] SubChapter ID: {subChapterId}
         </h2>
         {renderAttemptPill()}
       </div>
@@ -148,12 +153,14 @@ export default function RememberView({ activity }) {
             onQuizFail={handleQuizFail}
           />
         )}
+
         {status === "QUIZ_FAILED" && (
           <ReviseAnalyze
             subChapterId={subChapterId}
             onRevisionDone={handleRevisionDone}
           />
         )}
+
         {status === "REVISION_DONE" && (
           <div style={{ marginBottom: "1rem", color: "#f90" }}>
             <p>Revision complete. Attempt quiz again:</p>
@@ -164,10 +171,11 @@ export default function RememberView({ activity }) {
             />
           </div>
         )}
+
         {status === "QUIZ_COMPLETED" && (
           <div style={{ marginBottom: "1rem", color: "lightgreen" }}>
             <h3>Quiz Completed Successfully!</h3>
-            <p>Congrats, you passed the Apply stage for sub-chapter {subChapterId}.</p>
+            <p>Congrats, you passed the Analyze stage for sub-chapter {subChapterId}.</p>
           </div>
         )}
       </div>
@@ -246,7 +254,6 @@ const styles = {
   },
 };
 
-// Additional styling for history list
 const histStyles = {
   historyList: {
     marginTop: "6px",
