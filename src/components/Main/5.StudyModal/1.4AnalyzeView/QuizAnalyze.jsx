@@ -1,18 +1,25 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useSelector } from "react-redux";
+import LoadingSpinner from "./LoadingSpinner";
 
+/**
+ * QuizAnalyze
+ * -----------
+ * Removes the extra heading so the quiz begins “right away.” 
+ * The user sees only the questions or final results, no big "Quiz Analyze Attempt #..." text.
+ */
 export default function QuizAnalyze({
   subChapterId,
   attemptNumber,
   onQuizComplete,
   onQuizFail,
 }) {
-  const userId = useSelector((state) => state.auth?.userId) ;
+  const userId = useSelector((state) => state.auth?.userId);
   const quizType = "analyze";
   const promptKey = "quizAnalyze";
 
-  // local states
+  // Local states
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [responseData, setResponseData] = useState(null);
@@ -21,10 +28,11 @@ export default function QuizAnalyze({
   const [showResult, setShowResult] = useState(false);
   const [finalScore, setFinalScore] = useState(null);
 
+  // Fetch GPT quiz on mount or subChapter/attempt changes
   useEffect(() => {
     if (!subChapterId) return;
     fetchGPTQuiz();
-    // reset local states
+    // Reset states
     setSelectedAnswers([]);
     setShowResult(false);
     setFinalScore(null);
@@ -51,11 +59,17 @@ export default function QuizAnalyze({
   }
 
   if (!subChapterId) return <div style={styles.text}>No subChapterId</div>;
-  if (loading) return <div style={styles.text}>Loading quiz...</div>;
-  if (error) return <div style={styles.textError}>Error: {error}</div>;
-  if (!responseData) return <div style={styles.text}>No quiz data yet.</div>;
+  if (loading) {
+    return <LoadingSpinner message="Building your quiz..." />;
+  }
+  if (error) {
+    return <div style={styles.textError}>Error: {error}</div>;
+  }
+  if (!responseData) {
+    return <div style={styles.text}>No quiz data yet.</div>;
+  }
 
-  // parse GPT JSON
+  // Parse GPT JSON
   let raw = responseData.result || "";
   if (raw.startsWith("```")) {
     raw = stripMarkdownFences(raw);
@@ -67,7 +81,10 @@ export default function QuizAnalyze({
   } catch (err) {
     return (
       <div style={styles.container}>
-        <h3 style={styles.heading}>Quiz (Analyze)</h3>
+        {/* 
+          We remove big headings here too, just keep minimal text 
+          in case there's invalid JSON 
+        */}
         <p style={{ ...styles.text, color: "red" }}>
           GPT response is not valid JSON. Check console for details.
         </p>
@@ -81,7 +98,7 @@ export default function QuizAnalyze({
   if (!quizFieldConfig) {
     return (
       <div style={styles.container}>
-        <h3 style={styles.heading}>Quiz (Analyze)</h3>
+        {/* Minimal => no heading */}
         <p style={styles.text}>No quiz field found in UIconfig.</p>
       </div>
     );
@@ -90,6 +107,7 @@ export default function QuizAnalyze({
   const quizQuestions = parsed[quizFieldConfig.field] || [];
   const totalQuestions = quizQuestions.length;
 
+  // Handler => user clicks "Submit"
   async function handleSubmit() {
     let correctCount = 0;
     const quizSubmission = quizQuestions.map((q, idx) => {
@@ -125,7 +143,7 @@ export default function QuizAnalyze({
     }
   }
 
-  // if user submitted => show pass/fail
+  // If user submitted => show pass/fail results (no big heading)
   if (showResult && finalScore) {
     const correctCount = parseInt(finalScore.split("/")[0], 10);
     const passThreshold = 4;
@@ -133,9 +151,6 @@ export default function QuizAnalyze({
 
     return (
       <div style={styles.container}>
-        <h3 style={styles.heading}>
-          Quiz (Analyze) Attempt #{attemptNumber} Results
-        </h3>
         <p style={styles.text}>You scored: {finalScore}</p>
         {passed ? (
           <>
@@ -156,10 +171,10 @@ export default function QuizAnalyze({
     );
   }
 
-  // else show the quiz
+  // Else => show the quiz
   return (
     <div style={styles.container}>
-      <h3 style={styles.heading}>Quiz (Analyze) – Attempt #{attemptNumber}</h3>
+      {/* No heading, just jump straight into questions */}
       {quizQuestions.map((question, qIndex) => (
         <div key={qIndex} style={styles.questionBlock}>
           <p style={styles.questionText}>{`Q${qIndex + 1}: ${question.question}`}</p>
@@ -199,13 +214,9 @@ const styles = {
     padding: "1rem",
     color: "#fff",
   },
-  heading: {
-    margin: 0,
-    marginBottom: "1rem",
-    fontSize: "1.2rem",
-  },
   text: {
     color: "#fff",
+    fontSize: "1rem",
   },
   textError: {
     color: "red",

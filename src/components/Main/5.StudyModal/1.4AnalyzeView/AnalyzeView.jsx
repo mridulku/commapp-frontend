@@ -1,43 +1,25 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import { useSelector } from "react-redux"; // <-- to get userId from Redux
+import { useSelector } from "react-redux";
 import QuizAnalyze from "./QuizAnalyze";
 import ReviseAnalyze from "./ReviseAnalyze";
 
-/**
- * AnalyzeView
- * -----------
- * 1) On mount, fetch quiz attempts (/api/getQuiz) + revision attempts (/api/getRevisions).
- * 2) Decide user state (no quizzes yet? last quiz pass? last quiz fail + revision done?).
- * 3) Render the appropriate step.
- */
+// We'll import our timeline rendering code from a separate file or inline it
 
 export default function AnalyzeView({ activity }) {
-  // Suppose each activity has { subChapterId }
   const subChapterId = activity?.subChapterId || "";
-
-  // Option A: get userId from Redux
-  // const userId = useSelector((state) => state.auth?.userId);
-  // if you want to fallback => "demoUser":
-  //   const userId = useSelector((state) => state.auth?.userId) || "demoUser";
-
-  // Option B: or you might pass userId as a prop if you prefer:
-  // but let's assume Redux approach:
   const userId = useSelector((state) => state.auth?.userId);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  const [quizAttempts, setQuizAttempts] = useState([]);       // from /api/getQuiz
-  const [revisionAttempts, setRevisionAttempts] = useState([]); // from /api/getRevisions
-
-  // mode => "NO_QUIZ_YET", "QUIZ_COMPLETED", "NEED_REVISION", "CAN_TAKE_NEXT_QUIZ"
+  const [quizAttempts, setQuizAttempts] = useState([]);
+  const [revisionAttempts, setRevisionAttempts] = useState([]);
   const [mode, setMode] = useState("LOADING");
-
-  // We'll track the user's last quiz attempt doc
   const [lastQuizAttempt, setLastQuizAttempt] = useState(null);
 
-  // Re-fetch on subChapterId or userId changes
+  // NEW: control whether the timeline is visible
+  const [showTimeline, setShowTimeline] = useState(false);
+
   useEffect(() => {
     if (!subChapterId || !userId) return;
     fetchData();
@@ -50,21 +32,13 @@ export default function AnalyzeView({ activity }) {
 
       // 1) get quiz attempts
       const quizRes = await axios.get("http://localhost:3001/api/getQuiz", {
-        params: {
-          userId,                  // <--- use real userId from Redux
-          subchapterId: subChapterId,
-          quizType: "analyze",
-        },
+        params: { userId, subchapterId: subChapterId, quizType: "analyze" },
       });
       const quizArr = quizRes.data.attempts || [];
 
       // 2) get revision attempts
       const revRes = await axios.get("http://localhost:3001/api/getRevisions", {
-        params: {
-          userId,                  // <--- same here
-          subchapterId: subChapterId,
-          revisionType: "analyze",
-        },
+        params: { userId, subchapterId: subChapterId, revisionType: "analyze" },
       });
       const revArr = revRes.data.revisions || [];
 
@@ -81,19 +55,15 @@ export default function AnalyzeView({ activity }) {
 
   function computeState(quizArr, revArr) {
     if (quizArr.length === 0) {
-      // no quiz attempts => user does attempt #1
       setMode("NO_QUIZ_YET");
       setLastQuizAttempt(null);
       return;
     }
-
-    // quizArr is sorted by attemptNumber desc in the backend
-    const [latestQuiz] = quizArr; // first item is the newest
+    const [latestQuiz] = quizArr; // newest attempt
     setLastQuizAttempt(latestQuiz);
 
-    // parse the score => e.g. "3 / 5"
     const numericScore = parseInt(latestQuiz.score.split("/")[0], 10);
-    const passThreshold = 4; // your logic
+    const passThreshold = 4;
     const passed = numericScore >= passThreshold;
     const attemptNum = latestQuiz.attemptNumber;
 
@@ -101,8 +71,6 @@ export default function AnalyzeView({ activity }) {
       setMode("QUIZ_COMPLETED");
       return;
     }
-
-    // user fail => check if revision for that attempt
     const matchingRev = revArr.find((r) => r.revisionNumber === attemptNum);
     if (!matchingRev) {
       setMode("NEED_REVISION");
@@ -111,26 +79,18 @@ export default function AnalyzeView({ activity }) {
     }
   }
 
-  // Called when user finishes or fails the quiz => re-fetch
   function handleQuizComplete() {
     fetchData();
   }
   function handleQuizFail() {
     fetchData();
   }
-
-  // Called when user finishes revision => re-fetch
   function handleRevisionDone() {
     fetchData();
   }
 
-  // If subChapterId or userId is missing, we can't load
   if (!subChapterId || !userId) {
-    return (
-      <div style={{ color: "#fff" }}>
-        No valid subChapterId or userId. Please ensure both are set.
-      </div>
-    );
+    return <div style={{ color: "#fff" }}>No valid subChapterId/userId.</div>;
   }
   if (loading) {
     return <div style={{ color: "#fff" }}>Loading attempts...</div>;
@@ -139,57 +99,194 @@ export default function AnalyzeView({ activity }) {
     return <div style={{ color: "red" }}>Error: {error}</div>;
   }
 
+  // 1) Minimal summary label => e.g. last attempt or “No attempts”
+  let summaryLabel = "No Attempts Yet";
+  if (quizAttempts.length > 0) {
+    // e.g. "Last Attempt => Q3 (5/5)"
+    const [latest] = quizAttempts; // newest is index 0
+    summaryLabel = `Last Attempt => Q${latest.attemptNumber} (${latest.score})`;
+  }
+
   return (
     <div style={{ color: "#fff", padding: "1rem" }}>
-      <h2>Analyze Flow for subChapter: {subChapterId}</h2>
+      {/* A small row with summary + toggle button */}
+      <div style={styles.headerRow}>
+        <div>{summaryLabel}</div>
+        <button
+          style={styles.toggleButton}
+          onClick={() => setShowTimeline(!showTimeline)}
+        >
+          {showTimeline ? "Hide details" : "Show details"}
+        </button>
+      </div>
 
-      {mode === "NO_QUIZ_YET" && (
-        <div>
-          <p>No quiz attempts yet. Let's do attempt #1</p>
+      {/* On show, render the timeline in a less intrusive row */}
+      {showTimeline && (
+        <div style={styles.timelinePanel}>
+          {renderTimeline(quizAttempts, revisionAttempts)}
+        </div>
+      )}
+
+      {/* Render main flow based on mode */}
+      <div style={styles.mainContent}>
+        {mode === "NO_QUIZ_YET" && (
           <QuizAnalyze
             subChapterId={subChapterId}
             attemptNumber={1}
             onQuizComplete={handleQuizComplete}
             onQuizFail={handleQuizFail}
           />
-        </div>
-      )}
+        )}
 
-      {mode === "QUIZ_COMPLETED" && (
-        <div style={{ color: "lightgreen" }}>
-          <h3>Quiz Completed Successfully!</h3>
-          <p>You passed the Analyze stage for sub-chapter {subChapterId}.</p>
-        </div>
-      )}
+        {mode === "QUIZ_COMPLETED" && (
+          <div style={{ color: "lightgreen" }}>
+            <p>Congratulations! You passed the Analyze stage.</p>
+          </div>
+        )}
 
-      {mode === "NEED_REVISION" && lastQuizAttempt && (
-        <div>
-          <p>
-            Your last quiz attempt #{lastQuizAttempt.attemptNumber} was a fail.
-            Please do the revision for attempt #{lastQuizAttempt.attemptNumber}.
-          </p>
+        {mode === "NEED_REVISION" && lastQuizAttempt && (
           <ReviseAnalyze
             subChapterId={subChapterId}
             revisionNumber={lastQuizAttempt.attemptNumber}
             onRevisionDone={handleRevisionDone}
           />
-        </div>
-      )}
+        )}
 
-      {mode === "CAN_TAKE_NEXT_QUIZ" && lastQuizAttempt && (
-        <div>
-          <p>
-            You've completed revision for quiz attempt #
-            {lastQuizAttempt.attemptNumber}. Take next quiz attempt!
-          </p>
+        {mode === "CAN_TAKE_NEXT_QUIZ" && lastQuizAttempt && (
           <QuizAnalyze
             subChapterId={subChapterId}
             attemptNumber={lastQuizAttempt.attemptNumber + 1}
             onQuizComplete={handleQuizComplete}
             onQuizFail={handleQuizFail}
           />
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
+
+/** Renders Qn -> Rn timeline with color-coded boxes, same approach as before */
+function renderTimeline(quizArr, revArr) {
+  if (!quizArr.length) {
+    return (
+      <div style={styles.timelineContainer}>
+        <div style={styles.timelineItem}>
+          <p style={{ color: "#aaa", margin: 0 }}>No attempts yet</p>
+        </div>
+      </div>
+    );
+  }
+  const quizAsc = [...quizArr].sort((a, b) => a.attemptNumber - b.attemptNumber);
+
+  const timelineItems = [];
+  quizAsc.forEach((quizDoc) => {
+    const attemptNum = quizDoc.attemptNumber;
+    const numericScore = parseInt(quizDoc.score.split("/")[0], 10);
+    const passThreshold = 4;
+    const passed = numericScore >= passThreshold;
+
+    timelineItems.push({
+      type: "quiz",
+      attemptNumber: attemptNum,
+      passed,
+      score: quizDoc.score,
+      timestamp: quizDoc.timestamp,
+    });
+
+    const matchingRev = revArr.find((r) => r.revisionNumber === attemptNum);
+    if (matchingRev) {
+      timelineItems.push({
+        type: "revision",
+        attemptNumber: attemptNum,
+        timestamp: matchingRev.timestamp,
+      });
+    }
+  });
+
+  return (
+    <div style={styles.timelineContainer}>
+      {timelineItems.map((item, idx) => (
+        <TimelineItem item={item} key={idx} />
+      ))}
+    </div>
+  );
+}
+
+function TimelineItem({ item }) {
+  const { type, attemptNumber, passed, score, timestamp } = item;
+  const isQuiz = type === "quiz";
+  const isRevision = type === "revision";
+
+  let boxColor = "#888";
+  let label = "";
+  if (isQuiz) {
+    label = `Q${attemptNumber} (${score})`;
+    boxColor = passed ? "#2ecc71" : "#e74c3c"; // green or red
+  } else if (isRevision) {
+    label = `R${attemptNumber}`;
+    boxColor = "#3498db"; // blue
+  }
+
+  const timeString = timestamp
+    ? new Date(timestamp._seconds * 1000).toLocaleString()
+    : null;
+
+  return (
+    <div style={styles.timelineItem}>
+      <div style={{ ...styles.timelineBox, backgroundColor: boxColor }}>
+        {label}
+      </div>
+      {timeString && <p style={styles.timelineTimestamp}>{timeString}</p>}
+    </div>
+  );
+}
+
+// Some minimal styling
+const styles = {
+  headerRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: "1rem",
+  },
+  toggleButton: {
+    backgroundColor: "#444",
+    color: "#fff",
+    border: "none",
+    padding: "6px 10px",
+    borderRadius: "4px",
+    cursor: "pointer",
+  },
+  timelinePanel: {
+    marginBottom: "1rem",
+    backgroundColor: "#111",
+    padding: "0.5rem",
+    borderRadius: "4px",
+  },
+  mainContent: {
+    // space for main quiz/revision content
+  },
+  timelineContainer: {
+    display: "flex",
+    gap: "0.5rem",
+    flexWrap: "wrap",
+  },
+  timelineItem: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+  },
+  timelineBox: {
+    minWidth: "60px",
+    padding: "8px",
+    borderRadius: "4px",
+    color: "#fff",
+    textAlign: "center",
+    fontWeight: "bold",
+  },
+  timelineTimestamp: {
+    fontSize: "0.75rem",
+    marginTop: "4px",
+    color: "#aaa",
+  },
+};

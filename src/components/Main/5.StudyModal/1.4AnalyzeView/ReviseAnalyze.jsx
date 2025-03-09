@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useSelector } from "react-redux";
+import LoadingSpinner from "./LoadingSpinner";
+
 
 function stripMarkdownFences(text) {
   return text.replace(/```(json)?/gi, "").trim();
@@ -60,8 +62,8 @@ export default function ReviseAnalyze({
     return <div style={styles.text}>No subChapterId.</div>;
   }
   if (loading) {
-    return <div style={styles.text}>Loading revision data...</div>;
-  }
+      return <LoadingSpinner message="Building your revision..." />;
+    }
   if (error) {
     return <div style={styles.textError}>Error: {error}</div>;
   }
