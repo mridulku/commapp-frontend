@@ -2,26 +2,59 @@ import React, { useState, useEffect } from "react";
 import { useSelector } from "react-redux";
 import axios from "axios";
 
-// Helper to remove markdown fences (```json) from GPT's response
 function stripMarkdownFences(text) {
   return text.replace(/```(json)?/gi, "").trim();
 }
 
-export default function ReviseApply({ onRevisionDone }) {
-  // Grab user/subchapter from Redux (adjust selectors if needed)
+export default function ReviseAnalyze({ onRevisionDone }) {
   const userId = useSelector((state) => state.auth?.userId) || "demoUser";
   const { flattenedActivities, currentIndex } = useSelector((state) => state.plan);
   const currentActivity =
-    flattenedActivities && currentIndex >= 0 ? flattenedActivities[currentIndex] : null;
+    flattenedActivities && currentIndex >= 0
+      ? flattenedActivities[currentIndex]
+      : null;
   const subchapterId = currentActivity ? currentActivity.subChapterId : "";
 
-  // Hard-coded prompt key
-  const promptKey = "revise"; // <== CHANGED: using promptKey instead of promptId
+  // We'll define revisionType as "analyze" (or "apply", etc.)
+  const revisionType = "analyze";
+  // We'll store revisionNumber once we fetch existing revisions
+  const [revisionNumber, setRevisionNumber] = useState(null);
 
-  const [responseData, setResponseData] = useState(null); // { finalPrompt, result, UIconfig }
+  // States for GPT data
+  const [responseData, setResponseData] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // 1) On mount, fetch existing revisions to find the highest revisionNumber
+  useEffect(() => {
+    if (!userId || !subchapterId) return;
+
+    (async () => {
+      try {
+        // 1) fetch existing revisions
+        const revRes = await axios.get("http://localhost:3001/api/getRevisions", {
+          params: {
+            userId,
+            subchapterId,
+            revisionType,
+          },
+        });
+
+        const revisions = revRes.data.revisions || [];
+        // if we have existing revisions, let's say the highest is revisions[0].revisionNumber
+        // because we orderBy desc in the backend
+        let nextRevNum = 1;
+        if (revisions.length > 0) {
+          nextRevNum = revisions[0].revisionNumber + 1;
+        }
+        setRevisionNumber(nextRevNum);
+      } catch (err) {
+        console.error("Error fetching revisions:", err);
+      }
+    })();
+  }, [userId, subchapterId]);
+
+  // 2) Fetch GPT “revise” content
   useEffect(() => {
     if (!subchapterId || !userId) return;
 
@@ -33,70 +66,75 @@ export default function ReviseApply({ onRevisionDone }) {
       .post("http://localhost:3001/api/generate", {
         userId,
         subchapterId,
-        promptKey, // <== CHANGED: now sending promptKey
+        promptKey: "revise", // or "reviseAnalyze"
       })
       .then((res) => {
         setResponseData(res.data);
       })
       .catch((err) => {
-        console.error("Error fetching data:", err);
+        console.error("Error fetching revision data:", err);
         setError(err.message || "Error fetching data");
       })
-      .finally(() => {
-        setLoading(false);
-      });
-  }, [subchapterId, userId, promptKey]);
+      .finally(() => setLoading(false));
+  }, [subchapterId, userId]);
 
-  // Early returns for states
   if (!subchapterId || !userId) {
-    return <div style={styles.text}>Please ensure you have valid user and subchapter info.</div>;
+    return <div style={styles.text}>Please ensure valid user/subchapter.</div>;
   }
   if (loading) return <div style={styles.text}>Loading revision data...</div>;
-  if (error) {
-    return (
-      <div style={styles.textError}>
-        Error: {error}
-      </div>
-    );
-  }
-  if (!responseData) {
-    return <div style={styles.text}>No data received yet.</div>;
+  if (error) return <div style={styles.textError}>Error: {error}</div>;
+  if (!responseData) return <div style={styles.text}>No data yet.</div>;
+  if (revisionNumber === null) {
+    return <div style={styles.text}>Calculating next revision number...</div>;
   }
 
-  // Remove code fences if present
   let rawResult = responseData.result || "";
   if (rawResult.startsWith("```")) {
     rawResult = stripMarkdownFences(rawResult);
   }
 
-  // Attempt to parse the GPT result as JSON
   let parsedResult;
   try {
     parsedResult = JSON.parse(rawResult);
   } catch (err) {
-    // Fallback: show raw text
     return (
       <div style={styles.container}>
-        <h3 style={styles.heading}>Revision (Apply Stage) for SubChapter: {subchapterId}</h3>
+        <h3 style={styles.heading}>
+          Revision (Analyze Stage) for {subchapterId}
+        </h3>
         <p style={{ ...styles.text, color: "red" }}>
           GPT response is not valid JSON. Showing raw text:
         </p>
         <pre style={styles.pre}>{rawResult}</pre>
-        <button onClick={onRevisionDone} style={styles.button}>
+        <button onClick={handleRevisionDone} style={styles.button}>
           Done with Revision
         </button>
       </div>
     );
   }
 
-  // Render according to UIconfig
   const { UIconfig = {} } = responseData;
   const { fields = [] } = UIconfig;
 
-  const renderField = (fieldConfig) => {
-    const { field, label } = fieldConfig;
-    // Merge style from Firestore with our default style
-    const combinedStyle = { ...styles.fieldValue, ...(fieldConfig.style || {}) };
+  // Called when user finishes revision
+  async function handleRevisionDone() {
+    try {
+      await axios.post("http://localhost:3001/api/submitRevision", {
+        userId,
+        subchapterId,
+        revisionType,
+        revisionNumber,
+      });
+      if (onRevisionDone) onRevisionDone();
+    } catch (err) {
+      console.error("Error submitting revision record:", err);
+      alert("Failed to record revision.");
+    }
+  }
+
+  function renderField(fieldConfig) {
+    const { field, label, style } = fieldConfig;
+    const combinedStyle = { ...styles.fieldValue, ...(style || {}) };
 
     const value = parsedResult[field] || "";
     return (
@@ -109,25 +147,29 @@ export default function ReviseApply({ onRevisionDone }) {
         </div>
       </div>
     );
-  };
+  }
 
   return (
     <div style={styles.container}>
-      <h3 style={styles.heading}>Revision (Apply Stage) for SubChapter: {subchapterId}</h3>
+      <h3 style={styles.heading}>
+        Revision (Analyze Stage) for SubChapter: {subchapterId}
+      </h3>
+      <p style={styles.text}>
+        (This will be revision #{revisionNumber})
+      </p>
       {fields.length > 0 ? (
         fields.map(renderField)
       ) : (
-        // If no UIconfig fields, just show entire JSON
         <pre style={styles.pre}>{JSON.stringify(parsedResult, null, 2)}</pre>
       )}
-      <button onClick={onRevisionDone} style={styles.button}>
+
+      <button onClick={handleRevisionDone} style={styles.button}>
         Done with Revision
       </button>
     </div>
   );
 }
 
-// Simple styling to blend with a dark background
 const styles = {
   container: {
     backgroundColor: "transparent",
@@ -138,7 +180,6 @@ const styles = {
     margin: 0,
     marginBottom: "1rem",
     fontSize: "1.2rem",
-    color: "#fff",
   },
   text: {
     color: "#fff",
