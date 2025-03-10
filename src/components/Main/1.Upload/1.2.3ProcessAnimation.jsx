@@ -10,8 +10,10 @@ import {
   List,
   ListItem,
   IconButton,
-  Collapse
+  Collapse,
+  LinearProgress
 } from '@mui/material';
+import { styled } from '@mui/material/styles';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
@@ -27,6 +29,16 @@ function getNumericPrefix(title) {
   const num = parseInt(match[1], 10);
   return Number.isNaN(num) ? 999999 : num;
 }
+
+/**
+ * Styled progress bar in purple.
+ */
+const PurpleLinearProgress = styled(LinearProgress)(({ theme }) => ({
+  backgroundColor: 'rgba(255, 255, 255, 0.2)', // lighter track color
+  '& .MuiLinearProgress-bar': {
+    backgroundColor: '#9b59b6', // the purple fill
+  },
+}));
 
 /**
  * ProcessAnimation
@@ -57,6 +69,9 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
 
   // Whether to show the plan wizard inline
   const [showPlanWizard, setShowPlanWizard] = useState(false);
+
+  // Local state for a "fake" progress bar while waiting 20s
+  const [progress, setProgress] = useState(0);
 
   // Toggle expand/collapse for sub-chapters
   const handleToggleExpand = (chapterName) => {
@@ -122,15 +137,33 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
   }
 
   /**
-   * On mount, wait a few seconds, then fetch the "latest book" for this user
+   * On mount, wait 20 seconds, then fetch the "latest book" for this user
    * => Then call handleStartProcessing(bookId)
    */
   useEffect(() => {
     if (!userId) return;
-    const timer = setTimeout(() => {
+
+    // Reset progress bar
+    setProgress(0);
+
+    // Each second => +5% => 20 seconds to 100%
+    const progressInterval = setInterval(() => {
+      setProgress((prev) => {
+        const nextVal = prev + 5;
+        return nextVal >= 100 ? 100 : nextVal;
+      });
+    }, 1000);
+
+    // After 20 seconds => fetch latest book
+    const fetchTimer = setTimeout(() => {
       fetchLatestBookAndProcess();
-    }, 300);
-    return () => clearTimeout(timer);
+    }, 20000);
+
+    // Cleanup
+    return () => {
+      clearTimeout(fetchTimer);
+      clearInterval(progressInterval);
+    };
   }, [userId]);
 
   async function fetchLatestBookAndProcess() {
@@ -250,7 +283,7 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
     return null;
   }
 
-  // >>> NEW: "Card" container style, so no forced full-screen
+  // >>> "Card" container style, so no forced full-screen
   const containerStyle = {
     backgroundColor: 'rgba(255,255,255,0.04)',
     color: '#fff',
@@ -263,13 +296,18 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
 
   return (
     <Box sx={containerStyle}>
-      {/* If we haven't started, show a small "Fetching..." indicator */}
+      {/* If we haven't started, show the progress bar instead of a spinner */}
       {currentStep < 0 && (
         <Box textAlign="center">
           <Typography variant="h6" sx={{ mb: 2 }}>
             Please wait...
           </Typography>
-          <CircularProgress />
+
+          {/* Purple progress bar */}
+          <Box sx={{ width: '80%', margin: '0 auto' }}>
+            <PurpleLinearProgress variant="determinate" value={progress} />
+          </Box>
+
           <Typography sx={{ mt: 1, fontSize: '0.9rem', color: '#aaa' }}>
             Fetching your latest uploaded book...
           </Typography>
@@ -440,7 +478,6 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
           <EditAdaptivePlanModal
             // Renders in-line, not a MUI <Dialog>
             renderAsDialog={false}
-            // We'll pass open={true} for clarity
             open={true}
             onClose={() => setShowPlanWizard(false)}
             userId={userId}

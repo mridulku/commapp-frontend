@@ -13,9 +13,9 @@ import axios from "axios";
 import { auth } from "../../../firebase";
 
 // Import your steps
-import OnboardingCarousel from "./OnboardingCarousel";
-import UploadBook from "./UploadBook";
-import ProcessAnimation from "./ProcessAnimation";
+import OnboardingCarousel from "./1.2.1OnboardingCarousel";
+import UploadBook from "./1.2.2UploadBook";
+import ProcessAnimation from "./1.2.3ProcessAnimation";
 import EditAdaptivePlanModal from "../3.Library/LibraryChild/EditAdaptivePlanModal";
 
 

@@ -1,8 +1,8 @@
 // src/components/DetailedBookViewer/OnboardingModal.jsx
 
 import React, { useState } from "react";
-import OnboardingChatContent from "./OnboardingChatContent";
-import OnboardingFormContent from "./OnboardingFormContent";
+import OnboardingChatContent from "./1.1OnboardingChatContent";
+import OnboardingFormContent from "./1.2OnboardingFormContent";
 
 /**
  * OnboardingModal (Parent)

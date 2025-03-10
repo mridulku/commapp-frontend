@@ -1,5 +1,7 @@
 // src/components/AuthSignIn.jsx
 import React, { useState, useEffect } from "react";
+import googleIcon from "./logo.png"; // <-- Import from same folder
+
 import { useNavigate } from "react-router-dom";
 import {
   GoogleAuthProvider,
@@ -19,17 +21,17 @@ import {
   CssBaseline,
   Container,
   Paper,
-  Typography,
   TextField,
   Button,
   Divider,
-  Alert
+  Alert,
+  CircularProgress
 } from "@mui/material";
 
 // OPTIONAL: small Google "G" logo icon
 const GoogleLogo = () => (
   <img
-    src="https://upload.wikimedia.org/u/0/gs/internal/gfpdoor/logo_googleg_192.png"
+    src={googleIcon}
     alt="Google Logo"
     width="18"
     height="18"
@@ -74,12 +76,13 @@ export default function AuthSignIn() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
-  const navigate = useNavigate();
+  const [loadingEmailPassword, setLoadingEmailPassword] = useState(false);
+  const [loadingGoogle, setLoadingGoogle] = useState(false);
 
-  // If you have your backend URL in env or just hardcode it:
+  const navigate = useNavigate();
   const backendURL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
 
-  // If user is already logged in => we skip sign-in
+  // If user is already logged in => skip sign-in
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) {
@@ -88,16 +91,13 @@ export default function AuthSignIn() {
   }, [navigate]);
 
   /**
-   * Helper: After sign-in, create a learnerPersonas doc if none exists,
-   * using your custom endpoint => e.g. /create-learner-persona
+   * After sign-in, create a learnerPersonas doc if none exists
    */
   async function createLearnerPersonaIfNeeded() {
     try {
-      // The current user must exist here, post sign-in
       const currentUser = auth.currentUser;
       if (!currentUser) return;
 
-      // e.g., if the doc already exists, the server will ignore
       await axios.post(`${backendURL}/create-learner-persona`, {
         userId: currentUser.uid,
         wpm: 200,
@@ -114,6 +114,7 @@ export default function AuthSignIn() {
   // =============================================
   const handleEmailPasswordSignIn = async () => {
     setErrorMsg("");
+    setLoadingEmailPassword(true);
     try {
       const response = await axios.post(`${backendURL}/login`, {
         username,
@@ -122,64 +123,15 @@ export default function AuthSignIn() {
 
       if (response.data.success) {
         const { token, firebaseCustomToken, user } = response.data;
-
         if (!firebaseCustomToken) {
           alert("No Firebase custom token returned from server.");
           return;
         }
 
-        // Sign in to Firebase using the custom token
+        // Sign in to Firebase
         await signInWithCustomToken(auth, firebaseCustomToken);
 
-        // Store userId from the newly signed-in Firebase user
-        const currentUserId = auth.currentUser?.uid;
-        if (currentUserId) {
-          localStorage.setItem("userId", currentUserId);
-        }
-
-        // Attempt to create a default learnerPersona (optional)
-        await createLearnerPersonaIfNeeded();
-
-        // Store your server's JWT + user data
-        localStorage.setItem("token", token);
-        localStorage.setItem("userData", JSON.stringify(user));
-
-        // Go to Dashboard
-        navigate("/dashboard");
-      } else {
-        setErrorMsg(response.data.error || "Login failed");
-      }
-    } catch (error) {
-      console.error("Error logging in with username/password:", error);
-      setErrorMsg("Login failed. Check console for details.");
-    }
-  };
-
-  // =============================================
-  // 2) GOOGLE Sign-In
-  // =============================================
-  const handleGoogleSignIn = async () => {
-    setErrorMsg("");
-    try {
-      // Sign in with Google popup
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-
-      // Now, get the Firebase ID token from the newly signed-in user
-      const idToken = await auth.currentUser.getIdToken();
-
-      // Send it to your server's /login-google route
-      const response = await axios.post(`${backendURL}/login-google`, {
-        idToken,
-      });
-
-      if (response.data.success) {
-        const { token, firebaseCustomToken, user } = response.data;
-
-        // Sign in with the custom token from the server
-        await signInWithCustomToken(auth, firebaseCustomToken);
-
-        // Store userId from the newly signed-in Firebase user
+        // Store userId
         const currentUserId = auth.currentUser?.uid;
         if (currentUserId) {
           localStorage.setItem("userId", currentUserId);
@@ -195,11 +147,61 @@ export default function AuthSignIn() {
         // Navigate to Dashboard
         navigate("/dashboard");
       } else {
+        setErrorMsg(response.data.error || "Login failed");
+      }
+    } catch (error) {
+      console.error("Error logging in with username/password:", error);
+      setErrorMsg("Login failed. Check console for details.");
+    } finally {
+      setLoadingEmailPassword(false);
+    }
+  };
+
+  // =============================================
+  // 2) GOOGLE Sign-In
+  // =============================================
+  const handleGoogleSignIn = async () => {
+    setErrorMsg("");
+    setLoadingGoogle(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+
+      // Get the Firebase ID token
+      const idToken = await auth.currentUser.getIdToken();
+
+      // Send to server
+      const response = await axios.post(`${backendURL}/login-google`, {
+        idToken,
+      });
+
+      if (response.data.success) {
+        const { token, firebaseCustomToken, user } = response.data;
+
+        await signInWithCustomToken(auth, firebaseCustomToken);
+
+        // Store userId
+        const currentUserId = auth.currentUser?.uid;
+        if (currentUserId) {
+          localStorage.setItem("userId", currentUserId);
+        }
+
+        // Attempt to create a default learnerPersona
+        await createLearnerPersonaIfNeeded();
+
+        // Store server JWT + user data
+        localStorage.setItem("token", token);
+        localStorage.setItem("userData", JSON.stringify(user));
+
+        navigate("/dashboard");
+      } else {
         setErrorMsg(response.data.error || "Google Sign-In failed");
       }
     } catch (error) {
       console.error("Error signing in with Google:", error);
       setErrorMsg("Google Sign-In failed. Check console for details.");
+    } finally {
+      setLoadingGoogle(false);
     }
   };
 
@@ -208,13 +210,6 @@ export default function AuthSignIn() {
       <CssBaseline />
       <Container maxWidth="sm">
         <SignInContainer elevation={4}>
-          <Typography variant="h5" sx={{ fontWeight: "bold", mb: 1 }}>
-            Welcome Back
-          </Typography>
-          <Typography variant="body2" sx={{ color: "text.secondary", mb: 2 }}>
-            Please sign in to continue
-          </Typography>
-
           {errorMsg && (
             <Alert severity="error" sx={{ mb: 2 }}>
               {errorMsg}
@@ -248,8 +243,13 @@ export default function AuthSignIn() {
             color="primary"
             fullWidth
             sx={{ mb: 2, fontWeight: "bold" }}
+            disabled={loadingEmailPassword}
           >
-            Sign In with Username/Password
+            {loadingEmailPassword ? (
+              <CircularProgress size={24} />
+            ) : (
+              "Sign In"
+            )}
           </Button>
 
           <Divider sx={{ my: 2 }}>OR</Divider>
@@ -265,9 +265,16 @@ export default function AuthSignIn() {
               alignItems: "center",
               justifyContent: "center",
             }}
+            disabled={loadingGoogle}
           >
-            <GoogleLogo />
-            Sign In with Google
+            {loadingGoogle ? (
+              <CircularProgress size={24} />
+            ) : (
+              <>
+                <GoogleLogo />
+                Sign In with Google
+              </>
+            )}
           </Button>
         </SignInContainer>
       </Container>

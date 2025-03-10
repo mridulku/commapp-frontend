@@ -10,14 +10,14 @@ import {
   Typography
 } from "@mui/material";
 import axios from "axios";
-import { auth } from "../../../firebase";
+import { auth } from "../../firebase";
 
 // Import your steps
-import OnboardingCarousel from "./OnboardingCarousel";
+import OnboardingCarousel from "../Main/1.Upload/1.2.1OnboardingCarousel";
 
 import UploadBook from "../Upload/UploadBook";
 import ProcessAnimation from "./UploadProcessing";
-import EditAdaptivePlanModal from "../3.Library/LibraryChild/EditAdaptivePlanModal";
+import EditAdaptivePlanModal from "../Main/3.Library/LibraryChild/EditAdaptivePlanModal";
 
 
 

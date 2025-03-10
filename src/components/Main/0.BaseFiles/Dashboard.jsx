@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useBooksViewer } from "./DashboardHooks";
-import OnboardingModal from "../1.Upload/OnboardingModal";
+import OnboardingModal from "../1.Upload/0.OnboardingModal";
 
 import MaterialsDashboard from "../3.Library/MaterialsDashboard"; // Example
 import UnifiedSidebar from "../0.SidePanels/UnifiedSidebar";
