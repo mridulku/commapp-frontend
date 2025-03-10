@@ -15,6 +15,9 @@ import PromptManager from "./components/zTesting/PromptManager";
 import PromptInput from "./components/zTesting/PromptInput";
 
 
+import BrainstormingList from "./components/yBrainstorming/BrainstormingList";
+
+
 import BooksOverview from "./components/zArchive/Archive 4/BooksOverview";
 import ReadingPlan from "./components/zArchive/Archive 4/ReadingPlan";
 
@@ -396,6 +399,15 @@ function App() {
           element={
             <PrivateRoute>
               <PromptInput />
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/brainstorming"
+          element={
+            <PrivateRoute>
+              <BrainstormingList />
             </PrivateRoute>
           }
         />
