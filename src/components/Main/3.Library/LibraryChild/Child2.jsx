@@ -214,27 +214,28 @@ export default function Child2({
         renderLocalPlan(plan)
       )}
 
-      <Dialog
-        open={showPlanDialog}
-        onClose={() => setShowPlanDialog(false)}
-        fullWidth
-        maxWidth="lg"
-        BackdropProps={{
-          style: { backgroundColor: "rgba(0, 0, 0, 0.8)" },
-        }}
-        PaperProps={{
-          sx: {
-            height: "80vh",
-            display: "flex",
-            flexDirection: "column",
-            backgroundColor: "#000",
-            color: "#fff",
-            boxShadow: "none",
-            borderRadius: 2,
-            overflow: "hidden",
-          },
-        }}
-      >
+<Dialog
+  open={showPlanDialog}
+  onClose={() => setShowPlanDialog(false)}
+  // Removes default MUI widths; we're controlling width via slotProps.paper.
+  maxWidth={false}
+  // If you previously had fullWidth, remove it or set to false:
+  fullWidth={false}
+  // Use new slotProps to style backdrop and paper
+ 
+      sx={{
+        "& .MuiDialog-paper": {
+          width: "90vw",        // 90% of viewport width
+          maxWidth: "90vw",     // prevent shrinking to default
+          height: "90vh",       // 90% of viewport height
+          maxHeight: "90vh",    // prevent shrinking to default
+          backgroundColor: "#000",
+          color: "#fff",
+          borderRadius: 2,
+          boxShadow: "none",
+        },
+      }}
+    >
         <DialogContent
           sx={{
             flex: 1,

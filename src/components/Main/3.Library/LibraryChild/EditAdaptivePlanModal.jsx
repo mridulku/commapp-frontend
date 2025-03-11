@@ -657,25 +657,52 @@ export default function EditAdaptivePlanModal({
 
       {/* New MUI dialog for PlanFetcher */}
       <Dialog
-        open={showReduxPlanDialog}
-        onClose={() => setShowReduxPlanDialog(false)}
-        fullWidth
-        maxWidth="lg"
-      >
-        <DialogContent>
-          {playerPlanId ? (
-            <PlanFetcher
-              planId={playerPlanId}
-              userId={userId}
-              // If needed, pass other props
-            />
-          ) : (
-            <Typography>No planId found. Cannot load plan.</Typography>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowReduxPlanDialog(false)}>Close</Button>
-        </DialogActions>
+  open={showReduxPlanDialog}
+  onClose={() => setShowReduxPlanDialog(false)}
+  fullWidth={false}       // disable the default "fullWidth"
+  maxWidth={false}        // disable MUI's maxWidth so we can use our own
+  sx={{
+    "& .MuiDialog-paper": {
+      // Control the overall size of the modal
+      width: "90vw",
+      height: "90vh",
+      maxWidth: "90vw",
+      maxHeight: "90vh",
+      // Dark styling
+      backgroundColor: "#000",
+      color: "#fff",
+      borderRadius: 2,
+      boxShadow: "none",
+
+      // So the DialogContent can stretch
+      display: "flex",
+      flexDirection: "column",
+    },
+  }}
+>
+  <DialogContent
+    sx={{
+      display: "flex",
+      flexDirection: "column",
+      flex: 1,          // let child fill vertical space
+      p: 0,
+      backgroundColor: "#000",
+      overflow: "hidden",
+    }}
+  >
+    {playerPlanId ? (
+      <PlanFetcher
+        planId={playerPlanId}
+        userId={userId}
+        // pass any other needed props
+      />
+    ) : (
+      <Typography sx={{ color: "#fff", m: 2 }}>
+        No planId found. Cannot load plan.
+      </Typography>
+    )}
+  </DialogContent>
+       
       </Dialog>
     </>
   );

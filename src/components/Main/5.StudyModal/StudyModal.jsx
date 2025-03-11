@@ -1,3 +1,4 @@
+// PlanFetcher.jsx
 import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchPlan } from "./0.store/planSlice";
@@ -13,7 +14,7 @@ import MainContent from "./0.components/MainContent";
 export default function PlanFetcher({
   planId,
   initialActivityContext,
-  userId = null,           // <-- NEW: accept userId as a prop
+  userId = null, // NEW: accept userId as a prop
   backendURL = "http://localhost:3001",
   fetchUrl = "/api/adaptive-plan",
 
@@ -25,7 +26,7 @@ export default function PlanFetcher({
 }) {
   const dispatch = useDispatch();
 
-  // Grab plan state
+  // Grab plan state from Redux
   const {
     status,
     error,
@@ -37,7 +38,7 @@ export default function PlanFetcher({
   // A simple local countdown for session
   const [secondsLeft, setSecondsLeft] = useState(initialSeconds);
 
-  // 1) We store "collapsed" here => so we can style the left panel
+  // Store "collapsed" state so we can style the left panel
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   // Timer effect
@@ -49,14 +50,14 @@ export default function PlanFetcher({
     return () => clearInterval(timerId);
   }, []);
 
-  // NEW: Store userId in Redux (if provided)
+  // Store userId in Redux (if provided)
   useEffect(() => {
     if (userId) {
       dispatch(setUserId(userId));
     }
   }, [userId, dispatch]);
 
-  // On mount or planId change => fetchPlan
+  // On mount or planId change => fetch plan
   useEffect(() => {
     if (!planId) return;
 
@@ -70,7 +71,7 @@ export default function PlanFetcher({
     );
   }, [planId, backendURL, fetchUrl, initialActivityContext, dispatch]);
 
-  // for bottom bar progress
+  // For bottom bar progress
   const totalSteps = flattenedActivities?.length || 0;
   const currentStep = currentIndex >= 0 ? currentIndex + 1 : 0;
   const stepPercent =
@@ -97,7 +98,7 @@ export default function PlanFetcher({
 
       {planDoc && (
         <div style={styles.mainArea}>
-          {/* LeftPanel => pass isCollapsed + onToggle */}
+          {/* Left side (collapsible) */}
           <div
             style={{
               ...styles.leftPanelContainer,
@@ -110,6 +111,7 @@ export default function PlanFetcher({
             />
           </div>
 
+          {/* Right side (main content) */}
           <div style={styles.rightPanelContainer}>
             <MainContent />
           </div>
@@ -126,8 +128,9 @@ export default function PlanFetcher({
 }
 
 const styles = {
+  // Changed from '80vh' to '100%' to fill the parent container (e.g. Dialog)
   appContainer: {
-    height: "80vh",
+    height: "100%",
     display: "flex",
     flexDirection: "column",
     backgroundColor: "#000",
@@ -142,14 +145,14 @@ const styles = {
     overflow: "hidden",
   },
   leftPanelContainer: {
-    height: "100%",
+    height: "100%",          // fill the vertical space
     overflowY: "auto",
     backgroundColor: "#000",
     transition: "width 0.3s ease", // animate the collapse
   },
   rightPanelContainer: {
     flex: 1,
-    height: "100%",
+    height: "100%",          // fill the vertical space
     overflowY: "auto",
     backgroundColor: "#000",
   },
