@@ -12,34 +12,37 @@ import {
 import axios from "axios";
 import { auth } from "../../../firebase";
 
-// Import your steps
+// Steps
 import OnboardingCarousel from "./1.2.1OnboardingCarousel";
 import UploadBook from "./1.2.2UploadBook";
 import ProcessAnimation from "./1.2.3ProcessAnimation";
-import EditAdaptivePlanModal from "../3.Library/LibraryChild/EditAdaptivePlanModal";
-
-
 
 /**
- * OnboardingFormContent controls:
- *   - Step 0 => OnboardingCarousel
- *   - Step 1 => UploadBook
- *   - Step 2 => ProcessAnimation
- *   - Step 3 => EditAdaptivePlanModal
- * 
- * We also check Firestore "learnerPersonas" => skip carousel if user is already onboarded.
+ * OnboardingFormContent
+ *
+ * Steps:
+ *   0 => OnboardingCarousel (optionally skipped if user is already onboarded)
+ *   1 => UploadBook
+ *   2 => ProcessAnimation (Analyze)
+ *
+ * After Analyze finishes, we call `onOnboardingComplete(bookId)`
+ * so the parent can close onboarding and open the plan editor with that book.
+ *
+ * Props:
+ *   - onOnboardingComplete(bookId) : function
  */
-export default function OnboardingFormContent() {
+export default function OnboardingFormContent({ onOnboardingComplete }) {
   const [parentStep, setParentStep] = useState(0);
   const [currentUserId, setCurrentUserId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Only two steps visible in stepper: Upload, Analyze
   const stepsData = [
     { label: "Upload", summary: "Choose your PDF & specify title" },
-    { label: "Analyze", summary: "AI processes your content" },
-    { label: "Plan", summary: "Review & finalize your study plan" },
+    { label: "Analyze", summary: "AI processes your content" }
   ];
 
+  // 1) Check if user is authenticated
   useEffect(() => {
     const user = auth.currentUser;
     if (user?.uid) {
@@ -49,6 +52,7 @@ export default function OnboardingFormContent() {
     }
   }, []);
 
+  // 2) If user is onboarded => skip carousel
   useEffect(() => {
     if (!currentUserId) return;
 
@@ -61,6 +65,7 @@ export default function OnboardingFormContent() {
         const isOnboarded = !!(
           response.data.success && response.data.data?.isOnboarded === true
         );
+        // Skip to step 1 if already onboarded
         setParentStep(isOnboarded ? 1 : 0);
       } catch (error) {
         console.error("Error fetching learnerPersona:", error);
@@ -73,11 +78,16 @@ export default function OnboardingFormContent() {
     fetchOnboardingStatus();
   }, [currentUserId]);
 
+  // Step transitions
   const handleCarouselFinish = () => setParentStep(1);
   const handleUploadComplete = () => setParentStep(2);
-  const handleAnalyzeComplete = () => setParentStep(3);
-  const handlePlanModalClose = () => {
-    console.log("Plan creation complete or modal closed");
+
+  // 3) Once analyzing is done => call parent with bookId
+  const handleAnalyzeComplete = (bookId) => {
+    console.log("Analyze complete => calling onOnboardingComplete()", bookId);
+    if (onOnboardingComplete) {
+      onOnboardingComplete(bookId);
+    }
   };
 
   if (isLoading) {
@@ -96,47 +106,37 @@ export default function OnboardingFormContent() {
     );
   }
 
-  const showStepper = parentStep !== 0;
+  // We only show the stepper for steps 1 & 2 (Upload & Analyze)
+  const showStepper = parentStep > 0;
 
   return (
-    // Outer container: fixed height => scrollable main content
     <Box
       sx={{
         display: "flex",
         flexDirection: "column",
-        height: "80vh",  // or 70vh, as you prefer
+        height: "80vh",
         maxHeight: "80vh",
-        overflow: "hidden",   // no scroll on this outer container
+        overflow: "hidden",
         backgroundColor: "transparent",
         color: "#fff",
       }}
     >
-      {/* Stepper pinned at the top (optional) */}
+      {/* Optional Stepper UI */}
       {showStepper && (
-        <Box
-          sx={{
-            // if you want it pinned while scrolling:
-            // position: "sticky",
-            // top: 0,
-            // zIndex: 10,
-            // backgroundColor: "rgba(0,0,0,0.8)",
-            mb: 2,
-            p: 1,
-          }}
-        >
+        <Box sx={{ mb: 2, p: 1 }}>
           <Stepper
             alternativeLabel
-            activeStep={parentStep - 1}
+            activeStep={parentStep - 1} 
             sx={{
               "& .MuiStepLabel-label": { color: "#fff", fontWeight: 500 },
               "& .MuiStepIcon-text": { fill: "#fff" },
-              "& .MuiStepIcon-root": { color: "#666" },           // default
-              "& .Mui-active .MuiStepIcon-root": { color: "#9b59b6" }, // active step
-              "& .Mui-completed .MuiStepIcon-root": { color: "#9b59b6" }, // completed steps
+              "& .MuiStepIcon-root": { color: "#666" },
+              "& .Mui-active .MuiStepIcon-root": { color: "#9b59b6" },
+              "& .Mui-completed .MuiStepIcon-root": { color: "#9b59b6" },
               "& .MuiStepConnector-line": { borderColor: "#999" },
             }}
           >
-            {stepsData.map((step, i) => (
+            {stepsData.map((step) => (
               <Step key={step.label}>
                 <StepLabel>
                   <Typography variant="body1" sx={{ fontWeight: "bold" }}>
@@ -153,35 +153,22 @@ export default function OnboardingFormContent() {
       )}
 
       {/* Scrollable content area */}
-      <Box
-        sx={{
-          flex: 1,
-          overflowY: "auto",
-          p: 2,
-        }}
-      >
-        {/* Step 0 => Onboarding Carousel */}
-        {parentStep === 0 && <OnboardingCarousel onFinish={handleCarouselFinish} />}
+      <Box sx={{ flex: 1, overflowY: "auto", p: 2 }}>
+        {/* Step 0 => Carousel */}
+        {parentStep === 0 && (
+          <OnboardingCarousel onFinish={handleCarouselFinish} />
+        )}
 
-        {/* Step 1 => UploadBook */}
+        {/* Step 1 => Upload */}
         {parentStep === 1 && (
           <UploadBook userId={currentUserId} onComplete={handleUploadComplete} />
         )}
 
-        {/* Step 2 => ProcessAnimation */}
+        {/* Step 2 => Analyze */}
         {parentStep === 2 && (
           <ProcessAnimation
             userId={currentUserId}
-            onShowPlanModal={handleAnalyzeComplete}
-          />
-        )}
-
-        {/* Step 3 => EditAdaptivePlanModal */}
-        {parentStep === 3 && (
-          <EditAdaptivePlanModal
-            userId={currentUserId}
-            open={true}
-            onClose={handlePlanModalClose}
+            onShowPlanModal={(bId) => handleAnalyzeComplete(bId)}
           />
         )}
       </Box>

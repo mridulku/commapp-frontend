@@ -1,27 +1,32 @@
-// src/components/DetailedBookViewer/BooksViewer2.jsx
+// src/components/DetailedBookViewer/BooksViewer2.jsx (Dashboard)
 
 import React, { useState, useEffect } from "react";
 import { useBooksViewer } from "./DashboardHooks";
+
+// Import the updated Onboarding modal
 import OnboardingModal from "../1.Upload/0.OnboardingModal";
 
-import MaterialsDashboard from "../3.Library/MaterialsDashboard"; // Example
+// Import your separate Plan Editor modal
+import EditAdaptivePlanModal from "../3.Library/LibraryChild/EditAdaptivePlanModal";
+
+// Existing components
+import MaterialsDashboard from "../3.Library/MaterialsDashboard"; 
 import UnifiedSidebar from "../0.SidePanels/UnifiedSidebar";
 import ToursManager from "../0.Tours/ToursManager";
 
-// Existing components...
 import BookProgress from "../../zArchive/2.2Library/BookProgress";
 import SubchapterContent from "../../zArchive/4.Subchapter Content/0.SubchapterContent";
 import UserProfileAnalytics from "../4.Profile/UserProfileAnalytics";
 import PanelC from "../2.HomePanels/4.PanelC";
 import PanelAdaptiveProcess from "../2.HomePanels/PanelAdaptiveProcess";
-import PanelE from "../2.HomePanels/PanelE"; // Example new component
+import PanelE from "../2.HomePanels/PanelE";
 import StatsPanel from "../2.HomePanels/TopStatsPanel";
 import BookSummary from "../../zArchive/2.2Library/BookSummary";
 import LibraryHome from "../../zArchive/2.2Library/LibraryHome";
 import AdaptiveHome from "../../zArchive/2.3Adaptive/AdaptiveHome";
 
 // The cinematic "player" modal
-import AdaptivePlayerModal from "../../zArchive/3.AdaptiveModal/AdaptivePlayerModal"; // Adjust path if needed
+import AdaptivePlayerModal from "../../zArchive/3.AdaptiveModal/AdaptivePlayerModal"; 
 
 function Dashboard() {
   const {
@@ -50,48 +55,28 @@ function Dashboard() {
     fetchAllData,
   } = useBooksViewer();
 
+  // 1) Controls whether onboarding is shown
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
 
-  // For Joyride tours
+  // 2) Controls whether the separate plan editor is shown
+  const [showPlanEditor, setShowPlanEditor] = useState(false);
+
+  // 2a) We store which bookId the plan editor should use
+  const [planEditorBookId, setPlanEditorBookId] = useState(null);
+
+  // Joyride tours
   const [triggerTour, setTriggerTour] = useState(false);
 
-  // For the cinematic player modal
+  // Cinematic player modal
   const [showPlayer, setShowPlayer] = useState(false);
   const [currentModalPlanId, setCurrentModalPlanId] = useState(null);
   const [initialActivityContext, setInitialActivityContext] = useState(null);
   const [modalFetchUrl, setModalFetchUrl] = useState("/api/adaptive-plan-total");
 
-  // For “Home” filler content
+  // Some “Home” filler content
   const [selectedHomeActivity, setSelectedHomeActivity] = useState(null);
 
-  /**
-   * handleOpenPlayer => called by sidebars
-   * Accepts up to 3 arguments: planId, activity, fetchUrl
-   */
-  const handleOpenPlayer = (pId, activity, fetchUrl) => {
-    console.log("PARENT handleOpenPlayer =>", pId, activity, fetchUrl);
-
-    // 1) Plan ID for the modal
-    setCurrentModalPlanId(pId);
-
-    // 2) Subchapter context for auto-expansion
-    setInitialActivityContext({
-      subChapterId: activity?.subChapterId,
-      type: activity?.type,
-    });
-
-    // 3) If given, store a custom fetchUrl
-    if (fetchUrl) {
-      setModalFetchUrl(fetchUrl);
-    } else {
-      setModalFetchUrl("/api/adaptive-plan");
-    }
-
-    // 4) Show the modal
-    setShowPlayer(true);
-  };
-
-  // -------------- THEME & STYLES --------------
+  // Decide theme colors
   const themeColors = {
     background: "#121212",
     sidebarBg: "#1E1E1E",
@@ -127,7 +112,7 @@ function Dashboard() {
     backgroundColor: themeColors.background,
   };
 
-  // Common base for floating buttons
+  // Floating "?" button style for tours
   const floatBtnBase = {
     position: "fixed",
     bottom: "20px",
@@ -151,7 +136,7 @@ function Dashboard() {
     backgroundColor: themeColors.accent,
   };
 
-  // Filter the data based on library/adaptive/overview
+  // Extract the filtered books
   const displayedBooksData = getFilteredBooksData();
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -159,8 +144,8 @@ function Dashboard() {
     setIsSidebarCollapsed((prev) => !prev);
   };
 
+  // Monitor onboarding status & open the modal if needed
   useEffect(() => {
-    // Only open the modal if we *know* isOnboarded = false
     if (isOnboarded === false) {
       setShowOnboardingModal(true);
     } else {
@@ -168,7 +153,43 @@ function Dashboard() {
     }
   }, [isOnboarded]);
 
-  // Decide main content for each viewMode
+  /**
+   * handleOpenPlanEditor(bookId) => Called by OnboardingModal
+   * We store that bookId and show the plan editor
+   */
+  const handleOpenPlanEditor = (bId) => {
+    setPlanEditorBookId(bId || null); // store the book ID
+    setShowPlanEditor(true);         // open the plan editor
+  };
+
+  /**
+   * handleOpenPlayer => called by sidebars
+   * Accepts up to 3 arguments: planId, activity, fetchUrl
+   */
+  const handleOpenPlayer = (pId, activity, fetchUrl) => {
+    console.log("PARENT handleOpenPlayer =>", pId, activity, fetchUrl);
+
+    // 1) Plan ID for the modal
+    setCurrentModalPlanId(pId);
+
+    // 2) Subchapter context for auto-expansion
+    setInitialActivityContext({
+      subChapterId: activity?.subChapterId,
+      type: activity?.type,
+    });
+
+    // 3) If given, store a custom fetchUrl
+    if (fetchUrl) {
+      setModalFetchUrl(fetchUrl);
+    } else {
+      setModalFetchUrl("/api/adaptive-plan");
+    }
+
+    // 4) Show the cinematic player modal
+    setShowPlayer(true);
+  };
+
+  // Decide main content based on viewMode
   let mainContent;
   if (viewMode === "overview") {
     mainContent = (
@@ -288,7 +309,7 @@ function Dashboard() {
 
   return (
     <div style={outerContainerStyle}>
-      {/* Middle area => Sidebar + Main Content */}
+      {/* Left Sidebar + Main Content */}
       <div style={innerContentWrapper}>
         <UnifiedSidebar
           isCollapsed={isSidebarCollapsed}
@@ -339,7 +360,7 @@ function Dashboard() {
         onTourDone={() => setTriggerTour(false)}
       />
 
-      {/* The cinematic "player" modal */}
+      {/* Cinematic Player Modal */}
       <AdaptivePlayerModal
         isOpen={showPlayer}
         onClose={() => setShowPlayer(false)}
@@ -349,10 +370,20 @@ function Dashboard() {
         fetchUrl={modalFetchUrl}
       />
 
-      {/* The Onboarding Modal (only shows if showOnboardingModal = true) */}
+      {/* Onboarding Modal */}
       <OnboardingModal
         open={showOnboardingModal}
         onClose={() => setShowOnboardingModal(false)}
+        // We'll pass handleOpenPlanEditor(bookId) so we can open the Plan Editor with that ID
+        onOpenPlanEditor={handleOpenPlanEditor}
+      />
+
+      {/* Plan Editor Modal (separate from onboarding) */}
+      <EditAdaptivePlanModal
+        open={showPlanEditor}
+        onClose={() => setShowPlanEditor(false)}
+        userId={userId}
+        bookId={planEditorBookId} // pass the chosen book ID here
       />
     </div>
   );

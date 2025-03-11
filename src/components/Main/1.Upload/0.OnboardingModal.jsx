@@ -6,14 +6,27 @@ import OnboardingFormContent from "./1.2OnboardingFormContent";
 
 /**
  * OnboardingModal (Parent)
- * 
- * We hide the Chat tab (enableChat=false) and always show the Form content.
- * If you want to re-enable Chat in the future, set enableChat=true and uncomment
- * the tab UI below.
+ *
+ * Props:
+ *  - open (bool): Controls whether the onboarding overlay is visible
+ *  - onClose (func): Called to close this overlay
+ *  - onOpenPlanEditor (func(bookId)): Called to open the EditAdaptivePlan flow
+ *     once onboarding is done, passing the relevant bookId
  */
-export default function OnboardingModal({ open, onClose }) {
+export default function OnboardingModal({ open, onClose, onOpenPlanEditor }) {
   const enableChat = false;
-  const [activeView, setActiveView] = useState("form");
+  const [activeView] = useState("form");
+
+  // Handle "onboarding complete" => close this modal, open plan editor w/ bookId
+  const handleOnboardingComplete = (bookId) => {
+    // 1) Close the onboarding overlay
+    if (onClose) onClose();
+
+    // 2) Open the plan editor, passing bookId
+    if (onOpenPlanEditor) {
+      onOpenPlanEditor(bookId);
+    }
+  };
 
   if (!open) return null;
 
@@ -25,18 +38,21 @@ export default function OnboardingModal({ open, onClose }) {
           X
         </button>
 
+        {/* 
+          If enableChat is false, we always show OnboardingFormContent.
+          Otherwise we could toggle between chat and form.
+        */}
         {enableChat ? (
           <div style={{ marginTop: "1rem" }}>
             {activeView === "chat" ? (
               <OnboardingChatContent />
             ) : (
-              <OnboardingFormContent />
+              <OnboardingFormContent onOnboardingComplete={handleOnboardingComplete} />
             )}
           </div>
         ) : (
-          // Chat disabled => always show form
           <div style={{ marginTop: "1rem" }}>
-            <OnboardingFormContent />
+            <OnboardingFormContent onOnboardingComplete={handleOnboardingComplete} />
           </div>
         )}
       </div>
@@ -63,8 +79,7 @@ const modalStyle = {
   borderRadius: "8px",
   width: "80vw",
   maxWidth: "1000px",
-  // Let the child control the scrolling:
-  overflow: "hidden", // or "visible"
+  overflow: "hidden",
   position: "relative",
 };
 

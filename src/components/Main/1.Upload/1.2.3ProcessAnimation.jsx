@@ -18,10 +18,9 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 
-// Import your inline plan wizard
-import EditAdaptivePlanModal from "../3.Library/LibraryChild/EditAdaptivePlanModal";
-
-// Helper: safely parse numeric prefix "3. Something" => 3.
+/**
+ * Safely parse numeric prefix from strings like "3. Something" => 3.
+ */
 function getNumericPrefix(title) {
   if (typeof title !== 'string') return 999999;
   const match = title.trim().match(/^(\d+)\./);
@@ -31,9 +30,9 @@ function getNumericPrefix(title) {
 }
 
 /**
- * Styled progress bar in purple.
+ * Styled progress bar in purple (visual flair).
  */
-const PurpleLinearProgress = styled(LinearProgress)(({ theme }) => ({
+const PurpleLinearProgress = styled(LinearProgress)(() => ({
   backgroundColor: 'rgba(255, 255, 255, 0.2)', // lighter track color
   '& .MuiLinearProgress-bar': {
     backgroundColor: '#9b59b6', // the purple fill
@@ -42,17 +41,28 @@ const PurpleLinearProgress = styled(LinearProgress)(({ theme }) => ({
 
 /**
  * ProcessAnimation
+ *
  * Props:
- *  - userId (string) : from Firebase or your auth
+ *  - userId (string)          : The current user's ID
  *  - backendURL (string, optional)
- *  - colorScheme (string, optional) – if you want to pass it to the plan wizard
- *  - onShowPlanModal (fn) : If you want to externally trigger a "create plan"
+ *  - colorScheme (string, optional)
+ *  - onShowPlanModal (fn)     : Called when we reach step 8 => create plan;
+ *                               we pass the local bookId up to the parent.
+ *
+ * This component simulates an "analysis" of the recently uploaded book,
+ * then invites the user to create an adaptive plan. We no longer
+ * render EditAdaptivePlanModal inline.
  */
-export default function ProcessAnimation({ userId, backendURL, colorScheme, onShowPlanModal }) {
+export default function ProcessAnimation({
+  userId,
+  backendURL,
+  colorScheme,
+  onShowPlanModal
+}) {
   // We'll store the "latest" bookId from the server
   const [bookId, setBookId] = useState('');
 
-  // The step-based states: 0..8
+  // The step-based states: -1 => not started; 0..8 => the animation
   const [currentStep, setCurrentStep] = useState(-1);
 
   // The real chapters data
@@ -67,23 +77,12 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
   // For toggling expansions of sub-chapters
   const [expandedChapters, setExpandedChapters] = useState({});
 
-  // Whether to show the plan wizard inline
-  const [showPlanWizard, setShowPlanWizard] = useState(false);
-
   // Local state for a "fake" progress bar while waiting 20s
   const [progress, setProgress] = useState(0);
 
-  // Toggle expand/collapse for sub-chapters
-  const handleToggleExpand = (chapterName) => {
-    setExpandedChapters((prev) => ({
-      ...prev,
-      [chapterName]: !prev[chapterName],
-    }));
-  };
-
   /**
-   * 1) Fetch chapters + subchapters from your backend for a given bookId
-   * 2) Kick off step-based animation (setCurrentStep to 0)
+   * 1) Fetch chapters + subchapters for a given bookId
+   * 2) Kick off step-based animation => setCurrentStep to 0
    */
   async function handleStartProcessing(latestBookId) {
     if (!userId || !latestBookId) {
@@ -122,13 +121,12 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
       setChapters(cleanedChapters);
       setNumChaptersDetected(cleanedChapters.length);
 
-      // Reset anything typed out so far
+      // Reset typed data
       setDisplayedChapters([]);
       setDisplayedSubChapters({});
       setExpandedChapters({});
-      setShowPlanWizard(false);
 
-      // Start the animation at step 0
+      // Start the step animation at 0
       setCurrentStep(0);
     } catch (err) {
       console.error('Failed to fetch process-book-data:', err);
@@ -137,8 +135,7 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
   }
 
   /**
-   * On mount, wait 20 seconds, then fetch the "latest book" for this user
-   * => Then call handleStartProcessing(bookId)
+   * On mount => wait 20 seconds => fetch the "latest book" => then handleStartProcessing
    */
   useEffect(() => {
     if (!userId) return;
@@ -146,7 +143,7 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
     // Reset progress bar
     setProgress(0);
 
-    // Each second => +5% => 20 seconds to 100%
+    // Each second => +5% => in 20 seconds we reach 100%
     const progressInterval = setInterval(() => {
       setProgress((prev) => {
         const nextVal = prev + 5;
@@ -154,12 +151,12 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
       });
     }, 1000);
 
-    // After 20 seconds => fetch latest book
+    // After 20 seconds => fetch latest book => start processing
     const fetchTimer = setTimeout(() => {
       fetchLatestBookAndProcess();
     }, 20000);
 
-    // Cleanup
+    // Cleanup intervals
     return () => {
       clearTimeout(fetchTimer);
       clearInterval(progressInterval);
@@ -179,7 +176,7 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
         return;
       }
       setBookId(data.bookId);
-      // Next => load chapters for that book
+      // Then load chapters for that book
       handleStartProcessing(data.bookId);
     } catch (err) {
       console.error('Error fetching latest-book:', err);
@@ -187,19 +184,10 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
   }
 
   /**
-   * The step-based side effect:
-   *  0: Upload Complete
-   *  1: Analyzing Content
-   *  2: X Chapters Detected
-   *  3: Type out chapters
-   *  4: Analyzing chapters
-   *  5: Sub-chapters detected
-   *  6: Analyzing sub-chapters
-   *  7: All Content Absorbed
-   *  8: Show "Create Adaptive Plan"
+   * The step-based side effect for the animation
    */
   useEffect(() => {
-    if (currentStep < 0) return; // means we haven't started
+    if (currentStep < 0) return; // not started yet
 
     switch (currentStep) {
       case 0:
@@ -215,7 +203,7 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
         setTimeout(() => setCurrentStep(3), 1000);
         break;
       case 3: {
-        // Type out each chapter name
+        // Type out each chapter name one by one
         setDisplayedChapters([]);
         let index = 0;
         const interval = setInterval(() => {
@@ -249,7 +237,7 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
             const subNames = c.subchapters.map((s) => s.name || '');
             newObj[c.name] = subNames;
             setDisplayedSubChapters({ ...newObj });
-            // short delay for "detecting" next
+            // short delay for "detecting" the next
             await new Promise((r) => setTimeout(r, 200));
           }
           setTimeout(() => setCurrentStep(6), 1000);
@@ -262,6 +250,9 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
       case 7:
         // after 1s => step 8
         setTimeout(() => setCurrentStep(8), 1000);
+        break;
+      case 8:
+        // Ready to create a plan
         break;
       default:
         break;
@@ -283,7 +274,7 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
     return null;
   }
 
-  // >>> "Card" container style, so no forced full-screen
+  // A "card" container style for the animation content
   const containerStyle = {
     backgroundColor: 'rgba(255,255,255,0.04)',
     color: '#fff',
@@ -296,26 +287,23 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
 
   return (
     <Box sx={containerStyle}>
-      {/* If we haven't started, show the progress bar instead of a spinner */}
+      {/* If we haven't started => show the progress bar */}
       {currentStep < 0 && (
         <Box textAlign="center">
           <Typography variant="h6" sx={{ mb: 2 }}>
             Please wait...
           </Typography>
-
-          {/* Purple progress bar */}
           <Box sx={{ width: '80%', margin: '0 auto' }}>
             <PurpleLinearProgress variant="determinate" value={progress} />
           </Box>
-
           <Typography sx={{ mt: 1, fontSize: '0.9rem', color: '#aaa' }}>
             Fetching your latest uploaded book...
           </Typography>
         </Box>
       )}
 
-      {/* If we have started but haven't shown the plan wizard yet */}
-      {currentStep >= 0 && !showPlanWizard && (
+      {/* If we have started => show the steps */}
+      {currentStep >= 0 && (
         <>
           {/* Step 0 */}
           <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center' }}>
@@ -345,7 +333,7 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
             </Typography>
           )}
 
-          {/* Step 3: typed-out chapters */}
+          {/* Step 3 => typed-out chapters */}
           {currentStep >= 3 && (
             <Box sx={{ ml: 2, mt: 1 }}>
               {displayedChapters.map((chName, idx) => (
@@ -458,34 +446,23 @@ export default function ProcessAnimation({ userId, backendURL, colorScheme, onSh
             </Typography>
           )}
 
-          {/* Step 8 => button to open plan wizard inline */}
+          {/* Step 8 => "Create Plan" button => calls onShowPlanModal with our bookId */}
           {currentStep === 8 && (
             <Box sx={{ mt: 4 }}>
               <Button
                 variant="contained"
-                onClick={() => setShowPlanWizard(true)}
+                onClick={() => {
+                  // Pass the local bookId upward, so the parent can open the plan wizard
+                  if (onShowPlanModal) {
+                    onShowPlanModal(bookId);
+                  }
+                }}
               >
                 Create Adaptive Plan
               </Button>
             </Box>
           )}
         </>
-      )}
-
-      {/* If showPlanWizard===true => render EditAdaptivePlanModal inline */}
-      {showPlanWizard && (
-        <Box sx={{ mt: 3 }}>
-          <EditAdaptivePlanModal
-            // Renders in-line, not a MUI <Dialog>
-            renderAsDialog={false}
-            open={true}
-            onClose={() => setShowPlanWizard(false)}
-            userId={userId}
-            bookId={bookId}
-            backendURL={backendURL}
-            colorScheme={colorScheme}
-          />
-        </Box>
       )}
     </Box>
   );
