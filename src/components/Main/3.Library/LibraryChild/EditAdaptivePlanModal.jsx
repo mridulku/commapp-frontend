@@ -1,5 +1,3 @@
-// src/components/HIDDIT/EditAdaptivePlanModal.jsx
-
 import React, { useState, useEffect } from "react";
 import {
   Dialog,
@@ -14,6 +12,10 @@ import {
   CircularProgress,
   Paper,
   DialogActions,
+  MenuItem,
+  Select,
+  FormControl,
+  InputLabel,
 } from "@mui/material";
 import CheckIcon from "@mui/icons-material/Check";
 import axios from "axios";
@@ -59,7 +61,9 @@ export default function EditAdaptivePlanModal({
   const [activeStep, setActiveStep] = useState(0);
   const steps = ["Select Chapters", "Schedule & Mastery", "Review & Confirm"];
 
+  // -------------------------------------------------
   // Step 1: Chapter selection
+  // -------------------------------------------------
   const [chapters, setChapters] = useState([]);
   useEffect(() => {
     async function fetchChapters() {
@@ -117,12 +121,26 @@ export default function EditAdaptivePlanModal({
     setChapters(updated);
   };
 
+  // -------------------------------------------------
   // Step 2: Plan selection
+  //  (Replaces the single "masteryLevel" with
+  //   "currentKnowledge" + "goalLevel")
+  // -------------------------------------------------
   const [targetDate, setTargetDate] = useState("");
   const [dailyReadingTime, setDailyReadingTime] = useState(30);
-  const [masteryLevel, setMasteryLevel] = useState("mastery");
 
-  // For plan creation
+  // NEW: Instead of masteryLevel, we have:
+  const [currentKnowledge, setCurrentKnowledge] = useState("none"); // or "some" / "strong"
+  const [goalLevel, setGoalLevel] = useState("basic"); // or "moderate" / "advanced"
+
+  // We'll keep quizTime/reviseTime for now (existing functionality),
+  // but you can remove them if you prefer.
+  let quizTime = 1;
+  let reviseTime = 1;
+
+  // -------------------------------------------------
+  // Plan creation with the new function
+  // -------------------------------------------------
   const [isCreatingPlan, setIsCreatingPlan] = useState(false);
   const [serverError, setServerError] = useState(null);
   const [createdPlan, setCreatedPlan] = useState(null);
@@ -138,12 +156,15 @@ export default function EditAdaptivePlanModal({
       setServerError(null);
       setIsCreatingPlan(true);
 
-      let quizTime = 1;
-      let reviseTime = 1;
-      if (masteryLevel === "mastery") {
-        quizTime = 5;
+      // Combine the two inputs into a single planType
+      const planType = `${currentKnowledge}-${goalLevel}`;
+
+      // Keep quizTime/reviseTime logic if you want
+      // (the new function might or might not use them as overrides)
+      if (goalLevel === "advanced") {
+        quizTime = 5; // example override
         reviseTime = 5;
-      } else if (masteryLevel === "revision") {
+      } else if (goalLevel === "moderate") {
         quizTime = 3;
         reviseTime = 3;
       }
@@ -152,7 +173,7 @@ export default function EditAdaptivePlanModal({
         userId,
         targetDate,
         dailyReadingTime,
-        masteryLevel,
+        planType, // <-- Instead of masteryLevel
         quizTime,
         reviseTime,
       };
@@ -160,18 +181,20 @@ export default function EditAdaptivePlanModal({
         body.bookId = bookId;
       }
 
-      // Example:
+      // Use your new function endpoint:
+      // (just an example; adjust if your real endpoint differs)
       const createEndpoint =
-        "https://generateadaptiveplan-zfztjkkvva-uc.a.run.app";
+        "https://generateadaptiveplan2-zfztjkkvva-uc.a.run.app";
 
       const response = await axios.post(createEndpoint, body, {
         headers: { "Content-Type": "application/json" },
       });
 
-      const newPlan = response.data?.plan;
-      setCreatedPlan(newPlan);
-      setCreatedPlanId(newPlan?.id || null);
-      setCreatedAt(newPlan?.createdAt || null);
+      // The new function returns { planId, planDoc, message }
+      const { planId, planDoc } = response.data;
+      setCreatedPlan(planDoc);
+      setCreatedPlanId(planId);
+      setCreatedAt(planDoc?.createdAt || null); // might be null if using Firestore's serverTimestamp
     } catch (error) {
       console.error("Plan creation failed:", error);
       setServerError(error.message || "Plan creation failed");
@@ -180,7 +203,9 @@ export default function EditAdaptivePlanModal({
     }
   }
 
+  // -------------------------------------------------
   // Step 3: Fetch newly created or most recent plan
+  // -------------------------------------------------
   const [isFetchingPlan, setIsFetchingPlan] = useState(false);
   const [serverPlan, setServerPlan] = useState(null);
   const [aggregated, setAggregated] = useState(null);
@@ -263,7 +288,9 @@ export default function EditAdaptivePlanModal({
     };
   }
 
+  // -------------------------------------------------
   // Local feasibility (rough calc)
+  // -------------------------------------------------
   const [isProcessingLocalCalc, setIsProcessingLocalCalc] = useState(false);
   const [planSummary, setPlanSummary] = useState({
     totalMinutes: 0,
@@ -276,9 +303,18 @@ export default function EditAdaptivePlanModal({
   function calculatePlanLocally() {
     setIsProcessingLocalCalc(true);
 
+    // We keep a simple approach:
+    //   If user picks "none-...", we assume ~10 min per subchapter
+    //   If user picks "some-...", ~5 min
+    //   If user picks "strong-...", ~2 min
+    // (You can refine or remove as needed)
     let timePerSubchapter = 10;
-    if (masteryLevel === "revision") timePerSubchapter = 5;
-    if (masteryLevel === "glance") timePerSubchapter = 2;
+    const planType = `${currentKnowledge}-${goalLevel}`;
+    if (planType.startsWith("some-")) {
+      timePerSubchapter = 5;
+    } else if (planType.startsWith("strong-")) {
+      timePerSubchapter = 2;
+    }
 
     let subchapterCount = 0;
     chapters.forEach((ch) => {
@@ -317,7 +353,7 @@ export default function EditAdaptivePlanModal({
         reason,
       });
       setIsProcessingLocalCalc(false);
-    }, 6000);
+    }, 1500);
   }
 
   // -------------------------------------------------
@@ -338,8 +374,11 @@ export default function EditAdaptivePlanModal({
       return;
     }
     if (activeStep === 1) {
+      // 1) local feasibility check
       calculatePlanLocally();
+      // 2) create plan in backend
       await createPlanOnBackend();
+      // 3) move to step 3 + fetch plan
       setActiveStep(2);
       fetchMostRecentPlan();
       return;
@@ -379,15 +418,47 @@ export default function EditAdaptivePlanModal({
           />
         );
       case 1:
+        // We replace the old "masteryLevel" control
+        // with two separate selects for currentKnowledge & goalLevel
         return (
-          <PlanSelection
-            targetDate={targetDate}
-            setTargetDate={setTargetDate}
-            dailyReadingTime={dailyReadingTime}
-            setDailyReadingTime={setDailyReadingTime}
-            masteryLevel={masteryLevel}
-            setMasteryLevel={setMasteryLevel}
-          />
+          <Box sx={{ mt: 1 }}>
+            <PlanSelection
+              targetDate={targetDate}
+              setTargetDate={setTargetDate}
+              dailyReadingTime={dailyReadingTime}
+              setDailyReadingTime={setDailyReadingTime}
+              // We won't pass masteryLevel, we'll do our own UI here
+              hideMasteryInput // (just so we don't see the old fields if you had them)
+            />
+
+            <Box sx={{ mt: 3 }}>
+              <FormControl sx={{ mr: 2, minWidth: 120 }}>
+                <InputLabel>Current</InputLabel>
+                <Select
+                  label="Current"
+                  value={currentKnowledge}
+                  onChange={(e) => setCurrentKnowledge(e.target.value)}
+                >
+                  <MenuItem value="none">None</MenuItem>
+                  <MenuItem value="some">Some</MenuItem>
+                  <MenuItem value="strong">Strong</MenuItem>
+                </Select>
+              </FormControl>
+
+              <FormControl sx={{ minWidth: 120 }}>
+                <InputLabel>Goal</InputLabel>
+                <Select
+                  label="Goal"
+                  value={goalLevel}
+                  onChange={(e) => setGoalLevel(e.target.value)}
+                >
+                  <MenuItem value="basic">Basic</MenuItem>
+                  <MenuItem value="moderate">Moderate</MenuItem>
+                  <MenuItem value="advanced">Advanced</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+          </Box>
         );
       case 2:
         return (
@@ -519,20 +590,19 @@ export default function EditAdaptivePlanModal({
         <Box>{content}</Box>
       )}
 
-      {/* Instead of old <AdaptivePlayerModal> usage, we have a new dialog for PlanFetcher */}
+      {/* Instead of old <AdaptivePlayerModal>, new dialog for PlanFetcher */}
       <Dialog
         open={showReduxPlanDialog}
         onClose={() => setShowReduxPlanDialog(false)}
         fullWidth
         maxWidth="lg"
       >
-      {/*   <DialogTitle>Plan Viewer</DialogTitle> */}
         <DialogContent>
           {playerPlanId ? (
             <PlanFetcher
               planId={playerPlanId}
               userId={userId}
-              // If needed, pass userId or other props
+              // If needed, pass other props
             />
           ) : (
             <Typography>No planId found. Cannot load plan.</Typography>
