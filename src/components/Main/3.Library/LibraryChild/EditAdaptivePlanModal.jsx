@@ -26,9 +26,30 @@ import ChapterSelection from "./ChapterSelection";
 import PlanSelection from "./PlanSelection";
 import PlanRender from "./PlanRender";
 
-// REPLACE: (Remove) => import AdaptivePlayerModal from "../../3.AdaptiveModal/AdaptivePlayerModal";
 // NEW IMPORT: your Redux-based plan fetcher
 import PlanFetcher from "../../5.StudyModal/StudyModal";
+
+/**
+ * Helper function to sort a list of { title: "1. something"} objects 
+ * by the numeric prefix if present. Fallback is alphabetical if no parseable number.
+ */
+function sortByNumericPrefix(items) {
+  return items.slice().sort((a, b) => {
+    const getLeadingNumber = (str) => {
+      // Attempt to parse up to first non-digit or the dot
+      if (!str) return 999999;
+      const match = str.match(/^(\d+)\.?/);
+      return match ? parseInt(match[1], 10) : 999999; // large fallback
+    };
+    const numA = getLeadingNumber(a.title);
+    const numB = getLeadingNumber(b.title);
+    // If there's a tie in numeric prefix, fallback to standard string compare
+    if (numA === numB) {
+      return a.title.localeCompare(b.title);
+    }
+    return numA - numB;
+  });
+}
 
 /**
  * EditAdaptivePlanModal
@@ -65,6 +86,13 @@ export default function EditAdaptivePlanModal({
   // Step 1: Chapter selection
   // -------------------------------------------------
   const [chapters, setChapters] = useState([]);
+  // We'll track an error for invalid chapter selections
+  const [chapterSelectionError, setChapterSelectionError] = useState("");
+
+  // We’ll store an array of selected chapter IDs that we’ll eventually send 
+  // to the backend (or null if user selects ALL).
+  const [selectedChapterIds, setSelectedChapterIds] = useState(null);
+
   useEffect(() => {
     async function fetchChapters() {
       try {
@@ -73,19 +101,27 @@ export default function EditAdaptivePlanModal({
         });
         const data = res.data || {};
         if (data.chapters && Array.isArray(data.chapters)) {
-          // Transform
-          const transformed = data.chapters.map((chap) => ({
-            id: chap.id,
-            title: chap.name,
-            expanded: false,
-            selected: true,
-            subchapters: (chap.subchapters || []).map((sub) => ({
-              id: sub.id,
-              title: sub.name,
+          // 1) Sort chapters
+          let sortedChaps = sortByNumericPrefix(
+            data.chapters.map((chap) => ({
+              id: chap.id,
+              title: chap.name,
+              expanded: false,
               selected: true,
-            })),
-          }));
-          setChapters(transformed);
+              subchapters: (chap.subchapters || []).map((sub) => ({
+                id: sub.id,
+                title: sub.name,
+                selected: true,
+              })),
+            }))
+          );
+          // 2) Sort subchapters
+          sortedChaps = sortedChaps.map((ch) => {
+            const sortedSubs = sortByNumericPrefix(ch.subchapters);
+            return { ...ch, subchapters: sortedSubs };
+          });
+
+          setChapters(sortedChaps);
         }
       } catch (error) {
         console.error("Error fetching chapters:", error);
@@ -96,23 +132,26 @@ export default function EditAdaptivePlanModal({
     }
   }, [userId, bookId, backendURL]);
 
+  // Toggle the entire chapter on/off
   const handleToggleChapter = (chapterIndex) => {
     const updated = [...chapters];
     const c = updated[chapterIndex];
     c.selected = !c.selected;
+    // We are ignoring sub-chapter selection from the user side 
+    // (per request, no checkboxes there), but if we want them consistent:
     if (!c.selected) {
       c.subchapters.forEach((sc) => (sc.selected = false));
+    } else {
+      c.subchapters.forEach((sc) => (sc.selected = true));
     }
     updated[chapterIndex] = c;
     setChapters(updated);
   };
 
+  // We no longer toggle sub-chapters because sub-chapter checkboxes are disabled, 
+  // but let's keep the function around if needed:
   const handleToggleSubchapter = (chapterIndex, subIndex) => {
-    const updated = [...chapters];
-    const subChaps = updated[chapterIndex].subchapters;
-    subChaps[subIndex].selected = !subChaps[subIndex].selected;
-    updated[chapterIndex].selected = subChaps.some((sc) => sc.selected);
-    setChapters(updated);
+    // DO NOTHING, or you can remove this entirely
   };
 
   const handleAccordionToggle = (chapterIndex) => {
@@ -121,25 +160,54 @@ export default function EditAdaptivePlanModal({
     setChapters(updated);
   };
 
+  /**
+   * Validate and store selected chapters before moving to Step 2
+   *  - If all are selected => set selectedChapterIds = null
+   *  - If any are unselected => gather their IDs
+   *  - Must have at least 1 selected
+   *  - If partially selected, cannot exceed 10
+   */
+  function validateChapterSelections() {
+    const selectedChaps = chapters.filter((ch) => ch.selected);
+    if (selectedChaps.length === 0) {
+      setChapterSelectionError("Please select at least one chapter.");
+      return false;
+    }
+    // Are ALL selected?
+    if (selectedChaps.length === chapters.length) {
+      // Means user wants them all => we do NOT pass any chapter IDs
+      setSelectedChapterIds(null);
+      return true;
+    }
+
+    // Otherwise, user has a partial selection
+    if (selectedChaps.length > 10) {
+      setChapterSelectionError(
+        `You have selected ${selectedChaps.length} chapters. Please either select ALL or 10 or fewer.`
+      );
+      return false;
+    }
+
+    // All good => store them
+    setSelectedChapterIds(selectedChaps.map((ch) => ch.id));
+    return true;
+  }
+
   // -------------------------------------------------
   // Step 2: Plan selection
-  //  (Replaces the single "masteryLevel" with
-  //   "currentKnowledge" + "goalLevel")
   // -------------------------------------------------
   const [targetDate, setTargetDate] = useState("");
   const [dailyReadingTime, setDailyReadingTime] = useState(30);
 
-  // NEW: Instead of masteryLevel, we have:
-  const [currentKnowledge, setCurrentKnowledge] = useState("none"); // or "some" / "strong"
-  const [goalLevel, setGoalLevel] = useState("basic"); // or "moderate" / "advanced"
+  // Instead of old mastery levels:
+  const [currentKnowledge, setCurrentKnowledge] = useState("none");
+  const [goalLevel, setGoalLevel] = useState("basic");
 
-  // We'll keep quizTime/reviseTime for now (existing functionality),
-  // but you can remove them if you prefer.
   let quizTime = 1;
   let reviseTime = 1;
 
   // -------------------------------------------------
-  // Plan creation with the new function
+  // Plan creation (Step 2 -> Step 3)
   // -------------------------------------------------
   const [isCreatingPlan, setIsCreatingPlan] = useState(false);
   const [serverError, setServerError] = useState(null);
@@ -156,13 +224,10 @@ export default function EditAdaptivePlanModal({
       setServerError(null);
       setIsCreatingPlan(true);
 
-      // Combine the two inputs into a single planType
       const planType = `${currentKnowledge}-${goalLevel}`;
 
-      // Keep quizTime/reviseTime logic if you want
-      // (the new function might or might not use them as overrides)
       if (goalLevel === "advanced") {
-        quizTime = 5; // example override
+        quizTime = 5;
         reviseTime = 5;
       } else if (goalLevel === "moderate") {
         quizTime = 3;
@@ -173,7 +238,7 @@ export default function EditAdaptivePlanModal({
         userId,
         targetDate,
         dailyReadingTime,
-        planType, // <-- Instead of masteryLevel
+        planType,
         quizTime,
         reviseTime,
       };
@@ -181,8 +246,13 @@ export default function EditAdaptivePlanModal({
         body.bookId = bookId;
       }
 
-      // Use your new function endpoint:
-      // (just an example; adjust if your real endpoint differs)
+      // If selectedChapterIds is NOT null => partial selection
+      // If selectedChapterIds = null => we omit them (meaning all chapters)
+      if (selectedChapterIds !== null) {
+        body.selectedChapters = selectedChapterIds;
+      }
+
+      // Example new function endpoint:
       const createEndpoint =
         "https://generateadaptiveplan2-zfztjkkvva-uc.a.run.app";
 
@@ -190,11 +260,10 @@ export default function EditAdaptivePlanModal({
         headers: { "Content-Type": "application/json" },
       });
 
-      // The new function returns { planId, planDoc, message }
       const { planId, planDoc } = response.data;
       setCreatedPlan(planDoc);
       setCreatedPlanId(planId);
-      setCreatedAt(planDoc?.createdAt || null); // might be null if using Firestore's serverTimestamp
+      setCreatedAt(planDoc?.createdAt || null);
     } catch (error) {
       console.error("Plan creation failed:", error);
       setServerError(error.message || "Plan creation failed");
@@ -303,11 +372,6 @@ export default function EditAdaptivePlanModal({
   function calculatePlanLocally() {
     setIsProcessingLocalCalc(true);
 
-    // We keep a simple approach:
-    //   If user picks "none-...", we assume ~10 min per subchapter
-    //   If user picks "some-...", ~5 min
-    //   If user picks "strong-...", ~2 min
-    // (You can refine or remove as needed)
     let timePerSubchapter = 10;
     const planType = `${currentKnowledge}-${goalLevel}`;
     if (planType.startsWith("some-")) {
@@ -318,11 +382,9 @@ export default function EditAdaptivePlanModal({
 
     let subchapterCount = 0;
     chapters.forEach((ch) => {
-      ch.subchapters.forEach((sub) => {
-        if (sub.selected) {
-          subchapterCount += 1;
-        }
-      });
+      if (!ch.selected) return;
+      // subchapters are always 'selected' if the chapter is selected
+      subchapterCount += ch.subchapters.length;
     });
 
     const totalTime = subchapterCount * timePerSubchapter;
@@ -353,42 +415,41 @@ export default function EditAdaptivePlanModal({
         reason,
       });
       setIsProcessingLocalCalc(false);
-    }, 1500);
+    }, 800);
   }
 
   // -------------------------------------------------
-  // (OLD) ADAPTIVE PLAYER MODAL STATE - remove it?
+  // PlanFetcher modal (Step 4)
   // -------------------------------------------------
-  const [showPlayer, setShowPlayer] = useState(false);
-  const [playerPlanId, setPlayerPlanId] = useState(null);
-
-  // We'll use a new MUI dialog for the PlanFetcher instead
   const [showReduxPlanDialog, setShowReduxPlanDialog] = useState(false);
+  const [playerPlanId, setPlayerPlanId] = useState(null);
 
   // -------------------------------------------------
   // NAVIGATION
   // -------------------------------------------------
   const handleNext = async () => {
+    // Step 0 => Step 1
     if (activeStep === 0) {
+      setChapterSelectionError("");
+      const ok = validateChapterSelections();
+      if (!ok) return; // stop if invalid
       setActiveStep(1);
       return;
     }
+    // Step 1 => Step 2
     if (activeStep === 1) {
-      // 1) local feasibility check
-      calculatePlanLocally();
-      // 2) create plan in backend
-      await createPlanOnBackend();
-      // 3) move to step 3 + fetch plan
+      calculatePlanLocally();       // local check
+      await createPlanOnBackend();  // create plan
       setActiveStep(2);
       fetchMostRecentPlan();
       return;
     }
+    // Step 2 => done
     if (activeStep === 2) {
-      // final step => close wizard if dialog
       if (renderAsDialog && onClose) {
         onClose();
       }
-      // Then open the "player" => now it's the new PlanFetcher in a separate dialog
+      // Then open the new PlanFetcher in a modal
       if (serverPlan && serverPlan.id) {
         setPlayerPlanId(serverPlan.id);
         setShowReduxPlanDialog(true);
@@ -398,6 +459,7 @@ export default function EditAdaptivePlanModal({
 
   const handleBack = () => {
     if (activeStep === 0) {
+      // Going back from step 0 => close the dialog if needed
       if (renderAsDialog && onClose) {
         onClose();
       }
@@ -410,16 +472,21 @@ export default function EditAdaptivePlanModal({
     switch (step) {
       case 0:
         return (
-          <ChapterSelection
-            chapters={chapters}
-            onToggleChapter={handleToggleChapter}
-            onToggleSubchapter={handleToggleSubchapter}
-            onAccordionToggle={handleAccordionToggle}
-          />
+          <>
+            <ChapterSelection
+              chapters={chapters}
+              onToggleChapter={handleToggleChapter}
+              onToggleSubchapter={handleToggleSubchapter}
+              onAccordionToggle={handleAccordionToggle}
+            />
+            {chapterSelectionError && (
+              <Typography color="error" sx={{ mt: 2 }}>
+                {chapterSelectionError}
+              </Typography>
+            )}
+          </>
         );
       case 1:
-        // We replace the old "masteryLevel" control
-        // with two separate selects for currentKnowledge & goalLevel
         return (
           <Box sx={{ mt: 1 }}>
             <PlanSelection
@@ -427,10 +494,8 @@ export default function EditAdaptivePlanModal({
               setTargetDate={setTargetDate}
               dailyReadingTime={dailyReadingTime}
               setDailyReadingTime={setDailyReadingTime}
-              // We won't pass masteryLevel, we'll do our own UI here
-              hideMasteryInput // (just so we don't see the old fields if you had them)
+              hideMasteryInput
             />
-
             <Box sx={{ mt: 3 }}>
               <FormControl sx={{ mr: 2, minWidth: 120 }}>
                 <InputLabel>Current</InputLabel>
@@ -590,7 +655,7 @@ export default function EditAdaptivePlanModal({
         <Box>{content}</Box>
       )}
 
-      {/* Instead of old <AdaptivePlayerModal>, new dialog for PlanFetcher */}
+      {/* New MUI dialog for PlanFetcher */}
       <Dialog
         open={showReduxPlanDialog}
         onClose={() => setShowReduxPlanDialog(false)}

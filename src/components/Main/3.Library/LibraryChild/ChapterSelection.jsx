@@ -1,96 +1,97 @@
-// src/components/HIDDIT/ChapterSelection.jsx
-
 import React from "react";
 import {
   Box,
   Typography,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
   Checkbox,
-  FormControlLabel,
+  ListItem,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Collapse,
+  List,
 } from "@mui/material";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLess from "@mui/icons-material/ExpandLess";
+import ExpandMore from "@mui/icons-material/ExpandMore";
 
 export default function ChapterSelection({
-  chapters,
-  onAccordionToggle,
+  chapters = [],
   onToggleChapter,
-  onToggleSubchapter,
+  onToggleSubchapter, // unused now
+  onAccordionToggle,
 }) {
   return (
-    <Box>
-      <Typography
-        variant="h6"
-        sx={{ mb: 2, fontWeight: "bold", color: "#fff" }}
-      >
-        Select Chapters/Subchapters:
-      </Typography>
+    <Box sx={{ width: "100%" }}>
+      {chapters.map((chapter, cIdx) => {
+        const { id, title, expanded, selected, subchapters } = chapter;
 
-      {chapters.length === 0 && (
-        <Typography variant="body2" sx={{ color: "#ccc" }}>
-          No chapters found or not yet loaded.
-        </Typography>
-      )}
-
-      {chapters.map((ch, idx) => (
-        <Accordion
-          key={ch.id}
-          expanded={ch.expanded}
-          onChange={() => onAccordionToggle(idx)}
-          sx={{
-            marginBottom: 1,
-            backgroundColor: "#262626",
-            color: "#fff",
-          }}
-        >
-          <AccordionSummary
-            expandIcon={
-              <ExpandMoreIcon sx={{ color: "#fff", fontSize: "1.5rem" }} />
-            }
-          >
-            <FormControlLabel
-              sx={{ color: "#fff" }}
-              control={
-                <Checkbox
-                  checked={ch.selected}
-                  onChange={() => onToggleChapter(idx)}
-                  onClick={(e) => e.stopPropagation()}
-                  sx={{
-                    color: "#B39DDB",
-                    "&.Mui-checked": { color: "#B39DDB" },
-                  }}
-                />
-              }
-              label={
-                <Typography sx={{ fontWeight: "bold", color: "#fff" }}>
-                  {ch.title}
-                </Typography>
-              }
-            />
-          </AccordionSummary>
-
-          <AccordionDetails sx={{ backgroundColor: "#1f1f1f", color: "#fff" }}>
-            {ch.subchapters.map((sub, sidx) => (
-              <FormControlLabel
-                key={sub.id}
-                control={
+        return (
+          <Box key={id} sx={{ mb: 1 }}>
+            <ListItem
+              disablePadding
+              sx={{ backgroundColor: "#333", borderRadius: 1 }}
+            >
+              <ListItemButton onClick={() => onAccordionToggle(cIdx)}>
+                <ListItemIcon sx={{ minWidth: "40px" }}>
                   <Checkbox
-                    checked={sub.selected}
-                    onChange={() => onToggleSubchapter(idx, sidx)}
+                    checked={selected}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleChapter(cIdx);
+                    }}
+                    // For styling: white color check, etc.
                     sx={{
                       color: "#B39DDB",
-                      "&.Mui-checked": { color: "#B39DDB" },
+                      "&.Mui-checked": {
+                        color: "#D1C4E9",
+                      },
                     }}
                   />
-                }
-                label={sub.title}
-                sx={{ display: "block", marginLeft: 3, color: "#fff" }}
-              />
-            ))}
-          </AccordionDetails>
-        </Accordion>
-      ))}
+                </ListItemIcon>
+                <ListItemText
+                  primary={
+                    <Typography sx={{ color: "#fff", fontWeight: 500 }}>
+                      {title}
+                    </Typography>
+                  }
+                />
+                {expanded ? (
+                  <ExpandLess sx={{ color: "#fff" }} />
+                ) : (
+                  <ExpandMore sx={{ color: "#fff" }} />
+                )}
+              </ListItemButton>
+            </ListItem>
+
+            <Collapse in={expanded} timeout="auto" unmountOnExit>
+              <List component="div" disablePadding>
+                {subchapters.map((sub, sIdx) => (
+                  <ListItem
+                    key={sub.id}
+                    sx={{ pl: 6, backgroundColor: "#444" }}
+                  >
+                    {/* Instead of a checkbox, we show a bullet point or icon */}
+                    <ListItemIcon sx={{ minWidth: "30px" }}>
+                      <Typography
+                        component="span"
+                        sx={{ color: "#B39DDB", fontWeight: "bold" }}
+                      >
+                        •
+                      </Typography>
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={
+                        <Typography sx={{ color: "#fff" }}>
+                          {sub.title}
+                        </Typography>
+                      }
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </Collapse>
+          </Box>
+        );
+      })}
     </Box>
   );
 }
