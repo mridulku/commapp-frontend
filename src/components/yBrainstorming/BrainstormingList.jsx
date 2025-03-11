@@ -10,8 +10,7 @@ import Notes from './diagrams/Notes';
 import MonetizationBrainstorming from './diagrams/MonetizationBrainstorming';
 import UserGrowthStrategy from './diagrams/UserGrowthStrategy';
 import AnalyticsDashboard from './diagrams/AnalyticsDashboard';
-
-
+import UserPersonas from './diagrams/UserPersonas';
 
 
 
@@ -27,7 +26,8 @@ const diagramComponents = {
   Notes,
   MonetizationBrainstorming,
   UserGrowthStrategy,
-  AnalyticsDashboard
+  AnalyticsDashboard,
+  UserPersonas
   // When you create a new diagram component, simply add:
   // NewDiagramComponent: NewDiagramComponent
 };
@@ -94,7 +94,17 @@ const sampleBrainstormings = [
     title: 'PRODUCT: AnalyticsDashboard',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'AnalyticsDashboard'
+  },
+  {
+    id: 11,
+    title: 'USER: Personas',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'UserPersonas'
   }
+
+
+
+  
   // Add more sessions as needed...
 ];
 
