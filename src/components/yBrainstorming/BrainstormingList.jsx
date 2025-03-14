@@ -11,6 +11,7 @@ import MonetizationBrainstorming from './diagrams/MonetizationBrainstorming';
 import UserGrowthStrategy from './diagrams/UserGrowthStrategy';
 import AnalyticsDashboard from './diagrams/AnalyticsDashboard';
 import UserPersonas from './diagrams/UserPersonas';
+import TimeLogger from './diagrams/TimeLogger';
 
 
 
@@ -27,7 +28,8 @@ const diagramComponents = {
   MonetizationBrainstorming,
   UserGrowthStrategy,
   AnalyticsDashboard,
-  UserPersonas
+  UserPersonas,
+  TimeLogger
   // When you create a new diagram component, simply add:
   // NewDiagramComponent: NewDiagramComponent
 };
@@ -100,6 +102,12 @@ const sampleBrainstormings = [
     title: 'USER: Personas',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'UserPersonas'
+  },
+  {
+    id: 12,
+    title: 'GENERAL: TimeLogger',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'TimeLogger'
   }
 
 
