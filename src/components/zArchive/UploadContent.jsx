@@ -13,7 +13,7 @@ import axios from "axios";
 import { auth } from "../../firebase";
 
 // Import your steps
-import OnboardingCarousel from "../Main/1.Upload/1.2.1OnboardingCarousel";
+import OnboardingCarousel from "../Main/1.Upload/1.2OnboardingForm/1.2.1OnboardingCarousel";
 
 import UploadBook from "../Upload/UploadBook";
 import ProcessAnimation from "./UploadProcessing";

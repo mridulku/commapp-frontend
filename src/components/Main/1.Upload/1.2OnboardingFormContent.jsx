@@ -13,9 +13,9 @@ import axios from "axios";
 import { auth } from "../../../firebase";
 
 // Steps
-import OnboardingCarousel from "./1.2.1OnboardingCarousel";
-import UploadBook from "./1.2.2UploadBook";
-import ProcessAnimation from "./1.2.3ProcessAnimation";
+import OnboardingCarousel from "./1.2OnboardingForm/1.2.1OnboardingCarousel";
+import UploadBook from "./1.2OnboardingForm/1.2.2UploadBook";
+import ProcessAnimation from "./1.2OnboardingForm/1.2.3ProcessAnimation";
 
 /**
  * OnboardingFormContent
