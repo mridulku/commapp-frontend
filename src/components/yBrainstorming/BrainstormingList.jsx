@@ -23,6 +23,9 @@ import FlowUpload from './diagrams/FlowUpload';
 import FlowProfile from './diagrams/FlowProfile';
 import FlowContentPipeline from './diagrams/FlowContentPipeline';
 import FlowAPIRoutes from './diagrams/FlowAPIRoutes';
+import ExamConfigCreator from './diagrams/ExamConfigCreator';
+
+
 
 
 
@@ -52,7 +55,8 @@ const diagramComponents = {
   FlowUpload,
   FlowProfile,
   FlowContentPipeline,
-  FlowAPIRoutes
+  FlowAPIRoutes,
+  ExamConfigCreator
 };
 
 // Sample static data representing past brainstorming sessions.
@@ -195,13 +199,19 @@ const sampleBrainstormings = [
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'FlowAPIRoutes'
   },
+  {
+    id: 24,
+    title: 'TECH: ExamConfigCreator',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'ExamConfigCreator'
+  },
 
 
 
   
 
 
-
+  
   
 
 
