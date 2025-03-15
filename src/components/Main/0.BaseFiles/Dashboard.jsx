@@ -11,8 +11,8 @@ import EditAdaptivePlanModal from "../3.Library/LibraryChild/EditAdaptivePlanMod
 
 // Existing components
 import MaterialsDashboard from "../3.Library/MaterialsDashboard"; 
-import UnifiedSidebar from "../0.SidePanels/UnifiedSidebar";
-import ToursManager from "../0.Tours/ToursManager";
+import UnifiedSidebar from "./UnifiedSidebar";
+import ToursManager from "./ToursManager";
 
 import BookProgress from "../../zArchive/2.2Library/BookProgress";
 import SubchapterContent from "../../zArchive/4.Subchapter Content/0.SubchapterContent";

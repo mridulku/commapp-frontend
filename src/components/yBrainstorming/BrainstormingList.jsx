@@ -12,6 +12,18 @@ import UserGrowthStrategy from './diagrams/UserGrowthStrategy';
 import AnalyticsDashboard from './diagrams/AnalyticsDashboard';
 import UserPersonas from './diagrams/UserPersonas';
 import TimeLogger from './diagrams/TimeLogger';
+import FlowGeneratePlan from './diagrams/FlowGeneratePlan';
+import FlowChild2 from './diagrams/FlowChild2';
+import FlowReduxPlan from './diagrams/FlowReduxPlan';
+import FlowDashboard from './diagrams/FlowDashboard';
+import HomeComponentsNodes from './diagrams/HomeComponentsNodes';
+import FlowMaterialDashboard from './diagrams/FlowMaterialDashboard';
+import FlowPreLogin from './diagrams/FlowPreLogin';
+import FlowUpload from './diagrams/FlowUpload';
+import FlowProfile from './diagrams/FlowProfile';
+import FlowContentPipeline from './diagrams/FlowContentPipeline';
+import FlowAPIRoutes from './diagrams/FlowAPIRoutes';
+
 
 
 
@@ -29,13 +41,21 @@ const diagramComponents = {
   UserGrowthStrategy,
   AnalyticsDashboard,
   UserPersonas,
-  TimeLogger
-  // When you create a new diagram component, simply add:
-  // NewDiagramComponent: NewDiagramComponent
+  TimeLogger,
+  FlowGeneratePlan,
+  FlowChild2,
+  FlowReduxPlan,
+  FlowDashboard,
+  HomeComponentsNodes,
+  FlowMaterialDashboard,
+  FlowPreLogin,
+  FlowUpload,
+  FlowProfile,
+  FlowContentPipeline,
+  FlowAPIRoutes
 };
 
 // Sample static data representing past brainstorming sessions.
-// In a real app, you might fetch this from an API.
 const sampleBrainstormings = [
   {
     id: 1,
@@ -108,33 +128,112 @@ const sampleBrainstormings = [
     title: 'GENERAL: TimeLogger',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'TimeLogger'
-  }
+  },
+  {
+    id: 13,
+    title: 'TECH: AdaptivePlanFlow',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'FlowGeneratePlan'
+  },
+  {
+    id: 14,
+    title: 'TECH: FlowChild2',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'FlowChild2'
+  },
+  {
+    id: 15,
+    title: 'TECH: FlowReduxPlan',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'FlowReduxPlan'
+  },
+  {
+    id: 16,
+    title: 'TECH: FlowDashboard',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'FlowDashboard'
+  },
+  {
+    id: 17,
+    title: 'TECH: HomeComponentsNodes',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'HomeComponentsNodes'
+  },
+  {
+    id: 18,
+    title: 'TECH: FlowMaterialDashboard',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'FlowMaterialDashboard'
+  },
+  {
+    id: 19,
+    title: 'TECH: FlowPreLogin',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'FlowPreLogin'
+  },
+  {
+    id: 20,
+    title: 'TECH: FlowUpload',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'FlowUpload'
+  },
+  {
+    id: 21,
+    title: 'TECH: FlowProfile',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'FlowProfile'
+  },
+  {
+    id: 22,
+    title: 'TECH: FlowContentPipeline',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'FlowContentPipeline'
+  },
+  {
+    id: 23,
+    title: 'TECH: FlowAPIRoutes',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'FlowAPIRoutes'
+  },
 
 
 
   
-  // Add more sessions as needed...
+
+
+
+  
+
+
+
+
+
+  
+
+
+  
 ];
 
 function BrainstormingList() {
   const [brainstormings, setBrainstormings] = useState([]);
   const [selectedSession, setSelectedSession] = useState(null);
+
   // Sorting criteria: "alphabetical-desc", "alphabetical-asc", "date"
-  // Default is "alphabetical-desc" (which means A, B, C, D order)
+  // Default is "alphabetical-desc" (which means ascending alphabetical order).
   const [sortCriteria, setSortCriteria] = useState("alphabetical-desc");
 
   useEffect(() => {
-    // On mount, sort the sessions according to default criteria
+    // On mount or criteria change, sort the sessions
     sortSessions(sortCriteria);
   }, [sortCriteria]);
 
   const sortSessions = (criteria) => {
     const sorted = sampleBrainstormings.slice().sort((a, b) => {
       if (criteria === "alphabetical-desc") {
-        // Default: A, B, C, D (i.e. ascending alphabetical order)
+        // A -> Z
         return a.title.localeCompare(b.title);
       } else if (criteria === "alphabetical-asc") {
-        // Reverse alphabetical order: Z, Y, X, ...
+        // Z -> A
         return b.title.localeCompare(a.title);
       } else if (criteria === "date") {
         // Newest first
@@ -147,19 +246,24 @@ function BrainstormingList() {
   };
 
   const handleSortChange = (e) => {
-    const criteria = e.target.value;
-    setSortCriteria(criteria);
+    setSortCriteria(e.target.value);
   };
 
+  // If a session is selected, show the corresponding diagram
   if (selectedSession) {
     const DiagramComponent = diagramComponents[selectedSession.diagramComponent];
+
     return (
       <div style={styles.container}>
         <button style={styles.backButton} onClick={() => setSelectedSession(null)}>
           ← Back to Sessions
         </button>
+
         {DiagramComponent ? (
-          <DiagramComponent brainstorming={selectedSession} />
+          // Give the diagram a clear, large container to ensure it appears
+          <div style={styles.diagramContainer}>
+            <DiagramComponent brainstorming={selectedSession} />
+          </div>
         ) : (
           <div>Diagram component not implemented.</div>
         )}
@@ -167,9 +271,11 @@ function BrainstormingList() {
     );
   }
 
+  // Otherwise, show the list of brainstorming sessions
   return (
     <div style={styles.container}>
       <h1 style={styles.header}>Brainstorming Sessions</h1>
+
       <div style={styles.sortContainer}>
         <label style={styles.sortLabel}>Sort by: </label>
         <select value={sortCriteria} onChange={handleSortChange} style={styles.sortSelect}>
@@ -178,6 +284,7 @@ function BrainstormingList() {
           <option value="date">Date (Newest First)</option>
         </select>
       </div>
+
       <div style={styles.list}>
         {brainstormings.map((session) => (
           <button
@@ -259,6 +366,15 @@ const styles = {
     border: 'none',
     borderRadius: '4px',
     cursor: 'pointer'
+  },
+  // This container ensures the diagram has a visible area
+  diagramContainer: {
+    width: '100%',
+    height: '80vh',   // Adjust as you prefer
+    backgroundColor: '#000', 
+    border: '1px solid #444',
+    borderRadius: '4px',
+    overflow: 'hidden'
   }
 };
 
