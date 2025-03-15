@@ -1,38 +1,37 @@
+// QuizComponent.jsx
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useSelector } from "react-redux";
-import LoadingSpinner from "./LoadingSpinner";
+import LoadingSpinner from "../Secondary/LoadingSpinner";
 
 /**
- * QuizAnalyze
- * -----------
- * Removes the extra heading so the quiz begins “right away.” 
- * The user sees only the questions or final results, no big "Quiz Analyze Attempt #..." text.
+ * Generic quiz component for any stage
+ * e.g. quizStage="analyze", "apply", etc.
  */
-export default function QuizAnalyze({
+export default function QuizComponent({
+  quizStage,        // e.g. "analyze"
   subChapterId,
   attemptNumber,
   onQuizComplete,
   onQuizFail,
 }) {
   const userId = useSelector((state) => state.auth?.userId);
-  const quizType = "analyze";
-  const promptKey = "quizAnalyze";
+  // For now, still a 1:1 mapping -> if quizStage="analyze", we do "quizAnalyze"
+  // If you want different prompt keys: "quizRemember", "quizApply", etc.
+  // you can do a small switch or config lookup
+  const promptKey = `quiz${capitalize(quizStage)}`;
+  const quizType = quizStage; // for the API calls
 
-  // Local states
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [responseData, setResponseData] = useState(null);
-
   const [selectedAnswers, setSelectedAnswers] = useState([]);
   const [showResult, setShowResult] = useState(false);
   const [finalScore, setFinalScore] = useState(null);
 
-  // Fetch GPT quiz on mount or subChapter/attempt changes
   useEffect(() => {
     if (!subChapterId) return;
     fetchGPTQuiz();
-    // Reset states
     setSelectedAnswers([]);
     setShowResult(false);
     setFinalScore(null);
@@ -81,10 +80,6 @@ export default function QuizAnalyze({
   } catch (err) {
     return (
       <div style={styles.container}>
-        {/* 
-          We remove big headings here too, just keep minimal text 
-          in case there's invalid JSON 
-        */}
         <p style={{ ...styles.text, color: "red" }}>
           GPT response is not valid JSON. Check console for details.
         </p>
@@ -98,7 +93,6 @@ export default function QuizAnalyze({
   if (!quizFieldConfig) {
     return (
       <div style={styles.container}>
-        {/* Minimal => no heading */}
         <p style={styles.text}>No quiz field found in UIconfig.</p>
       </div>
     );
@@ -107,7 +101,6 @@ export default function QuizAnalyze({
   const quizQuestions = parsed[quizFieldConfig.field] || [];
   const totalQuestions = quizQuestions.length;
 
-  // Handler => user clicks "Submit"
   async function handleSubmit() {
     let correctCount = 0;
     const quizSubmission = quizQuestions.map((q, idx) => {
@@ -143,10 +136,9 @@ export default function QuizAnalyze({
     }
   }
 
-  // If user submitted => show pass/fail results (no big heading)
   if (showResult && finalScore) {
     const correctCount = parseInt(finalScore.split("/")[0], 10);
-    const passThreshold = 4;
+    const passThreshold = 4; // or from config
     const passed = correctCount >= passThreshold;
 
     return (
@@ -171,10 +163,8 @@ export default function QuizAnalyze({
     );
   }
 
-  // Else => show the quiz
   return (
     <div style={styles.container}>
-      {/* No heading, just jump straight into questions */}
       {quizQuestions.map((question, qIndex) => (
         <div key={qIndex} style={styles.questionBlock}>
           <p style={styles.questionText}>{`Q${qIndex + 1}: ${question.question}`}</p>
@@ -196,7 +186,6 @@ export default function QuizAnalyze({
           ))}
         </div>
       ))}
-
       <button onClick={handleSubmit} style={styles.button}>
         Submit Quiz
       </button>
@@ -204,9 +193,13 @@ export default function QuizAnalyze({
   );
 }
 
-// helper
 function stripMarkdownFences(text) {
   return text.replace(/```(json)?/gi, "").trim();
+}
+
+function capitalize(str) {
+  if (!str) return str;
+  return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
 const styles = {

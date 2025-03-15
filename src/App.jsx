@@ -56,13 +56,13 @@ import CoursesMaterialManager from "./components/zArchive/Archive 3/CoursesMater
 import BooksViewer from "./components/zArchive/Archive 1/BooksViewer";
 import BooksViewer2 from "./components/Main/0.BaseFiles/Dashboard";
 
-import StageTimeline from "./components/Main/5.StudyModal/0.components/StageTimeline";
+import StageTimeline from "./components/Main/5.StudyModal/0.components/Secondary/StageTimeline";
 
 
 import PlanFetcher from "./components/Main/5.StudyModal/StudyModal";
 
 
-import PlanBrowser from "./components/Main/5.StudyModal/0.test/PlanBrowser";
+import PlanBrowser from "./components/zArchive/0.test/PlanBrowser";
 
 
 function App() {

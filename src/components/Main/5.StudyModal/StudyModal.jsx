@@ -8,7 +8,7 @@ import { setUserId } from "./0.store/authSlice";
 import TopBar from "./0.components/TopBar";
 import BottomBar from "./0.components/BottomBar";
 import LeftPanel from "./0.components/LeftPanel";
-import MainContent from "./0.components/MainContent";
+import MainContent from "./0.components/Main/MainContent";
 
 export default function PlanFetcher({
   planId,

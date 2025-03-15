@@ -2,9 +2,8 @@
 import React from "react";
 import { useSelector } from "react-redux";
 
-import ReadingView from "../1.1ReadingView/ReadingView";
-import QuizView from "../0.OldViews/QuizView";
-import ReviseView from "../0.OldViews/ReviseView";
+import ReadingView from "./ReadingView";
+import StageView from "./StageView";
 
 export default function MainContent({ examId }) {
   const { flattenedActivities, currentIndex } = useSelector(
@@ -46,14 +45,10 @@ export default function MainContent({ examId }) {
 
     case "quiz":
       // pass examId as a prop to QuizView
-      content = <QuizView examId={examId} activity={currentAct} />;
+      content = <StageView examId={examId} activity={currentAct} />;
       break;
 
-    case "revise":
-    case "revision":
-      // If truly unused, you could remove this entire case
-      content = <ReviseView activity={currentAct} />;
-      break;
+    
 
     default:
       content = (

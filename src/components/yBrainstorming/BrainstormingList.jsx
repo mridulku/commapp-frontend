@@ -24,6 +24,7 @@ import FlowProfile from './diagrams/FlowProfile';
 import FlowContentPipeline from './diagrams/FlowContentPipeline';
 import FlowAPIRoutes from './diagrams/FlowAPIRoutes';
 import ExamConfigCreator from './diagrams/ExamConfigCreator';
+import HospitalERDiagram from './diagrams/HospitalERDiagram';
 
 
 
@@ -56,7 +57,8 @@ const diagramComponents = {
   FlowProfile,
   FlowContentPipeline,
   FlowAPIRoutes,
-  ExamConfigCreator
+  ExamConfigCreator,
+  HospitalERDiagram
 };
 
 // Sample static data representing past brainstorming sessions.
@@ -205,6 +207,12 @@ const sampleBrainstormings = [
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'ExamConfigCreator'
   },
+  {
+    id: 25,
+    title: 'TECH: HospitalERDiagram',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'HospitalERDiagram'
+  },
 
 
 
@@ -213,7 +221,6 @@ const sampleBrainstormings = [
 
   
   
-
 
 
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { collection, query, where, getDocs, doc, getDoc } from "firebase/firestore";
-import { db } from "../../../../firebase"; // Adjust your path
+import { db } from "../../../firebase"; // Adjust your path
 import _ from "lodash"; // optional for grouping/summing if you prefer lodash
 
 /**

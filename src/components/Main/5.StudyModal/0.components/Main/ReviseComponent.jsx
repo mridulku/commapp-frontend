@@ -1,38 +1,29 @@
+// ReviseComponent.jsx
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useSelector } from "react-redux";
-import LoadingSpinner from "./LoadingSpinner";
-
-
-function stripMarkdownFences(text) {
-  return text.replace(/```(json)?/gi, "").trim();
-}
+import LoadingSpinner from "../Secondary/LoadingSpinner";
 
 /**
- * ReviseAnalyze
- * -------------
- * Expects:
- *   subChapterId   (string)
- *   revisionNumber (number)
- *   onRevisionDone (function)
- *
- * Only fetches GPT data for "reviseAnalyze" or "revise" promptKey, then on "Done",
- * calls /api/submitRevision with { userId, subchapterId, revisionType="analyze", revisionNumber }.
+ * Generic revision for any stage
+ * e.g. quizStage="analyze", so we do "reviseAnalyze"
  */
-
-export default function ReviseAnalyze({
+export default function ReviseComponent({
+  quizStage,     // e.g. "analyze"
   subChapterId,
   revisionNumber,
   onRevisionDone,
 }) {
-  const userId = useSelector((state) => state.auth?.userId) ;
-  const revisionType = "analyze";
+  const userId = useSelector((state) => state.auth?.userId);
+  // If stage=analyze => "reviseAnalyze"
+  // If stage=remember => "reviseRemember"
+  // etc. For now, we do a small helper:
+  const promptKey = `revise${capitalize(quizStage)}`;
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [responseData, setResponseData] = useState(null);
 
-  // Fetch GPT for revision
   useEffect(() => {
     if (!subChapterId) return;
     fetchRevisionGPT();
@@ -47,7 +38,7 @@ export default function ReviseAnalyze({
       const res = await axios.post("http://localhost:3001/api/generate", {
         userId,
         subchapterId: subChapterId,
-        promptKey: "revise", // or "reviseAnalyze"
+        promptKey,
       });
       setResponseData(res.data);
     } catch (err) {
@@ -58,12 +49,27 @@ export default function ReviseAnalyze({
     }
   }
 
+  async function handleDone() {
+    try {
+      await axios.post("http://localhost:3001/api/submitRevision", {
+        userId,
+        subchapterId: subChapterId,
+        revisionType: quizStage,
+        revisionNumber,
+      });
+      onRevisionDone?.();
+    } catch (err) {
+      console.error("Error saving revision doc:", err);
+      alert("Failed to record revision!");
+    }
+  }
+
   if (!subChapterId) {
     return <div style={styles.text}>No subChapterId.</div>;
   }
   if (loading) {
-      return <LoadingSpinner message="Building your revision..." />;
-    }
+    return <LoadingSpinner message="Building your revision..." />;
+  }
   if (error) {
     return <div style={styles.textError}>Error: {error}</div>;
   }
@@ -71,19 +77,18 @@ export default function ReviseAnalyze({
     return <div style={styles.text}>No data loaded yet.</div>;
   }
 
-  // parse GPT JSON
+  // parse JSON from GPT
   let raw = responseData.result || "";
   if (raw.startsWith("```")) {
     raw = stripMarkdownFences(raw);
   }
-
   let parsed;
   try {
     parsed = JSON.parse(raw);
   } catch (err) {
     return (
       <div style={styles.container}>
-        <h3 style={styles.heading}>Revision (Analyze)</h3>
+        <h3 style={styles.heading}>Revision ({quizStage})</h3>
         <p style={{ ...styles.text, color: "red" }}>
           GPT response is not valid JSON. Check console for details.
         </p>
@@ -97,25 +102,10 @@ export default function ReviseAnalyze({
   const { UIconfig = {} } = responseData;
   const { fields = [] } = UIconfig;
 
-  async function handleDone() {
-    try {
-      await axios.post("http://localhost:3001/api/submitRevision", {
-        userId,
-        subchapterId: subChapterId,
-        revisionType,
-        revisionNumber,
-      });
-      onRevisionDone?.();
-    } catch (err) {
-      console.error("Error saving revision doc:", err);
-      alert("Failed to record revision!");
-    }
-  }
-
   return (
     <div style={styles.container}>
       <h3 style={styles.heading}>
-        Revision (Analyze) – Attempt #{revisionNumber}
+        Revision ({quizStage}) – Attempt #{revisionNumber}
       </h3>
       {fields.length > 0 ? (
         fields.map((fieldConfig, idx) => renderField(parsed, fieldConfig, idx))
@@ -143,6 +133,14 @@ function renderField(parsed, fieldConfig, key) {
       </div>
     </div>
   );
+}
+
+function stripMarkdownFences(text) {
+  return text.replace(/```(json)?/gi, "").trim();
+}
+function capitalize(str) {
+  if (!str) return str;
+  return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
 const styles = {
