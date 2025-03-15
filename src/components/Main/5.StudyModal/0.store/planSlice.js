@@ -1,5 +1,3 @@
-// planSlice.js
-
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import axios from "axios";
 
@@ -84,6 +82,7 @@ const planSlice = createSlice({
     currentIndex: -1,
     status: "idle",          // 'idle' | 'loading' | 'succeeded' | 'failed'
     error: null,
+    examId: "general",       // <-- NEW: store examId in Redux
   },
   reducers: {
     setCurrentIndex(state, action) {
@@ -99,6 +98,8 @@ const planSlice = createSlice({
         state.planDoc = null;
         state.flattenedActivities = [];
         state.currentIndex = -1;
+        // Keep examId as-is or reset to "general" if you prefer
+        // state.examId = "general";
       })
       .addCase(fetchPlan.fulfilled, (state, action) => {
         console.log("[planSlice] fetchPlan => fulfilled!");
@@ -116,10 +117,14 @@ const planSlice = createSlice({
         state.planDoc = updatedPlanDoc;
         state.flattenedActivities = flattenedActivities;
 
-        // 4) Default currentIndex => 0 if we have items
+        // 4) Also store examId for global convenience
+        //    fallback to "general" if none provided
+        state.examId = updatedPlanDoc.examId || "general";
+
+        // 5) Default currentIndex => 0 if we have items
         let newIndex = flattenedActivities.length > 0 ? 0 : -1;
 
-        // 5) If we have initialActivityContext => find matching item
+        // 6) If we have initialActivityContext => find matching item
         if (initialActivityContext && flattenedActivities.length > 0) {
           const { subChapterId, type } = initialActivityContext;
           console.log("[planSlice] searching for subChapterId:", subChapterId, "and type:", type);
@@ -138,7 +143,7 @@ const planSlice = createSlice({
           }
         }
 
-        // 6) Set currentIndex
+        // 7) Set currentIndex
         state.currentIndex = newIndex;
         console.log("[planSlice] final currentIndex =>", newIndex);
       })

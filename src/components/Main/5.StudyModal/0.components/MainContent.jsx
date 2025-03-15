@@ -1,3 +1,4 @@
+// MainContent.jsx
 import React from "react";
 import { useSelector } from "react-redux";
 
@@ -5,8 +6,10 @@ import ReadingView from "../1.1ReadingView/ReadingView";
 import QuizView from "../0.OldViews/QuizView";
 import ReviseView from "../0.OldViews/ReviseView";
 
-export default function MainContent() {
-  const { flattenedActivities, currentIndex } = useSelector((state) => state.plan);
+export default function MainContent({ examId }) {
+  const { flattenedActivities, currentIndex } = useSelector(
+    (state) => state.plan
+  );
 
   // 1) No activities
   if (!flattenedActivities || flattenedActivities.length === 0) {
@@ -40,13 +43,18 @@ export default function MainContent() {
     case "reading":
       content = <ReadingView activity={currentAct} />;
       break;
+
     case "quiz":
-      content = <QuizView activity={currentAct} />;
+      // pass examId as a prop to QuizView
+      content = <QuizView examId={examId} activity={currentAct} />;
       break;
+
     case "revise":
     case "revision":
+      // If truly unused, you could remove this entire case
       content = <ReviseView activity={currentAct} />;
       break;
+
     default:
       content = (
         <div style={{ padding: 20, color: "#fff" }}>
@@ -56,7 +64,7 @@ export default function MainContent() {
       );
   }
 
-  // 5) Render - (No arrow buttons here, they've been moved to TopBar)
+  // 5) Render
   return (
     <div style={styles.container}>
       <div style={styles.contentArea}>{content}</div>

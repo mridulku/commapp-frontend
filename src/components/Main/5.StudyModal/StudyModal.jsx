@@ -3,7 +3,6 @@ import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchPlan } from "./0.store/planSlice";
 
-// Import your setUserId action from the auth slice
 import { setUserId } from "./0.store/authSlice";
 
 import TopBar from "./0.components/TopBar";
@@ -14,7 +13,7 @@ import MainContent from "./0.components/MainContent";
 export default function PlanFetcher({
   planId,
   initialActivityContext,
-  userId = null, // NEW: accept userId as a prop
+  userId = null,
   backendURL = "http://localhost:3001",
   fetchUrl = "/api/adaptive-plan",
 
@@ -38,10 +37,12 @@ export default function PlanFetcher({
   // A simple local countdown for session
   const [secondsLeft, setSecondsLeft] = useState(initialSeconds);
 
-  // Store "collapsed" state so we can style the left panel
+  // Collapsible left panel
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  // Timer effect
+  // ----------------------------
+  // 1) Timer effect
+  // ----------------------------
   useEffect(() => {
     const timerId = setInterval(() => {
       setSecondsLeft((prev) => (prev > 0 ? prev - 1 : 0));
@@ -50,14 +51,18 @@ export default function PlanFetcher({
     return () => clearInterval(timerId);
   }, []);
 
-  // Store userId in Redux (if provided)
+  // ----------------------------
+  // 2) Store userId in Redux
+  // ----------------------------
   useEffect(() => {
     if (userId) {
       dispatch(setUserId(userId));
     }
   }, [userId, dispatch]);
 
-  // On mount or planId change => fetch plan
+  // ----------------------------
+  // 3) On mount => fetch plan
+  // ----------------------------
   useEffect(() => {
     if (!planId) return;
 
@@ -71,12 +76,17 @@ export default function PlanFetcher({
     );
   }, [planId, backendURL, fetchUrl, initialActivityContext, dispatch]);
 
-  // For bottom bar progress
+  // ----------------------------
+  // 4) For bottom bar progress
+  // ----------------------------
   const totalSteps = flattenedActivities?.length || 0;
   const currentStep = currentIndex >= 0 ? currentIndex + 1 : 0;
   const stepPercent =
     totalSteps > 0 ? Math.floor((currentStep / totalSteps) * 100) : 0;
 
+  // ----------------------------
+  // 5) Render
+  // ----------------------------
   return (
     <div style={styles.appContainer}>
       <TopBar
@@ -98,11 +108,11 @@ export default function PlanFetcher({
 
       {planDoc && (
         <div style={styles.mainArea}>
-          {/* Left side (collapsible) */}
+          {/* The left side (collapsible) */}
           <div
             style={{
               ...styles.leftPanelContainer,
-              width: isCollapsed ? 60 : 300, // toggle width
+              width: isCollapsed ? 60 : 300,
             }}
           >
             <LeftPanel
@@ -111,9 +121,10 @@ export default function PlanFetcher({
             />
           </div>
 
-          {/* Right side (main content) */}
+          {/* The right side (main content) */}
           <div style={styles.rightPanelContainer}>
-            <MainContent />
+            {/* Pull examId from planDoc (fallback to "general") */}
+            <MainContent examId={planDoc.examId || "general"} />
           </div>
         </div>
       )}
@@ -128,7 +139,6 @@ export default function PlanFetcher({
 }
 
 const styles = {
-  // Changed from '80vh' to '100%' to fill the parent container (e.g. Dialog)
   appContainer: {
     height: "100%",
     display: "flex",
@@ -145,14 +155,14 @@ const styles = {
     overflow: "hidden",
   },
   leftPanelContainer: {
-    height: "100%",          // fill the vertical space
+    height: "100%",
     overflowY: "auto",
     backgroundColor: "#000",
-    transition: "width 0.3s ease", // animate the collapse
+    transition: "width 0.3s ease",
   },
   rightPanelContainer: {
     flex: 1,
-    height: "100%",          // fill the vertical space
+    height: "100%",
     overflowY: "auto",
     backgroundColor: "#000",
   },

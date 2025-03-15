@@ -8,32 +8,33 @@ import ApplyView from "../1.5ApplyView/ApplyView";
 import AnalyzeView from "../1.4AnalyzeView/AnalyzeView";
 
 /**
- * QuizView (Shell)
- * ----------------
- *  - Reads activity.quizStage
- *  - Renders the appropriate child component:
- *      RememberView, UnderstandView, ApplyView, AnalyzeView
- *  - If none matches, it shows a fallback.
+ * QuizView
+ *  - Accepts examId + activity
+ *  - Chooses which stage subcomponent to render
  */
-export default function QuizView({ activity }) {
+export default function QuizView({ examId, activity }) {
   const userId = useSelector((state) => state.auth?.userId || "demoUser");
 
   const quizStage = (activity.quizStage || "").toLowerCase();
 
+  // If you want to do exam-based logic, you'd do something like:
+  // if (examId === "myExam" && quizStage === "apply") {...} etc.
+
   switch (quizStage) {
     case "remember":
-      return <RememberView activity={activity} />;
+      return <RememberView examId={examId} activity={activity} />;
     case "understand":
-      return <UnderstandView activity={activity} />;
+      return <UnderstandView examId={examId} activity={activity} />;
     case "apply":
-      return <ApplyView activity={activity} />;
+      return <ApplyView examId={examId} activity={activity} />;
     case "analyze":
-      return <AnalyzeView activity={activity} />;
+      return <AnalyzeView examId={examId} activity={activity} />;
     default:
       return (
         <div style={styles.outerContainer}>
           <div style={styles.quizContentArea}>
             <h2>Unknown Quiz Stage: {activity.quizStage || "N/A"}</h2>
+            <p>Exam ID: {examId}</p>
             <p>Activity data:</p>
             <pre style={{ backgroundColor: "#222", padding: "8px" }}>
               {JSON.stringify(activity, null, 2)}
