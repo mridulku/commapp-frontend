@@ -1,7 +1,6 @@
 //
 // src/components/DetailedBookViewer/Child2.jsx
 //
-
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import {
@@ -11,9 +10,6 @@ import {
 } from "@mui/material";
 import HistoryTab from "./HistoryTab";
 import PlanFetcher from "../../5.StudyModal/StudyModal"; // Adjust path if needed
-
-// We define an ordered array of the 5 possible "stages" (including "Reading")
-const STAGE_ORDER = ["Reading", "Remember", "Understand", "Apply", "Analyze"];
 
 export default function Child2({
   userId = null,
@@ -132,7 +128,50 @@ export default function Child2({
   }, [selectedPlanId]);
 
   // ------------------------------------------
-  // 4) Session Tab
+  // 4) Also fetch exam stages (once we have plan)
+  // ------------------------------------------
+  const [stageOrder, setStageOrder] = useState([]);
+
+  useEffect(() => {
+    if (!plan) {
+      setStageOrder([]);
+      return;
+    }
+    // plan.examId might be empty => default "general"
+    const effectiveExamId = plan.examId && plan.examId.trim()
+      ? plan.examId.trim()
+      : "general";
+
+    fetchExamConfig(effectiveExamId);
+  }, [plan]);
+
+  async function fetchExamConfig(examId) {
+    try {
+      const url = `${import.meta.env.VITE_BACKEND_URL}/api/exam-config`;
+      const res = await axios.get(url, { params: { examId } });
+      if (res.data && Array.isArray(res.data.stages)) {
+        // Transform the array of stages => e.g. "none","remember","..." => "Reading","Remember",...
+        const finalStages = res.data.stages.map(transformStage);
+        setStageOrder(finalStages);
+      } else {
+        setStageOrder([]);
+      }
+    } catch (err) {
+      console.error("Failed to fetch exam config:", err);
+      setStageOrder([]);
+    }
+  }
+
+  // Helper: "none" => "Reading", otherwise capitalized
+  function transformStage(rawStage) {
+    if (rawStage === "none") return "Reading";
+    if (!rawStage) return "";
+    // Capitalize first letter
+    return rawStage.charAt(0).toUpperCase() + rawStage.slice(1);
+  }
+
+  // ------------------------------------------
+  // 5) Session Tab
   // ------------------------------------------
   const [activeSessionIndex, setActiveSessionIndex] = useState(0);
 
@@ -155,7 +194,7 @@ export default function Child2({
   }
 
   // ------------------------------------------
-  // 5) PlanFetcher Dialog
+  // 6) PlanFetcher Dialog
   // ------------------------------------------
   const [showPlanDialog, setShowPlanDialog] = useState(false);
   const [dialogPlanId, setDialogPlanId] = useState("");
@@ -168,14 +207,16 @@ export default function Child2({
     } else {
       setDialogInitialActivity({
         subChapterId: activity.subChapterId,
-        type: activity.type, // "READ" | "QUIZ"
+        type: activity.type, // "READ" or "QUIZ"
         stage: activity.quizStage || null,
       });
     }
     setShowPlanDialog(true);
   }
 
+  // ------------------------------------------
   // Render
+  // ------------------------------------------
   if (localPlanIds.length === 0 && !plan) {
     return (
       <div style={containerStyle}>
@@ -214,28 +255,25 @@ export default function Child2({
         renderLocalPlan(plan)
       )}
 
-<Dialog
-  open={showPlanDialog}
-  onClose={() => setShowPlanDialog(false)}
-  // Removes default MUI widths; we're controlling width via slotProps.paper.
-  maxWidth={false}
-  // If you previously had fullWidth, remove it or set to false:
-  fullWidth={false}
-  // Use new slotProps to style backdrop and paper
- 
-      sx={{
-        "& .MuiDialog-paper": {
-          width: "90vw",        // 90% of viewport width
-          maxWidth: "90vw",     // prevent shrinking to default
-          height: "90vh",       // 90% of viewport height
-          maxHeight: "90vh",    // prevent shrinking to default
-          backgroundColor: "#000",
-          color: "#fff",
-          borderRadius: 2,
-          boxShadow: "none",
-        },
-      }}
-    >
+      {/* PlanFetcher Dialog */}
+      <Dialog
+        open={showPlanDialog}
+        onClose={() => setShowPlanDialog(false)}
+        maxWidth={false}
+        fullWidth={false}
+        sx={{
+          "& .MuiDialog-paper": {
+            width: "90vw",
+            maxWidth: "90vw",
+            height: "90vh",
+            maxHeight: "90vh",
+            backgroundColor: "#000",
+            color: "#fff",
+            borderRadius: 2,
+            boxShadow: "none",
+          },
+        }}
+      >
         <DialogContent
           sx={{
             flex: 1,
@@ -325,7 +363,7 @@ export default function Child2({
     };
   }
 
-  // Render a single session => we skip “book name” since only 1 book
+  // Render a single session => we skip “book name” if there's only 1 book
   function renderSessionContent(session) {
     if (!session) return null;
     const { activities = [] } = session;
@@ -395,8 +433,6 @@ export default function Child2({
     );
   }
 
-  // For each chapter => show each activity. We'll group them by subchapter as well, or
-  // simply list them in order. We'll do sub-ch grouping if you like. Let's do it quickly.
   function renderChapterActivities(chapterActivities) {
     // group by sub-chapter
     const subMap = new Map();
@@ -415,11 +451,9 @@ export default function Child2({
 
       return (
         <div key={subId} style={{ marginBottom: "8px" }}>
-          <div style={{ fontWeight: "bold", margin: "6px 0, 4px 0" }}>
+          <div style={{ fontWeight: "bold", margin: "6px 0 4px 0" }}>
             {subName}
           </div>
-          {/* list each activity as one line => subchapter name on left? we already did subName above,
-              so let's do each line with the "timeline" on right */}
           {sActs.map((act, index) => (
             <div
               key={`${act.type}-${act.quizStage || ""}-${index}`}
@@ -433,12 +467,12 @@ export default function Child2({
                 padding: "6px 8px",
               }}
             >
-              {/* Left: we can show "timeNeeded" or hide */}
+              {/* Left: show timeNeeded */}
               <div style={{ fontSize: "0.85rem", marginRight: "6px" }}>
                 {act.timeNeeded || 0} min
               </div>
 
-              {/* The timeline bar => reading, remember, etc. */}
+              {/* The timeline bar => built from 'stageOrder' */}
               <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                 {renderTimelineStages(act)}
               </div>
@@ -449,36 +483,50 @@ export default function Child2({
     });
   }
 
-  // Renders the 5-stage timeline. The "active" stage is the one that is a button (READ or QUIZ).
+  // Renders the timeline stages from our "stageOrder" state.
   function renderTimelineStages(activity) {
-    // figure out which stage is "active" from the activity
-    // If type=READ => active="Reading"
-    // If type=QUIZ => active = capitalized quizStage e.g. "Remember","Understand" etc.
+    // Figure out which stage is "active"
+    // - if type=READ => activeStage="Reading"
+    // - if type=QUIZ => activeStage = quizStage (capitalized)
     let activeStage = "";
     if (activity.type === "READ") {
       activeStage = "Reading";
     } else if (activity.type === "QUIZ") {
       if (activity.quizStage) {
         // e.g. "remember" => "Remember"
-        activeStage =
-          activity.quizStage.charAt(0).toUpperCase() +
-          activity.quizStage.slice(1);
+        activeStage = transformStage(activity.quizStage);
       } else {
         activeStage = "Quiz";
       }
     }
 
-    return STAGE_ORDER.map((stageName, idx) => {
-      // if this stageName == activeStage => make it a button
-      const isActive = (stageName.toLowerCase() === activeStage.toLowerCase());
-      // We'll separate each stage with ">" or something
+    // if we haven't loaded exam config, stageOrder might be empty
+    if (!stageOrder || stageOrder.length === 0) {
+      // fallback to show just the active stage as a button
+      return (
+        <button
+          style={activityButtonStyle()}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleOpenPlanFetcher(selectedPlanId, activity);
+          }}
+        >
+          {activeStage || "Activity"}
+        </button>
+      );
+    }
+
+    // Use the stageOrder array. For each stage, if it matches activeStage => button
+    return stageOrder.map((stageName, idx) => {
+      const isActive =
+        stageName.toLowerCase() === activeStage.toLowerCase();
+
       const stageElem = isActive ? (
         <button
           key={idx}
           style={activityButtonStyle()}
           onClick={(e) => {
             e.stopPropagation();
-            // open the plan fetcher
             handleOpenPlanFetcher(selectedPlanId, activity);
           }}
         >
@@ -490,7 +538,8 @@ export default function Child2({
         </div>
       );
 
-      if (idx < STAGE_ORDER.length - 1) {
+      // Insert a small arrow (➔) after each stage except the last
+      if (idx < stageOrder.length - 1) {
         return (
           <React.Fragment key={`${stageName}-${idx}`}>
             {stageElem}
