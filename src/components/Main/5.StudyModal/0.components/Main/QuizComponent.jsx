@@ -1,26 +1,21 @@
-// QuizComponent.jsx
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useSelector } from "react-redux";
 import LoadingSpinner from "../Secondary/LoadingSpinner";
 
-/**
- * Generic quiz component for any stage
- * e.g. quizStage="analyze", "apply", etc.
- */
 export default function QuizComponent({
-  quizStage,        // e.g. "analyze"
+  examId = "general",  // default if none provided
+  quizStage,
   subChapterId,
   attemptNumber,
   onQuizComplete,
   onQuizFail,
 }) {
   const userId = useSelector((state) => state.auth?.userId);
-  // For now, still a 1:1 mapping -> if quizStage="analyze", we do "quizAnalyze"
-  // If you want different prompt keys: "quizRemember", "quizApply", etc.
-  // you can do a small switch or config lookup
-  const promptKey = `quiz${capitalize(quizStage)}`;
-  const quizType = quizStage; // for the API calls
+
+  // Build promptKey: e.g. "quizGeneralAnalyze"
+  const promptKey = `quiz${capitalize(examId)}${capitalize(quizStage)}`;
+  const quizType = quizStage; // for Firestore "quizType"
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -35,7 +30,8 @@ export default function QuizComponent({
     setSelectedAnswers([]);
     setShowResult(false);
     setFinalScore(null);
-  }, [subChapterId, attemptNumber]);
+    // eslint-disable-next-line
+  }, [subChapterId, attemptNumber, quizStage, examId]);
 
   async function fetchGPTQuiz() {
     try {
@@ -57,18 +53,28 @@ export default function QuizComponent({
     }
   }
 
-  if (!subChapterId) return <div style={styles.text}>No subChapterId</div>;
+  if (!subChapterId) {
+    return <div style={styles.text}>No subChapterId</div>;
+  }
   if (loading) {
     return <LoadingSpinner message="Building your quiz..." />;
   }
   if (error) {
     return <div style={styles.textError}>Error: {error}</div>;
   }
-  if (!responseData) {
-    return <div style={styles.text}>No quiz data yet.</div>;
+
+  // If there's no doc found in the "prompts" collection, it means we have no promptText. 
+  // The Express route logs a warning and returns minimal data.
+  // We can check if responseData.result is empty or a known placeholder:
+  if (!responseData?.result) {
+    return (
+      <div style={styles.textError}>
+        No prompt found for <b>{promptKey}</b>. Please create that prompt in Firestore.
+      </div>
+    );
   }
 
-  // Parse GPT JSON
+  // parse GPT JSON
   let raw = responseData.result || "";
   if (raw.startsWith("```")) {
     raw = stripMarkdownFences(raw);
@@ -81,8 +87,9 @@ export default function QuizComponent({
     return (
       <div style={styles.container}>
         <p style={{ ...styles.text, color: "red" }}>
-          GPT response is not valid JSON. Check console for details.
+          GPT response for <b>{promptKey}</b> is not valid JSON.
         </p>
+        <pre>{responseData.result}</pre>
       </div>
     );
   }
@@ -93,7 +100,9 @@ export default function QuizComponent({
   if (!quizFieldConfig) {
     return (
       <div style={styles.container}>
-        <p style={styles.text}>No quiz field found in UIconfig.</p>
+        <p style={styles.text}>
+          <b>{promptKey}</b> prompt has no quiz field in UIconfig.
+        </p>
       </div>
     );
   }
@@ -137,8 +146,9 @@ export default function QuizComponent({
   }
 
   if (showResult && finalScore) {
+    // For demonstration, you might want a stage-specific pass threshold or read from a config
+    const passThreshold = 4; 
     const correctCount = parseInt(finalScore.split("/")[0], 10);
-    const passThreshold = 4; // or from config
     const passed = correctCount >= passThreshold;
 
     return (
@@ -153,7 +163,9 @@ export default function QuizComponent({
           </>
         ) : (
           <>
-            <p style={styles.text}>You need more practice. Let's revise now!</p>
+            <p style={styles.text}>
+              You need more practice. Let's revise now!
+            </p>
             <button onClick={onQuizFail} style={styles.button}>
               Revise
             </button>
@@ -163,11 +175,14 @@ export default function QuizComponent({
     );
   }
 
+  // Render the quiz form
   return (
     <div style={styles.container}>
       {quizQuestions.map((question, qIndex) => (
         <div key={qIndex} style={styles.questionBlock}>
-          <p style={styles.questionText}>{`Q${qIndex + 1}: ${question.question}`}</p>
+          <p style={styles.questionText}>
+            Q{qIndex + 1}: {question.question}
+          </p>
           {question.options.map((opt, optIndex) => (
             <label key={optIndex} style={styles.optionLabel}>
               <input

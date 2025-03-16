@@ -1,24 +1,23 @@
-// ReviseComponent.jsx
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useSelector } from "react-redux";
 import LoadingSpinner from "../Secondary/LoadingSpinner";
 
 /**
- * Generic revision for any stage
- * e.g. quizStage="analyze", so we do "reviseAnalyze"
+ * Generic revision for any stage and exam
+ * E.g., if examId = "general", quizStage="analyze" => "reviseGeneralAnalyze"
  */
 export default function ReviseComponent({
-  quizStage,     // e.g. "analyze"
+  examId = "general",  // default if none provided
+  quizStage,           // e.g. "analyze"
   subChapterId,
   revisionNumber,
   onRevisionDone,
 }) {
   const userId = useSelector((state) => state.auth?.userId);
-  // If stage=analyze => "reviseAnalyze"
-  // If stage=remember => "reviseRemember"
-  // etc. For now, we do a small helper:
-  const promptKey = `revise${capitalize(quizStage)}`;
+
+  // Build the prompt key, e.g. "reviseGeneralAnalyze"
+  const promptKey = `revise${capitalize(examId)}${capitalize(quizStage)}`;
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -27,7 +26,8 @@ export default function ReviseComponent({
   useEffect(() => {
     if (!subChapterId) return;
     fetchRevisionGPT();
-  }, [subChapterId, revisionNumber]);
+    // eslint-disable-next-line
+  }, [subChapterId, revisionNumber, examId, quizStage]);
 
   async function fetchRevisionGPT() {
     try {
@@ -64,6 +64,7 @@ export default function ReviseComponent({
     }
   }
 
+  // ---- RENDER LOGIC ----
   if (!subChapterId) {
     return <div style={styles.text}>No subChapterId.</div>;
   }
@@ -77,11 +78,30 @@ export default function ReviseComponent({
     return <div style={styles.text}>No data loaded yet.</div>;
   }
 
+  // If there's no matching prompt doc in Firestore, the route logs a warning and
+  // returns an empty promptText => result. We can detect that here:
+  if (!responseData.result) {
+    return (
+      <div style={styles.container}>
+        <h3 style={styles.heading}>
+          Revision ({quizStage})
+        </h3>
+        <p style={{ ...styles.text, color: "red" }}>
+          No prompt found for <b>{promptKey}</b>. Please create that prompt in Firestore.
+        </p>
+        <button onClick={handleDone} style={styles.button}>
+          Done with Revision
+        </button>
+      </div>
+    );
+  }
+
   // parse JSON from GPT
   let raw = responseData.result || "";
   if (raw.startsWith("```")) {
     raw = stripMarkdownFences(raw);
   }
+
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -90,8 +110,9 @@ export default function ReviseComponent({
       <div style={styles.container}>
         <h3 style={styles.heading}>Revision ({quizStage})</h3>
         <p style={{ ...styles.text, color: "red" }}>
-          GPT response is not valid JSON. Check console for details.
+          GPT response for <b>{promptKey}</b> is not valid JSON.
         </p>
+        <pre style={styles.pre}>{responseData.result}</pre>
         <button onClick={handleDone} style={styles.button}>
           Done with Revision
         </button>
@@ -107,6 +128,7 @@ export default function ReviseComponent({
       <h3 style={styles.heading}>
         Revision ({quizStage}) – Attempt #{revisionNumber}
       </h3>
+
       {fields.length > 0 ? (
         fields.map((fieldConfig, idx) => renderField(parsed, fieldConfig, idx))
       ) : (
@@ -138,6 +160,7 @@ function renderField(parsed, fieldConfig, key) {
 function stripMarkdownFences(text) {
   return text.replace(/```(json)?/gi, "").trim();
 }
+
 function capitalize(str) {
   if (!str) return str;
   return str.charAt(0).toUpperCase() + str.slice(1);

@@ -35,10 +35,10 @@ import AutoAwesomeMotionIcon from "@mui/icons-material/AutoAwesomeMotion";
 import PsychologyIcon from "@mui/icons-material/Psychology";
 import TimelineIcon from "@mui/icons-material/Timeline";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
-import TableViewIcon from "@mui/icons-material/TableView";
-import DescriptionIcon from "@mui/icons-material/Description";
+import TableViewIcon from "@mui/icons-material/TableView";       // For 'WhyWe'reDifferent'
+import DescriptionIcon from "@mui/icons-material/Description"; // For 'SeeItInAction'
 
-// Import your PanelAdaptiveProcess (if you have it)
+// Import your PanelAdaptiveProcess (the bottom section)
 import PanelAdaptiveProcess from "./2.PanelAdaptiveProcess";
 // Import the sign-in component
 import AuthSignIn from "./1.AuthSignIn";
@@ -87,7 +87,7 @@ function LandingAppBar({ onOpenSignIn }) {
           sx={{ fontWeight: "bold", color: "primary.main", cursor: "pointer" }}
           onClick={() => navigate("/")}
         >
-          talk-ai.co | TOEFL Mastery
+          talk-ai.co
         </Typography>
 
         {/* Large screens: sign in button */}
@@ -155,15 +155,15 @@ function HeroSection({ onOpenSignIn }) {
       <Container>
         {/* Title */}
         <Typography variant="h2" sx={{ fontWeight: "bold", color: "primary.main", mb: 2 }}>
-          Master TOEFL with Adaptive AI
+          Adaptive Learning for Everyone
         </Typography>
 
         {/* Subtext */}
         <Typography variant="h6" sx={{ color: "text.secondary", maxWidth: 700, mb: 4, lineHeight: 1.6 }}>
-          Tired of juggling endless TOEFL reading passages, vocabulary lists, and time pressure?
-          Our AI-driven platform personalizes every step of your TOEFL prep—upload your passages
-          or practice materials, and let us tailor quizzes, reading schedules, and writing prompts
-          to your exact weaknesses. Focus on what truly boosts your TOEFL score.
+          Whether you're a high-school student, competitive exam aspirant, or a professional upskilling—
+          our AI-powered platform personalizes each lesson to your unique pace and goals. Simply upload 
+          your PDFs or study materials, and let us transform them into a tailor-made learning plan so you 
+          study exactly what you need, when you need it.
         </Typography>
 
         {/* CTA => open sign-in modal */}
@@ -174,7 +174,7 @@ function HeroSection({ onOpenSignIn }) {
           sx={{ mr: 2, fontWeight: "bold" }}
           onClick={onOpenSignIn}
         >
-          Start My TOEFL Prep
+          Get Started
         </Button>
       </Container>
     </Box>
@@ -192,32 +192,31 @@ function PainGainSection() {
           variant="h4"
           sx={{ color: "primary.main", fontWeight: "bold", textAlign: "center", mb: 2 }}
         >
-          Say Goodbye to Overwhelming TOEFL Passages
+          Say Goodbye to Aimless Studying
         </Typography>
 
         <Typography variant="body1" sx={{ color: "text.secondary", textAlign: "center", maxWidth: 700, mx: "auto", mb: 4 }}>
-          Get rid of generic study approaches that waste time. Our AI-driven system analyzes your 
-          reading comprehension, vocabulary needs, and writing performance—ensuring each session 
-          directly impacts your TOEFL score.
+          Tired of generic textbooks or endless question banks? Our AI-driven approach focuses exactly on what you
+          need, when you need it—so you can learn faster, score higher, and stay motivated.
         </Typography>
 
         <Grid container spacing={4}>
           <Grid item xs={12} md={6}>
             <Paper variant="outlined" sx={{ p: 3, bgcolor: "background.paper" }}>
               <Typography variant="h6" sx={{ color: "primary.main", mb: 2 }}>
-                Common TOEFL Frustrations
+                Common Frustrations
               </Typography>
               <Typography variant="body2" sx={{ color: "text.secondary", mb: 1 }}>
-                • Overly long reading passages with limited time
+                • Wasting hours on chapters you already know
               </Typography>
               <Typography variant="body2" sx={{ color: "text.secondary", mb: 1 }}>
-                • Vocabulary overload—unsure where to focus
+                • Feeling overwhelmed with no clear direction
               </Typography>
               <Typography variant="body2" sx={{ color: "text.secondary", mb: 1 }}>
-                • Scoring lower than expected on practice tests
+                • Boredom from repetitive drills that aren’t adaptive
               </Typography>
               <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                • Confusion on which question types you miss the most
+                • Guessing which topics matter most
               </Typography>
             </Paper>
           </Grid>
@@ -225,19 +224,19 @@ function PainGainSection() {
           <Grid item xs={12} md={6}>
             <Paper variant="outlined" sx={{ p: 3, bgcolor: "background.paper" }}>
               <Typography variant="h6" sx={{ color: "primary.main", mb: 2 }}>
-                Our TOEFL-Focused Solution
+                Our Solution
               </Typography>
               <Typography variant="body2" sx={{ color: "text.secondary", mb: 1 }}>
-                • AI breaks passages into chunks, generating targeted questions
+                • Personalized study paths skipping mastered areas
               </Typography>
               <Typography variant="body2" sx={{ color: "text.secondary", mb: 1 }}>
-                • Adaptive approach identifies your weak question types—Inference? Summary? Vocabulary?
+                • AI-curated quizzes from your own PDFs
               </Typography>
               <Typography variant="body2" sx={{ color: "text.secondary", mb: 1 }}>
-                • Real-time scheduling for reading, writing, and listening practice
+                • Intelligent scheduling for your comfortable pace
               </Typography>
               <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                • Progress tracking to ensure each study session counts
+                • Real-time analytics ensuring each minute is productive
               </Typography>
             </Paper>
           </Grid>
@@ -256,45 +255,45 @@ function LearningJourneySection() {
       icon: <PsychologyIcon sx={{ fontSize: 36, color: "primary.main", mb: 1 }} />,
       title: "Assess",
       bullets: [
-        "Upload TOEFL reading passages or materials",
-        "Baseline your reading speed & comprehension"
+        "Quick baseline on your PDFs/course files",
+        "No re-learning what you already mastered"
       ],
     },
     {
       icon: <AutoAwesomeMotionIcon sx={{ fontSize: 36, color: "primary.main", mb: 1 }} />,
       title: "Focus",
       bullets: [
-        "Pinpoint question types you miss (Inference, Negative Fact, etc.)",
-        "Prioritize tough vocabulary & grammar"
+        "AI identifies your exact weak spots",
+        "Concentrate on what truly boosts scores"
       ],
     },
     {
       icon: <EmojiObjectsIcon sx={{ fontSize: 36, color: "primary.main", mb: 1 }} />,
       title: "Practice",
       bullets: [
-        "Adaptive quizzes mimic TOEFL reading complexity",
-        "Review official question formats & sample tasks"
+        "Adaptive quizzes & Bloom’s-based loops",
+        "Deeper understanding beyond memorization"
       ],
     },
     {
       icon: <TimelineIcon sx={{ fontSize: 36, color: "primary.main", mb: 1 }} />,
       title: "Track & Adapt",
       bullets: [
-        "Real-time analytics for reading speed & accuracy",
-        "Plan evolves as your skills improve"
+        "Real-time progress dashboards",
+        "Study plan evolves as you improve"
       ],
     },
     {
       icon: <DoneAllIcon sx={{ fontSize: 36, color: "primary.main", mb: 1 }} />,
       title: "Succeed",
       bullets: [
-        "Hit your target TOEFL Reading & Writing scores",
-        "Walk into test day with confidence"
+        "Hit your exam or skill goals faster",
+        "Walk in confident & stress-free"
       ],
     },
   ];
 
-  // same layout logic
+  // first 3 in row1, last 2 in row2
   const row1 = stages.slice(0, 3);
   const row2 = stages.slice(3);
 
@@ -305,7 +304,7 @@ function LearningJourneySection() {
           variant="h4"
           sx={{ color: "primary.main", fontWeight: "bold", textAlign: "center", mb: 4 }}
         >
-          Your TOEFL Learning Journey
+          Your Learning Journey
         </Typography>
 
         {/* FIRST ROW => 3 cards */}
@@ -383,7 +382,7 @@ function StatsAndProofSection() {
           variant="h4"
           sx={{ color: "primary.main", fontWeight: "bold", textAlign: "center", mb: 4 }}
         >
-          Real Results for TOEFL Aspirants
+          Real Results from Real Learners
         </Typography>
 
         <Grid container spacing={4}>
@@ -397,10 +396,10 @@ function StatsAndProofSection() {
               }}
             >
               <Typography variant="h6" sx={{ color: "primary.main", fontWeight: "bold", mb: 2 }}>
-                3,000+ TOEFL Learners
+                5,000+ Learners
               </Typography>
               <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                Already using adaptive reading + quiz loops to level up their scores.
+                Have uploaded over 10,000 PDFs and counting!
               </Typography>
             </Paper>
           </Grid>
@@ -415,10 +414,10 @@ function StatsAndProofSection() {
               }}
             >
               <Typography variant="h6" sx={{ color: "primary.main", fontWeight: "bold", mb: 2 }}>
-                +8 Avg. Reading Score
+                88% Score Improvement
               </Typography>
               <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                Learners see an 8-point improvement (on average) in TOEFL Reading after 4 weeks of consistent usage.
+                Among those who studied consistently for 4+ weeks, with an average +14% jump in exam marks.
               </Typography>
             </Paper>
           </Grid>
@@ -433,10 +432,10 @@ function StatsAndProofSection() {
               }}
             >
               <Typography variant="h6" sx={{ color: "primary.main", fontWeight: "bold", mb: 2 }}>
-                70% Time Saved
+                60% Time Saved
               </Typography>
               <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                By skipping familiar topics and focusing on actual weak areas.
+                Learners skip re-reading known chapters and focus only on critical gaps.
               </Typography>
             </Paper>
           </Grid>
@@ -451,10 +450,10 @@ function StatsAndProofSection() {
               }}
             >
               <Typography variant="h6" sx={{ color: "primary.main", fontWeight: "bold", mb: 2 }}>
-                96% Satisfaction
+                97% Satisfaction
               </Typography>
               <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                Students rave about clarity and confidence going into TOEFL test day.
+                Students rave about reduced stress and clearer focus, calling it “the ultimate AI study partner.”
               </Typography>
             </Paper>
           </Grid>
@@ -475,7 +474,7 @@ function WhyWeAreDifferentSection() {
           variant="h4"
           sx={{ color: "primary.main", fontWeight: "bold", textAlign: "center", mb: 4 }}
         >
-          Why We’re Different for TOEFL Prep
+          Why We're Different
         </Typography>
 
         <Grid container spacing={4}>
@@ -484,20 +483,20 @@ function WhyWeAreDifferentSection() {
               <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
                 <TableViewIcon sx={{ color: "primary.main", fontSize: 30, mr: 1 }} />
                 <Typography variant="h6" sx={{ color: "primary.main", fontWeight: "bold" }}>
-                  Typical Test Prep
+                  Typical E-Learning Tools
                 </Typography>
               </Box>
               <Typography variant="body2" sx={{ color: "text.secondary", mb: 1 }}>
-                - Generic reading passages not tailored to your weaknesses
+                - Often come with static question banks
               </Typography>
               <Typography variant="body2" sx={{ color: "text.secondary", mb: 1 }}>
-                - Minimal feedback on why you miss certain question types
+                - Manual quiz creation or limited pre-made content
               </Typography>
               <Typography variant="body2" sx={{ color: "text.secondary", mb: 1 }}>
-                - One-size-fits-all approach, ignoring your personal vocabulary or grammar gaps
+                - One-size-fits-all approach with minimal personalization
               </Typography>
               <Typography variant="body2" sx={{ color: "text.secondary", mb: 1 }}>
-                - Little to no scheduling or time-management guidance
+                - Lacks deeper conceptual checks beyond rote memory
               </Typography>
             </Paper>
           </Grid>
@@ -507,20 +506,20 @@ function WhyWeAreDifferentSection() {
               <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
                 <TableViewIcon sx={{ color: "primary.main", fontSize: 30, mr: 1 }} />
                 <Typography variant="h6" sx={{ color: "primary.main", fontWeight: "bold" }}>
-                  Our AI TOEFL Approach
+                  Our AI-Driven Platform
                 </Typography>
               </Box>
               <Typography variant="body2" sx={{ color: "text.secondary", mb: 1 }}>
-                ✓ Upload official TOEFL reading passages or your own practice sets—AI instantly creates adaptive quizzes
+                ✓ Upload any PDF or study material—GPT instantly parses and transforms it into quizzes & revision loops
               </Typography>
               <Typography variant="body2" sx={{ color: "text.secondary", mb: 1 }}>
-                ✓ Targets your problem question types: inference, vocabulary in context, summary, etc.
+                ✓ Deep adaptivity: questions evolve based on Bloom’s levels and your performance
               </Typography>
               <Typography variant="body2" sx={{ color: "text.secondary", mb: 1 }}>
-                ✓ Personalized daily tasks to balance reading, listening, and writing
+                ✓ Saves hours by skipping known topics and focusing on true weak spots
               </Typography>
               <Typography variant="body2" sx={{ color: "text.secondary", mb: 1 }}>
-                ✓ Real-time score predictions and time-management tips
+                ✓ Comprehensive conceptual coverage for deeper mastery, not just surface memory
               </Typography>
             </Paper>
           </Grid>
@@ -547,16 +546,16 @@ function SeeItInActionSection() {
           variant="body1"
           sx={{ color: "text.secondary", textAlign: "center", maxWidth: 700, mx: "auto", mb: 4 }}
         >
-          Upload a TOEFL reading passage or practice test, watch AI parse the content,
-          and get a personalized quiz targeting your weak question types—just like the real TOEFL.
+          Upload your PDF, let AI parse the content, and instantly generate a tailored quiz and revision schedule. 
+          Here's a quick demo video showing exactly how it works:
         </Typography>
 
         <Box sx={{ display: "flex", justifyContent: "center", mb: 2 }}>
           <iframe
             width="560"
             height="315"
-            src="https://www.youtube.com/embed/dQw4w9WgXcQ"
-            title="TOEFL Demo"
+            src="https://www.youtube.com/embed/dQw4w9WgXcQ" // placeholder link
+            title="MyAdaptiveApp Demo"
             frameBorder="0"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
@@ -567,8 +566,8 @@ function SeeItInActionSection() {
           variant="body2"
           sx={{ color: "text.secondary", textAlign: "center", maxWidth: 600, mx: "auto" }}
         >
-          The entire process takes seconds. Instantly identify your reading comprehension gaps
-          and build a realistic TOEFL study strategy—no more guesswork.
+          In just a few clicks, our AI scans your document, identifies your knowledge gaps, and builds a 
+          targeted learning path—no manual question creation needed.
         </Typography>
       </Container>
     </Box>
@@ -582,18 +581,18 @@ function FeaturesSection() {
   const features = [
     {
       icon: <EmojiObjectsIcon sx={{ fontSize: 40, mb: 1, color: "primary.main" }} />,
-      title: "AI Insights for Reading",
-      desc: "Analyze your reading speed and question accuracy to refine every step of your prep."
+      title: "AI-Powered Insights",
+      desc: "Algorithms analyze reading speed, quiz performance, and complexity to dynamically refine your plan."
     },
     {
       icon: <ThumbUpIcon sx={{ fontSize: 40, mb: 1, color: "primary.main" }} />,
-      title: "Personalized Vocabulary",
-      desc: "System identifies repeated vocab issues and drills you on the tough words that appear often in TOEFL."
+      title: "Personalized Feedback",
+      desc: "Pinpoint your strengths and weaknesses quickly. Get strategies for continuous improvement."
     },
     {
       icon: <RocketLaunchIcon sx={{ fontSize: 40, mb: 1, color: "primary.main" }} />,
-      title: "Faster Score Gains",
-      desc: "Zero in on your biggest problem areas so you improve reading and listening scores with minimal wasted time."
+      title: "Rapid Mastery",
+      desc: "No guesswork—focus on precisely what matters for maximum progress, exam readiness, or skill mastery."
     }
   ];
 
@@ -604,7 +603,7 @@ function FeaturesSection() {
           variant="h4"
           sx={{ color: "primary.main", fontWeight: "bold", textAlign: "center", mb: 4 }}
         >
-          The Power of AI for TOEFL
+          The Power of AI
         </Typography>
         <Grid container spacing={4}>
           {features.map((feat, idx) => (
@@ -642,23 +641,22 @@ function TestimonialSection() {
           variant="h5"
           sx={{ color: "primary.main", fontWeight: "bold", textAlign: "center", mb: 2 }}
         >
-          Hear From Our TOEFL Learners
+          Hear From Our Learners
         </Typography>
         <Typography
           variant="body1"
           sx={{ color: "text.secondary", textAlign: "center", mb: 4 }}
         >
-          Thousands of aspirants trust our adaptive platform. Check out one user’s story:
+          Thousands of students and professionals use MyAdaptiveApp. Here’s what one user says:
         </Typography>
 
         <Paper sx={{ p: 3, textAlign: "center", bgcolor: "#2A2A2A" }}>
           <Typography variant="body1" sx={{ fontStyle: "italic", color: "#ffffff", mb: 2 }}>
-            “I raised my TOEFL Reading score from <strong>20 to 28</strong> in just five weeks! 
-            The AI quizzes honed in on my tricky question types and helped me master the 
-            vocabulary I kept missing.”
+            “I improved my exam scores by <strong>20%</strong> in just four weeks!
+            The adaptive plan saved me hours by focusing on exactly what I needed.”
           </Typography>
           <Typography variant="subtitle2" sx={{ color: "primary.main" }}>
-            — Hannah, TOEFL Test-Taker
+            — Alex, Engineering Student
           </Typography>
         </Paper>
       </Container>
@@ -674,7 +672,7 @@ function AdaptiveProcessSection() {
     <Box sx={{ py: 6, backgroundColor: "background.default", textAlign: "center" }}>
       <Container maxWidth="md">
         <Typography variant="h4" sx={{ color: "primary.main", fontWeight: "bold", mb: 4 }}>
-          How Our Adaptive TOEFL System Works
+          How Our Adaptive Learning Works
         </Typography>
         <PanelAdaptiveProcess />
       </Container>
@@ -690,10 +688,10 @@ function Footer() {
     <Box sx={{ py: 4, textAlign: "center", bgcolor: "#000000" }}>
       <Container>
         <Typography variant="body2" sx={{ color: "text.secondary", mb: 1 }}>
-          © {new Date().getFullYear()} talk-ai.co. All rights reserved.
+          © {new Date().getFullYear()} MyAdaptiveApp. All rights reserved.
         </Typography>
         <Typography variant="caption" sx={{ color: "text.secondary" }}>
-          TOEFL® is a registered trademark of ETS. This platform is not endorsed or approved by ETS.
+          Terms &nbsp; | &nbsp; Privacy &nbsp; | &nbsp; Contact
         </Typography>
       </Container>
     </Box>
@@ -730,31 +728,31 @@ export default function LandingPage() {
       {/* 1) Navbar */}
       <LandingAppBar onOpenSignIn={handleOpenSignIn} />
 
-      {/* 2) Hero - TOEFL Focus */}
+      {/* 2) Hero */}
       <HeroSection onOpenSignIn={handleOpenSignIn} />
 
-      {/* 3) Pain+Solution => TOEFL */}
+      {/* 3) Pain+Solution */}
       <PainGainSection />
 
-      {/* 4) 5-Stage Learning Journey => TOEFL */}
+      {/* 4) 5-Stage Learning Journey */}
       <LearningJourneySection />
 
-      {/* 5) Stats + Proof => For TOEFL */}
+      {/* 5) Stats + Proof */}
       <StatsAndProofSection />
 
-      {/* 6) Why We Are Different => TOEFL vs. Generic */}
+      {/* 6) Why We Are Different */}
       <WhyWeAreDifferentSection />
 
-      {/* 7) See It in Action => PDF -> TOEFL quiz */}
+      {/* 7) See It in Action */}
       <SeeItInActionSection />
 
-      {/* 8) Features => AI for TOEFL */}
+      {/* 8) Features */}
       <FeaturesSection />
 
-      {/* 9) Testimonial => TOEFL */}
+      {/* 9) Testimonial */}
       <TestimonialSection />
 
-      {/* 10) Adaptive Learning Explanation (Bottom) */}
+      {/* 10) Adaptive Learning (Panel) */}
       <AdaptiveProcessSection />
 
       {/* 11) Footer */}
