@@ -11,8 +11,8 @@ import { loadUsetifulScript, setUsetifulTags } from "usetiful-sdk";
 // NEW: Landing Page (public)
 import LandingPage from "./components/Main/0.PreLogin/0.LandingPage";
 
-import PromptManager from "./components/zTesting/PromptManager";
-import PromptInput from "./components/zTesting/PromptInput";
+import PromptManager from "./components/yBrainstorming/diagrams/PromptManager";
+import PromptInput from "./components/yBrainstorming/diagrams/PromptInput";
 
 
 import BrainstormingList from "./components/yBrainstorming/BrainstormingList";

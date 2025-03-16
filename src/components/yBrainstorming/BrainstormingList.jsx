@@ -25,6 +25,10 @@ import FlowContentPipeline from './diagrams/FlowContentPipeline';
 import FlowAPIRoutes from './diagrams/FlowAPIRoutes';
 import ExamConfigCreator from './diagrams/ExamConfigCreator';
 import HospitalERDiagram from './diagrams/HospitalERDiagram';
+import FlowQuizRevisePipeline from './diagrams/FlowQuizRevisePipeline';
+import PromptInput from './diagrams/PromptInput';
+import PromptManager from './diagrams/PromptManager';
+
 
 
 
@@ -58,7 +62,11 @@ const diagramComponents = {
   FlowContentPipeline,
   FlowAPIRoutes,
   ExamConfigCreator,
-  HospitalERDiagram
+  HospitalERDiagram,
+  FlowQuizRevisePipeline,
+  PromptManager,
+  PromptInput,
+
 };
 
 // Sample static data representing past brainstorming sessions.
@@ -212,6 +220,24 @@ const sampleBrainstormings = [
     title: 'TECH: HospitalERDiagram',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'HospitalERDiagram'
+  },
+  {
+    id: 26,
+    title: 'TECH: FlowQuizRevisePipeline',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'FlowQuizRevisePipeline'
+  },
+  {
+    id: 27,
+    title: 'TECH: PromptManager',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'PromptManager'
+  },
+  {
+    id: 28,
+    title: 'TECH: PromptInput',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'PromptInput'
   },
 
 

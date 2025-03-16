@@ -32,7 +32,7 @@ function ExamConfigCreator() {
       const parsedData = JSON.parse(rawJson);
 
       // 2) Write to Firestore -> examConfigs/<docId>
-      await setDoc(doc(db, "examConfigs", docId), parsedData);
+      await setDoc(doc(db, "examConfigs", docId), parsedData, { merge: true });
 
       setStatus(`Successfully wrote examConfigs/${docId}.`);
     } catch (error) {
