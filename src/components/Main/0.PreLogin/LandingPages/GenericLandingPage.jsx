@@ -39,9 +39,9 @@ import TableViewIcon from "@mui/icons-material/TableView";       // For 'WhyWe'r
 import DescriptionIcon from "@mui/icons-material/Description"; // For 'SeeItInAction'
 
 // Import your PanelAdaptiveProcess (the bottom section)
-import PanelAdaptiveProcess from "./2.PanelAdaptiveProcess";
+import PanelAdaptiveProcess from "../2.PanelAdaptiveProcess";
 // Import the sign-in component
-import AuthSignIn from "./1.AuthSignIn";
+import AuthSignIn from "../1.AuthSignIn";
 
 /** ------------------------------------------------------------------
  * 1) CREATE THE DARK + PURPLE THEME
@@ -701,7 +701,7 @@ function Footer() {
 /** ------------------------------------------------------------------
  * 13) MAIN LANDING PAGE
  * ------------------------------------------------------------------ */
-export default function LandingPage() {
+export default function GenericLandingPage() {
   const navigate = useNavigate();
   const [openSignIn, setOpenSignIn] = useState(false);
 

@@ -28,6 +28,9 @@ import HospitalERDiagram from './diagrams/HospitalERDiagram';
 import FlowQuizRevisePipeline from './diagrams/FlowQuizRevisePipeline';
 import PromptInput from './diagrams/PromptInput';
 import PromptManager from './diagrams/PromptManager';
+import ManualBookCreator from './diagrams/ManualBookCreator';
+import QuestionTypesCreator from './diagrams/QuestionTypesCreator';
+import QuestionTypePlayground from './diagrams/QuestionTypePlayground';
 
 
 
@@ -66,6 +69,9 @@ const diagramComponents = {
   FlowQuizRevisePipeline,
   PromptManager,
   PromptInput,
+  ManualBookCreator,
+  QuestionTypesCreator,
+  QuestionTypePlayground
 
 };
 
@@ -239,6 +245,28 @@ const sampleBrainstormings = [
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'PromptInput'
   },
+  {
+    id: 29,
+    title: 'TECH: ManualBookCreator',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'ManualBookCreator'
+  },
+  {
+    id: 30,
+    title: 'TECH: QuestionTypesCreator',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'QuestionTypesCreator'
+  },
+  {
+    id: 31,
+    title: 'TECH: QuestionTypePlayground',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'QuestionTypePlayground'
+  },
+
+
+
+  
 
 
 
@@ -248,7 +276,7 @@ const sampleBrainstormings = [
   
   
 
-
+  
 
 
   

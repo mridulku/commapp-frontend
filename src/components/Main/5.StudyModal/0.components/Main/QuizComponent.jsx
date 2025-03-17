@@ -2,9 +2,19 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useSelector } from "react-redux";
 import LoadingSpinner from "../Secondary/LoadingSpinner";
+import QuestionRenderer from "./QuestionRenderer";  // The multi-type renderer
+
+function stripMarkdownFences(text) {
+  return text.replace(/```(json)?/gi, "").trim();
+}
+
+function capitalize(str) {
+  if (!str) return str;
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
 
 export default function QuizComponent({
-  examId = "general",  // default if none provided
+  examId = "general",
   quizStage,
   subChapterId,
   attemptNumber,
@@ -13,21 +23,36 @@ export default function QuizComponent({
 }) {
   const userId = useSelector((state) => state.auth?.userId);
 
-  // Build promptKey: e.g. "quizGeneralAnalyze"
+  /**
+   * We'll define or import pass ratios here as well,
+   * or rely on StageManager for the final decision.
+   * But we'll do a local ratio check to show immediate pass/fail to user.
+   */
+  const stagePassRatios = {
+    remember: 0.6,
+    understand: 0.7,
+    apply: 0.6,
+    analyze: 0.7,
+  };
+  const passRatio = stagePassRatios[quizStage] || 0.6;
+
   const promptKey = `quiz${capitalize(examId)}${capitalize(quizStage)}`;
-  const quizType = quizStage; // for Firestore "quizType"
+  const quizType = quizStage;
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [responseData, setResponseData] = useState(null);
-  const [selectedAnswers, setSelectedAnswers] = useState([]);
+
+  // Each question's user response
+  const [userAnswers, setUserAnswers] = useState([]);
+
   const [showResult, setShowResult] = useState(false);
   const [finalScore, setFinalScore] = useState(null);
 
   useEffect(() => {
     if (!subChapterId) return;
     fetchGPTQuiz();
-    setSelectedAnswers([]);
+    setUserAnswers([]);
     setShowResult(false);
     setFinalScore(null);
     // eslint-disable-next-line
@@ -39,6 +64,12 @@ export default function QuizComponent({
       setError("");
       setResponseData(null);
 
+      /**
+       * For multi-type generation, you need to pass instructions to your server's /api/generate
+       * So your server can build a GPT prompt like:
+       * "Generate 3 questions of type multipleChoice, 1 of type trueFalse, 1 fillInBlank..."
+       * Or do it inside the Firestore "prompts" doc. This example uses existing code.
+       */
       const res = await axios.post("http://localhost:3001/api/generate", {
         userId,
         subchapterId: subChapterId,
@@ -46,13 +77,14 @@ export default function QuizComponent({
       });
       setResponseData(res.data);
     } catch (err) {
-      console.error("Error fetching GPT quiz data:", err);
+      console.error("QuizComponent: Error fetching GPT quiz data:", err);
       setError(err.message || "Error fetching GPT quiz data");
     } finally {
       setLoading(false);
     }
   }
 
+  // Basic checks
   if (!subChapterId) {
     return <div style={styles.text}>No subChapterId</div>;
   }
@@ -62,20 +94,16 @@ export default function QuizComponent({
   if (error) {
     return <div style={styles.textError}>Error: {error}</div>;
   }
-
-  // If there's no doc found in the "prompts" collection, it means we have no promptText. 
-  // The Express route logs a warning and returns minimal data.
-  // We can check if responseData.result is empty or a known placeholder:
   if (!responseData?.result) {
     return (
       <div style={styles.textError}>
-        No prompt found for <b>{promptKey}</b>. Please create that prompt in Firestore.
+        No prompt found for <b>{promptKey}</b>. Please create that in Firestore.
       </div>
     );
   }
 
-  // parse GPT JSON
-  let raw = responseData.result || "";
+  // Parse GPT JSON
+  let raw = responseData.result;
   if (raw.startsWith("```")) {
     raw = stripMarkdownFences(raw);
   }
@@ -86,87 +114,93 @@ export default function QuizComponent({
   } catch (err) {
     return (
       <div style={styles.container}>
-        <p style={{ ...styles.text, color: "red" }}>
-          GPT response for <b>{promptKey}</b> is not valid JSON.
-        </p>
+        <p style={{ color: "red" }}>Invalid JSON from GPT for {promptKey}</p>
         <pre>{responseData.result}</pre>
       </div>
     );
   }
 
-  const { UIconfig = {} } = responseData;
-  const { fields = [] } = UIconfig;
-  const quizFieldConfig = fields.find((f) => f.component === "quiz");
-  if (!quizFieldConfig) {
-    return (
-      <div style={styles.container}>
-        <p style={styles.text}>
-          <b>{promptKey}</b> prompt has no quiz field in UIconfig.
-        </p>
-      </div>
-    );
+  // Suppose your GPT prompt or your Firestore prompt doc says:
+  // { "questions": [ ...multiple question objects... ] }
+  const quizQuestions = parsed.quizQuestions || [];
+
+  // Initialize userAnswers if not set:
+  // (But we do it in useEffect once we have quizQuestions, for a real approach.)
+  // Here, a quick approach is:
+  if (userAnswers.length !== quizQuestions.length) {
+    setUserAnswers(Array(quizQuestions.length).fill(""));
   }
 
-  const quizQuestions = parsed[quizFieldConfig.field] || [];
-  const totalQuestions = quizQuestions.length;
+  function handleAnswerChange(qIndex, newVal) {
+    const updated = [...userAnswers];
+    updated[qIndex] = newVal;
+    setUserAnswers(updated);
+  }
 
+  // Submitting => we compute how many are correct
   async function handleSubmit() {
+    console.log("QuizComponent: handleSubmit => checking user answers.");
+
     let correctCount = 0;
-    const quizSubmission = quizQuestions.map((q, idx) => {
-      const userAnswer = selectedAnswers[idx];
-      const isCorrect = userAnswer === q.correctAnswerIndex;
+    const submissionDetail = quizQuestions.map((qObj, idx) => {
+      const userAnswer = userAnswers[idx];
+      const isCorrect = checkIfCorrect(qObj, userAnswer);
       if (isCorrect) correctCount++;
       return {
-        question: q.question,
-        options: q.options,
-        correctAnswerIndex: q.correctAnswerIndex,
-        userAnswer: typeof userAnswer === "number" ? userAnswer : null,
+        ...qObj,
+        userAnswer,
         isCorrect,
       };
     });
 
-    const scoreString = `${correctCount} / ${totalQuestions}`;
+    const total = quizQuestions.length;
+    const scoreString = `${correctCount}/${total}`;
     setFinalScore(scoreString);
     setShowResult(true);
 
-    // Save doc
+    // Save to Firestore:
     try {
       await axios.post("http://localhost:3001/api/submitQuiz", {
         userId,
         subchapterId: subChapterId,
         quizType,
-        quizSubmission,
+        quizSubmission: submissionDetail,
         score: scoreString,
-        totalQuestions,
+        totalQuestions: total,
         attemptNumber,
       });
+      console.log("QuizComponent: quiz submission saved with score =", scoreString);
     } catch (err) {
-      console.error("Error saving quiz submission:", err);
+      console.error("QuizComponent: error saving quiz submission:", err);
     }
   }
 
+  // If showResult
   if (showResult && finalScore) {
-    // For demonstration, you might want a stage-specific pass threshold or read from a config
-    const passThreshold = 4; 
-    const correctCount = parseInt(finalScore.split("/")[0], 10);
-    const passed = correctCount >= passThreshold;
+    const [numStr, denomStr] = finalScore.split("/");
+    const correctNum = parseInt(numStr, 10);
+    const total = parseInt(denomStr, 10) || 1;
+    const ratio = correctNum / total;
+    const passed = ratio >= passRatio;
 
     return (
       <div style={styles.container}>
         <p style={styles.text}>You scored: {finalScore}</p>
+        <p style={styles.text}>
+          ({(ratio * 100).toFixed(1)}% correct, passing threshold is{" "}
+          {(passRatio * 100).toFixed(1)}%)
+        </p>
         {passed ? (
           <>
-            <p style={styles.text}>Congratulations! You passed.</p>
-            <button onClick={onQuizComplete} style={styles.button}>
+            <p style={styles.text}>Great job, you passed!</p>
+            <button style={styles.button} onClick={onQuizComplete}>
               Done
             </button>
           </>
         ) : (
           <>
-            <p style={styles.text}>
-              You need more practice. Let's revise now!
-            </p>
-            <button onClick={onQuizFail} style={styles.button}>
+            <p style={styles.text}>You need more practice. Let's revise!</p>
+            <button style={styles.button} onClick={onQuizFail}>
               Revise
             </button>
           </>
@@ -175,46 +209,65 @@ export default function QuizComponent({
     );
   }
 
-  // Render the quiz form
+  // Otherwise, display the quiz
   return (
     <div style={styles.container}>
-      {quizQuestions.map((question, qIndex) => (
-        <div key={qIndex} style={styles.questionBlock}>
-          <p style={styles.questionText}>
-            Q{qIndex + 1}: {question.question}
-          </p>
-          {question.options.map((opt, optIndex) => (
-            <label key={optIndex} style={styles.optionLabel}>
-              <input
-                type="radio"
-                name={`question-${qIndex}`}
-                value={optIndex}
-                checked={selectedAnswers[qIndex] === optIndex}
-                onChange={() => {
-                  const updated = [...selectedAnswers];
-                  updated[qIndex] = optIndex;
-                  setSelectedAnswers(updated);
-                }}
-              />
-              {opt}
-            </label>
-          ))}
-        </div>
+      {quizQuestions.map((qObj, qIndex) => (
+        <QuestionRenderer
+          key={qIndex}
+          index={qIndex}
+          questionObj={qObj}
+          userAnswer={userAnswers[qIndex]}
+          onUserAnswerChange={(val) => handleAnswerChange(qIndex, val)}
+        />
       ))}
-      <button onClick={handleSubmit} style={styles.button}>
+
+      <button style={styles.button} onClick={handleSubmit}>
         Submit Quiz
       </button>
     </div>
   );
 }
 
-function stripMarkdownFences(text) {
-  return text.replace(/```(json)?/gi, "").trim();
-}
+/**
+ * checkIfCorrect => custom logic for each question type
+ */
+function checkIfCorrect(questionObj, userAnswer) {
+  switch (questionObj.type) {
+    case "multipleChoice":
+      // correct if userAnswer (a number) === questionObj.correctAnswerIndex
+      return parseInt(userAnswer, 10) === questionObj.correctAnswerIndex;
 
-function capitalize(str) {
-  if (!str) return str;
-  return str.charAt(0).toUpperCase() + str.slice(1);
+    case "trueFalse":
+      // questionObj.correctAnswer => boolean (true or false)
+      // userAnswer => "true" or "false"
+      if (typeof questionObj.correctAnswer !== "boolean") return false;
+      const boolAnswer = userAnswer === "true"; // convert user input to boolean
+      return boolAnswer === questionObj.correctAnswer;
+
+    case "fillInBlank":
+      // questionObj.correctAnswers => array of acceptable strings
+      // userAnswer => string
+      if (!Array.isArray(questionObj.correctAnswers)) return false;
+      const trimmed = (userAnswer || "").trim().toLowerCase();
+      return questionObj.correctAnswers.some(
+        (ans) => ans.trim().toLowerCase() === trimmed
+      );
+
+    case "shortAnswer":
+      // Could do an approximate text match or GPT-based check.
+      // For simplicity, let's say we always mark "false" to show you can expand
+      // Or if questionObj.correctAnswers exist, do a check:
+      // return questionObj.correctAnswers.includes(userAnswer)
+      return false;
+
+    case "scenario":
+      // Usually would do GPT-based checking or skip auto-scoring
+      return false;
+
+    default:
+      return false;
+  }
 }
 
 const styles = {
@@ -224,7 +277,6 @@ const styles = {
   },
   text: {
     color: "#fff",
-    fontSize: "1rem",
   },
   textError: {
     color: "red",
@@ -238,16 +290,5 @@ const styles = {
     border: "none",
     borderRadius: "4px",
     cursor: "pointer",
-  },
-  questionBlock: {
-    marginBottom: "1rem",
-  },
-  questionText: {
-    fontWeight: "bold",
-    marginBottom: "0.5rem",
-  },
-  optionLabel: {
-    display: "block",
-    marginLeft: "1rem",
   },
 };

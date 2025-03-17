@@ -6,24 +6,19 @@ import ReviseComponent from "./ReviseComponent";
 export default function StageManager({ examId, activity, quizStage, userId }) {
   const subChapterId = activity?.subChapterId || "";
 
-  // We might store pass thresholds in a small dictionary, or fetch from exam configs
-  // Example default thresholds per stage (just for demonstration):
-  const stageThresholds = {
-    remember: 3,
-    understand: 4,
-    apply: 3,
-    analyze: 4,
+  /**
+   * We'll define pass ratio (0.6 = 60%) per stage.
+   * You can adjust these as needed.
+   */
+  const stagePassRatios = {
+    remember: 0.6,
+    understand: 0.7,
+    apply: 0.6,
+    analyze: 0.7,
   };
 
-  // If no examId is given, default to "general"
   const effectiveExamId = examId || "general";
 
-  // If we have no subChapterId or userId, fail quickly
-  if (!subChapterId || !userId) {
-    return <div style={{ color: "#fff" }}>No valid subChapterId/userId.</div>;
-  }
-
-  // ---- State for attempts & logic ----
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [quizAttempts, setQuizAttempts] = useState([]);
@@ -38,18 +33,21 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
   }, [subChapterId, userId, quizStage]);
 
   async function fetchData() {
-    if (!subChapterId || !userId) return;
+    if (!subChapterId || !userId) {
+      console.log("StageManager: missing subChapterId or userId => skipping fetch.");
+      return;
+    }
     try {
       setLoading(true);
       setError("");
 
-      // 1) get quiz attempts
+      // 1) Quiz attempts
       const quizRes = await axios.get("http://localhost:3001/api/getQuiz", {
         params: { userId, subchapterId: subChapterId, quizType: quizStage },
       });
       const quizArr = quizRes.data.attempts || [];
 
-      // 2) get revision attempts
+      // 2) Revision attempts
       const revRes = await axios.get("http://localhost:3001/api/getRevisions", {
         params: { userId, subchapterId: subChapterId, revisionType: quizStage },
       });
@@ -57,9 +55,10 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
 
       setQuizAttempts(quizArr);
       setRevisionAttempts(revArr);
+
       computeState(quizArr, revArr);
     } catch (err) {
-      console.error("Error fetching attempts:", err);
+      console.error("StageManager: error fetching attempts:", err);
       setError(err.message || "Error fetching data");
     } finally {
       setLoading(false);
@@ -67,25 +66,38 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
   }
 
   function computeState(quizArr, revArr) {
-    if (quizArr.length === 0) {
+    if (!quizArr.length) {
       setMode("NO_QUIZ_YET");
       setLastQuizAttempt(null);
       return;
     }
-    // newest attempt is first in the array
+    // newest attempt first
     const [latestQuiz] = quizArr;
     setLastQuizAttempt(latestQuiz);
 
-    // Example pass threshold from our dictionary:
-    const passThreshold = stageThresholds[quizStage] || 4;
-    const numericScore = parseInt(latestQuiz.score.split("/")[0], 10);
-    const passed = numericScore >= passThreshold;
-    const attemptNum = latestQuiz.attemptNumber;
+    // parse X/Y from latestQuiz.score
+    const passRatio = stagePassRatios[quizStage] || 0.6;
+    const scoreParts = latestQuiz.score.split("/");
+    if (scoreParts.length !== 2) {
+      // fallback if malformed
+      setMode("NEED_REVISION");
+      return;
+    }
+    const numericScore = parseInt(scoreParts[0], 10);
+    const outOf = parseInt(scoreParts[1], 10);
+    if (isNaN(numericScore) || isNaN(outOf) || outOf === 0) {
+      setMode("NEED_REVISION");
+      return;
+    }
+
+    const ratio = numericScore / outOf;
+    const passed = ratio >= passRatio;
 
     if (passed) {
       setMode("QUIZ_COMPLETED");
       return;
     }
+    const attemptNum = latestQuiz.attemptNumber;
     const matchingRev = revArr.find((r) => r.revisionNumber === attemptNum);
     if (!matchingRev) {
       setMode("NEED_REVISION");
@@ -95,15 +107,21 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
   }
 
   function handleQuizComplete() {
+    console.log("StageManager: handleQuizComplete => re-fetch data");
     fetchData();
   }
   function handleQuizFail() {
+    console.log("StageManager: handleQuizFail => re-fetch data");
     fetchData();
   }
   function handleRevisionDone() {
+    console.log("StageManager: handleRevisionDone => re-fetch data");
     fetchData();
   }
 
+  if (!subChapterId || !userId) {
+    return <div style={{ color: "#fff" }}>No valid subChapterId/userId.</div>;
+  }
   if (loading) {
     return <div style={{ color: "#fff" }}>Loading attempts...</div>;
   }
@@ -111,7 +129,7 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
     return <div style={{ color: "red" }}>Error: {error}</div>;
   }
 
-  // Show a summary label
+  // summary label
   let summaryLabel = "No Attempts Yet";
   if (quizAttempts.length > 0) {
     const [latest] = quizAttempts;
@@ -120,7 +138,6 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
 
   return (
     <div style={{ color: "#fff", padding: "1rem" }}>
-      {/* Minimal row with summary + toggle button */}
       <div style={styles.headerRow}>
         <div>
           Stage: <b>{quizStage}</b> | {summaryLabel}
@@ -135,12 +152,11 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
 
       {showTimeline && (
         <div style={styles.timelinePanel}>
-          {renderTimeline(quizAttempts, revisionAttempts)}
+          {renderTimeline(quizAttempts, revisionAttempts, stagePassRatios[quizStage] || 0.6)}
         </div>
       )}
 
       <div style={styles.mainContent}>
-        {/* 1) If no quiz yet => prompt user with first quiz */}
         {mode === "NO_QUIZ_YET" && (
           <QuizComponent
             quizStage={quizStage}
@@ -152,16 +168,12 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
           />
         )}
 
-        {/* 2) If quiz completed => show success */}
         {mode === "QUIZ_COMPLETED" && (
           <div style={{ color: "lightgreen" }}>
-            <p>
-              Congratulations! You passed the <b>{quizStage}</b> stage.
-            </p>
+            <p>Congratulations! You passed the <b>{quizStage}</b> stage.</p>
           </div>
         )}
 
-        {/* 3) If user needs revision => show ReviseComponent */}
         {mode === "NEED_REVISION" && lastQuizAttempt && (
           <ReviseComponent
             quizStage={quizStage}
@@ -172,7 +184,6 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
           />
         )}
 
-        {/* 4) If user has done revision => show next quiz attempt */}
         {mode === "CAN_TAKE_NEXT_QUIZ" && lastQuizAttempt && (
           <QuizComponent
             quizStage={quizStage}
@@ -188,8 +199,8 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
   );
 }
 
-// same timeline function as before
-function renderTimeline(quizArr, revArr) {
+// Timeline
+function renderTimeline(quizArr, revArr, passRatio) {
   if (!quizArr.length) {
     return (
       <div style={styles.timelineContainer}>
@@ -199,16 +210,16 @@ function renderTimeline(quizArr, revArr) {
       </div>
     );
   }
-
   const quizAsc = [...quizArr].sort((a, b) => a.attemptNumber - b.attemptNumber);
   const timelineItems = [];
 
   quizAsc.forEach((quizDoc) => {
     const attemptNum = quizDoc.attemptNumber;
-    const numericScore = parseInt(quizDoc.score.split("/")[0], 10);
-    // We can reuse the same stageThresholds or just pick a default
-    const passThreshold = 4; 
-    const passed = numericScore >= passThreshold;
+    const [numStr, denomStr] = quizDoc.score.split("/");
+    const numericScore = parseInt(numStr, 10) || 0;
+    const totalQ = parseInt(denomStr, 10) || 1;
+    const ratio = numericScore / totalQ;
+    const passed = ratio >= passRatio;
 
     timelineItems.push({
       type: "quiz",
@@ -239,15 +250,13 @@ function renderTimeline(quizArr, revArr) {
 
 function TimelineItem({ item }) {
   const { type, attemptNumber, passed, score, timestamp } = item;
-  const isQuiz = type === "quiz";
-  const isRevision = type === "revision";
-
   let boxColor = "#888";
   let label = "";
-  if (isQuiz) {
+
+  if (type === "quiz") {
     label = `Q${attemptNumber} (${score})`;
     boxColor = passed ? "#2ecc71" : "#e74c3c";
-  } else if (isRevision) {
+  } else if (type === "revision") {
     label = `R${attemptNumber}`;
     boxColor = "#3498db";
   }
@@ -266,6 +275,7 @@ function TimelineItem({ item }) {
   );
 }
 
+// basic styling
 const styles = {
   headerRow: {
     display: "flex",
