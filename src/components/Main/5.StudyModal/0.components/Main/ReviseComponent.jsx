@@ -11,6 +11,7 @@ import axios from "axios";
  *  - Then generate revision content (similar to generateQuestions)
  */
 export default function ReviseComponent({
+  userId,
   examId = "general",
   quizStage = "remember",
   subChapterId = "",
@@ -100,7 +101,7 @@ export default function ReviseComponent({
     try {
       // This can be a direct Firestore call or an API call – whichever your app uses:
       await axios.post("http://localhost:3001/api/submitRevision", {
-        userId: "demoUserId", // or read from Redux
+        userId, // or read from Redux
         subchapterId: subChapterId,
         revisionType: quizStage,
         revisionNumber,

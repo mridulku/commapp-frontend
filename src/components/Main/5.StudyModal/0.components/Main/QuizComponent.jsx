@@ -1,20 +1,22 @@
-// File: QuizComponent.jsx
+/**
+ * File: QuizComponent.jsx
+ * Description: 
+ *  - Renders a single quiz attempt for a given user/subchapter/stage.
+ *  - Auto-fetches question config & calls generateQuestions from QuizQuestionGenerator.
+ *  - Renders questions of multiple types.
+ *  - Locally grades "easy" question types (MCQ, T/F, fillInBlank).
+ *  - Sends "openEnded" types to GPT for 0..1 scoring.
+ *  - Submits the final attempt to your backend.
+ *  - Shows per-question feedback & final score, then waits for user to click "Proceed" to finalize.
+ */
 
 import React, { useEffect, useState } from "react";
 import { doc, getDoc, collection, getDocs } from "firebase/firestore";
 import { db } from "../../../../../firebase"; // adjust path if needed
-import { generateQuestions } from "./QuizQuestionGenerator";
-import { gradeQuestionsOfType } from "./QuizQuestionGrader";  
-import QuizQuestionRenderer from "./QuizQuestionRenderer";
 import axios from "axios";
+import QuizQuestionRenderer from "./QuizQuestionRenderer"; // Renders each question
+import { generateQuestions } from "./QuizQuestionGenerator"; // Our updated generator
 
-/**
- * Updated "QuizComponent" that:
- * 1) Auto-computes docId for quizConfigs/<docId> based on examId + quizStage
- * 2) Fetches question-type counts from that doc
- * 3) Automatically generates questions
- * 4) Renders the final quiz (no manual combo UI)
- */
 export default function QuizComponent({
   userId = "",
   examId = "general",
@@ -24,38 +26,24 @@ export default function QuizComponent({
   onQuizComplete,
   onQuizFail,
 }) {
-  // If examId or quizStage are empty, default them
-  const finalExamId = examId || "general";       // fallback: "general"
-  const finalStage = quizStage || "remember";    // fallback: "remember"
-
-  // We'll build a doc ID like "quizGeneralRemember"
-  // Capitalize the first letter of exam + stage
-  const docId = buildQuizConfigDocId(finalExamId, finalStage);
-
-  // For debugging, we'll log the docId
-  console.log("QuizComponent => docId for config:", docId);
-
-  // We fetch questionTypes from Firestore (like before) to have the relevant docs
-  const [questionTypes, setQuestionTypes] = useState([]);
-
-  // We'll store the final questions after generation
+  // Basic states
+  const [questionTypes, setQuestionTypes] = useState([]); 
   const [generatedQuestions, setGeneratedQuestions] = useState([]);
-  const [subchapterSummary, setSubchapterSummary] = useState("");
-
-  // userAnswers[i] => the user’s answer for the i-th question
   const [userAnswers, setUserAnswers] = useState([]);
-
-  // gradingResults[i] => GPT or local grading result for the i-th question
   const [gradingResults, setGradingResults] = useState([]);
   const [showGradingResults, setShowGradingResults] = useState(false);
 
+  const [subchapterSummary, setSubchapterSummary] = useState("");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
+
+  const [quizPassed, setQuizPassed] = useState(false); // <-- store pass/fail state
+  const [finalPercentage, setFinalPercentage] = useState(""); // optional, for display
 
   // Read the OpenAI key from .env (Vite)
   const openAiKey = import.meta.env.VITE_OPENAI_KEY || "";
 
-  // -- 1) On mount => fetch questionTypes (like before) --
+  // --- 1) Fetch "questionTypes" if needed ---
   useEffect(() => {
     async function fetchQuestionTypes() {
       try {
@@ -72,288 +60,430 @@ export default function QuizComponent({
     fetchQuestionTypes();
   }, []);
 
-  // -- 2) After we have questionTypes, fetch the quizConfigs doc and auto-generate --
+  // --- 2) Generate questions after we have questionTypes, userId, subChapterId, etc. ---
   useEffect(() => {
-    // Skip if we don't have userId or subChapterId
     if (!userId || !subChapterId) {
-      console.log("QuizComponent: userId or subChapterId is empty, skipping auto-generation.");
+      console.log("QuizComponent: userId or subChapterId is empty => skipping generation.");
       return;
     }
     if (!openAiKey) {
-      console.warn("QuizComponent: No OpenAI key found. Generation will fail.");
+      console.warn("QuizComponent: No OpenAI key found. GPT calls may fail or skip.");
     }
 
-    // We'll do an async fetch for the doc
-    async function fetchAndGenerate() {
+    async function doGenerate() {
       try {
         setLoading(true);
-        setStatus("Fetching quiz config & auto-generating questions...");
+        setStatus("Generating questions...");
 
-        // 2a) Get the doc from quizConfigs/<docId>
-        const quizConfigRef = doc(db, "quizConfigs", docId);
-        const quizConfigSnap = await getDoc(quizConfigRef);
-
-        if (!quizConfigSnap.exists()) {
-          console.error(`No quizConfig doc found for '${docId}'.`);
-          setStatus(`No quizConfig found for '${docId}'. Cannot generate questions.`);
-          setLoading(false);
-          return;
-        }
-
-        const configData = quizConfigSnap.data(); // e.g. { multipleChoice: 3, fillInBlank: 2, ... }
-
-        // 2b) Build "selectedCombos" from configData
-        // Each key is a question type => each value is the count
-        // e.g. [ { typeName: "multipleChoice", count: 3 }, { typeName: "trueFalse", count: 2 } ]
-        const combos = [];
-        Object.keys(configData).forEach((typeName) => {
-          const countVal = configData[typeName];
-          if (countVal > 0) {
-            combos.push({ typeName, count: countVal });
-          }
+        const result = await generateQuestions({
+          db,
+          subChapterId,
+          examId,
+          quizStage,
+          openAiKey,
         });
-
-        if (!combos.length) {
-          console.warn("QuizConfig has no non-zero question types. Nothing to generate.");
-          setStatus("No non-zero question types in config. No questions to generate.");
+        if (!result.success) {
+          console.error("generateQuestions => error:", result.error);
+          setStatus(`Generation error: ${result.error}`);
           setLoading(false);
           return;
         }
+        const allQs = result.questionsData?.questions || [];
 
-        // 2c) Actually generate all questions for each combo
-        let allQuestions = [];
-        let finalSubchapterSummary = "";
-
-        for (let combo of combos) {
-          const qTypeDoc = questionTypes.find((qt) => qt.name === combo.typeName);
-          if (!qTypeDoc) {
-            console.warn("No questionType doc found for:", combo.typeName);
-            continue;
+        // Optionally fetch subchapter summary if not returned by the generator
+        let summary = "";
+        try {
+          const ref = doc(db, "subchapters_demo", subChapterId);
+          const snap = await getDoc(ref);
+          if (snap.exists()) {
+            summary = snap.data().summary || "";
           }
-
-          const result = await generateQuestions({
-            db,
-            subChapterId,
-            openAiKey,
-            selectedTypeName: combo.typeName,
-            questionTypeDoc: qTypeDoc,
-            numberOfQuestions: combo.count,
-          });
-
-          if (!result.success) {
-            console.error("Error generating for", combo.typeName, result.error);
-            continue;
-          }
-
-          finalSubchapterSummary = result.subchapterSummary || finalSubchapterSummary;
-
-          if (Array.isArray(result.questionsData?.questions)) {
-            const typedQs = result.questionsData.questions.map((q) => {
-              if (!q.type) q.type = combo.typeName;
-              return q;
-            });
-            allQuestions.push(...typedQs);
-          }
+        } catch (err) {
+          console.error("Error fetching subchapter summary:", err);
         }
 
-        // 2d) Done generating => store final in state
-        setSubchapterSummary(finalSubchapterSummary);
-        setGeneratedQuestions(allQuestions);
-        setUserAnswers(allQuestions.map(() => ""));
-
-        setStatus(`Auto-generation complete. Total questions: ${allQuestions.length}`);
+        // Final step: store everything in state
+        setGeneratedQuestions(allQs);
+        setUserAnswers(allQs.map(() => "")); // blank answers initially
+        setSubchapterSummary(summary);
+        setStatus(`Successfully generated ${allQs.length} questions.`);
       } catch (err) {
-        console.error("Error in fetchAndGenerate:", err);
-        setStatus(`Error: ${err.message}`);
+        console.error("Error in doGenerate:", err);
+        setStatus("Error: " + err.message);
       } finally {
         setLoading(false);
       }
     }
 
-    fetchAndGenerate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questionTypes, userId, subChapterId, docId]); 
-  // We run this effect once questionTypes are loaded + docId is known.
+    doGenerate();
+  }, [questionTypes, userId, subChapterId, quizStage, examId, openAiKey]);
 
-  // ----------------------------
-  // PART 3: Render the final quiz
-  // ----------------------------
+  // --- 3) The main quiz rendering ---
   function renderQuizForm() {
     if (!generatedQuestions.length) return null;
 
     return (
       <div style={{ marginTop: "1rem" }}>
-        <h3>Auto-Generated Multi-Type Quiz</h3>
-        {generatedQuestions.map((questionObj, idx) => (
-          <div key={idx} style={styles.questionContainer}>
-            <QuizQuestionRenderer
-              questionObj={questionObj}
-              index={idx}
-              userAnswer={userAnswers[idx]}
-              onUserAnswerChange={(val) => handleAnswerChange(idx, val)}
-            />
-          </div>
-        ))}
+        <h3>Quiz</h3>
+        {generatedQuestions.map((questionObj, idx) => {
+          // If we've graded, get this question's results
+          const result = gradingResults[idx] || null;
 
-        <button style={styles.submitBtn} onClick={handleQuizSubmit}>
-          Submit All
-        </button>
+          return (
+            <div key={idx} style={styles.questionContainer}>
+              <QuizQuestionRenderer
+                questionObj={questionObj}
+                index={idx}
+                userAnswer={userAnswers[idx]}
+                onUserAnswerChange={(val) => handleAnswerChange(idx, val)}
+
+                // If showGradingResults, also pass feedback + score 
+                score={showGradingResults && result ? result.score : null}
+                feedback={showGradingResults && result ? result.feedback : null}
+              />
+            </div>
+          );
+        })}
+
+        {/* Button to submit for grading */}
+        {!showGradingResults && (
+          <button style={styles.submitBtn} onClick={handleQuizSubmit}>
+            Submit All
+          </button>
+        )}
       </div>
     );
   }
 
+  // Update userAnswers array as user types/selects
   function handleAnswerChange(index, newVal) {
     const updated = [...userAnswers];
     updated[index] = newVal;
     setUserAnswers(updated);
   }
 
-  // ----------------------------
-  // PART 4: Grading => One GPT call per question type
-  // ----------------------------
+  // --- 4) handleQuizSubmit => grade, store results, do NOT call parent callbacks yet ---
   async function handleQuizSubmit() {
     if (!generatedQuestions.length) {
       alert("No questions to submit.");
       return;
     }
-    if (!openAiKey) {
-      alert("No OpenAI key found in environment (VITE_OPENAI_KEY).");
-      return;
-    }
-
     setLoading(true);
-    setStatus("Grading in progress...");
-    setGradingResults([]);
-    setShowGradingResults(false);
+    setStatus("Grading quiz...");
 
-    // 1) Group questions by type
-    const typeMap = {};
-    generatedQuestions.forEach((qObj, idx) => {
-      const t = qObj.type || "unknownType";
-      if (!typeMap[t]) typeMap[t] = [];
-      typeMap[t].push({
-        questionObj: qObj,
-        userAnswer: userAnswers[idx],
-        originalIndex: idx,
-      });
-    });
-
-    // 2) We'll build an array where gradingResults[i] = { score, feedback }
+    // We'll accumulate results in an array parallel to generatedQuestions
     const overallResults = new Array(generatedQuestions.length).fill(null);
 
-    // 3) For each type => call GPT
-    for (let tName of Object.keys(typeMap)) {
-      const group = typeMap[tName];
+    // Separate local vs. GPT-based
+    const localItems = [];
+    const openEndedItems = [];
 
-      const { success, gradingArray, error } = await gradeQuestionsOfType({
+    generatedQuestions.forEach((qObj, idx) => {
+      const userAns = userAnswers[idx] || "";
+      if (isLocallyGradableType(qObj.type)) {
+        localItems.push({ qObj, userAns, originalIndex: idx });
+      } else {
+        openEndedItems.push({ qObj, userAns, originalIndex: idx });
+      }
+    });
+
+    // Local grading
+    localItems.forEach((item) => {
+      const { qObj, userAns, originalIndex } = item;
+      const { score, feedback } = localGradeQuestion(qObj, userAns);
+      overallResults[originalIndex] = { score, feedback };
+    });
+
+    // GPT grading
+    if (openEndedItems.length > 0 && openAiKey) {
+      const { success, gradingArray, error } = await gradeOpenEndedBatch({
         openAiKey,
         subchapterSummary,
-        questionType: tName,
-        questionsAndAnswers: group,
+        items: openEndedItems,
       });
-
       if (!success) {
-        console.error(`Grading error for type ${tName}:`, error);
-        continue;
+        console.error("GPT grading error:", error);
+        // Fill 0 for these items if GPT fails
+        openEndedItems.forEach((itm) => {
+          overallResults[itm.originalIndex] = {
+            score: 0,
+            feedback: "GPT grading error: " + error,
+          };
+        });
+      } else {
+        // Merge GPT results
+        gradingArray.forEach((res, i) => {
+          const origIdx = openEndedItems[i].originalIndex;
+          overallResults[origIdx] = res;
+        });
       }
-
-      // Place each result in the correct index
-      gradingArray.forEach((res, i) => {
-        const originalIdx = group[i].originalIndex;
-        overallResults[originalIdx] = res;
+    } else if (openEndedItems.length > 0 && !openAiKey) {
+      // no key => can't GPT-grade
+      openEndedItems.forEach((itm) => {
+        overallResults[itm.originalIndex] = {
+          score: 0,
+          feedback: "No GPT key; cannot grade open-ended question.",
+        };
       });
     }
 
-    setGradingResults(overallResults);
+    // Compute final numeric score => store as percentage
+    const totalScore = overallResults.reduce((acc, r) => acc + (r?.score || 0), 0);
+    const qCount = overallResults.length;
+    const avgFloat = qCount > 0 ? totalScore / qCount : 0; // e.g. 0.72
+    const percentageString = (avgFloat * 100).toFixed(2) + "%";
 
-    // 4) Summation => "X/5"
-    const totalScore = overallResults.reduce((acc, r) => acc + ((r && r.score) || 0), 0);
-    const questionCount = generatedQuestions.length;
-    const averageScore = questionCount > 0 ? totalScore / questionCount : 0;
-    const finalScoreString = `${averageScore.toFixed(1)} / 5`;
-    console.log("Final Score in X/5 format:", finalScoreString);
-
-    // 5) Submit to server
+    // Submit results to server
     try {
       await axios.post("http://localhost:3001/api/submitQuiz", {
-        userId,                       
-        subchapterId: subChapterId,   
-        quizType: quizStage,          
+        userId,
+        subchapterId: subChapterId,
+        quizType: quizStage,
         quizSubmission: generatedQuestions.map((qObj, idx) => ({
           ...qObj,
           userAnswer: userAnswers[idx],
           score: overallResults[idx]?.score ?? 0,
           feedback: overallResults[idx]?.feedback ?? "",
         })),
-        score: finalScoreString,                   
-        totalQuestions: questionCount,
+        score: percentageString,
+        totalQuestions: qCount,
         attemptNumber,
       });
       console.log("Quiz submission saved on server!");
     } catch (err) {
-      console.error("Error submitting quiz results:", err);
+      console.error("Error submitting quiz:", err);
     }
 
+    // Store in local state so we can show user
+    setGradingResults(overallResults);
+    setShowGradingResults(true);
     setLoading(false);
     setStatus("Grading complete.");
-    setShowGradingResults(true);
-    // Optionally call onQuizComplete or onQuizFail based on pass/fail
+
+    // Decide pass/fail but do NOT call parent's callback yet
+    const passThreshold = 0.6; // or use quizStage-based threshold if you want
+    const isPassed = avgFloat >= passThreshold;
+    setQuizPassed(isPassed);
+    setFinalPercentage(percentageString);
   }
 
+  // --- 5) The "Proceed" button => now we call onQuizComplete/onQuizFail ---
+  function handleProceed() {
+    if (quizPassed && onQuizComplete) {
+      onQuizComplete();
+    } else if (!quizPassed && onQuizFail) {
+      onQuizFail();
+    }
+  }
+
+  // --- 6) Optionally: render a summary panel for final feedback ---
   function renderGradingResults() {
     if (!showGradingResults || !gradingResults.length) return null;
-    const totalScore = gradingResults.reduce((acc, r) => acc + ((r && r.score) || 0), 0);
 
     return (
       <div style={styles.gradingContainer}>
-        <h3>Grading Results</h3>
-        {gradingResults.map((res, i) => {
-          if (!res) {
-            return (
-              <div key={i} style={styles.gradingResult}>
-                <b>Question {i + 1}:</b>
-                <p style={{ color: "red" }}>No grading result.</p>
-              </div>
-            );
-          }
-          return (
-            <div key={i} style={styles.gradingResult}>
-              <b>Question {i + 1}:</b>
-              <p>
-                Score: {res.score}
-                <br />
-                Feedback: {res.feedback}
-              </p>
-            </div>
-          );
-        })}
-        <p>
-          <b>Total Score:</b> {totalScore}
-        </p>
+        <h3>Overall Summary</h3>
+        <p>Your final score: <b>{finalPercentage}</b></p>
+        {quizPassed ? (
+          <p style={{ color: "lightgreen" }}>You passed!</p>
+        ) : (
+          <p style={{ color: "red" }}>You did not pass.</p>
+        )}
+        
+        {/* A "Finish" or "Proceed" button to let the user move on */}
+        <button style={styles.finishBtn} onClick={handleProceed}>
+          {quizPassed ? "Finish" : "Ok, Proceed"}
+        </button>
       </div>
     );
   }
 
-  // ----------------------------
-  // PART 5: Render
-  // ----------------------------
   return (
     <div style={styles.container}>
-      <h2 style={styles.heading}>Auto-Fetched Quiz ({docId})</h2>
+      <h2 style={styles.heading}>
+        Quiz Component ({examId} / {quizStage})
+      </h2>
+
       {loading && <p style={styles.text}>Loading... {status}</p>}
       {!loading && status && <p style={{ color: "lightgreen" }}>{status}</p>}
 
+      {/* Render the quiz form (questions) */}
       {renderQuizForm()}
+
+      {/* Render the final summary (or big feedback panel) */}
       {renderGradingResults()}
     </div>
   );
 }
 
-// Helper to build docId => "quiz" + capitalizedExam + capitalizedStage
-function buildQuizConfigDocId(exam, stage) {
-  const capExam = exam.charAt(0).toUpperCase() + exam.slice(1);
-  const capStage = stage.charAt(0).toUpperCase() + stage.slice(1);
-  return `quiz${capExam}${capStage}`;
+/**
+ * Identify question types that can be locally graded.
+ */
+function isLocallyGradableType(qType) {
+  switch (qType) {
+    case "multipleChoice":
+    case "trueFalse":
+    case "fillInBlank":
+    case "ranking":
+      return true;
+    default:
+      return false;
+  }
+}
+
+/**
+ * Local grading for question types with an explicit correct answer.
+ * Return { score: 0..1, feedback: string }.
+ */
+function localGradeQuestion(qObj, userAnswer) {
+  let score = 0;
+  let feedback = "";
+
+  switch (qObj.type) {
+    case "multipleChoice": {
+      const correctIndex = qObj.correctIndex;
+      const userIndex = parseInt(userAnswer, 10);
+      if (!isNaN(userIndex) && userIndex === correctIndex) {
+        score = 1.0;
+        feedback = "Correct!";
+      } else {
+        score = 0.0;
+        const correctOpt = Array.isArray(qObj.options) && qObj.options[correctIndex];
+        feedback = `Incorrect. The correct option was: ${correctOpt}`;
+      }
+      break;
+    }
+    case "trueFalse": {
+      if (userAnswer === qObj.correctValue) {
+        score = 1.0;
+        feedback = "Correct (True/False).";
+      } else {
+        score = 0.0;
+        feedback = `Incorrect. The correct answer was "${qObj.correctValue}".`;
+      }
+      break;
+    }
+    case "fillInBlank": {
+      const correct = (userAnswer || "").trim().toLowerCase() === 
+                      (qObj.answerKey || "").trim().toLowerCase();
+      score = correct ? 1.0 : 0.0;
+      feedback = correct
+        ? "Correct fill-in!"
+        : `Incorrect. Expected: "${qObj.answerKey}".`;
+      break;
+    }
+    case "ranking":
+      // If you have a correct order in qObj.correctOrder, compare with userAnswer
+      // For now, not implemented => 0.0
+      score = 0.0;
+      feedback = "Ranking not implemented yet.";
+      break;
+    default:
+      // Not recognized => no local grading
+      score = 0.0;
+      feedback = "Unrecognized question type for local grading.";
+  }
+
+  return { score, feedback };
+}
+
+/**
+ * Single GPT call to grade all open-ended questions (shortAnswer, scenario, etc.).
+ */
+async function gradeOpenEndedBatch({ openAiKey, subchapterSummary, items }) {
+  if (!openAiKey) {
+    return { success: false, gradingArray: [], error: "No OpenAI key" };
+  }
+  if (!items || !items.length) {
+    return { success: true, gradingArray: [], error: "" };
+  }
+
+  // Build a prompt referencing each question's expected vs user answer
+  let questionList = "";
+  items.forEach((item, idx) => {
+    const { qObj, userAns } = item;
+    questionList += `
+Q#${idx + 1}:
+Question: ${qObj.question}
+Expected Answer: ${qObj.expectedAnswer || qObj.answerGuidance || "(none)"}
+User's Answer: ${userAns}
+`;
+  });
+
+  const userPrompt = `
+You are a strict grading assistant. 
+Context (subchapter summary): "${subchapterSummary}"
+
+For each question, we have an "Expected Answer" and "User's Answer."
+Rate correctness 0.0 to 1.0 (float), then provide 1-2 sentences of feedback.
+
+Return valid JSON in this exact format:
+{
+  "results": [
+    {"score": 0.0, "feedback": "..."},
+    {"score": 1.0, "feedback": "..."},
+    ...
+  ]
+}
+No extra commentary—only that JSON.
+
+${questionList}
+`.trim();
+
+  try {
+    const response = await axios.post(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        model: "gpt-3.5-turbo",
+        messages: [
+          { role: "system", content: "You are a grading assistant. Return JSON only." },
+          { role: "user", content: userPrompt },
+        ],
+        max_tokens: 1200,
+        temperature: 0.0,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${openAiKey}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    const raw = response.data.choices[0].message.content.trim();
+    let parsed;
+    try {
+      const cleaned = raw.replace(/```json/g, "").replace(/```/g, "").trim();
+      parsed = JSON.parse(cleaned);
+    } catch (err) {
+      return {
+        success: false,
+        gradingArray: [],
+        error: "Error parsing JSON from GPT: " + err.message,
+      };
+    }
+
+    if (!parsed.results || !Array.isArray(parsed.results)) {
+      return {
+        success: false,
+        gradingArray: [],
+        error: "No 'results' array in GPT response.",
+      };
+    }
+
+    const gradingArray = parsed.results.map((r) => ({
+      score: r.score ?? 0.0,
+      feedback: r.feedback || "",
+    }));
+
+    return { success: true, gradingArray, error: "" };
+  } catch (err) {
+    return {
+      success: false,
+      gradingArray: [],
+      error: "GPT call failed: " + err.message,
+    };
+  }
 }
 
 // Styles
@@ -390,10 +520,13 @@ const styles = {
     padding: "1rem",
     borderRadius: "4px",
   },
-  gradingResult: {
-    marginBottom: "1rem",
-    border: "1px solid #555",
-    padding: "0.5rem",
+  finishBtn: {
+    padding: "8px 16px",
+    backgroundColor: "dodgerblue",
+    color: "#fff",
+    border: "none",
     borderRadius: "4px",
+    cursor: "pointer",
+    marginTop: "0.5rem",
   },
 };

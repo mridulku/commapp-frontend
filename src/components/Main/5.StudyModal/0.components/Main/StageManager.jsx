@@ -7,7 +7,7 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
   const subChapterId = activity?.subChapterId || "";
 
   const stagePassRatios = {
-    remember: 0.6,
+    remember: 0.1,
     understand: 0.7,
     apply: 0.6,
     analyze: 0.7,
@@ -60,38 +60,71 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
     }
   }
 
+  /**
+   * Parse a stored "score" string and convert it into a ratio from 0..1.
+   * Examples of accepted formats:
+   *  - "72.00%" => 0.72
+   *  - "50%" => 0.5
+   *  - "3/5" => 0.6
+   * Returns NaN if format not recognized.
+   */
+  function parseScoreForRatio(scoreString) {
+    if (!scoreString) return NaN;
+
+    // 1) Check if it ends with '%' (percentage-based)
+    const trimmed = scoreString.trim();
+    if (trimmed.endsWith("%")) {
+      // e.g. "72.00%" => parseFloat("72.00") => 72.0 => 0.72
+      const numPart = trimmed.slice(0, -1); // remove '%'
+      const parsed = parseFloat(numPart);
+      if (!isNaN(parsed)) {
+        return parsed / 100;
+      }
+    }
+
+    // 2) Check if it has a slash => "X/Y"
+    if (trimmed.includes("/")) {
+      const [numStr, denomStr] = trimmed.split("/");
+      const numericScore = parseFloat(numStr);
+      const outOf = parseFloat(denomStr);
+      if (!isNaN(numericScore) && !isNaN(outOf) && outOf > 0) {
+        return numericScore / outOf;
+      }
+    }
+
+    // 3) Otherwise, not recognized => NaN
+    return NaN;
+  }
+
   function computeState(quizArr, revArr) {
     if (!quizArr.length) {
       setMode("NO_QUIZ_YET");
       setLastQuizAttempt(null);
       return;
     }
-    // newest attempt first
+
+    // newest attempt is first
     const [latestQuiz] = quizArr;
     setLastQuizAttempt(latestQuiz);
 
-    // parse X/Y from latestQuiz.score
     const passRatio = stagePassRatios[quizStage] || 0.6;
-    const scoreParts = latestQuiz.score.split("/");
-    if (scoreParts.length !== 2) {
-      // fallback if malformed
-      setMode("NEED_REVISION");
-      return;
-    }
-    const numericScore = parseInt(scoreParts[0], 10);
-    const outOf = parseInt(scoreParts[1], 10);
-    if (isNaN(numericScore) || isNaN(outOf) || outOf === 0) {
+
+    // parse the quiz's score string into ratio
+    const ratio = parseScoreForRatio(latestQuiz.score);
+
+    // if ratio is NaN => can't parse => go to revision
+    if (isNaN(ratio)) {
       setMode("NEED_REVISION");
       return;
     }
 
-    const ratio = numericScore / outOf;
     const passed = ratio >= passRatio;
-
     if (passed) {
       setMode("QUIZ_COMPLETED");
       return;
     }
+
+    // Not passed => see if there's a matching revision
     const attemptNum = latestQuiz.attemptNumber;
     const matchingRev = revArr.find((r) => r.revisionNumber === attemptNum);
     if (!matchingRev) {
@@ -158,7 +191,7 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
       <div style={styles.mainContent}>
         {mode === "NO_QUIZ_YET" && (
           <QuizComponent
-            userId={userId}                // <-- Pass userId here
+            userId={userId}
             quizStage={quizStage}
             examId={effectiveExamId}
             subChapterId={subChapterId}
@@ -176,6 +209,7 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
 
         {mode === "NEED_REVISION" && lastQuizAttempt && (
           <ReviseComponent
+            userId={userId}
             quizStage={quizStage}
             examId={effectiveExamId}
             subChapterId={subChapterId}
@@ -186,7 +220,7 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
 
         {mode === "CAN_TAKE_NEXT_QUIZ" && lastQuizAttempt && (
           <QuizComponent
-            userId={userId}                // <-- Pass userId here
+            userId={userId}
             quizStage={quizStage}
             examId={effectiveExamId}
             subChapterId={subChapterId}
@@ -216,10 +250,7 @@ function renderTimeline(quizArr, revArr, passRatio) {
 
   quizAsc.forEach((quizDoc) => {
     const attemptNum = quizDoc.attemptNumber;
-    const [numStr, denomStr] = quizDoc.score.split("/");
-    const numericScore = parseInt(numStr, 10) || 0;
-    const totalQ = parseInt(denomStr, 10) || 1;
-    const ratio = numericScore / totalQ;
+    const ratio = parseScoreForTimeline(quizDoc.score);
     const passed = ratio >= passRatio;
 
     timelineItems.push({
@@ -247,6 +278,38 @@ function renderTimeline(quizArr, revArr, passRatio) {
       ))}
     </div>
   );
+}
+
+/**
+ * Helper to parse a string like "72.00%", "50%", or "3/5" into a 0..1 ratio for the timeline.
+ * If unrecognized, returns 0.
+ */
+function parseScoreForTimeline(scoreString) {
+  if (!scoreString) return 0;
+
+  // 1) If ends with '%'
+  const trimmed = scoreString.trim();
+  if (trimmed.endsWith("%")) {
+    const numPart = trimmed.slice(0, -1); 
+    const parsed = parseFloat(numPart);
+    if (!isNaN(parsed)) {
+      return parsed / 100;
+    }
+    return 0;
+  }
+
+  // 2) If it has a slash => "X/Y"
+  if (trimmed.includes("/")) {
+    const [numStr, denomStr] = trimmed.split("/");
+    const numericScore = parseFloat(numStr);
+    const outOf = parseFloat(denomStr);
+    if (!isNaN(numericScore) && !isNaN(outOf) && outOf > 0) {
+      return numericScore / outOf;
+    }
+    return 0;
+  }
+
+  return 0;
 }
 
 function TimelineItem({ item }) {

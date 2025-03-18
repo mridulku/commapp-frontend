@@ -1,3 +1,9 @@
+/**
+ * File: QuizQuestionGenerator.js
+ * Description: Handles question generation from GPT, returning an array of question objects
+ * that already contain correct answers/expected answers. 
+ */
+
 import axios from "axios";
 import {
   doc,
@@ -9,20 +15,18 @@ import {
 } from "firebase/firestore";
 
 /**
- * Main entry point for question generation. 
+ * Main entry point for question generation for a subchapter + stage.
+ * This function fetches the quizConfig doc (e.g. quizRememberGeneral),
+ * then for each question type in that config, calls GPT to generate
+ * the requested number of questions. 
  * 
- *  - db: Firestore
- *  - subChapterId: string
- *  - examId: string (e.g. "general")
- *  - quizStage: string (e.g. "remember" / "understand" / etc.)
- *  - openAiKey: string
- *
- * Returns an object:
- * {
- *   success: boolean,
- *   error: string | null,
- *   questionsData: { questions: [...] } | null
- * }
+ * For local vs. GPT-based grading:
+ *   - If question type is multipleChoice/trueFalse/fillInBlank/etc.,
+ *     we instruct GPT to include "correctIndex"/"correctValue"/"answerKey"
+ *     in the JSON.
+ *   - If question type is openEnded/shortAnswer/scenario/etc., 
+ *     we instruct GPT to include an "expectedAnswer" or "answerGuidance",
+ *     which we later send to GPT for grading.
  */
 export async function generateQuestions({
   db,
@@ -32,10 +36,10 @@ export async function generateQuestions({
   openAiKey,
 }) {
   try {
-    // 1) Build the quizConfig doc ID (assuming your naming scheme)
+    // 1) Build the quizConfig doc ID (e.g. "quizGeneralRemember")
     const docId = buildQuizConfigDocId(examId, quizStage);
 
-    // 2) Fetch the quizConfig doc => e.g. { multipleChoice: 1, trueFalse: 2, fillInBlank: 0 }
+    // 2) Fetch that quizConfig doc => e.g. { multipleChoice: 3, trueFalse: 2, ... }
     let quizConfigData = {};
     const quizConfigRef = doc(db, "quizConfigs", docId);
     const quizConfigSnap = await getDoc(quizConfigRef);
@@ -49,18 +53,20 @@ export async function generateQuestions({
       };
     }
 
-    // 3) Fetch subchapter concepts
+    // 3) Fetch subchapter concepts from "subchapterConcepts"
     let conceptList = [];
     const subChapConceptsRef = collection(db, "subchapterConcepts");
-    const conceptQuery = query(subChapConceptsRef, where("subChapterId", "==", subChapterId));
+    const conceptQuery = query(
+      subChapConceptsRef,
+      where("subChapterId", "==", subChapterId)
+    );
     const conceptSnap = await getDocs(conceptQuery);
-    conceptList = conceptSnap.docs.map(docSnap => ({
+    conceptList = conceptSnap.docs.map((docSnap) => ({
       id: docSnap.id,
       ...docSnap.data(),
     }));
 
-    // 4) If no concepts found => fallback to old approach 
-    //    (generate overall questions once)
+    // 4) If no concepts found => fallback approach: generate overall questions once
     if (conceptList.length === 0) {
       const fallbackQuestions = await generateQuestions_Overall({
         db,
@@ -75,20 +81,20 @@ export async function generateQuestions({
       };
     }
 
-    // 5) If we *do* have concepts => generate question sets per concept
+    // 5) If we do have concepts => generate question sets per concept
     let allConceptQuestions = [];
     for (const concept of conceptList) {
       // For each question type from quizConfigData
       for (let [typeName, count] of Object.entries(quizConfigData)) {
         if (count <= 0) continue; // skip if 0
-        // generate "count" questions for *this concept*
+        // generate "count" questions for this concept
         const batch = await generateQuestions_ForConcept({
           db,
           subChapterId,
           openAiKey,
           typeName,
           numberOfQuestions: count,
-          concept, // pass the entire concept doc so we can mention concept.name, etc.
+          concept,
         });
         allConceptQuestions.push(...batch);
       }
@@ -109,14 +115,9 @@ export async function generateQuestions({
 }
 
 // ------------------------------------------------------------------
-// 2. Helper: Fallback approach => old single-block question generation
+// 2. Helper: fallback approach => old single-block question generation
 // ------------------------------------------------------------------
-async function generateQuestions_Overall({
-  db,
-  subChapterId,
-  openAiKey,
-  quizConfigData,
-}) {
+async function generateQuestions_Overall({ db, subChapterId, openAiKey, quizConfigData }) {
   const allQuestions = [];
   for (let [typeName, count] of Object.entries(quizConfigData)) {
     if (count <= 0) continue;
@@ -135,7 +136,7 @@ async function generateQuestions_Overall({
 }
 
 // ------------------------------------------------------------------
-// 3. Helper: Concept-based approach => one concept at a time
+// 3. Helper: concept-based approach => one concept at a time
 // ------------------------------------------------------------------
 async function generateQuestions_ForConcept({
   db,
@@ -145,20 +146,19 @@ async function generateQuestions_ForConcept({
   numberOfQuestions,
   concept,
 }) {
-  // concept might have { name, summary, etc. }
+  // concept might have { name, summary, ... }
   return generateQuestions_GPT({
     db,
     subChapterId,
     openAiKey,
     typeName,
     numberOfQuestions,
-    forcedConceptName: concept.name, // so GPT sets "conceptName": concept.name
+    forcedConceptName: concept.name,
   });
 }
 
 // ------------------------------------------------------------------
 // 4. The GPT logic that fetches subchapter summary, merges prompt blocks, calls GPT
-//    (similar to your existing "generateQuestions" function)
 // ------------------------------------------------------------------
 async function generateQuestions_GPT({
   db,
@@ -168,7 +168,7 @@ async function generateQuestions_GPT({
   numberOfQuestions,
   forcedConceptName,
 }) {
-  // Step A: fetch sub-chapter summary from "subchapters_demo"
+  // Step A: fetch subchapter summary from "subchapters_demo"
   let subchapterSummary = "";
   try {
     const ref = doc(db, "subchapters_demo", subChapterId);
@@ -183,65 +183,57 @@ async function generateQuestions_GPT({
     console.error("Error fetching subchapter:", err);
   }
 
-  // Step B: fetch questionType doc from "questionTypes" (like you do now)
-  // This part might vary in your code
-  const questionTypeDoc = await fetchQuestionTypeDoc(db, typeName);
+  // Step B: (Optional) fetch questionType doc from "questionTypes" to see JSON structure
+  //         This is up to you. If you have that structure, it can help shape the prompt.
+  //         For brevity, we skip that here or we can do it if needed.
 
-  // Build your prompt blocks
+  // Build an instruction block that demands correct or expected answers:
   let forcedConceptBlock = "";
   if (forcedConceptName) {
     forcedConceptBlock = `
 All questions must focus on the concept: "${forcedConceptName}".
-Set each question's "conceptName" field to exactly "${forcedConceptName}".
+Set each question's "conceptName" field to "${forcedConceptName}".
     `.trim();
   }
 
-  const blocks = [
-    {
-      name: "context",
-      text: `You are a question generator. Here's a subchapter summary:\n${subchapterSummary}`,
-    },
-    {
-      name: "mainInstruction",
-      text: `Generate ${numberOfQuestions} "${typeName}" questions.`,
-    },
-    {
-      name: "forcedConcept",
-      text: forcedConceptBlock,
-    },
-    {
-      name: "questionTypeDefinition",
-      text: `
-Question Type Definition:
-Name: ${questionTypeDoc.name}
-Expected JSON structure: ${JSON.stringify(questionTypeDoc.expectedJsonStructure, null, 2)}
-      `.trim(),
-    },
-    {
-      name: "returnFormat",
-      text: `
-Return valid JSON in the format:
+  // The important part: Telling GPT how to format "correctIndex" etc.
+  // We'll show a short snippet as an example. You can expand for "ranking" or "compare/contrast."
+  const systemPrompt = `You are a helpful question generator that outputs JSON only.`;
+
+  const userPrompt = `
+You have a subchapter summary:
+"${subchapterSummary}"
+
+Generate ${numberOfQuestions} questions of type "${typeName}."
+
+${forcedConceptBlock}
+
+Include:
+- "question": The question text
+- "type": "${typeName}"
+- "conceptName": (if forced, otherwise blank)
+- For multipleChoice => include "options": [..] and "correctIndex": (the 0-based index of the correct option)
+- For trueFalse => include "correctValue": "true" or "false"
+- For fillInBlank => include "answerKey": "..."
+- For shortAnswer / openEnded / compareContrast => include "expectedAnswer": "..."
+- For scenario => could also have "scenarioText" plus "expectedAnswer"
+
+Return a valid JSON object exactly in this format:
 {
   "questions": [
     {
       "question": "...",
       "type": "${typeName}",
-      "conceptName": "${forcedConceptName || ""}",
-      ...
-    }
+      "conceptName": "...",
+      ... // any other fields like correctIndex, expectedAnswer, etc.
+    },
+    ...
   ]
 }
-No extra commentary—only the JSON object.
-      `.trim(),
-    },
-  ];
 
-  const prompt = blocks
-    .map(b => b.text.trim())
-    .filter(Boolean)
-    .join("\n\n");
+No extra commentary—only valid JSON.
+`.trim();
 
-  // Step C: Call GPT
   let parsedQuestions = [];
   try {
     const response = await axios.post(
@@ -249,10 +241,10 @@ No extra commentary—only the JSON object.
       {
         model: "gpt-3.5-turbo",
         messages: [
-          { role: "system", content: "You are a helpful question generator." },
-          { role: "user", content: prompt },
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
         ],
-        max_tokens: 1200,
+        max_tokens: 1500,
         temperature: 0.7,
       },
       {
@@ -283,16 +275,9 @@ No extra commentary—only the JSON object.
   return parsedQuestions;
 }
 
-// Helper to build docId => "quizGeneralRemember" or similar
+// Helper to build docId => e.g. "quizGeneralRemember"
 function buildQuizConfigDocId(exam, stage) {
   const capExam = exam.charAt(0).toUpperCase() + exam.slice(1);
   const capStage = stage.charAt(0).toUpperCase() + stage.slice(1);
   return `quiz${capExam}${capStage}`;
-}
-
-// Example fetch questionTypes doc
-async function fetchQuestionTypeDoc(db, typeName) {
-  const snap = await getDocs(collection(db, "questionTypes"));
-  const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  return arr.find(doc => doc.name === typeName) || { name: typeName, expectedJsonStructure: {} };
 }
