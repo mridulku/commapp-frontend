@@ -23,6 +23,12 @@ const styles = {
     borderRadius: "4px",
     marginBottom: "0.5rem",
   },
+  conceptLabel: {
+    fontStyle: "italic",
+    fontSize: "0.9rem",
+    color: "#aaa",
+    margin: "0.5rem 0",
+  },
 };
 
 export default function QuizQuestionRenderer({
@@ -33,12 +39,21 @@ export default function QuizQuestionRenderer({
 }) {
   const qType = questionObj.type || "";
   const questionText = questionObj.question || `Question ${index + 1}`;
+  const conceptName = questionObj.conceptName || ""; // <-- concept name (if any)
 
   return (
     <div style={styles.container}>
       <p>
         <b>Q{index + 1}:</b> {questionText}
       </p>
+
+      {/* Show concept name if it exists */}
+      {conceptName && (
+        <p style={styles.conceptLabel}>
+          Concept: <em>{conceptName}</em>
+        </p>
+      )}
+
       {renderByType(qType, questionObj, userAnswer, onUserAnswerChange)}
     </div>
   );
@@ -131,7 +146,7 @@ function renderByType(qType, questionObj, userAnswer, onUserAnswerChange) {
         </div>
       );
 
-    // Add more question types as desired...
+    // Add more question types as needed...
     default:
       return (
         <p style={{ color: "red" }}>

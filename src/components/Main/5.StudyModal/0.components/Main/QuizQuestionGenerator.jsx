@@ -1,6 +1,12 @@
-// File: QuizQuestionGenerator.js
 import axios from "axios";
-import { doc, getDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  collection,
+  getDocs,
+  query,
+  where,
+} from "firebase/firestore";
 
 /**
  * generateQuestions
@@ -36,7 +42,9 @@ export async function generateQuestions({
     };
   }
 
-  // 1) Fetch the subchapter doc => get "summary"
+  // -------------------------------------------------------------------------
+  // 1) Fetch the subchapter doc => get "summary" from "subchapters_demo"
+  // -------------------------------------------------------------------------
   let subchapterSummary = "";
   try {
     const ref = doc(db, "subchapters_demo", subChapterId);
@@ -68,39 +76,65 @@ export async function generateQuestions({
     };
   }
 
-  // ----------------------------------------------------------------
-  // 2) Build the GPT prompt in a more "modular" style:
-  //    We define a few "blocks" (or instructions) and then combine them.
-  //    For now, we only use the same pieces as before — subchapterSummary, questionType, numberOfQuestions, etc.
-  //    In the future, we can add more blocks with their own instructions (customInstruction1, etc.).
-  // ----------------------------------------------------------------
+  // -------------------------------------------------------------------------
+  // 2) Fetch all concepts for this sub-chapter from "subchapterConcepts"
+  //    Fields: name, subChapterId, summary, subPoints, createdAt, etc.
+  // -------------------------------------------------------------------------
+  let conceptList = [];
+  try {
+    const subChapConceptsRef = collection(db, "subchapterConcepts");
+    const conceptQuery = query(subChapConceptsRef, where("subChapterId", "==", subChapterId));
+    const conceptSnap = await getDocs(conceptQuery);
 
-  // Example array of blocks — each block can hold data + a snippet of instructions
+    conceptList = conceptSnap.docs.map((docSnap) => ({
+      id: docSnap.id,
+      ...docSnap.data(),
+    }));
+  } catch (err) {
+    return {
+      success: false,
+      subchapterSummary,
+      questionsData: null,
+      error: `Error fetching subchapter concepts: ${err.message}`,
+    };
+  }
+
+  // From each concept doc, we'll use the "name" field as the concept's name
+  const conceptNames = conceptList.map((c) => c.name).filter(Boolean);
+
+  let conceptText = "No specific concepts found for this sub-chapter.";
+  if (conceptNames.length > 0) {
+    conceptText =
+      `This sub-chapter can be broken down into the following concepts:\n` +
+      conceptNames.map((name, idx) => `${idx + 1}. ${name}`).join("\n");
+  }
+
+  // -------------------------------------------------------------------------
+  // 3) Build the GPT prompt in a modular style
+  // -------------------------------------------------------------------------
   const blocks = [
     {
-      // base or "context" block
+      // Base or "context" block
       name: "baseContext",
       text: `You are a question generator. I have a subchapter summary below.`,
     },
     {
-      // customInstruction1 (placeholder):
-      //   e.g. "Focus on reading speed" or "Use advanced difficulty"
-      //   Right now it's empty, but you can see how you'd add instructions here
-      name: "customInstruction1",
-      text: "",
-    },
-    {
-      // main instruction block: how many questions, which type
+      // Main instruction: how many questions, which type
       name: "mainInstruction",
       text: `I want you to produce ${numberOfQuestions} questions of type "${questionTypeDoc.name}".`,
     },
     {
-      // subchapter summary block
+      // Subchapter summary block
       name: "subchapterSummary",
       text: `Subchapter Summary:\n${subchapterSummary}`,
     },
     {
-      // question type definition block
+      // Concept list block
+      name: "conceptList",
+      text: conceptText,
+    },
+    {
+      // Question type definition block
       name: "questionTypeDefinition",
       text: `
 Question Type Definition:
@@ -110,37 +144,38 @@ ${JSON.stringify(questionTypeDoc.expectedJsonStructure, null, 2)}
       `.trim(),
     },
     {
-      // customInstruction2 (placeholder):
-      //   e.g. "Use scenario-based approach" if scenarioFocus = ...
-      name: "customInstruction2",
-      text: "",
-    },
-    {
-      // final format instruction
+      // Final format instruction => includes "conceptName"
       name: "returnFormat",
       text: `
-Return valid JSON in the format:
+Return valid JSON in the following format:
 {
   "questions": [
-    // objects that match the expectedJsonStructure
+    {
+      "question": "...",
+      "type": "${questionTypeDoc.name}",
+      "conceptName": "...", // must match EXACTLY one of the concepts listed above
+      // any other fields as per the expectedJsonStructure
+    }
   ]
 }
 
-No extra commentary, only the JSON object.
+Please ensure:
+1) Each question has a "conceptName" field chosen exactly from the list of concepts above and mark N/A if no concept list has been provided.
+2) No extra commentary—only the JSON object.
       `.trim(),
     },
   ];
 
-  // We combine them into one final prompt string
+  // Combine them into one final prompt string
   const prompt = blocks
     .map((block) => block.text.trim())
-    .filter(Boolean) // remove any empty lines if a block is empty
+    .filter(Boolean) // remove empty strings if any
     .join("\n\n")
     .trim();
 
-  // ----------------------------------------------------------------
-  // 3) Call OpenAI with our assembled prompt
-  // ----------------------------------------------------------------
+  // -------------------------------------------------------------------------
+  // 4) Call OpenAI with our assembled prompt
+  // -------------------------------------------------------------------------
   try {
     const response = await axios.post(
       "https://api.openai.com/v1/chat/completions",
@@ -186,7 +221,7 @@ No extra commentary, only the JSON object.
     return {
       success: true,
       subchapterSummary,
-      questionsData: parsed, // { questions: [...] }
+      questionsData: parsed, // e.g. { questions: [...] }
       error: "",
     };
   } catch (err) {
