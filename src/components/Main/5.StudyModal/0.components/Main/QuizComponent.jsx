@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from "react";
-import { collection, getDocs } from "firebase/firestore";
+// File: QuizComponent.jsx
+
+import React, { useEffect, useState } from "react";
+import { doc, getDoc, collection, getDocs } from "firebase/firestore";
 import { db } from "../../../../../firebase"; // adjust path if needed
 import { generateQuestions } from "./QuizQuestionGenerator";
 import { gradeQuestionsOfType } from "./QuizQuestionGrader";  
@@ -7,51 +9,53 @@ import QuizQuestionRenderer from "./QuizQuestionRenderer";
 import axios from "axios";
 
 /**
- * Multi-type version of QuizComponent
- * - Lets user select multiple (type, count) combos
- * - For each combo => calls generateQuestions(...) once
- * - Combines them into a single array for the quiz
- * - Grades them with one GPT call per type (aggregating the final score).
+ * Updated "QuizComponent" that:
+ * 1) Auto-computes docId for quizConfigs/<docId> based on examId + quizStage
+ * 2) Fetches question-type counts from that doc
+ * 3) Automatically generates questions
+ * 4) Renders the final quiz (no manual combo UI)
  */
 export default function QuizComponent({
-  userId = "",          // ensure you pass a valid string userId from parent
+  userId = "",
   examId = "general",
   quizStage = "remember",
-  subChapterId = "",    // ensure you pass a valid string from parent
+  subChapterId = "",
   attemptNumber = 1,
   onQuizComplete,
   onQuizFail,
 }) {
-  // ----------------------------
-  // PART 1: State & Setup
-  // ----------------------------
+  // If examId or quizStage are empty, default them
+  const finalExamId = examId || "general";       // fallback: "general"
+  const finalStage = quizStage || "remember";    // fallback: "remember"
+
+  // We'll build a doc ID like "quizGeneralRemember"
+  // Capitalize the first letter of exam + stage
+  const docId = buildQuizConfigDocId(finalExamId, finalStage);
+
+  // For debugging, we'll log the docId
+  console.log("QuizComponent => docId for config:", docId);
+
+  // We fetch questionTypes from Firestore (like before) to have the relevant docs
   const [questionTypes, setQuestionTypes] = useState([]);
-  // We'll store an array of combos: { typeName: string, count: number }
-  const [selectedCombos, setSelectedCombos] = useState([]);
 
-  // For picking a type + count from a dropdown
-  const [typeToAdd, setTypeToAdd] = useState("");
-  const [countToAdd, setCountToAdd] = useState(1);
-
-  // Internal states
-  const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState("");
-
-  const [generatedQuestions, setGeneratedQuestions] = useState([]); // all questions from all combos
+  // We'll store the final questions after generation
+  const [generatedQuestions, setGeneratedQuestions] = useState([]);
   const [subchapterSummary, setSubchapterSummary] = useState("");
 
-  // userAnswers[i] => the user’s answer for question i
+  // userAnswers[i] => the user’s answer for the i-th question
   const [userAnswers, setUserAnswers] = useState([]);
-  // gradingResults[i] => { score, feedback } for question i
+
+  // gradingResults[i] => GPT or local grading result for the i-th question
   const [gradingResults, setGradingResults] = useState([]);
   const [showGradingResults, setShowGradingResults] = useState(false);
+
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState("");
 
   // Read the OpenAI key from .env (Vite)
   const openAiKey = import.meta.env.VITE_OPENAI_KEY || "";
 
-  // ----------------------------
-  // PART 2: Load available question types (on mount)
-  // ----------------------------
+  // -- 1) On mount => fetch questionTypes (like before) --
   useEffect(() => {
     async function fetchQuestionTypes() {
       try {
@@ -68,123 +72,118 @@ export default function QuizComponent({
     fetchQuestionTypes();
   }, []);
 
-  // ----------------------------
-  // PART 3: UI for multiple combos
-  // ----------------------------
-  function handleAddCombo() {
-    if (!typeToAdd) {
-      alert("Select a question type first.");
-      return;
-    }
-    if (!countToAdd || countToAdd < 1) {
-      alert("Invalid count.");
-      return;
-    }
-    setSelectedCombos((prev) => [
-      ...prev,
-      { typeName: typeToAdd, count: parseInt(countToAdd, 10) },
-    ]);
-    setTypeToAdd("");
-    setCountToAdd(1);
-  }
-
-  function renderComboList() {
-    return (
-      <ul>
-        {selectedCombos.map((c, i) => (
-          <li key={i} style={{ marginBottom: "0.25rem" }}>
-            {c.count} x {c.typeName}
-          </li>
-        ))}
-      </ul>
-    );
-  }
-
-  // ----------------------------
-  // PART 4: Generate All Questions
-  //    - For each combo => call generateQuestions
-  //    - Combine results
-  // ----------------------------
-  async function handleGenerateAll() {
-    if (!subChapterId) {
-      alert("No subChapterId provided!");
+  // -- 2) After we have questionTypes, fetch the quizConfigs doc and auto-generate --
+  useEffect(() => {
+    // Skip if we don't have userId or subChapterId
+    if (!userId || !subChapterId) {
+      console.log("QuizComponent: userId or subChapterId is empty, skipping auto-generation.");
       return;
     }
     if (!openAiKey) {
-      alert("No OpenAI key found in environment (VITE_OPENAI_KEY).");
-      return;
-    }
-    if (!selectedCombos.length) {
-      alert("Please add at least one (type, count) combo.");
-      return;
+      console.warn("QuizComponent: No OpenAI key found. Generation will fail.");
     }
 
-    setLoading(true);
-    setStatus("Generating multi-type questions...");
-    setShowGradingResults(false);
-    setGradingResults([]);
+    // We'll do an async fetch for the doc
+    async function fetchAndGenerate() {
+      try {
+        setLoading(true);
+        setStatus("Fetching quiz config & auto-generating questions...");
 
-    let allQuestions = [];
-    let finalSubchapterSummary = "";
+        // 2a) Get the doc from quizConfigs/<docId>
+        const quizConfigRef = doc(db, "quizConfigs", docId);
+        const quizConfigSnap = await getDoc(quizConfigRef);
 
-    try {
-      // For each combo => get Firestore doc for that type => call generateQuestions
-      for (let combo of selectedCombos) {
-        const qTypeDoc = questionTypes.find((qt) => qt.name === combo.typeName);
-        if (!qTypeDoc) {
-          console.warn("No doc found for question type:", combo.typeName);
-          continue;
+        if (!quizConfigSnap.exists()) {
+          console.error(`No quizConfig doc found for '${docId}'.`);
+          setStatus(`No quizConfig found for '${docId}'. Cannot generate questions.`);
+          setLoading(false);
+          return;
         }
 
-        const result = await generateQuestions({
-          db,
-          subChapterId,
-          openAiKey,
-          selectedTypeName: combo.typeName,
-          questionTypeDoc: qTypeDoc,
-          numberOfQuestions: combo.count,
+        const configData = quizConfigSnap.data(); // e.g. { multipleChoice: 3, fillInBlank: 2, ... }
+
+        // 2b) Build "selectedCombos" from configData
+        // Each key is a question type => each value is the count
+        // e.g. [ { typeName: "multipleChoice", count: 3 }, { typeName: "trueFalse", count: 2 } ]
+        const combos = [];
+        Object.keys(configData).forEach((typeName) => {
+          const countVal = configData[typeName];
+          if (countVal > 0) {
+            combos.push({ typeName, count: countVal });
+          }
         });
 
-        if (!result.success) {
-          console.error("Error generating for", combo.typeName, result.error);
-          // We could continue or break
-          continue;
+        if (!combos.length) {
+          console.warn("QuizConfig has no non-zero question types. Nothing to generate.");
+          setStatus("No non-zero question types in config. No questions to generate.");
+          setLoading(false);
+          return;
         }
 
-        // They should share the same subchapterSummary; store the last
-        finalSubchapterSummary = result.subchapterSummary;
+        // 2c) Actually generate all questions for each combo
+        let allQuestions = [];
+        let finalSubchapterSummary = "";
 
-        if (Array.isArray(result.questionsData?.questions)) {
-          // Tag each question with the type if not present
-          const typedQs = result.questionsData.questions.map((q) => {
-            if (!q.type) q.type = combo.typeName;
-            return q;
+        for (let combo of combos) {
+          const qTypeDoc = questionTypes.find((qt) => qt.name === combo.typeName);
+          if (!qTypeDoc) {
+            console.warn("No questionType doc found for:", combo.typeName);
+            continue;
+          }
+
+          const result = await generateQuestions({
+            db,
+            subChapterId,
+            openAiKey,
+            selectedTypeName: combo.typeName,
+            questionTypeDoc: qTypeDoc,
+            numberOfQuestions: combo.count,
           });
-          allQuestions.push(...typedQs);
-        }
-      }
 
-      setSubchapterSummary(finalSubchapterSummary);
-      setGeneratedQuestions(allQuestions);
-      setUserAnswers(allQuestions.map(() => "")); // Reset answers
-      setStatus("All questions generated successfully!");
-    } catch (err) {
-      console.error("Error in handleGenerateAll:", err);
-      setStatus("Error generating multi-type questions: " + err.message);
+          if (!result.success) {
+            console.error("Error generating for", combo.typeName, result.error);
+            continue;
+          }
+
+          finalSubchapterSummary = result.subchapterSummary || finalSubchapterSummary;
+
+          if (Array.isArray(result.questionsData?.questions)) {
+            const typedQs = result.questionsData.questions.map((q) => {
+              if (!q.type) q.type = combo.typeName;
+              return q;
+            });
+            allQuestions.push(...typedQs);
+          }
+        }
+
+        // 2d) Done generating => store final in state
+        setSubchapterSummary(finalSubchapterSummary);
+        setGeneratedQuestions(allQuestions);
+        setUserAnswers(allQuestions.map(() => ""));
+
+        setStatus(`Auto-generation complete. Total questions: ${allQuestions.length}`);
+      } catch (err) {
+        console.error("Error in fetchAndGenerate:", err);
+        setStatus(`Error: ${err.message}`);
+      } finally {
+        setLoading(false);
+      }
     }
 
-    setLoading(false);
-  }
+    fetchAndGenerate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questionTypes, userId, subChapterId, docId]); 
+  // We run this effect once questionTypes are loaded + docId is known.
 
   // ----------------------------
-  // PART 5: Rendering the combined quiz
+  // PART 3: Render the final quiz
   // ----------------------------
   function renderQuizForm() {
-    if (!generatedQuestions || !generatedQuestions.length) return null;
+    if (!generatedQuestions.length) return null;
 
     return (
       <div style={{ marginTop: "1rem" }}>
-        <h3>Combined Multi-Type Quiz</h3>
+        <h3>Auto-Generated Multi-Type Quiz</h3>
         {generatedQuestions.map((questionObj, idx) => (
           <div key={idx} style={styles.questionContainer}>
             <QuizQuestionRenderer
@@ -195,6 +194,7 @@ export default function QuizComponent({
             />
           </div>
         ))}
+
         <button style={styles.submitBtn} onClick={handleQuizSubmit}>
           Submit All
         </button>
@@ -209,7 +209,7 @@ export default function QuizComponent({
   }
 
   // ----------------------------
-  // PART 6: Grading => One GPT call per question type
+  // PART 4: Grading => One GPT call per question type
   // ----------------------------
   async function handleQuizSubmit() {
     if (!generatedQuestions.length) {
@@ -220,13 +220,14 @@ export default function QuizComponent({
       alert("No OpenAI key found in environment (VITE_OPENAI_KEY).");
       return;
     }
+
     setLoading(true);
     setStatus("Grading in progress...");
     setGradingResults([]);
     setShowGradingResults(false);
 
     // 1) Group questions by type
-    const typeMap = {}; 
+    const typeMap = {};
     generatedQuestions.forEach((qObj, idx) => {
       const t = qObj.type || "unknownType";
       if (!typeMap[t]) typeMap[t] = [];
@@ -240,7 +241,7 @@ export default function QuizComponent({
     // 2) We'll build an array where gradingResults[i] = { score, feedback }
     const overallResults = new Array(generatedQuestions.length).fill(null);
 
-    // 3) For each type => call gradeQuestionsOfType
+    // 3) For each type => call GPT
     for (let tName of Object.keys(typeMap)) {
       const group = typeMap[tName];
 
@@ -253,41 +254,37 @@ export default function QuizComponent({
 
       if (!success) {
         console.error(`Grading error for type ${tName}:`, error);
-        continue; // or handle it
+        continue;
       }
 
-      // gradingArray should match length of group
+      // Place each result in the correct index
       gradingArray.forEach((res, i) => {
         const originalIdx = group[i].originalIndex;
-        overallResults[originalIdx] = res; 
+        overallResults[originalIdx] = res;
       });
     }
 
-    // 4) Store these results in state so we can display them
     setGradingResults(overallResults);
 
-    // 5) Now sum the scores => average => "X/5"
+    // 4) Summation => "X/5"
     const totalScore = overallResults.reduce((acc, r) => acc + ((r && r.score) || 0), 0);
     const questionCount = generatedQuestions.length;
-    const averageScore = (questionCount > 0) ? (totalScore / questionCount) : 0;
+    const averageScore = questionCount > 0 ? totalScore / questionCount : 0;
     const finalScoreString = `${averageScore.toFixed(1)} / 5`;
     console.log("Final Score in X/5 format:", finalScoreString);
 
-    // 6) Post final data to the server
+    // 5) Submit to server
     try {
       await axios.post("http://localhost:3001/api/submitQuiz", {
-        userId,                       // a string
-        subchapterId: subChapterId,   // if your server expects subchapterId
-        quizType: quizStage,          // or "multiType", whichever you want
-        quizSubmission: generatedQuestions.map((qObj, idx) => {
-          return {
-            ...qObj,
-            userAnswer: userAnswers[idx],
-            // store GPT results in each question if you want
-            score: overallResults[idx]?.score ?? 0,
-            feedback: overallResults[idx]?.feedback ?? "",
-          };
-        }),
+        userId,                       
+        subchapterId: subChapterId,   
+        quizType: quizStage,          
+        quizSubmission: generatedQuestions.map((qObj, idx) => ({
+          ...qObj,
+          userAnswer: userAnswers[idx],
+          score: overallResults[idx]?.score ?? 0,
+          feedback: overallResults[idx]?.feedback ?? "",
+        })),
         score: finalScoreString,                   
         totalQuestions: questionCount,
         attemptNumber,
@@ -300,6 +297,7 @@ export default function QuizComponent({
     setLoading(false);
     setStatus("Grading complete.");
     setShowGradingResults(true);
+    // Optionally call onQuizComplete or onQuizFail based on pass/fail
   }
 
   function renderGradingResults() {
@@ -337,54 +335,13 @@ export default function QuizComponent({
   }
 
   // ----------------------------
-  // PART 7: Render
+  // PART 5: Render
   // ----------------------------
   return (
     <div style={styles.container}>
-      <h2 style={styles.heading}>Quiz Component (Multi-Type Version)</h2>
-
+      <h2 style={styles.heading}>Auto-Fetched Quiz ({docId})</h2>
       {loading && <p style={styles.text}>Loading... {status}</p>}
       {!loading && status && <p style={{ color: "lightgreen" }}>{status}</p>}
-
-      {/* UI to add combos (type + count) */}
-      <div style={styles.fieldBlock}>
-        <label style={styles.label}>Select Question Type:</label>
-        <select
-          style={styles.input}
-          value={typeToAdd}
-          onChange={(e) => setTypeToAdd(e.target.value)}
-        >
-          <option value="">--Select--</option>
-          {questionTypes.map((qt) => (
-            <option key={qt.id} value={qt.name}>
-              {qt.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div style={styles.fieldBlock}>
-        <label style={styles.label}>Count:</label>
-        <input
-          type="number"
-          style={styles.input}
-          value={countToAdd}
-          onChange={(e) => setCountToAdd(e.target.value)}
-        />
-      </div>
-
-      <button style={styles.button} onClick={handleAddCombo}>
-        Add Combo
-      </button>
-
-      <div style={{ marginTop: "1rem" }}>
-        <p>Current Combos:</p>
-        {renderComboList()}
-      </div>
-
-      <button style={styles.button} onClick={handleGenerateAll} disabled={!selectedCombos.length}>
-        Generate All Questions
-      </button>
 
       {renderQuizForm()}
       {renderGradingResults()}
@@ -392,9 +349,14 @@ export default function QuizComponent({
   );
 }
 
-// ----------------------------
+// Helper to build docId => "quiz" + capitalizedExam + capitalizedStage
+function buildQuizConfigDocId(exam, stage) {
+  const capExam = exam.charAt(0).toUpperCase() + exam.slice(1);
+  const capStage = stage.charAt(0).toUpperCase() + stage.slice(1);
+  return `quiz${capExam}${capStage}`;
+}
+
 // Styles
-// ----------------------------
 const styles = {
   container: {
     padding: "1rem",
@@ -407,29 +369,6 @@ const styles = {
   },
   text: {
     color: "#fff",
-  },
-  fieldBlock: {
-    marginBottom: "0.75rem",
-  },
-  label: {
-    display: "block",
-    marginBottom: "0.25rem",
-  },
-  input: {
-    width: "100%",
-    padding: "8px",
-    borderRadius: "4px",
-    boxSizing: "border-box",
-    marginBottom: "0.5rem",
-  },
-  button: {
-    padding: "8px 16px",
-    backgroundColor: "#444",
-    color: "#fff",
-    border: "none",
-    borderRadius: "4px",
-    cursor: "pointer",
-    marginRight: "0.5rem",
   },
   questionContainer: {
     backgroundColor: "#333",
@@ -455,15 +394,6 @@ const styles = {
     marginBottom: "1rem",
     border: "1px solid #555",
     padding: "0.5rem",
-    borderRadius: "4px",
-  },
-  pre: {
-    whiteSpace: "pre-wrap",
-    color: "#fff",
-    margin: 0,
-    marginTop: "0.5rem",
-    backgroundColor: "#222",
-    padding: "8px",
     borderRadius: "4px",
   },
 };

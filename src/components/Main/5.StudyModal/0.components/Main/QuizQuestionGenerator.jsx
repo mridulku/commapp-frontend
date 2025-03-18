@@ -1,5 +1,4 @@
 // File: QuizQuestionGenerator.js
-
 import axios from "axios";
 import { doc, getDoc } from "firebase/firestore";
 
@@ -69,19 +68,57 @@ export async function generateQuestions({
     };
   }
 
-  // 2) Build the GPT prompt
-  const prompt = `
-You are a question generator. I have a subchapter summary below.
-I want you to produce ${numberOfQuestions} questions of type "${questionTypeDoc.name}".
+  // ----------------------------------------------------------------
+  // 2) Build the GPT prompt in a more "modular" style:
+  //    We define a few "blocks" (or instructions) and then combine them.
+  //    For now, we only use the same pieces as before — subchapterSummary, questionType, numberOfQuestions, etc.
+  //    In the future, we can add more blocks with their own instructions (customInstruction1, etc.).
+  // ----------------------------------------------------------------
 
-Subchapter Summary:
-${subchapterSummary}
-
+  // Example array of blocks — each block can hold data + a snippet of instructions
+  const blocks = [
+    {
+      // base or "context" block
+      name: "baseContext",
+      text: `You are a question generator. I have a subchapter summary below.`,
+    },
+    {
+      // customInstruction1 (placeholder):
+      //   e.g. "Focus on reading speed" or "Use advanced difficulty"
+      //   Right now it's empty, but you can see how you'd add instructions here
+      name: "customInstruction1",
+      text: "",
+    },
+    {
+      // main instruction block: how many questions, which type
+      name: "mainInstruction",
+      text: `I want you to produce ${numberOfQuestions} questions of type "${questionTypeDoc.name}".`,
+    },
+    {
+      // subchapter summary block
+      name: "subchapterSummary",
+      text: `Subchapter Summary:\n${subchapterSummary}`,
+    },
+    {
+      // question type definition block
+      name: "questionTypeDefinition",
+      text: `
 Question Type Definition:
 Name: ${questionTypeDoc.name}
 Expected JSON structure for each question:
 ${JSON.stringify(questionTypeDoc.expectedJsonStructure, null, 2)}
-
+      `.trim(),
+    },
+    {
+      // customInstruction2 (placeholder):
+      //   e.g. "Use scenario-based approach" if scenarioFocus = ...
+      name: "customInstruction2",
+      text: "",
+    },
+    {
+      // final format instruction
+      name: "returnFormat",
+      text: `
 Return valid JSON in the format:
 {
   "questions": [
@@ -90,9 +127,20 @@ Return valid JSON in the format:
 }
 
 No extra commentary, only the JSON object.
-`.trim();
+      `.trim(),
+    },
+  ];
 
-  // 3) Call OpenAI
+  // We combine them into one final prompt string
+  const prompt = blocks
+    .map((block) => block.text.trim())
+    .filter(Boolean) // remove any empty lines if a block is empty
+    .join("\n\n")
+    .trim();
+
+  // ----------------------------------------------------------------
+  // 3) Call OpenAI with our assembled prompt
+  // ----------------------------------------------------------------
   try {
     const response = await axios.post(
       "https://api.openai.com/v1/chat/completions",

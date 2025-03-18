@@ -33,6 +33,7 @@ import QuestionTypesCreator from './diagrams/QuestionTypesCreator';
 import QuestionTypePlayground from './diagrams/QuestionTypePlayground';
 import FlowQuizLatest from './diagrams/FlowQuizLatest';
 import FlowQuizReact from './diagrams/FlowQuizReact';
+import QuizConfigCreator from './diagrams/QuizConfigCreator';
 
 
 
@@ -75,7 +76,8 @@ const diagramComponents = {
   QuestionTypesCreator,
   QuestionTypePlayground,
   FlowQuizLatest,
-  FlowQuizReact
+  FlowQuizReact,
+  QuizConfigCreator
 
 };
 
@@ -279,6 +281,18 @@ const sampleBrainstormings = [
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'FlowQuizReact'
   },
+  {
+    id: 34,
+    title: 'TECH: QuizConfigCreator',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'QuizConfigCreator'
+  },
+
+
+
+
+
+  
 
 
 
