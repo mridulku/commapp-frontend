@@ -9,173 +9,240 @@ import {
 } from "firebase/firestore";
 
 /**
- * generateQuestions
- *  - db: Firestore instance
+ * Main entry point for question generation. 
+ * 
+ *  - db: Firestore
  *  - subChapterId: string
+ *  - examId: string (e.g. "general")
+ *  - quizStage: string (e.g. "remember" / "understand" / etc.)
  *  - openAiKey: string
- *  - selectedTypeName: string
- *  - questionTypeDoc: from Firestore (containing expectedJsonStructure, etc.)
- *  - numberOfQuestions: number
  *
- * Returns an object like:
- *  {
- *    success: boolean,
- *    subchapterSummary: string,
- *    questionsData: { questions: [...] } or null,
- *    error: string (if any)
- *  }
+ * Returns an object:
+ * {
+ *   success: boolean,
+ *   error: string | null,
+ *   questionsData: { questions: [...] } | null
+ * }
  */
 export async function generateQuestions({
   db,
   subChapterId,
+  examId = "general",
+  quizStage = "remember",
   openAiKey,
-  selectedTypeName,
-  questionTypeDoc,
-  numberOfQuestions,
 }) {
-  if (!db || !subChapterId || !openAiKey || !selectedTypeName || !questionTypeDoc) {
+  try {
+    // 1) Build the quizConfig doc ID (assuming your naming scheme)
+    const docId = buildQuizConfigDocId(examId, quizStage);
+
+    // 2) Fetch the quizConfig doc => e.g. { multipleChoice: 1, trueFalse: 2, fillInBlank: 0 }
+    let quizConfigData = {};
+    const quizConfigRef = doc(db, "quizConfigs", docId);
+    const quizConfigSnap = await getDoc(quizConfigRef);
+    if (quizConfigSnap.exists()) {
+      quizConfigData = quizConfigSnap.data();
+    } else {
+      return {
+        success: false,
+        error: `No quizConfig doc found for '${docId}'.`,
+        questionsData: null,
+      };
+    }
+
+    // 3) Fetch subchapter concepts
+    let conceptList = [];
+    const subChapConceptsRef = collection(db, "subchapterConcepts");
+    const conceptQuery = query(subChapConceptsRef, where("subChapterId", "==", subChapterId));
+    const conceptSnap = await getDocs(conceptQuery);
+    conceptList = conceptSnap.docs.map(docSnap => ({
+      id: docSnap.id,
+      ...docSnap.data(),
+    }));
+
+    // 4) If no concepts found => fallback to old approach 
+    //    (generate overall questions once)
+    if (conceptList.length === 0) {
+      const fallbackQuestions = await generateQuestions_Overall({
+        db,
+        subChapterId,
+        openAiKey,
+        quizConfigData,
+      });
+      return {
+        success: true,
+        error: null,
+        questionsData: { questions: fallbackQuestions },
+      };
+    }
+
+    // 5) If we *do* have concepts => generate question sets per concept
+    let allConceptQuestions = [];
+    for (const concept of conceptList) {
+      // For each question type from quizConfigData
+      for (let [typeName, count] of Object.entries(quizConfigData)) {
+        if (count <= 0) continue; // skip if 0
+        // generate "count" questions for *this concept*
+        const batch = await generateQuestions_ForConcept({
+          db,
+          subChapterId,
+          openAiKey,
+          typeName,
+          numberOfQuestions: count,
+          concept, // pass the entire concept doc so we can mention concept.name, etc.
+        });
+        allConceptQuestions.push(...batch);
+      }
+    }
+
+    return {
+      success: true,
+      error: null,
+      questionsData: { questions: allConceptQuestions },
+    };
+  } catch (err) {
     return {
       success: false,
-      subchapterSummary: "",
+      error: err.message,
       questionsData: null,
-      error: "Missing required parameters.",
     };
   }
+}
 
-  // -------------------------------------------------------------------------
-  // 1) Fetch the subchapter doc => get "summary" from "subchapters_demo"
-  // -------------------------------------------------------------------------
+// ------------------------------------------------------------------
+// 2. Helper: Fallback approach => old single-block question generation
+// ------------------------------------------------------------------
+async function generateQuestions_Overall({
+  db,
+  subChapterId,
+  openAiKey,
+  quizConfigData,
+}) {
+  const allQuestions = [];
+  for (let [typeName, count] of Object.entries(quizConfigData)) {
+    if (count <= 0) continue;
+
+    const partial = await generateQuestions_GPT({
+      db,
+      subChapterId,
+      openAiKey,
+      typeName,
+      numberOfQuestions: count,
+      forcedConceptName: null,
+    });
+    allQuestions.push(...partial);
+  }
+  return allQuestions;
+}
+
+// ------------------------------------------------------------------
+// 3. Helper: Concept-based approach => one concept at a time
+// ------------------------------------------------------------------
+async function generateQuestions_ForConcept({
+  db,
+  subChapterId,
+  openAiKey,
+  typeName,
+  numberOfQuestions,
+  concept,
+}) {
+  // concept might have { name, summary, etc. }
+  return generateQuestions_GPT({
+    db,
+    subChapterId,
+    openAiKey,
+    typeName,
+    numberOfQuestions,
+    forcedConceptName: concept.name, // so GPT sets "conceptName": concept.name
+  });
+}
+
+// ------------------------------------------------------------------
+// 4. The GPT logic that fetches subchapter summary, merges prompt blocks, calls GPT
+//    (similar to your existing "generateQuestions" function)
+// ------------------------------------------------------------------
+async function generateQuestions_GPT({
+  db,
+  subChapterId,
+  openAiKey,
+  typeName,
+  numberOfQuestions,
+  forcedConceptName,
+}) {
+  // Step A: fetch sub-chapter summary from "subchapters_demo"
   let subchapterSummary = "";
   try {
     const ref = doc(db, "subchapters_demo", subChapterId);
     const snap = await getDoc(ref);
     if (!snap.exists()) {
-      return {
-        success: false,
-        subchapterSummary: "",
-        questionsData: null,
-        error: `No subchapter with ID = ${subChapterId}`,
-      };
-    }
-    const data = snap.data();
-    subchapterSummary = data.summary || "";
-    if (!subchapterSummary) {
-      return {
-        success: false,
-        subchapterSummary: "",
-        questionsData: null,
-        error: "Subchapter has no summary text.",
-      };
+      console.warn(`No subchapter doc found for: ${subChapterId}`);
+    } else {
+      const data = snap.data();
+      subchapterSummary = data.summary || "";
     }
   } catch (err) {
-    return {
-      success: false,
-      subchapterSummary: "",
-      questionsData: null,
-      error: `Error fetching subchapter: ${err.message}`,
-    };
+    console.error("Error fetching subchapter:", err);
   }
 
-  // -------------------------------------------------------------------------
-  // 2) Fetch all concepts for this sub-chapter from "subchapterConcepts"
-  //    Fields: name, subChapterId, summary, subPoints, createdAt, etc.
-  // -------------------------------------------------------------------------
-  let conceptList = [];
-  try {
-    const subChapConceptsRef = collection(db, "subchapterConcepts");
-    const conceptQuery = query(subChapConceptsRef, where("subChapterId", "==", subChapterId));
-    const conceptSnap = await getDocs(conceptQuery);
+  // Step B: fetch questionType doc from "questionTypes" (like you do now)
+  // This part might vary in your code
+  const questionTypeDoc = await fetchQuestionTypeDoc(db, typeName);
 
-    conceptList = conceptSnap.docs.map((docSnap) => ({
-      id: docSnap.id,
-      ...docSnap.data(),
-    }));
-  } catch (err) {
-    return {
-      success: false,
-      subchapterSummary,
-      questionsData: null,
-      error: `Error fetching subchapter concepts: ${err.message}`,
-    };
+  // Build your prompt blocks
+  let forcedConceptBlock = "";
+  if (forcedConceptName) {
+    forcedConceptBlock = `
+All questions must focus on the concept: "${forcedConceptName}".
+Set each question's "conceptName" field to exactly "${forcedConceptName}".
+    `.trim();
   }
 
-  // From each concept doc, we'll use the "name" field as the concept's name
-  const conceptNames = conceptList.map((c) => c.name).filter(Boolean);
-
-  let conceptText = "No specific concepts found for this sub-chapter.";
-  if (conceptNames.length > 0) {
-    conceptText =
-      `This sub-chapter can be broken down into the following concepts:\n` +
-      conceptNames.map((name, idx) => `${idx + 1}. ${name}`).join("\n");
-  }
-
-  // -------------------------------------------------------------------------
-  // 3) Build the GPT prompt in a modular style
-  // -------------------------------------------------------------------------
   const blocks = [
     {
-      // Base or "context" block
-      name: "baseContext",
-      text: `You are a question generator. I have a subchapter summary below.`,
+      name: "context",
+      text: `You are a question generator. Here's a subchapter summary:\n${subchapterSummary}`,
     },
     {
-      // Main instruction: how many questions, which type
       name: "mainInstruction",
-      text: `I want you to produce ${numberOfQuestions} questions of type "${questionTypeDoc.name}".`,
+      text: `Generate ${numberOfQuestions} "${typeName}" questions.`,
     },
     {
-      // Subchapter summary block
-      name: "subchapterSummary",
-      text: `Subchapter Summary:\n${subchapterSummary}`,
+      name: "forcedConcept",
+      text: forcedConceptBlock,
     },
     {
-      // Concept list block
-      name: "conceptList",
-      text: conceptText,
-    },
-    {
-      // Question type definition block
       name: "questionTypeDefinition",
       text: `
 Question Type Definition:
 Name: ${questionTypeDoc.name}
-Expected JSON structure for each question:
-${JSON.stringify(questionTypeDoc.expectedJsonStructure, null, 2)}
+Expected JSON structure: ${JSON.stringify(questionTypeDoc.expectedJsonStructure, null, 2)}
       `.trim(),
     },
     {
-      // Final format instruction => includes "conceptName"
       name: "returnFormat",
       text: `
-Return valid JSON in the following format:
+Return valid JSON in the format:
 {
   "questions": [
     {
       "question": "...",
-      "type": "${questionTypeDoc.name}",
-      "conceptName": "...", // must match EXACTLY one of the concepts listed above
-      // any other fields as per the expectedJsonStructure
+      "type": "${typeName}",
+      "conceptName": "${forcedConceptName || ""}",
+      ...
     }
   ]
 }
-
-Please ensure:
-1) Each question has a "conceptName" field chosen exactly from the list of concepts above and mark N/A if no concept list has been provided.
-2) No extra commentary—only the JSON object.
+No extra commentary—only the JSON object.
       `.trim(),
     },
   ];
 
-  // Combine them into one final prompt string
   const prompt = blocks
-    .map((block) => block.text.trim())
-    .filter(Boolean) // remove empty strings if any
-    .join("\n\n")
-    .trim();
+    .map(b => b.text.trim())
+    .filter(Boolean)
+    .join("\n\n");
 
-  // -------------------------------------------------------------------------
-  // 4) Call OpenAI with our assembled prompt
-  // -------------------------------------------------------------------------
+  // Step C: Call GPT
+  let parsedQuestions = [];
   try {
     const response = await axios.post(
       "https://api.openai.com/v1/chat/completions",
@@ -185,7 +252,7 @@ Please ensure:
           { role: "system", content: "You are a helpful question generator." },
           { role: "user", content: prompt },
         ],
-        max_tokens: 1000,
+        max_tokens: 1200,
         temperature: 0.7,
       },
       {
@@ -205,31 +272,27 @@ Please ensure:
     let parsed;
     try {
       parsed = JSON.parse(cleaned);
+      parsedQuestions = parsed.questions || [];
     } catch (err) {
-      return {
-        success: false,
-        subchapterSummary,
-        questionsData: {
-          error: "Invalid JSON from GPT",
-          raw: gptMessage,
-        },
-        error: `Error parsing GPT JSON: ${err.message}`,
-      };
+      console.error("Error parsing GPT JSON:", err);
     }
-
-    // Return success
-    return {
-      success: true,
-      subchapterSummary,
-      questionsData: parsed, // e.g. { questions: [...] }
-      error: "",
-    };
   } catch (err) {
-    return {
-      success: false,
-      subchapterSummary,
-      questionsData: null,
-      error: `Error generating questions (OpenAI): ${err.message}`,
-    };
+    console.error("Error calling GPT API:", err);
   }
+
+  return parsedQuestions;
+}
+
+// Helper to build docId => "quizGeneralRemember" or similar
+function buildQuizConfigDocId(exam, stage) {
+  const capExam = exam.charAt(0).toUpperCase() + exam.slice(1);
+  const capStage = stage.charAt(0).toUpperCase() + stage.slice(1);
+  return `quiz${capExam}${capStage}`;
+}
+
+// Example fetch questionTypes doc
+async function fetchQuestionTypeDoc(db, typeName) {
+  const snap = await getDocs(collection(db, "questionTypes"));
+  const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  return arr.find(doc => doc.name === typeName) || { name: typeName, expectedJsonStructure: {} };
 }
