@@ -6,10 +6,6 @@ import ReviseComponent from "./ReviseComponent";
 export default function StageManager({ examId, activity, quizStage, userId }) {
   const subChapterId = activity?.subChapterId || "";
 
-  /**
-   * We'll define pass ratio (0.6 = 60%) per stage.
-   * You can adjust these as needed.
-   */
   const stagePassRatios = {
     remember: 0.6,
     understand: 0.7,
@@ -55,7 +51,6 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
 
       setQuizAttempts(quizArr);
       setRevisionAttempts(revArr);
-
       computeState(quizArr, revArr);
     } catch (err) {
       console.error("StageManager: error fetching attempts:", err);
@@ -152,13 +147,18 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
 
       {showTimeline && (
         <div style={styles.timelinePanel}>
-          {renderTimeline(quizAttempts, revisionAttempts, stagePassRatios[quizStage] || 0.6)}
+          {renderTimeline(
+            quizAttempts,
+            revisionAttempts,
+            stagePassRatios[quizStage] || 0.6
+          )}
         </div>
       )}
 
       <div style={styles.mainContent}>
         {mode === "NO_QUIZ_YET" && (
           <QuizComponent
+            userId={userId}                // <-- Pass userId here
             quizStage={quizStage}
             examId={effectiveExamId}
             subChapterId={subChapterId}
@@ -186,6 +186,7 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
 
         {mode === "CAN_TAKE_NEXT_QUIZ" && lastQuizAttempt && (
           <QuizComponent
+            userId={userId}                // <-- Pass userId here
             quizStage={quizStage}
             examId={effectiveExamId}
             subChapterId={subChapterId}
@@ -275,7 +276,6 @@ function TimelineItem({ item }) {
   );
 }
 
-// basic styling
 const styles = {
   headerRow: {
     display: "flex",

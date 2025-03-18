@@ -31,6 +31,8 @@ import PromptManager from './diagrams/PromptManager';
 import ManualBookCreator from './diagrams/ManualBookCreator';
 import QuestionTypesCreator from './diagrams/QuestionTypesCreator';
 import QuestionTypePlayground from './diagrams/QuestionTypePlayground';
+import FlowQuizLatest from './diagrams/FlowQuizLatest';
+import FlowQuizReact from './diagrams/FlowQuizReact';
 
 
 
@@ -71,7 +73,9 @@ const diagramComponents = {
   PromptInput,
   ManualBookCreator,
   QuestionTypesCreator,
-  QuestionTypePlayground
+  QuestionTypePlayground,
+  FlowQuizLatest,
+  FlowQuizReact
 
 };
 
@@ -263,12 +267,26 @@ const sampleBrainstormings = [
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'QuestionTypePlayground'
   },
+  {
+    id: 32,
+    title: 'TECH: FlowQuizLatest',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'FlowQuizLatest'
+  },
+  {
+    id: 33,
+    title: 'TECH: FlowQuizReact',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'FlowQuizReact'
+  },
 
 
 
   
 
 
+  
+  
 
   
 
