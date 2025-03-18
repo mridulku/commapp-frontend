@@ -1,212 +1,196 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../../../../../firebase"; // Adjust path as needed
+import { generateRevisionContent } from "./RevisionContentGenerator"; // We'll create this
 import axios from "axios";
-import { useSelector } from "react-redux";
-import LoadingSpinner from "../Secondary/LoadingSpinner";
 
 /**
- * Generic revision for any stage and exam
- * E.g., if examId = "general", quizStage="analyze" => "reviseGeneralAnalyze"
+ * "ReviseComponent" that parallels "QuizComponent."
+ *  - Instead of calling a local /api/generate, we do the GPT call directly in the front-end
+ *  - We build a docId like "reviseExamStage" and fetch from "revisionConfigs" collection
+ *  - Then generate revision content (similar to generateQuestions)
  */
 export default function ReviseComponent({
-  examId = "general",  // default if none provided
-  quizStage,           // e.g. "analyze"
-  subChapterId,
-  revisionNumber,
+  examId = "general",
+  quizStage = "remember",
+  subChapterId = "",
+  revisionNumber = 1,
   onRevisionDone,
 }) {
-  const userId = useSelector((state) => state.auth?.userId);
-
-  // Build the prompt key, e.g. "reviseGeneralAnalyze"
-  const promptKey = `revise${capitalize(examId)}${capitalize(quizStage)}`;
-
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [responseData, setResponseData] = useState(null);
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+
+  // This is the final object returned by GPT (parsed JSON) 
+  const [revisionContent, setRevisionContent] = useState(null);
+
+  // If you want to incorporate quiz attempts data, you can store it here:
+  // (For now, we can keep it static or pass in as a prop; this is just an example.)
+  const [quizAttemptsData] = useState([
+    // E.g., a minimal placeholder array (in the future, pass real data):
+    { attemptNumber: 1, score: "2/5", timestamp: "2025-01-01T10:00:00Z" },
+    { attemptNumber: 2, score: "4/5", timestamp: "2025-01-03T14:30:00Z" },
+  ]);
+
+  // Read the OpenAI key from your .env (Vite)
+  const openAiKey = import.meta.env.VITE_OPENAI_KEY || "";
+
+  // Build docId => e.g. "reviseGeneralRemember"
+  const docId = buildRevisionConfigDocId(examId, quizStage);
+  console.log("ReviseComponent => docId for config:", docId);
 
   useEffect(() => {
-    if (!subChapterId) return;
-    fetchRevisionGPT();
+    if (!subChapterId) {
+      console.log("ReviseComponent: missing subChapterId => skipping generation.");
+      return;
+    }
+    if (!openAiKey) {
+      console.warn("ReviseComponent: No OpenAI key found. Generation will fail.");
+      return;
+    }
+    fetchAndGenerateRevision();
     // eslint-disable-next-line
-  }, [subChapterId, revisionNumber, examId, quizStage]);
+  }, [subChapterId, examId, quizStage, revisionNumber]);
 
-  async function fetchRevisionGPT() {
+  async function fetchAndGenerateRevision() {
     try {
       setLoading(true);
+      setStatus("Fetching revision config & generating content...");
       setError("");
-      setResponseData(null);
 
-      const res = await axios.post("http://localhost:3001/api/generate", {
-        userId,
-        subchapterId: subChapterId,
-        promptKey,
+      // 1) Fetch the revision config doc from Firestore: revisionConfigs/<docId>
+      const revConfigRef = doc(db, "revisionConfigs", docId);
+      const revConfigSnap = await getDoc(revConfigRef);
+      if (!revConfigSnap.exists()) {
+        setStatus(`No revisionConfig doc found for '${docId}'.`);
+        setLoading(false);
+        return;
+      }
+      const configData = revConfigSnap.data(); // e.g. { instruction: "...", customFields: ... }
+
+      // 2) Generate the revision content
+      const result = await generateRevisionContent({
+        db,
+        subChapterId,
+        openAiKey,
+        revisionConfig: configData,
+        quizAttempts: quizAttemptsData, // pass your quiz attempt data here
       });
-      setResponseData(res.data);
+
+      if (!result.success) {
+        setError(result.error);
+        setStatus("Failed to generate revision content.");
+        setLoading(false);
+        return;
+      }
+
+      // Store the parsed content in state
+      setRevisionContent(result.revisionData);
+      setStatus("Revision content generated successfully.");
     } catch (err) {
-      console.error("Error fetching revision GPT:", err);
-      setError(err.message || "Error fetching revision GPT");
+      console.error("Error generating revision content:", err);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleDone() {
+  // Called when user finishes the revision
+  async function handleSubmitRevision() {
     try {
+      // This can be a direct Firestore call or an API call – whichever your app uses:
       await axios.post("http://localhost:3001/api/submitRevision", {
-        userId,
+        userId: "demoUserId", // or read from Redux
         subchapterId: subChapterId,
         revisionType: quizStage,
         revisionNumber,
       });
-      onRevisionDone?.();
+      console.log("Revision attempt recorded on server!");
     } catch (err) {
-      console.error("Error saving revision doc:", err);
-      alert("Failed to record revision!");
+      console.error("Error submitting revision attempt:", err);
+      alert("Failed to record revision attempt.");
+      return;
     }
+
+    // Fire callback if provided
+    onRevisionDone?.();
   }
 
-  // ---- RENDER LOGIC ----
-  if (!subChapterId) {
-    return <div style={styles.text}>No subChapterId.</div>;
-  }
-  if (loading) {
-    return <LoadingSpinner message="Building your revision..." />;
-  }
-  if (error) {
-    return <div style={styles.textError}>Error: {error}</div>;
-  }
-  if (!responseData) {
-    return <div style={styles.text}>No data loaded yet.</div>;
-  }
+  // Simple rendering example
+  function renderRevisionContent() {
+    if (!revisionContent) return null;
 
-  // If there's no matching prompt doc in Firestore, the route logs a warning and
-  // returns an empty promptText => result. We can detect that here:
-  if (!responseData.result) {
+    // Suppose the GPT returns something like:
+    // { title: "...", bulletPoints: [...], exampleSummary: "..." }
+    // The structure is up to you; you can also define a more dynamic renderer
     return (
-      <div style={styles.container}>
-        <h3 style={styles.heading}>
-          Revision ({quizStage})
-        </h3>
-        <p style={{ ...styles.text, color: "red" }}>
-          No prompt found for <b>{promptKey}</b>. Please create that prompt in Firestore.
-        </p>
-        <button onClick={handleDone} style={styles.button}>
-          Done with Revision
-        </button>
+      <div style={styles.revisionBox}>
+        {revisionContent.title && <h4>{revisionContent.title}</h4>}
+        {Array.isArray(revisionContent.bulletPoints) && (
+          <ul>
+            {revisionContent.bulletPoints.map((pt, idx) => (
+              <li key={idx}>{pt}</li>
+            ))}
+          </ul>
+        )}
+        {revisionContent.exampleSummary && (
+          <p>{revisionContent.exampleSummary}</p>
+        )}
       </div>
     );
   }
-
-  // parse JSON from GPT
-  let raw = responseData.result || "";
-  if (raw.startsWith("```")) {
-    raw = stripMarkdownFences(raw);
-  }
-
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    return (
-      <div style={styles.container}>
-        <h3 style={styles.heading}>Revision ({quizStage})</h3>
-        <p style={{ ...styles.text, color: "red" }}>
-          GPT response for <b>{promptKey}</b> is not valid JSON.
-        </p>
-        <pre style={styles.pre}>{responseData.result}</pre>
-        <button onClick={handleDone} style={styles.button}>
-          Done with Revision
-        </button>
-      </div>
-    );
-  }
-
-  const { UIconfig = {} } = responseData;
-  const { fields = [] } = UIconfig;
 
   return (
     <div style={styles.container}>
-      <h3 style={styles.heading}>
+      <h2 style={styles.heading}>
         Revision ({quizStage}) – Attempt #{revisionNumber}
-      </h3>
+      </h2>
 
-      {fields.length > 0 ? (
-        fields.map((fieldConfig, idx) => renderField(parsed, fieldConfig, idx))
-      ) : (
-        <pre style={styles.pre}>{JSON.stringify(parsed, null, 2)}</pre>
-      )}
+      {loading && <p>Loading... {status}</p>}
+      {!loading && status && <p style={{ color: "lightgreen" }}>{status}</p>}
+      {error && <p style={{ color: "red" }}>{error}</p>}
 
-      <button onClick={handleDone} style={styles.button}>
+      {renderRevisionContent()}
+
+      <button style={styles.submitBtn} onClick={handleSubmitRevision}>
         Done with Revision
       </button>
     </div>
   );
 }
 
-function renderField(parsed, fieldConfig, key) {
-  const { field, label, style } = fieldConfig;
-  const value = parsed[field] || "";
-  return (
-    <div key={key} style={styles.fieldBlock}>
-      <strong style={styles.fieldLabel}>{label}:</strong>
-      <div style={{ ...styles.fieldValue, ...(style || {}) }}>
-        {Array.isArray(value)
-          ? value.map((item, idx) => <div key={idx}>• {item}</div>)
-          : value}
-      </div>
-    </div>
-  );
-}
-
-function stripMarkdownFences(text) {
-  return text.replace(/```(json)?/gi, "").trim();
-}
-
-function capitalize(str) {
-  if (!str) return str;
-  return str.charAt(0).toUpperCase() + str.slice(1);
+// Helper to build docId => "revise" + capitalizedExam + capitalizedStage
+function buildRevisionConfigDocId(exam, stage) {
+  const capExam = exam.charAt(0).toUpperCase() + exam.slice(1);
+  const capStage = stage.charAt(0).toUpperCase() + stage.slice(1);
+  return `revise${capExam}${capStage}`;
 }
 
 const styles = {
   container: {
     padding: "1rem",
     color: "#fff",
+    maxWidth: "600px",
+    margin: "0 auto",
+    backgroundColor: "#222",
+    borderRadius: "4px",
   },
   heading: {
-    margin: 0,
     marginBottom: "1rem",
-    fontSize: "1.2rem",
   },
-  text: {
-    color: "#fff",
+  revisionBox: {
+    backgroundColor: "#333",
+    padding: "8px",
+    borderRadius: "4px",
+    marginTop: "1rem",
   },
-  textError: {
-    color: "red",
-    padding: "1rem",
-  },
-  button: {
+  submitBtn: {
     marginTop: "1rem",
     padding: "8px 16px",
-    backgroundColor: "#444",
+    backgroundColor: "teal",
     color: "#fff",
     border: "none",
     borderRadius: "4px",
     cursor: "pointer",
-  },
-  pre: {
-    backgroundColor: "transparent",
-    color: "#fff",
-    whiteSpace: "pre-wrap",
-    border: "none",
-    margin: "1rem 0",
-  },
-  fieldBlock: {
-    marginBottom: "1rem",
-  },
-  fieldLabel: {
-    fontWeight: "bold",
-    marginBottom: "0.25rem",
-  },
-  fieldValue: {
-    color: "#fff",
   },
 };
