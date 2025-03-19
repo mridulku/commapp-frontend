@@ -15,6 +15,7 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
 
   const effectiveExamId = examId || "general";
 
+  // Existing state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [quizAttempts, setQuizAttempts] = useState([]);
@@ -23,11 +24,22 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
   const [lastQuizAttempt, setLastQuizAttempt] = useState(null);
   const [showTimeline, setShowTimeline] = useState(false);
 
+  // NEW: Store subchapter concepts in state so we can do concept-level reporting
+  const [subchapterConcepts, setSubchapterConcepts] = useState([]);
+  // We'll also store computed concept stats for the *latest* quiz in a separate variable
+  const [conceptStats, setConceptStats] = useState(null);
+
   useEffect(() => {
     fetchData();
     // eslint-disable-next-line
   }, [subChapterId, userId, quizStage]);
 
+  /**
+   * Main data fetch:
+   *  1) quiz attempts + revision attempts
+   *  2) subchapter concepts
+   *  3) compute pass/fail mode
+   */
   async function fetchData() {
     if (!subChapterId || !userId) {
       console.log("StageManager: missing subChapterId or userId => skipping fetch.");
@@ -49,11 +61,21 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
       });
       const revArr = revRes.data.revisions || [];
 
+      // 3) Subchapter concepts
+      //    (If you have your own Firebase fetch, do that; here is an example REST call.)
+      const conceptRes = await axios.get("http://localhost:3001/api/getSubchapterConcepts", {
+        params: { subchapterId: subChapterId },
+      });
+      const conceptArr = conceptRes.data.concepts || [];
+
       setQuizAttempts(quizArr);
       setRevisionAttempts(revArr);
-      computeState(quizArr, revArr);
+      setSubchapterConcepts(conceptArr);
+
+      // Evaluate pass/fail mode
+      computeState(quizArr, revArr, conceptArr);
     } catch (err) {
-      console.error("StageManager: error fetching attempts:", err);
+      console.error("StageManager: error fetching attempts or concepts:", err);
       setError(err.message || "Error fetching data");
     } finally {
       setLoading(false);
@@ -61,28 +83,20 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
   }
 
   /**
-   * Parse a stored "score" string and convert it into a ratio from 0..1.
-   * Examples of accepted formats:
-   *  - "72.00%" => 0.72
-   *  - "50%" => 0.5
-   *  - "3/5" => 0.6
-   * Returns NaN if format not recognized.
+   * Convert a "score" string (e.g. "72.00%", "3/5") into 0..1 ratio.
    */
   function parseScoreForRatio(scoreString) {
     if (!scoreString) return NaN;
-
-    // 1) Check if it ends with '%' (percentage-based)
     const trimmed = scoreString.trim();
+
+    // Check for percentage
     if (trimmed.endsWith("%")) {
-      // e.g. "72.00%" => parseFloat("72.00") => 72.0 => 0.72
-      const numPart = trimmed.slice(0, -1); // remove '%'
+      const numPart = trimmed.slice(0, -1); 
       const parsed = parseFloat(numPart);
-      if (!isNaN(parsed)) {
-        return parsed / 100;
-      }
+      return isNaN(parsed) ? NaN : parsed / 100;
     }
 
-    // 2) Check if it has a slash => "X/Y"
+    // Check for "X/Y"
     if (trimmed.includes("/")) {
       const [numStr, denomStr] = trimmed.split("/");
       const numericScore = parseFloat(numStr);
@@ -92,14 +106,19 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
       }
     }
 
-    // 3) Otherwise, not recognized => NaN
+    // otherwise unrecognized
     return NaN;
   }
 
-  function computeState(quizArr, revArr) {
+  /**
+   * Decide pass/fail mode based on the newest quiz attempt.
+   * Also, compute concept-level stats for that attempt so we can display them.
+   */
+  function computeState(quizArr, revArr, conceptArr) {
     if (!quizArr.length) {
       setMode("NO_QUIZ_YET");
       setLastQuizAttempt(null);
+      setConceptStats(null);
       return;
     }
 
@@ -107,33 +126,72 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
     const [latestQuiz] = quizArr;
     setLastQuizAttempt(latestQuiz);
 
+    // --- (A) Overall pass/fail logic (unchanged) ---
     const passRatio = stagePassRatios[quizStage] || 0.6;
-
-    // parse the quiz's score string into ratio
     const ratio = parseScoreForRatio(latestQuiz.score);
-
-    // if ratio is NaN => can't parse => go to revision
     if (isNaN(ratio)) {
       setMode("NEED_REVISION");
-      return;
-    }
-
-    const passed = ratio >= passRatio;
-    if (passed) {
-      setMode("QUIZ_COMPLETED");
-      return;
-    }
-
-    // Not passed => see if there's a matching revision
-    const attemptNum = latestQuiz.attemptNumber;
-    const matchingRev = revArr.find((r) => r.revisionNumber === attemptNum);
-    if (!matchingRev) {
-      setMode("NEED_REVISION");
     } else {
-      setMode("CAN_TAKE_NEXT_QUIZ");
+      const passed = ratio >= passRatio;
+      if (passed) {
+        setMode("QUIZ_COMPLETED");
+      } else {
+        // Not passed => see if there's a matching revision
+        const attemptNum = latestQuiz.attemptNumber;
+        const matchingRev = revArr.find((r) => r.revisionNumber === attemptNum);
+        if (!matchingRev) {
+          setMode("NEED_REVISION");
+        } else {
+          setMode("CAN_TAKE_NEXT_QUIZ");
+        }
+      }
+    }
+
+    // --- (B) Compute concept-level stats for the LATEST attempt, storing in state ---
+    if (latestQuiz?.quizSubmission && conceptArr.length > 0) {
+      const stats = buildConceptStats(latestQuiz.quizSubmission, conceptArr);
+      setConceptStats(stats);
+    } else {
+      setConceptStats(null);
     }
   }
 
+  /**
+   * Utility: turn quizSubmission[] + list of subchapterConcepts into a conceptStats object/array
+   */
+  function buildConceptStats(quizSubmission, conceptArr) {
+    // Tally correct vs. total for each conceptName
+    const countMap = {};
+    quizSubmission.forEach((q) => {
+      const cName = q.conceptName || "UnknownConcept";
+      if (!countMap[cName]) {
+        countMap[cName] = { correct: 0, total: 0 };
+      }
+      countMap[cName].total++;
+      // If we treat a question as correct if q.score >= 1:
+      if (q.score && parseFloat(q.score) >= 1) {
+        countMap[cName].correct++;
+      }
+    });
+
+    // Now build a list in the order of conceptArr
+    // conceptArr might look like: [ {name: "ConceptA"}, {name: "ConceptB"} ]
+    const statsArray = conceptArr.map((c) => {
+      const cName = c.name; // or c.conceptName
+      const rec = countMap[cName] || { correct: 0, total: 0 };
+      const ratio = rec.total > 0 ? rec.correct / rec.total : 0;
+      return {
+        conceptName: cName,
+        correct: rec.correct,
+        total: rec.total,
+        ratio,
+      };
+    });
+
+    return statsArray;
+  }
+
+  // Handlers
   function handleQuizComplete() {
     console.log("StageManager: handleQuizComplete => re-fetch data");
     fetchData();
@@ -147,6 +205,7 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
     fetchData();
   }
 
+  // Render logic
   if (!subChapterId || !userId) {
     return <div style={{ color: "#fff" }}>No valid subChapterId/userId.</div>;
   }
@@ -178,6 +237,7 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
         </button>
       </div>
 
+      {/* Timeline stays the same */}
       {showTimeline && (
         <div style={styles.timelinePanel}>
           {renderTimeline(
@@ -189,6 +249,12 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
       )}
 
       <div style={styles.mainContent}>
+        {/* 
+          1) No quiz => show first quiz
+          2) Quiz completed => show success
+          3) Need Revision => show revision 
+          4) or show next quiz if revision done
+        */}
         {mode === "NO_QUIZ_YET" && (
           <QuizComponent
             userId={userId}
@@ -202,7 +268,7 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
         )}
 
         {mode === "QUIZ_COMPLETED" && (
-          <div style={{ color: "lightgreen" }}>
+          <div style={{ color: "lightgreen", marginBottom: "1rem" }}>
             <p>Congratulations! You passed the <b>{quizStage}</b> stage.</p>
           </div>
         )}
@@ -229,12 +295,39 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
             onQuizFail={handleQuizFail}
           />
         )}
+
+        {/* NEW: Show concept stats for the last attempt (if we have them) */}
+        {lastQuizAttempt && conceptStats && conceptStats.length > 0 && (
+          <div style={{ marginTop: "1rem" }}>
+            <h3>Concept Performance (Last Attempt)</h3>
+            <table style={{ borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={styles.tableHeader}>Concept</th>
+                  <th style={styles.tableHeader}>Correct</th>
+                  <th style={styles.tableHeader}>Total</th>
+                  <th style={styles.tableHeader}>% Correct</th>
+                </tr>
+              </thead>
+              <tbody>
+                {conceptStats.map((cs, idx) => (
+                  <tr key={idx}>
+                    <td style={styles.tableCell}>{cs.conceptName}</td>
+                    <td style={styles.tableCell}>{cs.correct}</td>
+                    <td style={styles.tableCell}>{cs.total}</td>
+                    <td style={styles.tableCell}>{(cs.ratio * 100).toFixed(1)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-// Timeline
+// Timeline code remains basically the same
 function renderTimeline(quizArr, revArr, passRatio) {
   if (!quizArr.length) {
     return (
@@ -280,25 +373,14 @@ function renderTimeline(quizArr, revArr, passRatio) {
   );
 }
 
-/**
- * Helper to parse a string like "72.00%", "50%", or "3/5" into a 0..1 ratio for the timeline.
- * If unrecognized, returns 0.
- */
 function parseScoreForTimeline(scoreString) {
   if (!scoreString) return 0;
-
-  // 1) If ends with '%'
   const trimmed = scoreString.trim();
   if (trimmed.endsWith("%")) {
-    const numPart = trimmed.slice(0, -1); 
+    const numPart = trimmed.slice(0, -1);
     const parsed = parseFloat(numPart);
-    if (!isNaN(parsed)) {
-      return parsed / 100;
-    }
-    return 0;
+    return !isNaN(parsed) ? parsed / 100 : 0;
   }
-
-  // 2) If it has a slash => "X/Y"
   if (trimmed.includes("/")) {
     const [numStr, denomStr] = trimmed.split("/");
     const numericScore = parseFloat(numStr);
@@ -306,9 +388,7 @@ function parseScoreForTimeline(scoreString) {
     if (!isNaN(numericScore) && !isNaN(outOf) && outOf > 0) {
       return numericScore / outOf;
     }
-    return 0;
   }
-
   return 0;
 }
 
@@ -339,6 +419,7 @@ function TimelineItem({ item }) {
   );
 }
 
+// Inline styles
 const styles = {
   headerRow: {
     display: "flex",
@@ -383,5 +464,15 @@ const styles = {
     fontSize: "0.75rem",
     marginTop: "4px",
     color: "#aaa",
+  },
+  tableHeader: {
+    borderBottom: "1px solid #aaa",
+    padding: "4px 8px",
+    textAlign: "left",
+  },
+  tableCell: {
+    borderBottom: "1px solid #444",
+    padding: "4px 8px",
+    textAlign: "left",
   },
 };
