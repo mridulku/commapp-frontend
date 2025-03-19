@@ -76,6 +76,7 @@ export default function QuizComponent({
         setStatus("Generating questions...");
 
         const result = await generateQuestions({
+          userId,
           db,
           subChapterId,
           examId,

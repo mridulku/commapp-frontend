@@ -15,10 +15,10 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
 
   // Pass/fail thresholds by stage
   const stagePassRatios = {
-    remember: 0.1,
-    understand: 0.7,
-    apply: 0.6,
-    analyze: 0.7,
+    remember: 1,
+    understand: 1,
+    apply: 1,
+    analyze: 1,
   };
   const effectiveExamId = examId || "general";
 
@@ -189,6 +189,23 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
     }
   }
 
+  function getCellStyle(passOrFail) {
+    if (passOrFail === "PASS") return styles.passCell;
+    if (passOrFail === "FAIL") return styles.failCell;
+    return styles.notTestedCell; // default or a new style
+  }
+
+  function getResultCellStyle(passOrFail) {
+    if (passOrFail === "PASS") {
+      return styles.passCell;
+    }
+    if (passOrFail === "NOT_TESTED") {
+      return styles.notTestedCell; 
+    }
+    // Otherwise, "FAIL"
+    return styles.failCell;
+  }
+
   /**
    * buildConceptStats: given a single quizSubmission[] and the list of subchapterConcepts,
    *   returns an array of objects [ { conceptName, correct, total, ratio, passOrFail }, ... ]
@@ -222,8 +239,16 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
     conceptNamesSet.forEach((cName) => {
       const rec = countMap[cName] || { correct: 0, total: 0 };
       const ratio = rec.total > 0 ? rec.correct / rec.total : 0;
-      const passOrFail = ratio === 1.0 ? "PASS" : "FAIL";
-      statsArray.push({
+      let passOrFail;
+
+      if (rec.total === 0) {
+        passOrFail = "NOT_TESTED";  // or "NA"
+      } else if (ratio === 1.0) {
+        passOrFail = "PASS";
+      } else {
+        passOrFail = "FAIL";
+      }
+        statsArray.push({
         conceptName: cName,
         correct: rec.correct,
         total: rec.total,
@@ -368,8 +393,8 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
                       <td style={styles.tableCell}>{cs.correct}</td>
                       <td style={styles.tableCell}>{cs.total}</td>
                       <td style={styles.tableCell}>{ratioPct}%</td>
-                      <td style={isPass ? styles.passCell : styles.failCell}>
-                        {cs.passOrFail}
+                      <td style={getCellStyle(cs.passOrFail)}>
+                      {cs.passOrFail}
                       </td>
                     </tr>
                   );
@@ -410,8 +435,8 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
                             <td style={styles.tableCell}>{cs.correct}</td>
                             <td style={styles.tableCell}>{cs.total}</td>
                             <td style={styles.tableCell}>{ratioPct}%</td>
-                            <td style={isPass ? styles.passCell : styles.failCell}>
-                              {cs.passOrFail}
+                            <td style={getResultCellStyle(cs.passOrFail)}>
+                            {cs.passOrFail}
                             </td>
                           </tr>
                         );
@@ -600,6 +625,14 @@ const styles = {
     textAlign: "left",
     backgroundColor: "red",
     color: "#fff",
+    fontWeight: "bold",
+  },
+  notTestedCell: {
+    borderBottom: "1px solid #444",
+    padding: "4px 8px",
+    textAlign: "left",
+    backgroundColor: "yellow", // or some other color
+    color: "#000",
     fontWeight: "bold",
   },
 };

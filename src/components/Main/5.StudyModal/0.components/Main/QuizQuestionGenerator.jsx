@@ -1,7 +1,8 @@
 /**
  * File: QuizQuestionGenerator.js
- * Description: Handles question generation from GPT, returning an array of question objects
- * that already contain correct answers/expected answers. 
+ * Description:
+ *   - Handles question generation from GPT, returning an array of question objects
+ *   - Now excludes any concepts that the user has already passed at 100%
  */
 
 import axios from "axios";
@@ -12,21 +13,17 @@ import {
   getDocs,
   query,
   where,
+  orderBy,
 } from "firebase/firestore";
 
 /**
  * Main entry point for question generation for a subchapter + stage.
- * This function fetches the quizConfig doc (e.g. quizRememberGeneral),
- * then for each question type in that config, calls GPT to generate
- * the requested number of questions. 
- * 
- * For local vs. GPT-based grading:
- *   - If question type is multipleChoice/trueFalse/fillInBlank/etc.,
- *     we instruct GPT to include "correctIndex"/"correctValue"/"answerKey"
- *     in the JSON.
- *   - If question type is openEnded/shortAnswer/scenario/etc., 
- *     we instruct GPT to include an "expectedAnswer" or "answerGuidance",
- *     which we later send to GPT for grading.
+ * This function:
+ *   1) finds any concepts the user has already passed (100% correctness),
+ *   2) fetches the quizConfig doc (e.g. quizGeneralRemember),
+ *   3) fetches subchapterConcepts,
+ *   4) filters out "passed" concepts,
+ *   5) calls GPT or local generation to produce questions only for remaining concepts.
  */
 export async function generateQuestions({
   db,
@@ -34,8 +31,12 @@ export async function generateQuestions({
   examId = "general",
   quizStage = "remember",
   openAiKey,
+  userId, // <-- newly required so we can fetch prior attempts
 }) {
   try {
+    // 0) First, gather a set of concepts the user has already "passed" at 100%
+    const passedConceptsSet = await findPassedConcepts(db, userId, subChapterId, quizStage);
+
     // 1) Build the quizConfig doc ID (e.g. "quizGeneralRemember")
     const docId = buildQuizConfigDocId(examId, quizStage);
 
@@ -66,7 +67,14 @@ export async function generateQuestions({
       ...docSnap.data(),
     }));
 
-    // 4) If no concepts found => fallback approach: generate overall questions once
+    // 3a) Filter out any concepts that appear in passedConceptsSet
+    //     (assuming we match by concept's "name")
+    conceptList = conceptList.filter((c) => {
+      const cName = c.name; // or c.conceptName, depending on your schema
+      return !passedConceptsSet.has(cName);
+    });
+
+    // 4) If no concepts remain => fallback approach (maybe empty or generate overall)
     if (conceptList.length === 0) {
       const fallbackQuestions = await generateQuestions_Overall({
         db,
@@ -81,7 +89,7 @@ export async function generateQuestions({
       };
     }
 
-    // 5) If we do have concepts => generate question sets per concept
+    // 5) If we do have filtered concepts => generate question sets per concept
     let allConceptQuestions = [];
     for (const concept of conceptList) {
       // For each question type from quizConfigData
@@ -114,9 +122,71 @@ export async function generateQuestions({
   }
 }
 
-// ------------------------------------------------------------------
-// 2. Helper: fallback approach => old single-block question generation
-// ------------------------------------------------------------------
+/**
+ * Helper: findPassedConcepts
+ *  - Fetch all quiz attempts for the user/subChapter/quizStage
+ *  - For each attempt, check question "conceptName" + "score"
+ *  - If concept is 100% correct in that attempt => mark as "passed"
+ *  - We'll collect a Set of concept names the user has *ever* gotten 100% on
+ */
+async function findPassedConcepts(db, userId, subChapterId, quizStage) {
+  const passedSet = new Set();
+
+  try {
+    // 1) Fetch all attempts from "quizzes_demo" with userId, subchapterId, quizType
+    const quizRef = collection(db, "quizzes_demo");
+    const q = query(
+      quizRef,
+      where("userId", "==", userId),
+      where("subchapterId", "==", subChapterId),
+      where("quizType", "==", quizStage),
+      orderBy("attemptNumber", "desc")
+    );
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      // No attempts => user hasn't passed anything
+      return passedSet;
+    }
+
+    // 2) For each attempt, gather concept correctness
+    snap.forEach((docSnap) => {
+      const data = docSnap.data();
+      const quizSubmission = data.quizSubmission || [];
+      // We'll track concept -> { correct: X, total: Y } for *that attempt*
+      // If correct == total, user got 100% for that concept in this attempt => passed
+      const conceptMap = {};
+
+      quizSubmission.forEach((qItem) => {
+        const cName = qItem.conceptName || "UnknownConcept";
+        if (!conceptMap[cName]) {
+          conceptMap[cName] = { correct: 0, total: 0 };
+        }
+        conceptMap[cName].total++;
+        // if qItem.score >= 1 => correct
+        if (parseFloat(qItem.score) >= 1) {
+          conceptMap[cName].correct++;
+        }
+      });
+
+      // Now see if any concept has 100% => ratio == 1
+      Object.keys(conceptMap).forEach((cName) => {
+        const { correct, total } = conceptMap[cName];
+        if (total > 0 && correct === total) {
+          passedSet.add(cName);
+        }
+      });
+    });
+  } catch (err) {
+    console.error("Error in findPassedConcepts:", err);
+  }
+
+  return passedSet;
+}
+
+/**
+ * Helper: If no concepts remain or if no concepts found initially,
+ * we generate an "overall" question set. 
+ */
 async function generateQuestions_Overall({ db, subChapterId, openAiKey, quizConfigData }) {
   const allQuestions = [];
   for (let [typeName, count] of Object.entries(quizConfigData)) {
@@ -135,9 +205,9 @@ async function generateQuestions_Overall({ db, subChapterId, openAiKey, quizConf
   return allQuestions;
 }
 
-// ------------------------------------------------------------------
-// 3. Helper: concept-based approach => one concept at a time
-// ------------------------------------------------------------------
+/**
+ * Helper: concept-based approach => one concept at a time
+ */
 async function generateQuestions_ForConcept({
   db,
   subChapterId,
@@ -157,9 +227,9 @@ async function generateQuestions_ForConcept({
   });
 }
 
-// ------------------------------------------------------------------
-// 4. The GPT logic that fetches subchapter summary, merges prompt blocks, calls GPT
-// ------------------------------------------------------------------
+/**
+ * GPT logic that fetches subchapter summary, merges prompt blocks, calls GPT
+ */
 async function generateQuestions_GPT({
   db,
   subChapterId,
@@ -183,11 +253,7 @@ async function generateQuestions_GPT({
     console.error("Error fetching subchapter:", err);
   }
 
-  // Step B: (Optional) fetch questionType doc from "questionTypes" to see JSON structure
-  //         This is up to you. If you have that structure, it can help shape the prompt.
-  //         For brevity, we skip that here or we can do it if needed.
-
-  // Build an instruction block that demands correct or expected answers:
+  // Build any forced concept instructions
   let forcedConceptBlock = "";
   if (forcedConceptName) {
     forcedConceptBlock = `
@@ -196,8 +262,6 @@ Set each question's "conceptName" field to "${forcedConceptName}".
     `.trim();
   }
 
-  // The important part: Telling GPT how to format "correctIndex" etc.
-  // We'll show a short snippet as an example. You can expand for "ranking" or "compare/contrast."
   const systemPrompt = `You are a helpful question generator that outputs JSON only.`;
 
   const userPrompt = `
@@ -212,20 +276,20 @@ Include:
 - "question": The question text
 - "type": "${typeName}"
 - "conceptName": (if forced, otherwise blank)
-- For multipleChoice => include "options": [..] and "correctIndex": (the 0-based index of the correct option)
+- For multipleChoice => include "options": [..] and "correctIndex": ...
 - For trueFalse => include "correctValue": "true" or "false"
 - For fillInBlank => include "answerKey": "..."
-- For shortAnswer / openEnded / compareContrast => include "expectedAnswer": "..."
-- For scenario => could also have "scenarioText" plus "expectedAnswer"
+- For openEnded/shortAnswer/compareContrast => include "expectedAnswer": "..."
+- For scenario => can have "scenarioText" + "expectedAnswer"
 
-Return a valid JSON object exactly in this format:
+Return valid JSON like:
 {
   "questions": [
     {
       "question": "...",
       "type": "${typeName}",
       "conceptName": "...",
-      ... // any other fields like correctIndex, expectedAnswer, etc.
+      ...
     },
     ...
   ]
@@ -275,7 +339,9 @@ No extra commentary—only valid JSON.
   return parsedQuestions;
 }
 
-// Helper to build docId => e.g. "quizGeneralRemember"
+/**
+ * Helper: buildQuizConfigDocId => e.g. "quizGeneralRemember"
+ */
 function buildQuizConfigDocId(exam, stage) {
   const capExam = exam.charAt(0).toUpperCase() + exam.slice(1);
   const capStage = stage.charAt(0).toUpperCase() + stage.slice(1);
