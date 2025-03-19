@@ -1,9 +1,9 @@
 // PlanFetcher.jsx
 import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { fetchPlan } from "./0.store/planSlice";
+import { fetchPlan } from "../../../store/planSlice";
 
-import { setUserId } from "./0.store/authSlice";
+import { setUserId } from "../../../store/authSlice";
 
 import TopBar from "./0.components/Secondary/TopBar";
 import BottomBar from "./0.components/Secondary/BottomBar";

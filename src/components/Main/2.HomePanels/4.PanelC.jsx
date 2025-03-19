@@ -1,5 +1,4 @@
 // src/components/DetailedBookViewer/PanelC.jsx
-
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import {
@@ -10,10 +9,10 @@ import {
   Button,
 } from "@mui/material";
 
-// REPLACE OLD ADAPTIVE PLAYER IMPORT:
-// import AdaptivePlayerModal from "../3.AdaptiveModal/AdaptivePlayerModal";
+// NEW: import useSelector to read examType from Redux
+import { useSelector } from "react-redux";
 
-// NEW: import your Redux-based PlanFetcher
+// Import your Redux-based PlanFetcher
 import PlanFetcher from "../5.StudyModal/StudyModal"; // adjust path if needed
 
 // A helper to randomize icons for each book tile
@@ -25,15 +24,23 @@ function getRandomIcon() {
 /**
  * PanelC
  * Renders a list of the user's books + checks if a plan exists for each.
- * If a plan is found, user can click "Start Learning" => opens (NEW) PlanFetcher in a dialog.
+ * If a plan is found, user can click "Start Learning" => opens PlanFetcher in a dialog.
  *
  * Props:
  *  - userId (string)
  *  - onOpenOnboarding (function): callback to open your OnboardingModal
+ *  - onSeeAllCourses (function): callback that changes parent view to "home" (or similar)
  */
-function PanelC({ userId = "demoUser123", onOpenOnboarding = () => {} }) {
+function PanelC({
+  userId = "demoUser123",
+  onOpenOnboarding = () => {},
+  onSeeAllCourses = () => {},
+}) {
+  // --- NEW: read examType from Redux
+  const examType = useSelector((state) => state.exam.examType);
+
   const [books, setBooks] = useState([]);
-  // Each book => an object with { loading, error, hasPlan, planId, readCount, quizCount, reviseCount, totalTime }
+  // Each book => { loading, error, hasPlan, planId, readCount, quizCount, reviseCount, totalTime }
   const [plansData, setPlansData] = useState({});
 
   // --------------------------
@@ -44,9 +51,12 @@ function PanelC({ userId = "demoUser123", onOpenOnboarding = () => {} }) {
 
     async function fetchBooks() {
       try {
-        const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/books-user`, {
-          params: { userId },
-        });
+        const res = await axios.get(
+          `${import.meta.env.VITE_BACKEND_URL}/api/books-user`,
+          {
+            params: { userId },
+          }
+        );
         if (res.data && res.data.success) {
           console.log("Books fetched:", res.data.data);
           setBooks(res.data.data);
@@ -73,9 +83,12 @@ function PanelC({ userId = "demoUser123", onOpenOnboarding = () => {} }) {
         [bookId]: { loading: true, error: null, hasPlan: false },
       }));
       try {
-        const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/adaptive-plans`, {
-          params: { userId, bookId },
-        });
+        const res = await axios.get(
+          `${import.meta.env.VITE_BACKEND_URL}/api/adaptive-plans`,
+          {
+            params: { userId, bookId },
+          }
+        );
         const allPlans = res.data?.plans || [];
         if (!allPlans.length) {
           // No plan for this book
@@ -97,7 +110,7 @@ function PanelC({ userId = "demoUser123", onOpenOnboarding = () => {} }) {
         });
         const recentPlan = allPlans[0];
 
-        // Summarize day1’s activities (optional example)
+        // Summarize day1’s activities
         let readCount = 0;
         let quizCount = 0;
         let reviseCount = 0;
@@ -120,7 +133,7 @@ function PanelC({ userId = "demoUser123", onOpenOnboarding = () => {} }) {
             loading: false,
             error: null,
             hasPlan: true,
-            planId: recentPlan.id, // <-- store the actual planId
+            planId: recentPlan.id, // store the actual planId
             readCount,
             quizCount,
             reviseCount,
@@ -140,7 +153,7 @@ function PanelC({ userId = "demoUser123", onOpenOnboarding = () => {} }) {
       }
     }
 
-    // For each book => fetch plan
+    // For each book => fetch its plan
     books.forEach((b) => {
       if (!b.id) return;
       fetchPlanForBook(b.id);
@@ -148,7 +161,7 @@ function PanelC({ userId = "demoUser123", onOpenOnboarding = () => {} }) {
   }, [books, userId]);
 
   // ------------------------------------------------
-  // (C) NEW PLAN FETCHER DIALOG STATE
+  // (C) PlanFetcher DIALOG STATE
   // ------------------------------------------------
   const [showPlanDialog, setShowPlanDialog] = useState(false);
   const [currentPlanId, setCurrentPlanId] = useState(null);
@@ -170,60 +183,98 @@ function PanelC({ userId = "demoUser123", onOpenOnboarding = () => {} }) {
   const booksCount = books.length;
   let displayBooks = [];
 
-  if (booksCount === 0) {
-    // Single "See All Courses" card
-    displayBooks = [
-      {
+  if (examType === "TOEFL") {
+    // If examType is TOEFL => no "See All Courses" or "X more courses..."
+    // Just show up to 4 books, or all if 4 or fewer
+    if (booksCount <= 4) {
+      // Show all
+      displayBooks = books.map((b) => ({
+        isSeeAll: false,
+        bookId: b.id,
+        title: b.name || "Untitled",
+        icon: getRandomIcon(),
+      }));
+    } else {
+      // Show only first 4
+      displayBooks = books
+        .slice(0, 4)
+        .map((b) => ({
+          isSeeAll: false,
+          bookId: b.id,
+          title: b.name || "Untitled",
+          icon: getRandomIcon(),
+        }));
+    }
+  } else {
+    // If examType is NOT TOEFL => original logic with "See All Courses"
+    if (booksCount === 0) {
+      // Single "See All Courses" card
+      displayBooks = [
+        {
+          isSeeAll: true,
+          title: "See All Courses",
+          icon: "📚",
+          extraCoursesCount: 0,
+          bookId: null,
+        },
+      ];
+    } else if (booksCount <= 4) {
+      // 1-4 books => show them + "See All Courses"
+      displayBooks = books.map((b) => ({
+        isSeeAll: false,
+        bookId: b.id,
+        title: b.name || "Untitled",
+        icon: getRandomIcon(),
+      }));
+      displayBooks.push({
         isSeeAll: true,
         title: "See All Courses",
         icon: "📚",
         extraCoursesCount: 0,
         bookId: null,
-      },
-    ];
-  } else if (booksCount < 4) {
-    // 1-3 books => show them + "See All Courses"
-    displayBooks = books.map((b) => ({
-      isSeeAll: false,
-      bookId: b.id,
-      title: b.name || "Untitled",
-      icon: getRandomIcon(),
-    }));
-    displayBooks.push({
-      isSeeAll: true,
-      title: "See All Courses",
-      icon: "📚",
-      extraCoursesCount: 0,
-      bookId: null,
-    });
-  } else {
-    // 4+ => show first 3, plus "X more courses"
-    const firstThree = books.slice(0, 3).map((b) => ({
-      isSeeAll: false,
-      bookId: b.id,
-      title: b.name || "Untitled",
-      icon: getRandomIcon(),
-    }));
-    const remaining = booksCount - 3;
-    firstThree.push({
-      isSeeAll: true,
-      title: `${remaining} more courses available`,
-      icon: "📚",
-      extraCoursesCount: remaining,
-      bookId: null,
-    });
-    displayBooks = firstThree;
+      });
+    } else {
+      // 5+ => show first 4, plus "X more courses available"
+      const firstFour = books.slice(0, 4).map((b) => ({
+        isSeeAll: false,
+        bookId: b.id,
+        title: b.name || "Untitled",
+        icon: getRandomIcon(),
+      }));
+      const remaining = booksCount - 4;
+      firstFour.push({
+        isSeeAll: true,
+        title: `${remaining} more courses available`,
+        icon: "📚",
+        extraCoursesCount: remaining,
+        bookId: null,
+      });
+      displayBooks = firstFour;
+    }
   }
 
   return (
     <div style={panelStyle}>
-      {/* Top row: Title + "Upload New Material" button */}
+      {/* Top row: now with a clickable arrow near "My Courses / Books" */}
       <div style={topRowStyle}>
-        <h2 style={{ margin: 0 }}>My Courses / Books</h2>
+        {/* Container for the title + arrow */}
+        <div style={titleArrowContainerStyle}>
+          <h2 style={{ margin: 0 }}>My Courses / Books</h2>
+          {/* The arrow also calls onSeeAllCourses, unless TOEFL */}
+          {examType !== "TOEFL" && (
+            <button style={titleArrowButtonStyle} onClick={onSeeAllCourses}>
+              &gt;
+            </button>
+          )}
+        </div>
+
+        {/* "Upload New Material" on the right, hidden if TOEFL */}
         <div style={{ display: "flex", gap: "10px" }}>
-          <button style={uploadButtonStyle} onClick={onOpenOnboarding}>
-            <span style={{ marginRight: "6px" }}>⬆️</span> Upload New Material
-          </button>
+          {examType !== "TOEFL" && (
+            <button style={uploadButtonStyle} onClick={onOpenOnboarding}>
+              <span style={{ marginRight: "6px" }}>⬆️</span> Upload New Material
+            </button>
+          )}
         </div>
       </div>
 
@@ -231,18 +282,23 @@ function PanelC({ userId = "demoUser123", onOpenOnboarding = () => {} }) {
       <div style={tileContainerStyle}>
         {displayBooks.map((item, idx) => {
           if (item.isSeeAll) {
+            // The "See All Courses" or "X more courses" tile
             return (
               <div key={`seeAll-${idx}`} style={tileStyle}>
                 <div style={iconStyle}>{item.icon}</div>
                 <h3 style={{ margin: "10px 0 5px 0" }}>{item.title}</h3>
                 <div style={buttonRowStyle}>
-                  <button style={seeAllCoursesButtonStyle}>
+                  <button
+                    style={seeAllCoursesButtonStyle}
+                    onClick={onSeeAllCourses}
+                  >
                     See All Courses
                   </button>
                 </div>
               </div>
             );
           } else {
+            // A real book/course tile
             const bookId = item.bookId;
             const planInfo = plansData[bookId] || {};
             const {
@@ -325,9 +381,7 @@ function PanelC({ userId = "demoUser123", onOpenOnboarding = () => {} }) {
         })}
       </div>
 
-      {/* 
-        NEW: Instead of <AdaptivePlayerModal>, we open a Dialog with PlanFetcher
-      */}
+      {/* PlanFetcher DIALOG */}
       <Dialog
         open={showPlanDialog}
         onClose={() => setShowPlanDialog(false)}
@@ -367,6 +421,22 @@ const topRowStyle = {
   justifyContent: "space-between",
   alignItems: "center",
   marginBottom: "20px",
+};
+
+const titleArrowContainerStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+};
+
+const titleArrowButtonStyle = {
+  background: "transparent",
+  color: "#fff",
+  border: "none",
+  cursor: "pointer",
+  fontSize: "1.5rem",
+  lineHeight: "1",
+  padding: 0,
 };
 
 const tileContainerStyle = {

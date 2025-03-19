@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
-import { setCurrentIndex } from "../../0.store/planSlice";
+import { setCurrentIndex } from "../../../../../store/planSlice";
 
 import {
   Box,

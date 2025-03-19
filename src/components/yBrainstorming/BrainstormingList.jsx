@@ -34,6 +34,7 @@ import QuestionTypePlayground from './diagrams/QuestionTypePlayground';
 import FlowQuizLatest from './diagrams/FlowQuizLatest';
 import FlowQuizReact from './diagrams/FlowQuizReact';
 import QuizConfigCreator from './diagrams/QuizConfigCreator';
+import CSVBookUploader from './diagrams/CSVBookUploader';
 
 
 
@@ -77,7 +78,8 @@ const diagramComponents = {
   QuestionTypePlayground,
   FlowQuizLatest,
   FlowQuizReact,
-  QuizConfigCreator
+  QuizConfigCreator,
+  CSVBookUploader
 
 };
 
@@ -287,10 +289,18 @@ const sampleBrainstormings = [
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'QuizConfigCreator'
   },
+  {
+    id: 35,
+    title: 'TECH: CSVBookUploader',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'CSVBookUploader'
+  },
 
 
 
 
+
+  
 
   
 

@@ -1,6 +1,9 @@
 // src/components/DetailedBookViewer/BooksViewer2.jsx (Dashboard)
 
 import React, { useState, useEffect } from "react";
+import { useSelector, useDispatch } from "react-redux"; // <-- Make sure you have this
+
+
 import { useBooksViewer } from "./DashboardHooks";
 
 // Import the updated Onboarding modal
@@ -19,6 +22,7 @@ import SubchapterContent from "../../zArchive/4.Subchapter Content/0.SubchapterC
 import UserProfileAnalytics from "../4.Profile/UserProfileAnalytics";
 import PanelC from "../2.HomePanels/4.PanelC";
 import PanelAdaptiveProcess from "../2.HomePanels/PanelAdaptiveProcess";
+import TOEFLAdaptiveProcess from "../2.HomePanels/TOEFLAdaptiveProcess";
 import PanelE from "../2.HomePanels/PanelE";
 import StatsPanel from "../2.HomePanels/TopStatsPanel";
 import BookSummary from "../../zArchive/2.2Library/BookSummary";
@@ -162,6 +166,9 @@ function Dashboard() {
     setShowPlanEditor(true);         // open the plan editor
   };
 
+  const examType = useSelector((state) => state.exam.examType);
+
+
   /**
    * handleOpenPlayer => called by sidebars
    * Accepts up to 3 arguments: planId, activity, fetchUrl
@@ -205,8 +212,13 @@ function Dashboard() {
           <PanelC
             userId={userId}
             onOpenOnboarding={() => setShowOnboardingModal(true)}
+            onSeeAllCourses={() => setViewMode("home")}
           />
-          <PanelAdaptiveProcess />
+          {examType === "TOEFL" || examType === "RELUX" ? (
+        <TOEFLAdaptiveProcess />
+      ) : (
+        <PanelAdaptiveProcess />
+      )}
         </div>
       </>
     );
