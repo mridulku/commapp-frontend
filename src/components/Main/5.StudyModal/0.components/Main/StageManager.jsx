@@ -3,16 +3,23 @@ import axios from "axios";
 import QuizComponent from "./QuizComponent";
 import ReviseComponent from "./ReviseComponent";
 
+/**
+ * StageManager
+ *  - Fetches quiz attempts + revisions + subchapter concepts
+ *  - Decides pass/fail for the "latest" quiz attempt (the old logic)
+ *  - Shows timeline + ability to attempt quiz / do revisions
+ *  - NEW: Renders a concept-level breakdown for *each* quiz attempt in descending order
+ */
 export default function StageManager({ examId, activity, quizStage, userId }) {
   const subChapterId = activity?.subChapterId || "";
 
+  // Pass/fail thresholds by stage
   const stagePassRatios = {
     remember: 0.1,
     understand: 0.7,
     apply: 0.6,
     analyze: 0.7,
   };
-
   const effectiveExamId = examId || "general";
 
   // Existing state
@@ -24,22 +31,20 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
   const [lastQuizAttempt, setLastQuizAttempt] = useState(null);
   const [showTimeline, setShowTimeline] = useState(false);
 
-  // NEW: Store subchapter concepts in state so we can do concept-level reporting
+  // We'll fetch all subchapter concepts
   const [subchapterConcepts, setSubchapterConcepts] = useState([]);
-  // We'll also store computed concept stats for the *latest* quiz in a separate variable
-  const [conceptStats, setConceptStats] = useState(null);
+
+  // For the "latest" quiz attempt concept breakdown (we used to show just one)
+  const [latestConceptStats, setLatestConceptStats] = useState(null);
+
+  // NEW: store concept breakdown for *all* attempts in descending order
+  const [allAttemptsConceptStats, setAllAttemptsConceptStats] = useState([]);
 
   useEffect(() => {
     fetchData();
     // eslint-disable-next-line
   }, [subChapterId, userId, quizStage]);
 
-  /**
-   * Main data fetch:
-   *  1) quiz attempts + revision attempts
-   *  2) subchapter concepts
-   *  3) compute pass/fail mode
-   */
   async function fetchData() {
     if (!subChapterId || !userId) {
       console.log("StageManager: missing subChapterId or userId => skipping fetch.");
@@ -49,7 +54,7 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
       setLoading(true);
       setError("");
 
-      // 1) Quiz attempts
+      // 1) Quiz attempts (descending attemptNumber from Firestore)
       const quizRes = await axios.get("http://localhost:3001/api/getQuiz", {
         params: { userId, subchapterId: subChapterId, quizType: quizStage },
       });
@@ -62,18 +67,21 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
       const revArr = revRes.data.revisions || [];
 
       // 3) Subchapter concepts
-      //    (If you have your own Firebase fetch, do that; here is an example REST call.)
       const conceptRes = await axios.get("http://localhost:3001/api/getSubchapterConcepts", {
         params: { subchapterId: subChapterId },
       });
       const conceptArr = conceptRes.data.concepts || [];
 
+      // Save them in state
       setQuizAttempts(quizArr);
       setRevisionAttempts(revArr);
       setSubchapterConcepts(conceptArr);
 
-      // Evaluate pass/fail mode
+      // Evaluate pass/fail mode for the LATEST attempt
       computeState(quizArr, revArr, conceptArr);
+
+      // Build concept breakdown for all attempts (descending order)
+      buildAllAttemptsConceptStats(quizArr, conceptArr);
     } catch (err) {
       console.error("StageManager: error fetching attempts or concepts:", err);
       setError(err.message || "Error fetching data");
@@ -83,20 +91,46 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
   }
 
   /**
-   * Convert a "score" string (e.g. "72.00%", "3/5") into 0..1 ratio.
+   * buildAllAttemptsConceptStats:
+   *   For each quiz attempt, compute concept stats. Then store in allAttemptsConceptStats.
+   *   We'll keep them in *descending* attemptNumber order to match the quizArr ordering from Firestore.
+   */
+  function buildAllAttemptsConceptStats(quizArr, conceptArr) {
+    if (!quizArr.length || !conceptArr.length) {
+      setAllAttemptsConceptStats([]);
+      return;
+    }
+
+    // quizArr is presumably in descending order from Firestore
+    // For each attempt, build concept stats. We'll store them in an array of objects:
+    // [ { attemptNumber, score: "...", conceptStats: [{conceptName, correct, total, ratio, passOrFail}, ...] }, ... ]
+    const mapped = quizArr.map((attempt) => {
+      const stats = buildConceptStats(attempt.quizSubmission || [], conceptArr);
+      return {
+        attemptNumber: attempt.attemptNumber,
+        score: attempt.score,
+        conceptStats: stats,
+      };
+    });
+
+    setAllAttemptsConceptStats(mapped);
+  }
+
+  /**
+   * parseScoreForRatio: convert "72.00%", "3/5" to 0..1 ratio (or NaN if unrecognized).
    */
   function parseScoreForRatio(scoreString) {
     if (!scoreString) return NaN;
     const trimmed = scoreString.trim();
 
-    // Check for percentage
+    // 1) Percentage-based
     if (trimmed.endsWith("%")) {
-      const numPart = trimmed.slice(0, -1); 
+      const numPart = trimmed.slice(0, -1);
       const parsed = parseFloat(numPart);
       return isNaN(parsed) ? NaN : parsed / 100;
     }
 
-    // Check for "X/Y"
+    // 2) "X/Y" format
     if (trimmed.includes("/")) {
       const [numStr, denomStr] = trimmed.split("/");
       const numericScore = parseFloat(numStr);
@@ -106,61 +140,62 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
       }
     }
 
-    // otherwise unrecognized
     return NaN;
   }
 
   /**
-   * Decide pass/fail mode based on the newest quiz attempt.
-   * Also, compute concept-level stats for that attempt so we can display them.
+   * computeState: decides pass/fail based on the newest quiz attempt. Also sets the
+   * latest concept stats so we can show them if desired.
    */
   function computeState(quizArr, revArr, conceptArr) {
     if (!quizArr.length) {
       setMode("NO_QUIZ_YET");
       setLastQuizAttempt(null);
-      setConceptStats(null);
+      setLatestConceptStats(null);
       return;
     }
 
-    // newest attempt is first
+    // newest attempt is the first doc (desc order from Firestore)
     const [latestQuiz] = quizArr;
     setLastQuizAttempt(latestQuiz);
 
-    // --- (A) Overall pass/fail logic (unchanged) ---
+    // Overall pass/fail logic (unchanged)
     const passRatio = stagePassRatios[quizStage] || 0.6;
     const ratio = parseScoreForRatio(latestQuiz.score);
     if (isNaN(ratio)) {
       setMode("NEED_REVISION");
+      return;
+    }
+    const passed = ratio >= passRatio;
+    if (passed) {
+      setMode("QUIZ_COMPLETED");
     } else {
-      const passed = ratio >= passRatio;
-      if (passed) {
-        setMode("QUIZ_COMPLETED");
+      // Not passed => see if there's a matching revision
+      const attemptNum = latestQuiz.attemptNumber;
+      const matchingRev = revArr.find((r) => r.revisionNumber === attemptNum);
+      if (!matchingRev) {
+        setMode("NEED_REVISION");
       } else {
-        // Not passed => see if there's a matching revision
-        const attemptNum = latestQuiz.attemptNumber;
-        const matchingRev = revArr.find((r) => r.revisionNumber === attemptNum);
-        if (!matchingRev) {
-          setMode("NEED_REVISION");
-        } else {
-          setMode("CAN_TAKE_NEXT_QUIZ");
-        }
+        setMode("CAN_TAKE_NEXT_QUIZ");
       }
     }
 
-    // --- (B) Compute concept-level stats for the LATEST attempt, storing in state ---
+    // Build concept stats for the LATEST quiz only (for the old single table we had).
     if (latestQuiz?.quizSubmission && conceptArr.length > 0) {
       const stats = buildConceptStats(latestQuiz.quizSubmission, conceptArr);
-      setConceptStats(stats);
+      setLatestConceptStats(stats);
     } else {
-      setConceptStats(null);
+      setLatestConceptStats(null);
     }
   }
 
   /**
-   * Utility: turn quizSubmission[] + list of subchapterConcepts into a conceptStats object/array
+   * buildConceptStats: given a single quizSubmission[] and the list of subchapterConcepts,
+   *   returns an array of objects [ { conceptName, correct, total, ratio, passOrFail }, ... ]
+   *   We'll define pass as ratio === 1.0 (i.e. 100%).
    */
   function buildConceptStats(quizSubmission, conceptArr) {
-    // Tally correct vs. total for each conceptName
+    // Count correct vs. total for each conceptName
     const countMap = {};
     quizSubmission.forEach((q) => {
       const cName = q.conceptName || "UnknownConcept";
@@ -168,25 +203,38 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
         countMap[cName] = { correct: 0, total: 0 };
       }
       countMap[cName].total++;
-      // If we treat a question as correct if q.score >= 1:
+      // We'll treat 'correct' if q.score >= 1
       if (q.score && parseFloat(q.score) >= 1) {
         countMap[cName].correct++;
       }
     });
 
-    // Now build a list in the order of conceptArr
-    // conceptArr might look like: [ {name: "ConceptA"}, {name: "ConceptB"} ]
-    const statsArray = conceptArr.map((c) => {
-      const cName = c.name; // or c.conceptName
+    // Build an array for each known concept in conceptArr,
+    // plus any "UnknownConcept" if it appeared in the quiz.
+    // If you want to only show concepts that appear, you can adapt this logic,
+    // but for now we show everything in conceptArr + anything else from the quiz.
+    const conceptNamesSet = new Set(conceptArr.map((c) => c.name));
+    if (countMap["UnknownConcept"]) {
+      conceptNamesSet.add("UnknownConcept");
+    }
+
+    const statsArray = [];
+    conceptNamesSet.forEach((cName) => {
       const rec = countMap[cName] || { correct: 0, total: 0 };
       const ratio = rec.total > 0 ? rec.correct / rec.total : 0;
-      return {
+      const passOrFail = ratio === 1.0 ? "PASS" : "FAIL";
+      statsArray.push({
         conceptName: cName,
         correct: rec.correct,
         total: rec.total,
         ratio,
-      };
+        passOrFail,
+      });
     });
+
+    // You might want to sort this array by conceptName, or keep the order from the DB.
+    // We'll just sort by conceptName for neatness:
+    statsArray.sort((a, b) => a.conceptName.localeCompare(b.conceptName));
 
     return statsArray;
   }
@@ -205,7 +253,7 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
     fetchData();
   }
 
-  // Render logic
+  // Render
   if (!subChapterId || !userId) {
     return <div style={{ color: "#fff" }}>No valid subChapterId/userId.</div>;
   }
@@ -216,7 +264,7 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
     return <div style={{ color: "red" }}>Error: {error}</div>;
   }
 
-  // summary label
+  // summary label for the newest attempt
   let summaryLabel = "No Attempts Yet";
   if (quizAttempts.length > 0) {
     const [latest] = quizAttempts;
@@ -225,6 +273,7 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
 
   return (
     <div style={{ color: "#fff", padding: "1rem" }}>
+      {/* Header row */}
       <div style={styles.headerRow}>
         <div>
           Stage: <b>{quizStage}</b> | {summaryLabel}
@@ -237,7 +286,7 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
         </button>
       </div>
 
-      {/* Timeline stays the same */}
+      {/* Timeline of quiz + revision attempts */}
       {showTimeline && (
         <div style={styles.timelinePanel}>
           {renderTimeline(
@@ -249,12 +298,7 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
       )}
 
       <div style={styles.mainContent}>
-        {/* 
-          1) No quiz => show first quiz
-          2) Quiz completed => show success
-          3) Need Revision => show revision 
-          4) or show next quiz if revision done
-        */}
+        {/* 1) If no quiz yet => show first quiz attempt */}
         {mode === "NO_QUIZ_YET" && (
           <QuizComponent
             userId={userId}
@@ -267,12 +311,14 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
           />
         )}
 
+        {/* 2) Quiz completed => show success */}
         {mode === "QUIZ_COMPLETED" && (
           <div style={{ color: "lightgreen", marginBottom: "1rem" }}>
             <p>Congratulations! You passed the <b>{quizStage}</b> stage.</p>
           </div>
         )}
 
+        {/* 3) If we need revision, show the revision component */}
         {mode === "NEED_REVISION" && lastQuizAttempt && (
           <ReviseComponent
             userId={userId}
@@ -284,6 +330,7 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
           />
         )}
 
+        {/* 4) If there's a matching revision done, let user retake quiz */}
         {mode === "CAN_TAKE_NEXT_QUIZ" && lastQuizAttempt && (
           <QuizComponent
             userId={userId}
@@ -296,10 +343,10 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
           />
         )}
 
-        {/* NEW: Show concept stats for the last attempt (if we have them) */}
-        {lastQuizAttempt && conceptStats && conceptStats.length > 0 && (
+        {/* Single-table breakdown for the *latest attempt* (unchanged from before) */}
+        {lastQuizAttempt && latestConceptStats && latestConceptStats.length > 0 && (
           <div style={{ marginTop: "1rem" }}>
-            <h3>Concept Performance (Last Attempt)</h3>
+            <h3>Concept Performance (Latest Attempt)</h3>
             <table style={{ borderCollapse: "collapse" }}>
               <thead>
                 <tr>
@@ -307,19 +354,73 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
                   <th style={styles.tableHeader}>Correct</th>
                   <th style={styles.tableHeader}>Total</th>
                   <th style={styles.tableHeader}>% Correct</th>
+                  <th style={styles.tableHeader}>Result</th>
                 </tr>
               </thead>
               <tbody>
-                {conceptStats.map((cs, idx) => (
-                  <tr key={idx}>
-                    <td style={styles.tableCell}>{cs.conceptName}</td>
-                    <td style={styles.tableCell}>{cs.correct}</td>
-                    <td style={styles.tableCell}>{cs.total}</td>
-                    <td style={styles.tableCell}>{(cs.ratio * 100).toFixed(1)}%</td>
-                  </tr>
-                ))}
+                {latestConceptStats.map((cs, idx) => {
+                  const ratioPct = (cs.ratio * 100).toFixed(1);
+                  // Mark pass if ratio === 1.0
+                  const isPass = cs.passOrFail === "PASS";
+                  return (
+                    <tr key={idx}>
+                      <td style={styles.tableCell}>{cs.conceptName}</td>
+                      <td style={styles.tableCell}>{cs.correct}</td>
+                      <td style={styles.tableCell}>{cs.total}</td>
+                      <td style={styles.tableCell}>{ratioPct}%</td>
+                      <td style={isPass ? styles.passCell : styles.failCell}>
+                        {cs.passOrFail}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* NEW: Attempt-by-Attempt concept breakdown in descending order */}
+        {allAttemptsConceptStats && allAttemptsConceptStats.length > 0 && (
+          <div style={{ marginTop: "2rem" }}>
+            <h2>Attempt-by-Attempt Concept Breakdown (Descending)</h2>
+            {allAttemptsConceptStats.map((attemptObj, i) => {
+              const { attemptNumber, score, conceptStats } = attemptObj;
+              return (
+                <div key={i} style={{ marginBottom: "1.5rem" }}>
+                  <h3 style={{ marginBottom: "0.5rem" }}>
+                    Attempt # {attemptNumber} &mdash; Score: {score}
+                  </h3>
+                  <table style={{ borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr>
+                        <th style={styles.tableHeader}>Concept</th>
+                        <th style={styles.tableHeader}>Correct</th>
+                        <th style={styles.tableHeader}>Total</th>
+                        <th style={styles.tableHeader}>% Correct</th>
+                        <th style={styles.tableHeader}>Result</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {conceptStats.map((cs, idx) => {
+                        const ratioPct = (cs.ratio * 100).toFixed(1);
+                        const isPass = cs.passOrFail === "PASS";
+                        return (
+                          <tr key={idx}>
+                            <td style={styles.tableCell}>{cs.conceptName}</td>
+                            <td style={styles.tableCell}>{cs.correct}</td>
+                            <td style={styles.tableCell}>{cs.total}</td>
+                            <td style={styles.tableCell}>{ratioPct}%</td>
+                            <td style={isPass ? styles.passCell : styles.failCell}>
+                              {cs.passOrFail}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -327,7 +428,7 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
   );
 }
 
-// Timeline code remains basically the same
+// ------------------------ Timeline code ------------------------ //
 function renderTimeline(quizArr, revArr, passRatio) {
   if (!quizArr.length) {
     return (
@@ -338,6 +439,9 @@ function renderTimeline(quizArr, revArr, passRatio) {
       </div>
     );
   }
+
+  // We want to show timeline in ascending order (attempt #1, #2, etc.)
+  // quizArr is in descending order from Firestore, so let's reverse it for timeline
   const quizAsc = [...quizArr].sort((a, b) => a.attemptNumber - b.attemptNumber);
   const timelineItems = [];
 
@@ -373,14 +477,19 @@ function renderTimeline(quizArr, revArr, passRatio) {
   );
 }
 
+/**
+ * parseScoreForTimeline: simpler version for timeline (returns 0 if unrecognized).
+ */
 function parseScoreForTimeline(scoreString) {
   if (!scoreString) return 0;
   const trimmed = scoreString.trim();
+  // 1) If ends with '%'
   if (trimmed.endsWith("%")) {
     const numPart = trimmed.slice(0, -1);
     const parsed = parseFloat(numPart);
     return !isNaN(parsed) ? parsed / 100 : 0;
   }
+  // 2) If "X/Y"
   if (trimmed.includes("/")) {
     const [numStr, denomStr] = trimmed.split("/");
     const numericScore = parseFloat(numStr);
@@ -419,7 +528,7 @@ function TimelineItem({ item }) {
   );
 }
 
-// Inline styles
+// ------------------------ Styles ------------------------ //
 const styles = {
   headerRow: {
     display: "flex",
@@ -441,7 +550,9 @@ const styles = {
     padding: "0.5rem",
     borderRadius: "4px",
   },
-  mainContent: {},
+  mainContent: {
+    marginTop: "1rem",
+  },
   timelineContainer: {
     display: "flex",
     gap: "0.5rem",
@@ -474,5 +585,21 @@ const styles = {
     borderBottom: "1px solid #444",
     padding: "4px 8px",
     textAlign: "left",
+  },
+  passCell: {
+    borderBottom: "1px solid #444",
+    padding: "4px 8px",
+    textAlign: "left",
+    backgroundColor: "green",
+    color: "#fff",
+    fontWeight: "bold",
+  },
+  failCell: {
+    borderBottom: "1px solid #444",
+    padding: "4px 8px",
+    textAlign: "left",
+    backgroundColor: "red",
+    color: "#fff",
+    fontWeight: "bold",
   },
 };
