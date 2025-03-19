@@ -8,6 +8,8 @@ import { useBooksViewer } from "./DashboardHooks";
 
 // Import the updated Onboarding modal
 import OnboardingModal from "../1.Upload/0.OnboardingModal";
+import TOEFLOnboardingModal from "../1.Upload/TOEFLOnboardingModal";
+
 
 // Import your separate Plan Editor modal
 import EditAdaptivePlanModal from "../3.Library/LibraryChild/EditAdaptivePlanModal";
@@ -383,12 +385,25 @@ function Dashboard() {
       />
 
       {/* Onboarding Modal */}
-      <OnboardingModal
-        open={showOnboardingModal}
-        onClose={() => setShowOnboardingModal(false)}
-        // We'll pass handleOpenPlanEditor(bookId) so we can open the Plan Editor with that ID
-        onOpenPlanEditor={handleOpenPlanEditor}
-      />
+      {examType === "TOEFL" ? (
+        <TOEFLOnboardingModal
+          open={showOnboardingModal}
+          onClose={() => setShowOnboardingModal(false)}
+          onOpenPlanEditor={(bookId) => {
+            console.log("Open plan editor for TOEFL with", bookId);
+            // If you have a single plan or multiple, do your logic here
+          }}
+          userId={userId}
+        />
+      ) : (
+        <OnboardingModal
+          open={showOnboardingModal}
+          onClose={() => setShowOnboardingModal(false)}
+          onOpenPlanEditor={(bookId) => {
+            console.log("Open plan editor for normal flow with", bookId);
+          }}
+        />
+      )}
 
       {/* Plan Editor Modal (separate from onboarding) */}
       <EditAdaptivePlanModal
