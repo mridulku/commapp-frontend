@@ -1,15 +1,18 @@
+/**
+ * File: ReviseComponent.jsx
+ * Description:
+ *   - A React component for displaying revision content for a particular stage & attempt.
+ *   - It automatically fetches the relevant revision config doc, calls the revision generator,
+ *     and displays the returned concept-based revision from GPT.
+ *   - On "Done with Revision", it stores a revision attempt in your backend.
+ */
+
 import React, { useEffect, useState } from "react";
 import { doc, getDoc } from "firebase/firestore";
-import { db } from "../../../../../firebase"; // Adjust path as needed
-import { generateRevisionContent } from "./RevisionContentGenerator"; // We'll create this
+import { db } from "../../../../../firebase"; // Adjust as needed
+import { generateRevisionContent } from "./RevisionContentGenerator"; // The logic below
 import axios from "axios";
 
-/**
- * "ReviseComponent" that parallels "QuizComponent."
- *  - Instead of calling a local /api/generate, we do the GPT call directly in the front-end
- *  - We build a docId like "reviseExamStage" and fetch from "revisionConfigs" collection
- *  - Then generate revision content (similar to generateQuestions)
- */
 export default function ReviseComponent({
   userId,
   examId = "general",
@@ -22,36 +25,28 @@ export default function ReviseComponent({
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
-  // This is the final object returned by GPT (parsed JSON) 
+  // The JSON-based content we receive from GPT
   const [revisionContent, setRevisionContent] = useState(null);
 
-  // If you want to incorporate quiz attempts data, you can store it here:
-  // (For now, we can keep it static or pass in as a prop; this is just an example.)
-  const [quizAttemptsData] = useState([
-    // E.g., a minimal placeholder array (in the future, pass real data):
-    { attemptNumber: 1, score: "2/5", timestamp: "2025-01-01T10:00:00Z" },
-    { attemptNumber: 2, score: "4/5", timestamp: "2025-01-03T14:30:00Z" },
-  ]);
+  // The doc ID for "revisionConfigs", e.g. "reviseGeneralRemember"
+  const docId = buildRevisionConfigDocId(examId, quizStage);
 
-  // Read the OpenAI key from your .env (Vite)
+  // We'll read the OpenAI API key from environment (Vite style)
   const openAiKey = import.meta.env.VITE_OPENAI_KEY || "";
 
-  // Build docId => e.g. "reviseGeneralRemember"
-  const docId = buildRevisionConfigDocId(examId, quizStage);
-  console.log("ReviseComponent => docId for config:", docId);
-
   useEffect(() => {
-    if (!subChapterId) {
-      console.log("ReviseComponent: missing subChapterId => skipping generation.");
+    if (!userId || !subChapterId) {
+      console.log("ReviseComponent: missing userId or subChapterId => skipping generation.");
       return;
     }
     if (!openAiKey) {
-      console.warn("ReviseComponent: No OpenAI key found. Generation will fail.");
+      console.warn("ReviseComponent: No OpenAI key found. GPT calls may fail.");
       return;
     }
+    // Trigger the fetch/creation of revision content
     fetchAndGenerateRevision();
     // eslint-disable-next-line
-  }, [subChapterId, examId, quizStage, revisionNumber]);
+  }, [userId, subChapterId, examId, quizStage, revisionNumber]);
 
   async function fetchAndGenerateRevision() {
     try {
@@ -59,7 +54,7 @@ export default function ReviseComponent({
       setStatus("Fetching revision config & generating content...");
       setError("");
 
-      // 1) Fetch the revision config doc from Firestore: revisionConfigs/<docId>
+      // 1) Fetch the revision config doc from "revisionConfigs" collection
       const revConfigRef = doc(db, "revisionConfigs", docId);
       const revConfigSnap = await getDoc(revConfigRef);
       if (!revConfigSnap.exists()) {
@@ -67,41 +62,47 @@ export default function ReviseComponent({
         setLoading(false);
         return;
       }
-      const configData = revConfigSnap.data(); // e.g. { instruction: "...", customFields: ... }
+      const configData = revConfigSnap.data(); // e.g. { instructions: "...", ... }
 
-      // 2) Generate the revision content
+      // 2) Let "generateRevisionContent" do all the heavy lifting:
+      //    - It fetches the user's latest quiz attempt
+      //    - Finds which concepts they failed
+      //    - Builds a GPT prompt focusing on those concepts
+      //    - Returns concept-by-concept revision data in JSON
       const result = await generateRevisionContent({
         db,
         subChapterId,
         openAiKey,
         revisionConfig: configData,
-        quizAttempts: quizAttemptsData, // pass your quiz attempt data here
+        userId,
+        quizStage,
       });
 
       if (!result.success) {
-        setError(result.error);
         setStatus("Failed to generate revision content.");
+        setError(result.error);
         setLoading(false);
         return;
       }
 
-      // Store the parsed content in state
       setRevisionContent(result.revisionData);
       setStatus("Revision content generated successfully.");
     } catch (err) {
-      console.error("Error generating revision content:", err);
+      console.error("ReviseComponent: Error generating revision content:", err);
       setError(err.message);
     } finally {
       setLoading(false);
     }
   }
 
-  // Called when user finishes the revision
+  /**
+   * Handle user finishing the revision.
+   * We'll record the attempt (via a /submitRevision call) and invoke onRevisionDone if any.
+   */
   async function handleSubmitRevision() {
     try {
-      // This can be a direct Firestore call or an API call – whichever your app uses:
       await axios.post("http://localhost:3001/api/submitRevision", {
-        userId, // or read from Redux
+        userId,
         subchapterId: subChapterId,
         revisionType: quizStage,
         revisionNumber,
@@ -112,30 +113,52 @@ export default function ReviseComponent({
       alert("Failed to record revision attempt.");
       return;
     }
-
     // Fire callback if provided
     onRevisionDone?.();
   }
 
-  // Simple rendering example
+  /**
+   * Renders the revision content in a concept-by-concept manner, as returned by GPT:
+   * 
+   * We expect a structure like:
+   * {
+   *   "title": "Short Title",
+   *   "concepts": [
+   *     {
+   *       "conceptName": "Newton's First Law",
+   *       "notes": ["Point 1", "Point 2"]
+   *     },
+   *     {
+   *       "conceptName": "Newton's Second Law",
+   *       "notes": ["..."]
+   *     }
+   *   ]
+   * }
+   */
   function renderRevisionContent() {
     if (!revisionContent) return null;
 
-    // Suppose the GPT returns something like:
-    // { title: "...", bulletPoints: [...], exampleSummary: "..." }
-    // The structure is up to you; you can also define a more dynamic renderer
+    const { title, concepts } = revisionContent;
+
     return (
       <div style={styles.revisionBox}>
-        {revisionContent.title && <h4>{revisionContent.title}</h4>}
-        {Array.isArray(revisionContent.bulletPoints) && (
-          <ul>
-            {revisionContent.bulletPoints.map((pt, idx) => (
-              <li key={idx}>{pt}</li>
+        {title && <h4>{title}</h4>}
+
+        {Array.isArray(concepts) && concepts.length > 0 && (
+          <div>
+            {concepts.map((cObj, idx) => (
+              <div key={idx} style={{ marginBottom: "1rem" }}>
+                <h5 style={{ margin: "0.5rem 0" }}>{cObj.conceptName}</h5>
+                {Array.isArray(cObj.notes) && (
+                  <ul>
+                    {cObj.notes.map((n, i) => (
+                      <li key={i}>{n}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             ))}
-          </ul>
-        )}
-        {revisionContent.exampleSummary && (
-          <p>{revisionContent.exampleSummary}</p>
+          </div>
         )}
       </div>
     );
@@ -153,6 +176,7 @@ export default function ReviseComponent({
 
       {renderRevisionContent()}
 
+      {/* A button to finalize revision */}
       <button style={styles.submitBtn} onClick={handleSubmitRevision}>
         Done with Revision
       </button>
@@ -160,7 +184,7 @@ export default function ReviseComponent({
   );
 }
 
-// Helper to build docId => "revise" + capitalizedExam + capitalizedStage
+// Helper to build docId => "reviseExamStage", e.g. "reviseGeneralRemember"
 function buildRevisionConfigDocId(exam, stage) {
   const capExam = exam.charAt(0).toUpperCase() + exam.slice(1);
   const capStage = stage.charAt(0).toUpperCase() + stage.slice(1);
