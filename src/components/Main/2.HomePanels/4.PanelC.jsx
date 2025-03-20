@@ -255,17 +255,14 @@ function PanelC({
 
   return (
     <div style={panelStyle}>
-      {/* Top row: now with a clickable arrow near "My Courses / Books" */}
+      {/* Top row: a clickable arrow near "My Courses / Books" (always visible) */}
       <div style={topRowStyle}>
-        {/* Container for the title + arrow */}
         <div style={titleArrowContainerStyle}>
           <h2 style={{ margin: 0 }}>My Courses / Books</h2>
-          {/* The arrow also calls onSeeAllCourses, unless TOEFL */}
-          {examType !== "TOEFL" && (
-            <button style={titleArrowButtonStyle} onClick={onSeeAllCourses}>
-              &gt;
-            </button>
-          )}
+          {/* Removed condition so arrow is always displayed */}
+          <button style={titleArrowButtonStyle} onClick={onSeeAllCourses}>
+            &gt;
+          </button>
         </div>
 
         {/* "Upload New Material" on the right, hidden if TOEFL */}
@@ -500,7 +497,6 @@ const noPlanButtonStyle = {
   color: "#000",
 };
 
-// Progress bar container
 const progressBarContainerStyle = {
   width: "100%",
   height: "8px",
@@ -509,7 +505,6 @@ const progressBarContainerStyle = {
   marginTop: "10px",
 };
 
-// Purple progress fill
 const progressBarFillStyle = {
   height: "100%",
   backgroundColor: "#B39DDB",

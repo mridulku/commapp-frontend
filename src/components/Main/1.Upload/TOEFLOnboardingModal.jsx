@@ -324,12 +324,12 @@ export default function TOEFLOnboardingModal({
             >
               <p>Successfully created {planCreationResults.length} plans:</p>
               <ul>
-                {planCreationResults.map((res) => (
-                  <li key={res.planId}>
-                    {res.skill} Plan => ID: {res.planId}
-                  </li>
-                ))}
-              </ul>
+  {planCreationResults.map((res) => (
+    <li key={res.planId}>
+      {res.skill} Plan =&gt; ID: {res.planId}
+    </li>
+  ))}
+</ul>
             </div>
           )}
       </div>
