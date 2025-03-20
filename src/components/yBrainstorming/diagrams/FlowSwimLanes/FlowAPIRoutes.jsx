@@ -3,7 +3,7 @@ import ReactFlow, { Background, Controls } from "reactflow";
 import "reactflow/dist/style.css";
 
 // If you have a separate VerboseNode component, import it:
-import VerboseNode from "./VerboseNode"; // or wherever your VerboseNode is located
+import VerboseNode from "../Support/VerboseNode"; // or wherever your VerboseNode is located
 
 export default function ExpressRoutesFlow() {
   // We won't have edges since these endpoints are mostly independent
@@ -598,3 +598,5 @@ Error => 500 on failure`,
     </div>
   );
 }
+
+

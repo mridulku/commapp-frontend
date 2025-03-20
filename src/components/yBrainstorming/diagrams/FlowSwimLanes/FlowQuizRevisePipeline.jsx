@@ -10,7 +10,7 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 
 // A custom node to allow verbose tooltips or expanded details
-import VerboseNode from "./VerboseNode";
+import VerboseNode from "../Support/VerboseNode";
 
 /**
  * FlowQuizRevisePipeline

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { db } from "../../../firebase"; // adjust this path
+import { db } from "../../../../firebase"; // adjust this path
 import { doc, setDoc } from "firebase/firestore";
 
 function ExamConfigCreator() {

@@ -1,7 +1,7 @@
 // File: QuestionTypePlayground.jsx
 
 import React, { useState, useEffect } from "react";
-import { db } from "../../../firebase"; // your Firebase config
+import { db } from "../../../../firebase"; // your Firebase config
 import { collection, getDocs } from "firebase/firestore";
 
 import { generateQuestions } from "./Quiz/QuestionGenerator";

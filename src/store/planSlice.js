@@ -13,6 +13,7 @@ export const fetchPlan = createAsyncThunk(
     try {
       console.log("[planSlice] fetchPlan => planId:", planId, "initialActivityContext:", initialActivityContext);
 
+      // GET /api/adaptive-plan?planId=...
       const res = await axios.get(`${backendURL}${fetchUrl}`, {
         params: { planId },
       });
@@ -24,9 +25,14 @@ export const fetchPlan = createAsyncThunk(
 
       // Return planDoc + initialActivityContext so we can handle it in 'fulfilled'
       console.log("[planSlice] fetchPlan => planDoc found =>", res.data.planDoc);
+
       return {
         planDoc: res.data.planDoc,
         initialActivityContext: initialActivityContext || null,
+
+        // We also return the planId we used,
+        // in case the backend didn't embed it in planDoc
+        requestedPlanId: planId,
       };
     } catch (err) {
       console.error("[planSlice] fetchPlan => error:", err);
@@ -82,7 +88,7 @@ const planSlice = createSlice({
     currentIndex: -1,
     status: "idle",          // 'idle' | 'loading' | 'succeeded' | 'failed'
     error: null,
-    examId: "general",       // <-- NEW: store examId in Redux
+    examId: "general",       // store examId in Redux
   },
   reducers: {
     setCurrentIndex(state, action) {
@@ -98,27 +104,40 @@ const planSlice = createSlice({
         state.planDoc = null;
         state.flattenedActivities = [];
         state.currentIndex = -1;
-        // Keep examId as-is or reset to "general" if you prefer
-        // state.examId = "general";
       })
       .addCase(fetchPlan.fulfilled, (state, action) => {
         console.log("[planSlice] fetchPlan => fulfilled!");
         state.status = "succeeded";
 
-        // 1) We expect the payload => { planDoc, initialActivityContext }
-        const { planDoc, initialActivityContext } = action.payload;
+        // We expect { planDoc, initialActivityContext, requestedPlanId }
+        const { planDoc, initialActivityContext, requestedPlanId } = action.payload;
         console.log("[planSlice] planDoc =>", planDoc);
         console.log("[planSlice] initialActivityContext =>", initialActivityContext);
+        console.log("[planSlice] requestedPlanId =>", requestedPlanId);
 
-        // 2) Insert dayIndex + flatIndex into planDoc activities
+        // 1) Insert dayIndex + flatIndex into planDoc activities
         const { updatedPlanDoc, flattenedActivities } = addFlatIndexes(planDoc);
+
+        // 2) If the server didn't return a .id or .planId, forcibly set them
+        //    (Pick whichever field your front-end actually uses, e.g. "planId" or "id")
+        if (requestedPlanId) {
+          // If there's no planId in the doc, set it:
+          if (!updatedPlanDoc.planId) {
+            updatedPlanDoc.planId = requestedPlanId;
+            console.log(`[planSlice] forcibly set updatedPlanDoc.planId = ${requestedPlanId}`);
+          }
+          // If there's no .id in the doc, set it as well:
+          if (!updatedPlanDoc.id) {
+            updatedPlanDoc.id = requestedPlanId;
+            console.log(`[planSlice] forcibly set updatedPlanDoc.id = ${requestedPlanId}`);
+          }
+        }
 
         // 3) Store mutated doc + flattened array in Redux
         state.planDoc = updatedPlanDoc;
         state.flattenedActivities = flattenedActivities;
 
         // 4) Also store examId for global convenience
-        //    fallback to "general" if none provided
         state.examId = updatedPlanDoc.examId || "general";
 
         // 5) Default currentIndex => 0 if we have items

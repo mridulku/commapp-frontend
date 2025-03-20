@@ -9,8 +9,8 @@ import ReactFlow, {
 } from "reactflow";
 import "reactflow/dist/style.css";
 
-import VerboseNode from "./VerboseNode";       // your custom tooltip node
-import { getLayoutedElements } from "./layoutHelper"; // your Dagre-based layout helper
+import VerboseNode from "../Support/VerboseNode";       // your custom tooltip node
+import { getLayoutedElements } from "../Support/layoutHelper"; // your Dagre-based layout helper
 
 /**
  * FlowDetailedQuiz

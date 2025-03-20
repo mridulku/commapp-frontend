@@ -9,7 +9,7 @@ import ReactFlow, {
 } from "reactflow";
 import "reactflow/dist/style.css";
 
-import VerboseNode from "./VerboseNode"; // Your custom tooltip node
+import VerboseNode from "../Support/VerboseNode"; // Your custom tooltip node
 
 /**
  * FlowComponentsBreakdown

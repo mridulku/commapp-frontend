@@ -10,8 +10,8 @@ import ReactFlow, {
 } from "reactflow";
 import "reactflow/dist/style.css";
 
-import VerboseNode from "./VerboseNode";
-import { getLayoutedElements } from "./layoutHelper";
+import VerboseNode from "../Support/VerboseNode";
+import { getLayoutedElements } from "../Support/layoutHelper";
 
 const nodeTypes = { verboseNode: VerboseNode };
 

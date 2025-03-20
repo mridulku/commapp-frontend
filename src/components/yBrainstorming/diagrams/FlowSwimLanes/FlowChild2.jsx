@@ -10,8 +10,8 @@ import ReactFlow, {
 } from "reactflow";
 import "reactflow/dist/style.css";
 
-import VerboseNode from "./VerboseNode";       // custom node with MUI Tooltips
-import { getLayoutedElements } from "./layoutHelper"; // your Dagre-based layout helper
+import VerboseNode from "../Support/VerboseNode";       // custom node with MUI Tooltips
+import { getLayoutedElements } from "../Support/layoutHelper"; // your Dagre-based layout helper
 
 const nodeTypes = { verboseNode: VerboseNode };
 

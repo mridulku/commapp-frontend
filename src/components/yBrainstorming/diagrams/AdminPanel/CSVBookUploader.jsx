@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import Papa from "papaparse"; // npm install papaparse
-import { db } from "../../../firebase"; // adjust to your path
+import { db } from "../../../../firebase"; // adjust to your path
 import { collection, addDoc, doc, setDoc, serverTimestamp } from "firebase/firestore";
 
 // Utility to group rows by some key

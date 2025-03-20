@@ -6,7 +6,7 @@ import {
   updateDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { db } from "../../../firebase"; // Adjust to your actual path
+import { db } from "../../../../firebase"; // Adjust to your actual path
 
 // A small helper to compute word count
 function getWordCount(text = "") {

@@ -1,44 +1,41 @@
 // src/components/BrainstormingList.jsx
 import React, { useState, useEffect } from 'react';
-import UserOutreachPitch from './diagrams/UserOutreachPitch';
-import UserOutreachTree from './diagrams/UserOutreachTree';
-import GeneralTodoDashboard from './diagrams/GeneralTodoDashboard';
-import ProductFlowDiagram from './diagrams/ProductFlowDiagram';
-import PitchingDashboard from './diagrams/PitchingDashboard';
-import UserInterviewFeedback from './diagrams/UserInterviewFeedback';
-import Notes from './diagrams/Notes';
-import MonetizationBrainstorming from './diagrams/MonetizationBrainstorming';
-import UserGrowthStrategy from './diagrams/UserGrowthStrategy';
-import AnalyticsDashboard from './diagrams/AnalyticsDashboard';
-import UserPersonas from './diagrams/UserPersonas';
-import TimeLogger from './diagrams/TimeLogger';
-import FlowGeneratePlan from './diagrams/FlowGeneratePlan';
-import FlowChild2 from './diagrams/FlowChild2';
-import FlowReduxPlan from './diagrams/FlowReduxPlan';
-import FlowDashboard from './diagrams/FlowDashboard';
-import HomeComponentsNodes from './diagrams/HomeComponentsNodes';
-import FlowMaterialDashboard from './diagrams/FlowMaterialDashboard';
-import FlowPreLogin from './diagrams/FlowPreLogin';
-import FlowUpload from './diagrams/FlowUpload';
-import FlowProfile from './diagrams/FlowProfile';
-import FlowContentPipeline from './diagrams/FlowContentPipeline';
-import FlowAPIRoutes from './diagrams/FlowAPIRoutes';
-import ExamConfigCreator from './diagrams/ExamConfigCreator';
-import HospitalERDiagram from './diagrams/HospitalERDiagram';
-import FlowQuizRevisePipeline from './diagrams/FlowQuizRevisePipeline';
-import PromptInput from './diagrams/PromptInput';
-import PromptManager from './diagrams/PromptManager';
-import ManualBookCreator from './diagrams/ManualBookCreator';
-import QuestionTypesCreator from './diagrams/QuestionTypesCreator';
-import QuestionTypePlayground from './diagrams/QuestionTypePlayground';
-import FlowQuizLatest from './diagrams/FlowQuizLatest';
-import FlowQuizReact from './diagrams/FlowQuizReact';
-import QuizConfigCreator from './diagrams/QuizConfigCreator';
-import CSVBookUploader from './diagrams/CSVBookUploader';
-
-
-
-
+import UserOutreachPitch from './diagrams/USER/UserOutreachPitch';
+import UserOutreachTree from './diagrams/USER/UserOutreachTree';
+import GeneralTodoDashboard from './diagrams/PersonalProd/GeneralTodoDashboard';
+import ProductFlowDiagram from './diagrams/PRODUCT/ProductFlowDiagram';
+import PitchingDashboard from './diagrams/PITCH/PitchingDashboard';
+import UserInterviewFeedback from './diagrams/USER/UserInterviewFeedback';
+import Notes from './diagrams/PersonalProd/Notes';
+import MonetizationBrainstorming from './diagrams/PITCH/MonetizationBrainstorming';
+import UserGrowthStrategy from './diagrams/USER/UserGrowthStrategy';
+import AnalyticsDashboard from './diagrams/PRODUCT/AnalyticsDashboard';
+import UserPersonas from './diagrams/USER/UserPersonas';
+import TimeLogger from './diagrams/PersonalProd/TimeLogger';
+import FlowGeneratePlan from './diagrams/FlowSwimLanes/FlowGeneratePlan';
+import FlowChild2 from './diagrams/FlowSwimLanes/FlowChild2';
+import FlowReduxPlan from './diagrams/FlowSwimLanes/FlowReduxPlan';
+import FlowDashboard from './diagrams/FlowSwimLanes/FlowDashboard';
+import HomeComponentsNodes from './diagrams/FlowSwimLanes/FlowHomeComponentsNodes';
+import FlowMaterialDashboard from './diagrams/FlowSwimLanes/FlowMaterialDashboard';
+import FlowPreLogin from './diagrams/FlowSwimLanes/FlowPreLogin';
+import FlowUpload from './diagrams/FlowSwimLanes/FlowUpload';
+import FlowProfile from './diagrams/FlowSwimLanes/FlowProfile';
+import FlowContentPipeline from './diagrams/FlowSwimLanes/FlowContentPipeline';
+import FlowAPIRoutes from './diagrams/FlowSwimLanes/FlowAPIRoutes';
+import ExamConfigCreator from './diagrams/AdminPanel/ExamConfigCreator';
+import HospitalERDiagram from './diagrams/Junk/HospitalERDiagram';
+import FlowQuizRevisePipeline from './diagrams/FlowSwimLanes/FlowQuizRevisePipeline';
+import PromptInput from './diagrams/PilotComponents/PromptInput';
+import PromptManager from './diagrams/PilotComponents/PromptManager';
+import ManualBookCreator from './diagrams/AdminPanel/ManualBookCreator';
+import QuestionTypesCreator from './diagrams/AdminPanel/QuestionTypesCreator';
+import QuestionTypePlayground from './diagrams/PilotComponents/QuestionTypePlayground';
+import FlowQuizLatest from './diagrams/FlowSwimLanes/FlowQuizLatest';
+import FlowQuizReact from './diagrams/FlowSwimLanes/FlowQuizReact';
+import QuizConfigCreator from './diagrams/AdminPanel/QuizConfigCreator';
+import CSVBookUploader from './diagrams/AdminPanel/CSVBookUploader';
+import FlowHolyGrailDataFlow from './diagrams/FlowSwimLanes/FlowHolyGrailDataFlow';
 
 
 
@@ -79,301 +76,384 @@ const diagramComponents = {
   FlowQuizLatest,
   FlowQuizReact,
   QuizConfigCreator,
-  CSVBookUploader
-
+  CSVBookUploader,
+  FlowHolyGrailDataFlow
 };
 
 // Sample static data representing past brainstorming sessions.
+// Added "isImportant" for each. Feel free to change which ones are true/false.
 const sampleBrainstormings = [
   {
     id: 1,
     title: 'USER: Outreach Pitch',
     timestamp: new Date('2025-03-20T10:00:00Z'),
-    diagramComponent: 'UserOutreachPitch'
+    diagramComponent: 'UserOutreachPitch',
+    isImportant: false
   },
   {
     id: 2,
     title: 'USER: Channels',
     timestamp: new Date('2025-03-18T15:30:00Z'),
-    diagramComponent: 'UserOutreachTree'
+    diagramComponent: 'UserOutreachTree',
+    isImportant: false
   },
   {
     id: 3,
-    title: 'GENERAL: TodoDashboard',
+    title: 'PersonalProd: GeneralTodoDashboard',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'GeneralTodoDashboard'
+    diagramComponent: 'GeneralTodoDashboard',
+    isImportant: true
   },
   {
     id: 4,
     title: 'PRODUCT: Flow',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'ProductFlowDiagram'
+    diagramComponent: 'ProductFlowDiagram',
+    isImportant: false
   },
   {
     id: 5,
     title: 'PITCH: Dashboard',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'PitchingDashboard'
+    diagramComponent: 'PitchingDashboard',
+    isImportant: false
   },
   {
     id: 6,
     title: 'USER: Interview',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'UserInterviewFeedback'
+    diagramComponent: 'UserInterviewFeedback',
+    isImportant: false
   },
   {
     id: 7,
-    title: 'GENERAL: Notes',
+    title: 'PersonalProd: Notes',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'Notes'
+    diagramComponent: 'Notes',
+    isImportant: false
   },
   {
     id: 8,
     title: 'PITCH: Monetization',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'MonetizationBrainstorming'
+    diagramComponent: 'MonetizationBrainstorming',
+    isImportant: true
   },
   {
     id: 9,
     title: 'USER: Growth Loops',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'UserGrowthStrategy'
+    diagramComponent: 'UserGrowthStrategy',
+    isImportant: false
   },
   {
     id: 10,
     title: 'PRODUCT: AnalyticsDashboard',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'AnalyticsDashboard'
+    diagramComponent: 'AnalyticsDashboard',
+    isImportant: false
   },
   {
     id: 11,
     title: 'USER: Personas',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'UserPersonas'
+    diagramComponent: 'UserPersonas',
+    isImportant: false
   },
   {
     id: 12,
-    title: 'GENERAL: TimeLogger',
+    title: 'PersonalProd: TimeLogger',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'TimeLogger'
+    diagramComponent: 'TimeLogger',
+    isImportant: false
   },
   {
     id: 13,
     title: 'TECH: AdaptivePlanFlow',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'FlowGeneratePlan'
+    diagramComponent: 'FlowGeneratePlan',
+    isImportant: false
   },
   {
     id: 14,
     title: 'TECH: FlowChild2',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'FlowChild2'
+    diagramComponent: 'FlowChild2',
+    isImportant: false
   },
   {
     id: 15,
     title: 'TECH: FlowReduxPlan',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'FlowReduxPlan'
+    diagramComponent: 'FlowReduxPlan',
+    isImportant: false
   },
   {
     id: 16,
     title: 'TECH: FlowDashboard',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'FlowDashboard'
+    diagramComponent: 'FlowDashboard',
+    isImportant: false
   },
   {
     id: 17,
-    title: 'TECH: HomeComponentsNodes',
+    title: 'FlowSwimLanes: FlowHomeComponentsNodes',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'HomeComponentsNodes'
+    diagramComponent: 'HomeComponentsNodes',
+    isImportant: false
   },
   {
     id: 18,
-    title: 'TECH: FlowMaterialDashboard',
+    title: 'FlowSwimLanes: FlowMaterialDashboard',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'FlowMaterialDashboard'
+    diagramComponent: 'FlowMaterialDashboard',
+    isImportant: false
   },
   {
     id: 19,
-    title: 'TECH: FlowPreLogin',
+    title: 'FlowSwimLanes: FlowPreLogin',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'FlowPreLogin'
+    diagramComponent: 'FlowPreLogin',
+    isImportant: false
   },
   {
     id: 20,
-    title: 'TECH: FlowUpload',
+    title: 'FlowSwimLanes: FlowUpload',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'FlowUpload'
+    diagramComponent: 'FlowUpload',
+    isImportant: false
   },
   {
     id: 21,
     title: 'TECH: FlowProfile',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'FlowProfile'
+    diagramComponent: 'FlowProfile',
+    isImportant: false
   },
   {
     id: 22,
-    title: 'TECH: FlowContentPipeline',
+    title: 'FlowSwimLanes: FlowContentPipeline',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'FlowContentPipeline'
+    diagramComponent: 'FlowContentPipeline',
+    isImportant: false
   },
   {
     id: 23,
-    title: 'TECH: FlowAPIRoutes',
+    title: 'FlowSwimLanes: FlowAPIRoutes',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'FlowAPIRoutes'
+    diagramComponent: 'FlowAPIRoutes',
+    isImportant: false
   },
   {
     id: 24,
-    title: 'TECH: ExamConfigCreator',
+    title: 'AdminPanel: ExamConfigCreator',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'ExamConfigCreator'
+    diagramComponent: 'ExamConfigCreator',
+    isImportant: false
   },
   {
     id: 25,
-    title: 'TECH: HospitalERDiagram',
+    title: 'Junk: HospitalERDiagram',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'HospitalERDiagram'
+    diagramComponent: 'HospitalERDiagram',
+    isImportant: false
   },
   {
     id: 26,
-    title: 'TECH: FlowQuizRevisePipeline',
+    title: 'FlowSwimLanes: FlowQuizRevisePipeline',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'FlowQuizRevisePipeline'
+    diagramComponent: 'FlowQuizRevisePipeline',
+    isImportant: false
   },
   {
     id: 27,
-    title: 'TECH: PromptManager',
+    title: 'PilotComponents: PromptManager',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'PromptManager'
+    diagramComponent: 'PromptManager',
+    isImportant: false
   },
   {
     id: 28,
-    title: 'TECH: PromptInput',
+    title: 'PilotComponents: PromptInput',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'PromptInput'
+    diagramComponent: 'PromptInput',
+    isImportant: false
   },
   {
     id: 29,
-    title: 'TECH: ManualBookCreator',
+    title: 'AdminPanel: ManualBookCreator',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'ManualBookCreator'
+    diagramComponent: 'ManualBookCreator',
+    isImportant: false
   },
   {
     id: 30,
-    title: 'TECH: QuestionTypesCreator',
+    title: 'AdminPanel: QuestionTypesCreator',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'QuestionTypesCreator'
+    diagramComponent: 'QuestionTypesCreator',
+    isImportant: false
   },
   {
     id: 31,
-    title: 'TECH: QuestionTypePlayground',
+    title: 'PilotComponents: QuestionTypePlayground',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'QuestionTypePlayground'
+    diagramComponent: 'QuestionTypePlayground',
+    isImportant: false
   },
   {
     id: 32,
-    title: 'TECH: FlowQuizLatest',
+    title: 'FlowSwimLanes: FlowQuizLatest',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'FlowQuizLatest'
+    diagramComponent: 'FlowQuizLatest',
+    isImportant: true
   },
   {
     id: 33,
-    title: 'TECH: FlowQuizReact',
+    title: 'FlowSwimLanes: FlowQuizReact',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'FlowQuizReact'
+    diagramComponent: 'FlowQuizReact',
+    isImportant: false
   },
   {
     id: 34,
-    title: 'TECH: QuizConfigCreator',
+    title: 'AdminPanel: QuizConfigCreator',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'QuizConfigCreator'
+    diagramComponent: 'QuizConfigCreator',
+    isImportant: false
   },
   {
     id: 35,
-    title: 'TECH: CSVBookUploader',
+    title: 'AdminPanel: CSVBookUploader',
     timestamp: new Date('2025-03-19T15:30:00Z'),
-    diagramComponent: 'CSVBookUploader'
+    diagramComponent: 'CSVBookUploader',
+    isImportant: false
+  },
+  {
+    id: 36,
+    title: 'FlowSwimLanes: FlowHolyGrailDataFlow',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'FlowHolyGrailDataFlow',
+    isImportant: false
   },
 
 
-
-
-
-  
-
-  
-
-
-
-  
-
-
-  
-  
-
-  
-
-
-  
-  
-
-  
-
-
-  
 
 
   
 ];
 
 function BrainstormingList() {
-  const [brainstormings, setBrainstormings] = useState([]);
+  const [brainstormings, setBrainstormings] = useState(sampleBrainstormings);
   const [selectedSession, setSelectedSession] = useState(null);
 
-  // Sorting criteria: "alphabetical-desc", "alphabetical-asc", "date"
-  // Default is "alphabetical-desc" (which means ascending alphabetical order).
+  // Sorting criteria: "alphabetical-desc" (A->Z), "alphabetical-asc" (Z->A), "date" (newest first)
   const [sortCriteria, setSortCriteria] = useState("alphabetical-desc");
 
-  useEffect(() => {
-    // On mount or criteria change, sort the sessions
-    sortSessions(sortCriteria);
-  }, [sortCriteria]);
+  // Filter by importance: "all" or "important"
+  const [importanceFilter, setImportanceFilter] = useState("all");
 
-  const sortSessions = (criteria) => {
-    const sorted = sampleBrainstormings.slice().sort((a, b) => {
-      if (criteria === "alphabetical-desc") {
-        // A -> Z
-        return a.title.localeCompare(b.title);
-      } else if (criteria === "alphabetical-asc") {
-        // Z -> A
-        return b.title.localeCompare(a.title);
-      } else if (criteria === "date") {
-        // Newest first
-        return b.timestamp - a.timestamp;
-      } else {
-        return 0;
-      }
-    });
-    setBrainstormings(sorted);
+  // Track collapsible state for categories. Key: category name, Value: bool (true = collapsed)
+  // Default is collapsed: so `true` for all categories.
+  const [collapsedCategories, setCollapsedCategories] = useState({});
+
+  // Toggles the collapsed state of a given category
+  const toggleCategoryCollapse = (category) => {
+    setCollapsedCategories((prev) => ({
+      ...prev,
+      [category]: !prev[category]
+    }));
   };
 
-  const handleSortChange = (e) => {
-    setSortCriteria(e.target.value);
+  // Toggles "isImportant" for a single session
+  const toggleImportant = (id) => {
+    setBrainstormings((prev) =>
+      prev.map((b) =>
+        b.id === id ? { ...b, isImportant: !b.isImportant } : b
+      )
+    );
+  };
+
+  useEffect(() => {
+    // On first render, initialize all categories as collapsed = true
+    const allCategories = new Set();
+    sampleBrainstormings.forEach((s) => {
+      const cat = parseCategory(s.title);
+      allCategories.add(cat);
+    });
+
+    const collapseMap = {};
+    allCategories.forEach((cat) => {
+      collapseMap[cat] = true; // default collapsed
+    });
+    setCollapsedCategories(collapseMap);
+  }, []);
+
+  // Helper: extracts category from a title (the part before ":")
+  const parseCategory = (fullTitle) => {
+    const parts = fullTitle.split(":");
+    if (parts.length > 1) {
+      return parts[0].trim();
+    }
+    // If somehow no colon, just treat entire title as category
+    return fullTitle.trim();
+  };
+
+  // Returns the items filtered by importance, grouped by category, and sorted.
+  // 1) Filter by importance
+  // 2) Group by category
+  // 3) Sort categories A->Z
+  // 4) Sort items by the selected sort criteria
+  const getGroupedAndSortedBrainstormings = () => {
+    // 1) Filter by importance
+    let filtered = brainstormings;
+    if (importanceFilter === "important") {
+      filtered = filtered.filter((item) => item.isImportant);
+    }
+
+    // 2) Group by category
+    const grouped = {};
+    filtered.forEach((item) => {
+      const category = parseCategory(item.title);
+      if (!grouped[category]) {
+        grouped[category] = [];
+      }
+      grouped[category].push(item);
+    });
+
+    // 3) Sort categories A->Z
+    const sortedCategories = Object.keys(grouped).sort((a, b) =>
+      a.localeCompare(b)
+    );
+
+    // 4) Sort items within each category by sortCriteria
+    sortedCategories.forEach((cat) => {
+      grouped[cat].sort((a, b) => {
+        if (sortCriteria === "alphabetical-desc") {
+          // A -> Z
+          return a.title.localeCompare(b.title);
+        } else if (sortCriteria === "alphabetical-asc") {
+          // Z -> A
+          return b.title.localeCompare(a.title);
+        } else if (sortCriteria === "date") {
+          // Newest first
+          return b.timestamp - a.timestamp;
+        }
+        return 0;
+      });
+    });
+
+    return { grouped, sortedCategories };
   };
 
   // If a session is selected, show the corresponding diagram
   if (selectedSession) {
     const DiagramComponent = diagramComponents[selectedSession.diagramComponent];
-
     return (
       <div style={styles.container}>
         <button style={styles.backButton} onClick={() => setSelectedSession(null)}>
           ← Back to Sessions
         </button>
-
         {DiagramComponent ? (
-          // Give the diagram a clear, large container to ensure it appears
           <div style={styles.diagramContainer}>
             <DiagramComponent brainstorming={selectedSession} />
           </div>
@@ -384,36 +464,92 @@ function BrainstormingList() {
     );
   }
 
-  // Otherwise, show the list of brainstorming sessions
+  // Otherwise, show the grouped list of sessions
+  const { grouped, sortedCategories } = getGroupedAndSortedBrainstormings();
+
   return (
     <div style={styles.container}>
       <h1 style={styles.header}>Brainstorming Sessions</h1>
 
-      <div style={styles.sortContainer}>
-        <label style={styles.sortLabel}>Sort by: </label>
-        <select value={sortCriteria} onChange={handleSortChange} style={styles.sortSelect}>
-          <option value="alphabetical-desc">Alphabetical (A, B, C, D)</option>
-          <option value="alphabetical-asc">Alphabetical (Z, Y, X, ...)</option>
-          <option value="date">Date (Newest First)</option>
-        </select>
+      {/* Sorting + Importance Filter */}
+      <div style={styles.controlsRow}>
+        <div style={styles.controlGroup}>
+          <label style={styles.sortLabel}>Sort by: </label>
+          <select
+            value={sortCriteria}
+            onChange={(e) => setSortCriteria(e.target.value)}
+            style={styles.sortSelect}
+          >
+            <option value="alphabetical-desc">Alphabetical (A → Z)</option>
+            <option value="alphabetical-asc">Alphabetical (Z → A)</option>
+            <option value="date">Date (Newest First)</option>
+          </select>
+        </div>
+
+        <div style={styles.controlGroup}>
+          <label style={styles.sortLabel}>Filter:</label>
+          <select
+            value={importanceFilter}
+            onChange={(e) => setImportanceFilter(e.target.value)}
+            style={styles.sortSelect}
+          >
+            <option value="all">All</option>
+            <option value="important">Important</option>
+          </select>
+        </div>
       </div>
 
-      <div style={styles.list}>
-        {brainstormings.map((session) => (
-          <button
-            key={session.id}
-            style={styles.sessionButton}
-            onClick={() => setSelectedSession(session)}
-          >
-            <div style={styles.buttonContent}>
-              <span style={styles.title}>{session.title}</span>
-              <span style={styles.timestamp}>
-                {session.timestamp.toLocaleString()}
+      {/* Render each category as collapsible */}
+      {sortedCategories.map((category) => {
+        const sessions = grouped[category];
+        // If a category has 0 sessions (after filtering), skip
+        if (!sessions || sessions.length === 0) return null;
+
+        const isCollapsed = collapsedCategories[category] ?? true;
+
+        return (
+          <div key={category} style={styles.categoryContainer}>
+            {/* Category Header */}
+            <div
+              style={styles.categoryHeader}
+              onClick={() => toggleCategoryCollapse(category)}
+            >
+              <span style={styles.categoryTitle}>{category}</span>
+              <span style={styles.collapseIndicator}>
+                {isCollapsed ? "[+]" : "[-]"}
               </span>
             </div>
-          </button>
-        ))}
-      </div>
+
+            {/* Sessions inside category */}
+            {!isCollapsed && (
+              <div style={styles.sessionList}>
+                {sessions.map((session) => (
+                  <div key={session.id} style={styles.sessionRow}>
+                    <button
+                      style={styles.sessionButton}
+                      onClick={() => setSelectedSession(session)}
+                    >
+                      <div style={styles.buttonContent}>
+                        <span style={styles.title}>{session.title}</span>
+                        <span style={styles.timestamp}>
+                          {session.timestamp.toLocaleString()}
+                        </span>
+                      </div>
+                    </button>
+                    {/* Toggle important icon/button */}
+                    <button
+                      style={styles.importantButton}
+                      onClick={() => toggleImportant(session.id)}
+                    >
+                      {session.isImportant ? "★" : "☆"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -429,11 +565,15 @@ const styles = {
     textAlign: 'center',
     marginBottom: '1rem'
   },
-  sortContainer: {
+  controlsRow: {
     display: 'flex',
-    alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: '1rem'
+    gap: '2rem',
+    marginBottom: '1rem',
+  },
+  controlGroup: {
+    display: 'flex',
+    alignItems: 'center'
   },
   sortLabel: {
     marginRight: '0.5rem'
@@ -445,16 +585,39 @@ const styles = {
     backgroundColor: '#1F1F1F',
     color: '#fff'
   },
-  list: {
+  categoryContainer: {
+    marginBottom: '1rem',
+    border: '1px solid #444',
+    borderRadius: '4px',
+  },
+  categoryHeader: {
     display: 'flex',
-    flexDirection: 'column',
-    gap: '0.5rem'
+    justifyContent: 'space-between',
+    padding: '0.75rem 1rem',
+    backgroundColor: '#222',
+    cursor: 'pointer',
+  },
+  categoryTitle: {
+    fontSize: '1.1rem',
+    fontWeight: 'bold'
+  },
+  collapseIndicator: {
+    marginLeft: '1rem'
+  },
+  sessionList: {
+    padding: '0.5rem 1rem'
+  },
+  sessionRow: {
+    display: 'flex',
+    alignItems: 'center',
+    marginBottom: '0.5rem'
   },
   sessionButton: {
+    flex: 1,
     backgroundColor: '#1F1F1F',
     border: '1px solid #444',
     borderRadius: '4px',
-    padding: '1rem',
+    padding: '0.5rem',
     cursor: 'pointer',
     textAlign: 'left'
   },
@@ -471,6 +634,16 @@ const styles = {
     fontSize: '0.85rem',
     color: '#aaa'
   },
+  importantButton: {
+    marginLeft: '0.5rem',
+    backgroundColor: '#444',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '4px',
+    padding: '0.4rem 0.6rem',
+    cursor: 'pointer',
+    fontSize: '1rem',
+  },
   backButton: {
     marginBottom: '1rem',
     padding: '0.5rem 1rem',
@@ -480,11 +653,10 @@ const styles = {
     borderRadius: '4px',
     cursor: 'pointer'
   },
-  // This container ensures the diagram has a visible area
   diagramContainer: {
     width: '100%',
-    height: '80vh',   // Adjust as you prefer
-    backgroundColor: '#000', 
+    height: '80vh',
+    backgroundColor: '#000',
     border: '1px solid #444',
     borderRadius: '4px',
     overflow: 'hidden'

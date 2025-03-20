@@ -6,7 +6,7 @@
  *  - Renders questions of multiple types.
  *  - Locally grades "easy" question types (MCQ, T/F, fillInBlank).
  *  - Sends "openEnded" types to GPT for 0..1 scoring.
- *  - Submits the final attempt to your backend.
+ *  - Submits the final attempt to your backend (now including planId).
  *  - Shows per-question feedback & final score, then waits for user to click "Proceed" to finalize.
  */
 
@@ -16,6 +16,7 @@ import { db } from "../../../../../firebase"; // adjust path if needed
 import axios from "axios";
 import QuizQuestionRenderer from "./QuizQuestionRenderer"; // Renders each question
 import { generateQuestions } from "./QuizQuestionGenerator"; // Our updated generator
+import { useSelector } from "react-redux"; // <-- import from react-redux
 
 export default function QuizComponent({
   userId = "",
@@ -26,6 +27,9 @@ export default function QuizComponent({
   onQuizComplete,
   onQuizFail,
 }) {
+  // 1) Retrieve planId from Redux so we can pass it in the final submission
+  const planId = useSelector((state) => state.plan.planDoc?.id);
+
   // Basic states
   const [questionTypes, setQuestionTypes] = useState([]); 
   const [generatedQuestions, setGeneratedQuestions] = useState([]);
@@ -37,13 +41,15 @@ export default function QuizComponent({
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
 
-  const [quizPassed, setQuizPassed] = useState(false); // <-- store pass/fail state
-  const [finalPercentage, setFinalPercentage] = useState(""); // optional, for display
+  const [quizPassed, setQuizPassed] = useState(false); // store pass/fail state
+  const [finalPercentage, setFinalPercentage] = useState(""); // for display
 
   // Read the OpenAI key from .env (Vite)
   const openAiKey = import.meta.env.VITE_OPENAI_KEY || "";
 
-  // --- 1) Fetch "questionTypes" if needed ---
+  // ==============================
+  // 1) Fetch "questionTypes" if needed
+  // ==============================
   useEffect(() => {
     async function fetchQuestionTypes() {
       try {
@@ -60,7 +66,9 @@ export default function QuizComponent({
     fetchQuestionTypes();
   }, []);
 
-  // --- 2) Generate questions after we have questionTypes, userId, subChapterId, etc. ---
+  // ==============================
+  // 2) Generate questions after we have questionTypes, userId, subChapterId, etc.
+  // ==============================
   useEffect(() => {
     if (!userId || !subChapterId) {
       console.log("QuizComponent: userId or subChapterId is empty => skipping generation.");
@@ -119,7 +127,9 @@ export default function QuizComponent({
     doGenerate();
   }, [questionTypes, userId, subChapterId, quizStage, examId, openAiKey]);
 
-  // --- 3) The main quiz rendering ---
+  // ==============================
+  // The main quiz rendering
+  // ==============================
   function renderQuizForm() {
     if (!generatedQuestions.length) return null;
 
@@ -163,7 +173,9 @@ export default function QuizComponent({
     setUserAnswers(updated);
   }
 
-  // --- 4) handleQuizSubmit => grade, store results, do NOT call parent callbacks yet ---
+  // ==============================
+  // 4) handleQuizSubmit => grade, store results, do NOT call parent callbacks yet
+  // ==============================
   async function handleQuizSubmit() {
     if (!generatedQuestions.length) {
       alert("No questions to submit.");
@@ -188,14 +200,14 @@ export default function QuizComponent({
       }
     });
 
-    // Local grading
+    // 1) Local grading
     localItems.forEach((item) => {
       const { qObj, userAns, originalIndex } = item;
       const { score, feedback } = localGradeQuestion(qObj, userAns);
       overallResults[originalIndex] = { score, feedback };
     });
 
-    // GPT grading
+    // 2) GPT grading
     if (openEndedItems.length > 0 && openAiKey) {
       const { success, gradingArray, error } = await gradeOpenEndedBatch({
         openAiKey,
@@ -228,15 +240,15 @@ export default function QuizComponent({
       });
     }
 
-    // Compute final numeric score => store as percentage
+    // 3) Compute final numeric score => store as percentage
     const totalScore = overallResults.reduce((acc, r) => acc + (r?.score || 0), 0);
     const qCount = overallResults.length;
     const avgFloat = qCount > 0 ? totalScore / qCount : 0; // e.g. 0.72
     const percentageString = (avgFloat * 100).toFixed(2) + "%";
 
-    // Submit results to server
+    // 4) Submit results to server, now including planId from Redux
     try {
-      await axios.post("http://localhost:3001/api/submitQuiz", {
+      const payload = {
         userId,
         subchapterId: subChapterId,
         quizType: quizStage,
@@ -249,26 +261,33 @@ export default function QuizComponent({
         score: percentageString,
         totalQuestions: qCount,
         attemptNumber,
-      });
+        planId,  // <-- pass planId to /api/submitQuiz
+      };
+
+      console.log("[QuizComponent] handleQuizSubmit => final payload:", payload);
+      await axios.post("http://localhost:3001/api/submitQuiz", payload);
+
       console.log("Quiz submission saved on server!");
     } catch (err) {
       console.error("Error submitting quiz:", err);
     }
 
-    // Store in local state so we can show user
+    // 5) Store in local state so we can show user
     setGradingResults(overallResults);
     setShowGradingResults(true);
     setLoading(false);
     setStatus("Grading complete.");
 
-    // Decide pass/fail but do NOT call parent's callback yet
+    // 6) Decide pass/fail but do NOT call parent's callback yet
     const passThreshold = 0.6; // or use quizStage-based threshold if you want
     const isPassed = avgFloat >= passThreshold;
     setQuizPassed(isPassed);
     setFinalPercentage(percentageString);
   }
 
-  // --- 5) The "Proceed" button => now we call onQuizComplete/onQuizFail ---
+  // ==============================
+  // 5) The "Proceed" button => now we call onQuizComplete/onQuizFail
+  // ==============================
   function handleProceed() {
     if (quizPassed && onQuizComplete) {
       onQuizComplete();
@@ -277,7 +296,9 @@ export default function QuizComponent({
     }
   }
 
-  // --- 6) Optionally: render a summary panel for final feedback ---
+  // ==============================
+  // 6) Optionally: render a summary panel for final feedback
+  // ==============================
   function renderGradingResults() {
     if (!showGradingResults || !gradingResults.length) return null;
 
@@ -317,9 +338,7 @@ export default function QuizComponent({
   );
 }
 
-/**
- * Identify question types that can be locally graded.
- */
+// ====== Helper to determine which types are locally gradable
 function isLocallyGradableType(qType) {
   switch (qType) {
     case "multipleChoice":
@@ -332,10 +351,7 @@ function isLocallyGradableType(qType) {
   }
 }
 
-/**
- * Local grading for question types with an explicit correct answer.
- * Return { score: 0..1, feedback: string }.
- */
+// ====== Local grading logic
 function localGradeQuestion(qObj, userAnswer) {
   let score = 0;
   let feedback = "";
@@ -388,9 +404,7 @@ function localGradeQuestion(qObj, userAnswer) {
   return { score, feedback };
 }
 
-/**
- * Single GPT call to grade all open-ended questions (shortAnswer, scenario, etc.).
- */
+// ====== GPT-based grading for openEnded items
 async function gradeOpenEndedBatch({ openAiKey, subchapterSummary, items }) {
   if (!openAiKey) {
     return { success: false, gradingArray: [], error: "No OpenAI key" };
@@ -399,7 +413,6 @@ async function gradeOpenEndedBatch({ openAiKey, subchapterSummary, items }) {
     return { success: true, gradingArray: [], error: "" };
   }
 
-  // Build a prompt referencing each question's expected vs user answer
   let questionList = "";
   items.forEach((item, idx) => {
     const { qObj, userAns } = item;
@@ -422,8 +435,7 @@ Return valid JSON in this exact format:
 {
   "results": [
     {"score": 0.0, "feedback": "..."},
-    {"score": 1.0, "feedback": "..."},
-    ...
+    {"score": 1.0, "feedback": "..."}
   ]
 }
 No extra commentary—only that JSON.

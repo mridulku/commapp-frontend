@@ -3,7 +3,7 @@ import ReactFlow, { Background, Controls } from "reactflow";
 import "reactflow/dist/style.css";
 
 // Import your custom VerboseNode (same as you did in the ExpressRoutesFlow)
-import VerboseNode from "./VerboseNode"; 
+import VerboseNode from "../Support/VerboseNode"; 
 
 export default function FlowQuizReact() {
   // We’ll create four lanes representing each main file:

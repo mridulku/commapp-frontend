@@ -8,7 +8,7 @@ import {
   setDoc,
   addDoc
 } from "firebase/firestore";
-import { db } from "../../../firebase"; // <-- adjust to your firebase config path
+import { db } from "../../../../firebase"; // <-- adjust to your firebase config path
 
 /**
  * PromptManagerNoExpress

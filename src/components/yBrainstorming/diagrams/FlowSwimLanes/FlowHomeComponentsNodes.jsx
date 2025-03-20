@@ -9,7 +9,7 @@ import ReactFlow, {
 } from "reactflow";
 import "reactflow/dist/style.css";
 
-import VerboseNode from "./VerboseNode"; // Your custom tooltip node
+import VerboseNode from "../Support/VerboseNode"; // Your custom tooltip node
 
 /**
  * FlowComponentsBreakdown
@@ -28,7 +28,7 @@ import VerboseNode from "./VerboseNode"; // Your custom tooltip node
  * We do NOT create edges across lanes, so each lane stands alone.
  */
 
-export default function HomeComponentsNodes() {
+export default function FlowHomeComponentsNodes() {
   const nodeTypes = useMemo(() => ({ verboseNode: VerboseNode }), []);
 
   // ----------------------------------------------------------------
