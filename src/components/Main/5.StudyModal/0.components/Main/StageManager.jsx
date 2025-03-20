@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import QuizComponent from "./QuizComponent";
 import ReviseComponent from "./ReviseComponent";
+import { useSelector } from "react-redux";
+
 
 /**
  * StageManager
@@ -21,6 +23,9 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
     analyze: 1,
   };
   const effectiveExamId = examId || "general";
+
+  const planId = useSelector((state) => state.plan.planDoc?.id);
+  
 
   // Existing state
   const [loading, setLoading] = useState(false);
@@ -56,13 +61,13 @@ export default function StageManager({ examId, activity, quizStage, userId }) {
 
       // 1) Quiz attempts (descending attemptNumber from Firestore)
       const quizRes = await axios.get("http://localhost:3001/api/getQuiz", {
-        params: { userId, subchapterId: subChapterId, quizType: quizStage },
+        params: { userId, planId, subchapterId: subChapterId, quizType: quizStage },
       });
       const quizArr = quizRes.data.attempts || [];
 
       // 2) Revision attempts
       const revRes = await axios.get("http://localhost:3001/api/getRevisions", {
-        params: { userId, subchapterId: subChapterId, revisionType: quizStage },
+        params: { userId, planId, subchapterId: subChapterId, revisionType: quizStage },
       });
       const revArr = revRes.data.revisions || [];
 
