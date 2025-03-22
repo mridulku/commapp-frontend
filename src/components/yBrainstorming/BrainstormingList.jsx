@@ -39,6 +39,9 @@ import FlowHolyGrailDataFlow from './diagrams/FlowSwimLanes/FlowHolyGrailDataFlo
 import FileExplorer from './diagrams/AdminPanel/FileExplorer';
 import FirebaseCollectionsViewer from './diagrams/AdminPanel/FirebaseCollectionsViewer';
 import AdaptivePlanLoader from './diagrams/PilotComponents/AdaptivePlanLoader';
+import AdaptivePlanConceptLoader from './diagrams/PilotComponents/AdaptivePlanConceptLoader';
+import UploadQuestionPaper from './diagrams/PilotComponents/UploadQuestionPaper';
+import UploadExamGuidelines from './diagrams/PilotComponents/UploadExamGuidelines';
 
 
 
@@ -86,7 +89,10 @@ const diagramComponents = {
   FlowHolyGrailDataFlow,
   FileExplorer,
   FirebaseCollectionsViewer,
-  AdaptivePlanLoader
+  AdaptivePlanLoader,
+  AdaptivePlanConceptLoader,
+  UploadQuestionPaper,
+  UploadExamGuidelines
 };
 
 // Sample static data representing past brainstorming sessions.
@@ -365,6 +371,41 @@ const sampleBrainstormings = [
     diagramComponent: 'AdaptivePlanLoader',
     isImportant: false
   },
+  {
+    id: 40,
+    title: 'PilotComponents: AdaptivePlanConceptLoader',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'AdaptivePlanConceptLoader',
+    isImportant: false
+  },
+  {
+    id: 41,
+    title: 'PilotComponents: UploadQuestionPaper',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'UploadQuestionPaper',
+    isImportant: false
+  },
+  {
+    id: 42,
+    title: 'PilotComponents: UploadExamGuidelines',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'UploadExamGuidelines',
+    isImportant: false
+  },
+
+
+
+
+
+  
+
+
+  
+
+
+
+
+  
 
 
 

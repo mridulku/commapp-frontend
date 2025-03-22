@@ -190,7 +190,8 @@ export default function LeftPanel({
         {renderTopRow()}
         {!isCollapsed && (
           <Box sx={{ flex: 1, overflowY: "auto" }}>
-            <ChapterList
+            {/* Now we call our custom "MasterList" that shows global vs. normal */}
+            <MasterList
               activities={activities}
               currentIndex={currentIndex}
               onSelectAct={(idx) => dispatch(setCurrentIndex(idx))}
@@ -212,7 +213,7 @@ export default function LeftPanel({
       {renderTopRow()}
       <Box sx={{ flex: 1, overflowY: "auto" }}>
         {!isCollapsed && (
-          <ChapterList
+          <MasterList
             activities={activities}
             currentIndex={currentIndex}
             onSelectAct={(idx) => dispatch(setCurrentIndex(idx))}
@@ -285,6 +286,99 @@ export default function LeftPanel({
   }
 }
 
+/**
+ * MasterList
+ * ----------
+ * This wraps:
+ *   1) "Global" or "Cumulative" activities that have no chapter or 
+ *      some quizStage like "cumulativequiz"/"cumulativerevision"
+ *   2) Normal chapter-based activities (rendered via ChapterList).
+ */
+function MasterList({
+  activities,
+  currentIndex,
+  onSelectAct,
+  expanded,
+  onToggleExpand,
+}) {
+  // PARTITION the activities into "global" vs. "chapter-based"
+  const globalActivities = [];
+  const chapterBased = [];
+
+  for (const act of activities) {
+    // Identify condition(s) for "global/cumulative" vs normal
+    // Example check: (no chapterId) or (quizStage === "cumulativequiz" / "cumulativerevision")
+    const quizStageLower = (act.quizStage || "").toLowerCase();
+    const isCumulative =
+      quizStageLower === "cumulativequiz" ||
+      quizStageLower === "cumulativerevision";
+
+    // If subChapterId or chapterId is missing, or if it’s flagged as cumulative
+    if (!act.chapterId || isCumulative) {
+      globalActivities.push(act);
+    } else {
+      chapterBased.push(act);
+    }
+  }
+
+  return (
+    <List dense sx={{ p: 0 }}>
+      {/* 1) Render global/cumulative items first */}
+      {globalActivities.length > 0 && (
+        <Box sx={{ mb: 2 }}>
+          <Typography
+            variant="subtitle1"
+            sx={{ color: "#fff", fontSize: "0.8rem", ml: 1, mb: 0.5 }}
+          >
+            Global Activities
+          </Typography>
+
+          <List dense sx={{ p: 0, ml: 1 }}>
+            {globalActivities.map((act) => {
+              const isSelected = act.flatIndex === currentIndex;
+              const { bgColor, textColor } = getActivityStyle(isSelected);
+              // Construct a label
+              let label = act.quizStage
+                ? `Cumulative (${act.quizStage})`
+                : "Global Activity";
+              if (label.toLowerCase().includes("cumulativerevision")) {
+                label = "Cumulative Revision";
+              } else if (label.toLowerCase().includes("cumulativequiz")) {
+                label = "Cumulative Quiz";
+              }
+
+              return (
+                <ListItemButton
+                  key={act.flatIndex}
+                  sx={{
+                    ...listItemButtonSx,
+                    bgcolor: bgColor,
+                    color: textColor,
+                    mb: 0.4,
+                  }}
+                  onClick={() => onSelectAct(act.flatIndex)}
+                >
+                  <TruncateTooltip text={label} sx={{ fontSize: "0.75rem" }} />
+                  {act.timeNeeded && <TimePill minutes={act.timeNeeded} />}
+                </ListItemButton>
+              );
+            })}
+          </List>
+        </Box>
+      )}
+
+      {/* 2) Now render the normal chapters */}
+      <ChapterList
+        activities={chapterBased}
+        currentIndex={currentIndex}
+        onSelectAct={onSelectAct}
+        expanded={expanded}
+        onToggleExpand={onToggleExpand}
+      />
+    </List>
+  );
+}
+
 /** Renders a list of chapters with collapsible blocks. Each sub-chapter => single line. */
 function ChapterList({
   activities,
@@ -350,16 +444,13 @@ function ChapterList({
  */
 function renderSubChLines(subChActivities, currentIndex, onSelectAct) {
   // We'll group them by subChapter, but each activity => 1 line
-  // If multiple "activities" for the same sub-ch happen, we show multiple lines.
-  const lines = [];
-  for (const act of subChActivities) {
-    lines.push(act);
-  }
+  const lines = subChActivities.map((act) => act);
 
   return lines.map((act, idx) => {
     const isSelected = act.flatIndex === currentIndex;
     const { bgColor, textColor } = getActivityStyle(isSelected);
     const subName = act.subChapterName || `SubCh(${act.subChapterId})`;
+
     // If type=READ => label "Reading"
     let stageLabel = "Reading";
     if (act.type === "QUIZ") {
@@ -441,5 +532,3 @@ const selectSx = {
     color: "#fff",
   },
 };
-
-
