@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import axios from "axios";
 
+// Utility to format mm:ss
 function formatTime(totalSeconds) {
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
@@ -9,16 +10,29 @@ function formatTime(totalSeconds) {
 }
 
 export default function ReadingView({ activity }) {
+  // For demonstration, we’re still expecting "activity" to have at least { subChapterId }.
+  // If none is provided, we show a fallback.
   if (!activity) {
     return <div style={styles.outerContainer}>No activity provided.</div>;
   }
 
   const subChapterId = activity.subChapterId;
   const userId = useSelector((state) => state.auth?.userId || "demoUser");
+
+  // If your plan is stored in Redux similarly to the revision code:
+  const planId = useSelector((state) => state.plan?.planDoc?.id);
+
   const backendURL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
 
+  // === Local State ===
   const [subChapter, setSubChapter] = useState(null);
-  const [localProficiency, setLocalProficiency] = useState("empty");
+
+  // We’ll track local reading state/proficiency just for UI
+  const [localProficiency, setLocalProficiency] = useState("empty"); 
+  // "empty" => haven't started
+  // "reading" => currently reading
+  // "read" => finished reading
+
   const [isExpanded, setIsExpanded] = useState(false);
 
   const [localStartMs, setLocalStartMs] = useState(null);
@@ -26,31 +40,31 @@ export default function ReadingView({ activity }) {
   const [readingSeconds, setReadingSeconds] = useState(0);
   const [finalReadingTime, setFinalReadingTime] = useState(null);
 
+  // For demonstration, we’ll track a “productReadingPerformance” – 
+  // you can imagine a numeric or string measure of performance
+  const [productReadingPerformance, setProductReadingPerformance] = useState("N/A");
+
+  // For debug overlay
   const [showDebug, setShowDebug] = useState(false);
 
+  // --- Fetch subchapter for display ---
   useEffect(() => {
     if (!subChapterId) return;
 
     async function fetchSubChapter() {
       try {
+        // The same GET approach as before
         const res = await axios.get(`${backendURL}/api/subchapters/${subChapterId}`);
         const data = res.data;
         if (!data) return;
 
         setSubChapter(data);
-        setLocalProficiency(data.proficiency || "empty");
-
-        if (data.readStartTime) {
-          setLocalStartMs(new Date(data.readStartTime).getTime());
-        }
-        if (data.readEndTime) {
-          setLocalEndMs(new Date(data.readEndTime).getTime());
-        }
       } catch (err) {
         console.error("Error fetching subchapter details:", err);
       }
     }
 
+    // Reset local states on each new subChapterId
     setLocalProficiency("empty");
     setIsExpanded(false);
     setLocalStartMs(null);
@@ -58,10 +72,12 @@ export default function ReadingView({ activity }) {
     setReadingSeconds(0);
     setFinalReadingTime(null);
     setSubChapter(null);
+    setProductReadingPerformance("N/A");
 
     fetchSubChapter();
   }, [subChapterId, backendURL]);
 
+  // --- If currently "reading", update the readingSeconds every second ---
   useEffect(() => {
     if (localProficiency === "reading" && localStartMs && !localEndMs) {
       const tick = () => {
@@ -69,7 +85,8 @@ export default function ReadingView({ activity }) {
         const diff = now - localStartMs;
         setReadingSeconds(diff > 0 ? Math.floor(diff / 1000) : 0);
       };
-      tick();
+      tick(); // run once immediately
+
       const timerId = setInterval(tick, 1000);
       return () => clearInterval(timerId);
     } else {
@@ -77,6 +94,7 @@ export default function ReadingView({ activity }) {
     }
   }, [localProficiency, localStartMs, localEndMs]);
 
+  // --- Once user is "read" (stopped reading), compute final time ---
   useEffect(() => {
     if (localProficiency === "read" && localStartMs && localEndMs) {
       const totalSec = Math.floor((localEndMs - localStartMs) / 1000);
@@ -86,6 +104,54 @@ export default function ReadingView({ activity }) {
     }
   }, [localProficiency, localStartMs, localEndMs]);
 
+  // --- Start Reading Handler ---
+  async function handleStartReading() {
+    setLocalProficiency("reading");
+    setIsExpanded(true);
+    setLocalStartMs(Date.now());
+    setLocalEndMs(null);
+  }
+
+  // --- Stop (Done) Reading Handler ---
+  async function handleStopReading() {
+    // 1) Update local state so UI shows "read"
+    setLocalProficiency("read");
+    setIsExpanded(true);
+    const nowMs = Date.now();
+    setLocalEndMs(nowMs);
+
+    // 2) Build payload for our new "submitReading" endpoint
+    const readingStartTime = new Date(localStartMs).toISOString();
+    const readingEndTime = new Date(nowMs).toISOString();
+    const readingTimestamp = new Date().toISOString(); // The time we log the event
+
+    const payload = {
+      userId,
+      subChapterId,
+      readingStartTime,
+      readingEndTime,
+      productReadingPerformance,
+      planId,
+      // "timestamp" is the final recorded time of the submission
+      timestamp: readingTimestamp,
+    };
+
+    try {
+      // 3) Post it to our new API
+      await axios.post(`${backendURL}/api/submitReading`, payload);
+      console.log("Reading submission successful:", payload);
+    } catch (error) {
+      console.error("Error submitting reading record:", error);
+      alert("Failed to submit reading record.");
+      // Optional: revert local changes or handle error
+    }
+  }
+
+  // --- Expand/Collapse UI ---
+  function toggleExpand() {
+    setIsExpanded((prev) => !prev);
+  }
+
   if (!subChapter) {
     return (
       <div style={styles.outerContainer}>
@@ -94,16 +160,12 @@ export default function ReadingView({ activity }) {
     );
   }
 
-  // ============ THE KEY PART ============
+  // ============ Summaries & Display ============
 
-  // 1) Read the field containing HTML (or partial HTML)
   let { summary = "" } = subChapter;
-
-  // 2) Remove ALL raw newlines:
-  //    This ensures absolutely no '\n\n' can appear as text.
+  // Remove raw newlines:
   summary = summary.replace(/\r?\n/g, "");
 
-  // 3) Truncate if needed:
   const maxChars = 200;
   const truncatedHtml =
     summary.length > maxChars ? summary.slice(0, maxChars) + " ..." : summary;
@@ -114,72 +176,11 @@ export default function ReadingView({ activity }) {
   } else if (localProficiency === "reading") {
     displayedHtml = summary;
   } else {
+    // If "read", let user expand or collapse
     displayedHtml = isExpanded ? summary : truncatedHtml;
   }
 
-  // ============ ======================
-
-  async function postUserActivity(eventType) {
-    try {
-      await axios.post(`${backendURL}/api/user-activities`, {
-        userId,
-        subChapterId,
-        eventType,
-        timestamp: new Date().toISOString(),
-      });
-    } catch (err) {
-      console.error("Error posting user activity:", err);
-    }
-  }
-
-  async function handleStartReading() {
-    setLocalProficiency("reading");
-    setIsExpanded(true);
-    const nowMs = Date.now();
-    setLocalStartMs(nowMs);
-    setLocalEndMs(null);
-
-    try {
-      await axios.post(`${backendURL}/api/complete-subchapter`, {
-        userId,
-        subChapterId,
-        startReading: true,
-      });
-      await postUserActivity("startReading");
-    } catch (error) {
-      console.error("Error starting reading:", error);
-      setLocalProficiency("empty");
-      setIsExpanded(false);
-      setLocalStartMs(null);
-    }
-  }
-
-  async function handleStopReading() {
-    setLocalProficiency("read");
-    setIsExpanded(true);
-    const nowMs = Date.now();
-    setLocalEndMs(nowMs);
-
-    try {
-      await axios.post(`${backendURL}/api/complete-subchapter`, {
-        userId,
-        subChapterId,
-        endReading: true,
-      });
-      await postUserActivity("stopReading");
-    } catch (error) {
-      console.error("Error stopping reading:", error);
-      setLocalProficiency("reading");
-      setIsExpanded(true);
-      setLocalEndMs(null);
-    }
-  }
-
-  function toggleExpand() {
-    setIsExpanded((prev) => !prev);
-  }
-
-  const canExpand = localProficiency === "read" || localProficiency === "proficient";
+  // ============ JSX Return ============
 
   return (
     <div style={styles.outerContainer}>
@@ -190,13 +191,25 @@ export default function ReadingView({ activity }) {
 
       <div style={styles.footerActions}>
         {renderActionButtons(localProficiency)}
-        {canExpand && (
+        {localProficiency === "read" && (
           <button style={styles.btnStyle} onClick={toggleExpand}>
             {isExpanded ? "Collapse" : "Expand"}
           </button>
         )}
       </div>
 
+      {/* Show reading stats if desired */}
+      <div style={{ marginTop: "8px" }}>
+        {localProficiency === "reading" && (
+          <div>Reading time so far: {formatTime(readingSeconds)}</div>
+        )}
+        {localProficiency === "read" && finalReadingTime && (
+          <div>Total Reading Time: {finalReadingTime}</div>
+        )}
+        <div>ProductReadingPerformance: {productReadingPerformance}</div>
+      </div>
+
+      {/* Debug overlay */}
       <div
         style={styles.debugEyeContainer}
         onMouseEnter={() => setShowDebug(true)}
@@ -220,6 +233,7 @@ export default function ReadingView({ activity }) {
     </div>
   );
 
+  // Helper to show the relevant button
   function renderActionButtons(prof) {
     switch (prof) {
       case "empty":
@@ -231,7 +245,7 @@ export default function ReadingView({ activity }) {
       case "reading":
         return (
           <button style={styles.btnStyle} onClick={handleStopReading}>
-            Stop Reading
+            Done Reading
           </button>
         );
       case "read":
@@ -240,17 +254,13 @@ export default function ReadingView({ activity }) {
             <em>Reading Complete</em>
           </div>
         );
-      case "proficient":
-        return (
-          <div style={styles.readingDoneMsg}>
-            <em>You are Proficient!</em>
-          </div>
-        );
       default:
         return null;
     }
   }
 }
+
+// ============ Basic Styles ============
 
 const styles = {
   outerContainer: {

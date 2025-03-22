@@ -36,6 +36,12 @@ import FlowQuizReact from './diagrams/FlowSwimLanes/FlowQuizReact';
 import QuizConfigCreator from './diagrams/AdminPanel/QuizConfigCreator';
 import CSVBookUploader from './diagrams/AdminPanel/CSVBookUploader';
 import FlowHolyGrailDataFlow from './diagrams/FlowSwimLanes/FlowHolyGrailDataFlow';
+import FileExplorer from './diagrams/AdminPanel/FileExplorer';
+import FirebaseCollectionsViewer from './diagrams/AdminPanel/FirebaseCollectionsViewer';
+import AdaptivePlanLoader from './diagrams/PilotComponents/AdaptivePlanLoader';
+
+
+
 
 
 
@@ -77,7 +83,10 @@ const diagramComponents = {
   FlowQuizReact,
   QuizConfigCreator,
   CSVBookUploader,
-  FlowHolyGrailDataFlow
+  FlowHolyGrailDataFlow,
+  FileExplorer,
+  FirebaseCollectionsViewer,
+  AdaptivePlanLoader
 };
 
 // Sample static data representing past brainstorming sessions.
@@ -335,8 +344,40 @@ const sampleBrainstormings = [
     diagramComponent: 'FlowHolyGrailDataFlow',
     isImportant: false
   },
+  {
+    id: 37,
+    title: 'AdminPanel: FileExplorer',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'FileExplorer',
+    isImportant: false
+  },
+  {
+    id: 38,
+    title: 'AdminPanel: FirebaseCollectionsViewer',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'FirebaseCollectionsViewer',
+    isImportant: false
+  },
+  {
+    id: 39,
+    title: 'PilotComponents: AdaptivePlanLoader',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'AdaptivePlanLoader',
+    isImportant: false
+  },
 
 
+
+  
+
+
+
+  
+
+
+
+
+  
 
 
   

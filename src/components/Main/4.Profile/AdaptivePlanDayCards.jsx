@@ -1,192 +1,323 @@
 import React, { useState } from "react";
 
+// We'll re-use your colorScheme approach for styling:
+const defaultColorScheme = {
+  panelBg: "#0D0D0D",
+  textColor: "#FFD700",
+  heading: "#FFD700",
+  borderColor: "#FFD700",
+};
+
 /**
- * Mock data to illustrate the day-by-day plan logic. 
- * Each day has:
- *  - dayNumber (1,2,3,...)
- *  - planned: array of tasks that were initially proposed for that day
- *  - actual: array of tasks the user really did
- *  - updatedPlan => what changed going into the next day 
- *  - isFuture => whether this day is "theoretical" (if day is after the current day)
+ * We'll define a mock "daysData" representing the day-by-day plan with
+ * chapter/subchapter tasks, time estimates, actual times, and a stage (Reading/Understand/Analyze/Apply).
+ * Each "day" can also have a "planReadjustment" note, and "isFuture" flag to differentiate upcoming days.
+ * Each day has a summary too.
  */
 const mockDaysData = [
   {
     dayNumber: 1,
-    planned: [
-      "Read Chapter 1.1 & 1.2",
-      "Understand Stage (Quiz) for Chapter 1.1",
-    ],
-    actual: [
-      "Read Chapter 1.1 (took 45 min)",
-      "Quiz for Chapter 1.1 => FAIL on Concept B",
-      "Did partial reading for Chapter 1.2 (unplanned)",
-    ],
-    updatedPlan: [
-      "Scheduled revision for Chapter 1.1 => Concept B tomorrow",
-      "Moved reading for Chapter 1.2 from Day 2 to Day 1 leftover => might impact Day 2 tasks",
-    ],
     isFuture: false,
+    planReadjustment:
+      "Concept B (Understand) failed => scheduled revision on Day 2, partial reading leftover from Day 2 was done on Day 1.",
+    tasks: [
+      {
+        chapter: "Chapter 1",
+        subchapter: "1.1",
+        stage: "Reading",
+        estimatedTime: 30,
+        actualTime: 45,
+        status: "Completed",
+      },
+      {
+        chapter: "Chapter 1",
+        subchapter: "1.1",
+        stage: "Understand",
+        estimatedTime: 20,
+        actualTime: 25,
+        status: "Failed",
+      },
+      {
+        chapter: "Chapter 1",
+        subchapter: "1.2",
+        stage: "Reading",
+        estimatedTime: 20,
+        actualTime: 15,
+        status: "Partial",
+      },
+    ],
+    summary: {
+      plannedTime: 70,
+      actualTime: 85,
+      progress: "70%", // e.g. can be derived
+    },
   },
   {
     dayNumber: 2,
-    planned: [
-      "Revision for Chapter 1.1 => Concept B",
-      "Retake Quiz for Chapter 1.1 => Expect pass",
-      "Start 'Analyze' Stage for Chapter 1.1 if pass",
-    ],
-    actual: [
-      "Revision for Concept B => DONE",
-      "Retake Quiz => PASS for Chapter 1.1",
-      "Analyze Stage => Quiz 1 => FAIL Concept X",
-    ],
-    updatedPlan: [
-      "Analyze for Chapter 1.1 => partial pass => new revision needed tomorrow for Concept X",
-      "Reading leftover for Chapter 1.2 => finished",
-    ],
     isFuture: false,
+    planReadjustment:
+      "Analyze stage partial fail => next revision scheduled Day 3. Reading leftover done for 1.2",
+    tasks: [
+      {
+        chapter: "Chapter 1",
+        subchapter: "1.1",
+        stage: "Revision (Concept B)",
+        estimatedTime: 15,
+        actualTime: 15,
+        status: "Completed",
+      },
+      {
+        chapter: "Chapter 1",
+        subchapter: "1.1",
+        stage: "Understand (Quiz retry)",
+        estimatedTime: 10,
+        actualTime: 10,
+        status: "Completed",
+      },
+      {
+        chapter: "Chapter 1",
+        subchapter: "1.1",
+        stage: "Analyze",
+        estimatedTime: 20,
+        actualTime: 25,
+        status: "Failed",
+      },
+      {
+        chapter: "Chapter 1",
+        subchapter: "1.2",
+        stage: "Reading leftover",
+        estimatedTime: 15,
+        actualTime: 15,
+        status: "Completed",
+      },
+    ],
+    summary: {
+      plannedTime: 60,
+      actualTime: 65,
+      progress: "80%",
+    },
   },
   {
     dayNumber: 3,
-    planned: [
-      "Revision for Chapter 1.1 => Concept X",
-      "Retake Analyze quiz for Chapter 1.1 => hopefully pass",
-      "Read Chapter 2.1",
-    ],
-    actual: [
-      "User only had 20 minutes => partial revision done",
-      "Analyze quiz => FAIL again on Concept X",
-    ],
-    updatedPlan: [
-      "Analyze stage incomplete => new revision tomorrow for Concept X",
-      "Reading for Chapter 2.1 => not started => push to Day 4",
-    ],
     isFuture: false,
+    planReadjustment:
+      "Analyze stage incomplete => new revision tomorrow for Concept X. Reading for Chapter 2 => push to Day 4.",
+    tasks: [
+      {
+        chapter: "Chapter 1",
+        subchapter: "1.1",
+        stage: "Revision (Concept X)",
+        estimatedTime: 20,
+        actualTime: 10,
+        status: "Partial",
+      },
+      {
+        chapter: "Chapter 1",
+        subchapter: "1.1",
+        stage: "Analyze (Quiz)",
+        estimatedTime: 20,
+        actualTime: 20,
+        status: "Failed",
+      },
+      {
+        chapter: "Chapter 2",
+        subchapter: "2.1",
+        stage: "Reading",
+        estimatedTime: 30,
+        actualTime: null,
+        status: "NotStarted",
+      },
+    ],
+    summary: {
+      plannedTime: 70,
+      actualTime: 30,
+      progress: "42%",
+    },
   },
   {
     dayNumber: 4,
-    planned: [
-      "Finish revision for Concept X (Analyze Stage, Chapter 1.1)",
-      "Quiz => pass => move to 'Apply' stage for Chapter 1.1",
-      "Start reading Chapter 2.1 & 2.2",
-    ],
-    actual: [],
-    updatedPlan: [],
     isFuture: false,
+    planReadjustment: null,
+    tasks: [
+      {
+        chapter: "Chapter 1",
+        subchapter: "1.1",
+        stage: "Revision (Concept X)",
+        estimatedTime: 15,
+        actualTime: null,
+        status: "NotStarted",
+      },
+      {
+        chapter: "Chapter 2",
+        subchapter: "2.1",
+        stage: "Reading",
+        estimatedTime: 30,
+        actualTime: null,
+        status: "NotStarted",
+      },
+      {
+        chapter: "Chapter 2",
+        subchapter: "2.2",
+        stage: "Reading",
+        estimatedTime: 20,
+        actualTime: null,
+        status: "NotStarted",
+      },
+    ],
+    summary: {
+      plannedTime: 65,
+      actualTime: 0,
+      progress: "0%",
+    },
   },
   {
     dayNumber: 5,
-    planned: [
-      "Potentially continue 'Apply' for Chapter 1.1 if pass on Analyze",
-      "Revision for Chapter 1.1 if still fail",
-      "Reading leftover for Chapter 2.2",
+    isFuture: true,
+    planReadjustment: null,
+    tasks: [
+      {
+        chapter: "Chapter 1",
+        subchapter: "1.1",
+        stage: "Apply (If Analyze pass)",
+        estimatedTime: 20,
+        actualTime: null,
+        status: "NotStarted",
+      },
+      {
+        chapter: "Chapter 1",
+        subchapter: "1.1",
+        stage: "Revision (Concept X) if still fail",
+        estimatedTime: 15,
+        actualTime: null,
+        status: "NotStarted",
+      },
+      {
+        chapter: "Chapter 2",
+        subchapter: "2.2",
+        stage: "Reading leftover",
+        estimatedTime: 15,
+        actualTime: null,
+        status: "NotStarted",
+      },
     ],
-    actual: [],
-    updatedPlan: [],
-    isFuture: true, // It's upcoming
+    summary: {
+      plannedTime: 50,
+      actualTime: 0,
+      progress: "0%",
+    },
   },
   {
     dayNumber: 6,
-    planned: [
-      "Analyze Chapter 2.1 if reading done",
-      "Remember stage Chapter 2.2 if time allows",
-    ],
-    actual: [],
-    updatedPlan: [],
     isFuture: true,
+    planReadjustment: null,
+    tasks: [
+      {
+        chapter: "Chapter 2",
+        subchapter: "2.1",
+        stage: "Analyze",
+        estimatedTime: 20,
+        actualTime: null,
+        status: "NotStarted",
+      },
+      {
+        chapter: "Chapter 2",
+        subchapter: "2.2",
+        stage: "Remember stage (if time allows)",
+        estimatedTime: 10,
+        actualTime: null,
+        status: "NotStarted",
+      },
+    ],
+    summary: {
+      plannedTime: 30,
+      actualTime: 0,
+      progress: "0%",
+    },
   },
 ];
 
-export default function AdaptivePlanDayCards() {
-  // In real usage, you'd fetch or generate day-based plan data from your backend
+export default function AdaptivePlanDayCards({
+  userId,
+  colorScheme = defaultColorScheme,
+}) {
   const [daysData] = useState(mockDaysData);
 
-  // Let's assume the "current day" is Day 4 for demonstration – 
-  // so days 1..3 are past, day4 is "today", day5..6 are future
-  // (We've already set isFuture in the mock data, but you might compute it dynamically.)
+  // We might have day1..N, day4 is "today", day5..N are future, etc.
+  // We'll display them in ascending order, each day in an expandable card.
 
   return (
-    <div style={styles.container}>
-      <h1 style={styles.title}>Adaptive Plan: Day-by-Day</h1>
-      <p style={styles.subtitle}>
-        A dynamic schedule that evolves based on daily performance.
+    <div style={containerStyle(colorScheme)}>
+      <h2 style={headingStyle(colorScheme)}>Adaptive Plan — Day by Day</h2>
+      <p style={{ marginBottom: "1.5rem", color: colorScheme.textColor }}>
+        This schedule updates daily based on your progress, leftover tasks, and quiz results.
       </p>
 
-      <div style={styles.cardList}>
-        {daysData.map((day) => (
-          <DayCard key={day.dayNumber} day={day} />
-        ))}
-      </div>
+      {daysData.map((day) => (
+        <DayCard key={day.dayNumber} day={day} colorScheme={colorScheme} />
+      ))}
     </div>
   );
 }
 
-/**
- * DayCard => Renders a "card" for a single day, showing:
- *   - Day # 
- *   - (If future => "Upcoming" badge)
- *   - Planned tasks
- *   - Actual tasks (if day is not future, or day has ended)
- *   - Updated Plan => how tomorrow changed
- */
-function DayCard({ day }) {
-  const { dayNumber, planned, actual, updatedPlan, isFuture } = day;
+// -----------------------------
+// DayCard
+// -----------------------------
+function DayCard({ day, colorScheme }) {
+  const [expanded, setExpanded] = useState(!day.isFuture);
 
-  // For visual flair, we'll color the card differently if it's future or past
-  let cardBg = isFuture ? "#2c3e50" : "#3f3f3f";
+  function toggleExpand() {
+    setExpanded(!expanded);
+  }
 
-  // If there's no actual data but not future => might be "today"
-  // We won't differentiate that in the mock, but you could if you wanted.
-
-  // Collapsible approach if you'd like
-  const [expanded, setExpanded] = useState(!isFuture);
-
-  const handleToggle = () => setExpanded(!expanded);
+  const cardBg = day.isFuture ? "#2c3e50" : "#1a1a1a";
 
   return (
-    <div style={{ ...styles.dayCard, backgroundColor: cardBg }}>
-      <div style={styles.dayHeader}>
-        <div style={styles.dayHeaderLeft}>
-          <h2 style={styles.dayTitle}>Day {dayNumber}</h2>
-          {isFuture && <span style={styles.upcomingBadge}>Upcoming</span>}
+    <div style={cardStyle(cardBg, colorScheme)}>
+      <div
+        style={cardHeaderStyle(colorScheme)}
+        onClick={toggleExpand}
+      >
+        <div>
+          <strong>Day {day.dayNumber}</strong>{" "}
+          {day.isFuture && (
+            <span style={upcomingBadgeStyle()}>Upcoming</span>
+          )}
         </div>
-        <button style={styles.toggleBtn} onClick={handleToggle}>
-          {expanded ? "−" : "+"}
-        </button>
+        <div style={{ cursor: "pointer" }}>
+          {expanded ? "▼" : "▶"}
+        </div>
       </div>
 
       {expanded && (
-        <div style={styles.dayContent}>
-          <SectionBlock
-            title="Planned Tasks"
-            items={planned}
-            placeholder="(No planned tasks)"
-          />
+        <div style={{ padding: "0.5rem 1rem" }}>
+          {/* tasks grouped by chapter => subchapter */}
+          {renderDayTasks(day, colorScheme)}
 
-          {/* If not future, show "Actual" or "Day Incomplete" */}
-          {!isFuture && (
-            <SectionBlock
-              title="What Actually Happened"
-              items={actual}
-              placeholder="(No data recorded yet)"
-            />
+          {/* summary row */}
+          <div style={summaryBoxStyle(colorScheme)}>
+            <div>Planned Time: {day.summary?.plannedTime || 0} min</div>
+            <div>Actual Time: {day.summary?.actualTime || 0} min</div>
+            <div>Progress: {day.summary?.progress || "0%"}</div>
+          </div>
+
+          {/* Plan readjustment note */}
+          {day.planReadjustment && (
+            <div
+              style={{
+                marginTop: "0.5rem",
+                backgroundColor: "#333",
+                padding: "8px",
+                borderRadius: "4px",
+                fontStyle: "italic",
+              }}
+            >
+              {day.planReadjustment}
+            </div>
           )}
 
-          {/* If not future and we have updatedPlan, show that */}
-          {!isFuture && updatedPlan && updatedPlan.length > 0 && (
-            <SectionBlock
-              title="Plan Adjustments for Next Day"
-              items={updatedPlan}
-              placeholder="(No updates or changes)"
-            />
-          )}
-
-          {/* 
-            If day is future => we can mention "this plan might change 
-            once the system re-runs tomorrow" 
-          */}
-          {isFuture && (
-            <div style={styles.futureNote}>
-              <em>These tasks are subject to change tomorrow, based on performance.</em>
+          {day.isFuture && (
+            <div style={{ marginTop: "0.5rem", fontStyle: "italic", color: "#ccc" }}>
+              These tasks may change tomorrow based on performance.
             </div>
           )}
         </div>
@@ -195,117 +326,178 @@ function DayCard({ day }) {
   );
 }
 
-/**
- * SectionBlock => Renders a small sub-section with a title and bullet items
- */
-function SectionBlock({ title, items, placeholder }) {
-  return (
-    <div style={styles.sectionBlock}>
-      <h4 style={styles.sectionTitle}>{title}</h4>
-      {items && items.length > 0 ? (
-        <ul style={styles.ul}>
-          {items.map((txt, i) => (
-            <li key={i} style={styles.li}>{txt}</li>
-          ))}
-        </ul>
-      ) : (
-        <div style={styles.noItems}>{placeholder}</div>
-      )}
-    </div>
-  );
+function renderDayTasks(day, colorScheme) {
+  // group tasks by chapter->subchapter
+  const tasks = day.tasks || [];
+  const chapterMap = {};
+
+  tasks.forEach((t) => {
+    const chKey = t.chapter || "UnknownChapter";
+    if (!chapterMap[chKey]) {
+      chapterMap[chKey] = {};
+    }
+    const subKey = t.subchapter || "UnknownSubchapter";
+    if (!chapterMap[chKey][subKey]) {
+      chapterMap[chKey][subKey] = [];
+    }
+    chapterMap[chKey][subKey].push(t);
+  });
+
+  return Object.keys(chapterMap).map((chapterName) => {
+    const subMap = chapterMap[chapterName];
+    return (
+      <div key={chapterName} style={{ marginBottom: "1rem" }}>
+        <div style={chapterHeaderStyle2(colorScheme)}>
+          {chapterName}
+        </div>
+        {Object.keys(subMap).map((subName) => {
+          const subActs = subMap[subName];
+          return (
+            <div key={subName} style={subchapterContainerStyle()}>
+              <div style={subchapterTitleStyle(colorScheme)}>
+                {subName}
+              </div>
+              <div style={{ marginLeft: "1rem" }}>
+                {subActs.map((task, idx) => (
+                  <div key={idx} style={activityRowStyle(colorScheme)}>
+                    <div>{task.stage}</div>
+                    <div style={{ marginLeft: "auto", marginRight: "12px" }}>
+                      Est: {task.estimatedTime || 0}m
+                    </div>
+                    <div style={{ marginRight: "12px" }}>
+                      {task.actualTime != null
+                        ? `Actual: ${task.actualTime}m`
+                        : "Actual: --"}
+                    </div>
+                    <div>{renderStatus(task.status)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  });
 }
 
-// ===========================
-// Inline Styles
-// ===========================
-const styles = {
-  container: {
-    backgroundColor: "#222",
-    color: "#fff",
+// small helper for status
+function renderStatus(status) {
+  switch (status) {
+    case "Completed":
+      return <span style={{ color: "#00ff00" }}>Completed</span>;
+    case "Failed":
+      return <span style={{ color: "#ff4444" }}>Failed</span>;
+    case "Partial":
+      return <span style={{ color: "#ffa500" }}>Partial</span>;
+    case "NotStarted":
+      return <span style={{ color: "#ccc" }}>Not Started</span>;
+    default:
+      return <span style={{ color: "#999" }}>{status}</span>;
+  }
+}
+
+// -----------------------------
+// Styles
+// -----------------------------
+function containerStyle(cs) {
+  return {
+    backgroundColor: cs.panelBg || "#0D0D0D",
+    color: cs.textColor || "#FFD700",
     minHeight: "100vh",
     padding: "1rem",
-    fontFamily: "Arial, sans-serif",
-  },
-  title: {
-    marginBottom: "0.5rem",
-  },
-  subtitle: {
-    marginBottom: "2rem",
-    color: "#aaa",
-  },
-  cardList: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "1rem",
-  },
-  dayCard: {
-    borderRadius: "8px",
-    padding: "1rem",
-    backgroundColor: "#3f3f3f",
-    boxShadow: "0 2px 5px rgba(0,0,0,0.4)",
-    transition: "background-color 0.3s ease",
-  },
-  dayHeader: {
+  };
+}
+
+function headingStyle(cs) {
+  return {
+    fontWeight: "bold",
+    marginBottom: "15px",
+    fontSize: "1.25rem",
+    color: cs.heading || "#FFD700",
+  };
+}
+
+function cardStyle(bg, cs) {
+  return {
+    backgroundColor: bg,
+    marginBottom: "1rem",
+    borderRadius: "6px",
+    border: `1px solid ${cs.borderColor || "#FFD700"}`,
+    overflow: "hidden",
+  };
+}
+
+function cardHeaderStyle(cs) {
+  return {
+    backgroundColor: cs.heading || "#FFD700",
+    color: "#000",
+    padding: "0.5rem 1rem",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: "0.5rem",
-  },
-  dayHeaderLeft: {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-  },
-  dayTitle: {
-    margin: 0,
-    fontSize: "1.25rem",
-  },
-  upcomingBadge: {
+    cursor: "pointer",
+    fontWeight: "bold",
+  };
+}
+
+function upcomingBadgeStyle() {
+  return {
     backgroundColor: "#f1c40f",
     color: "#000",
-    padding: "4px 8px",
     borderRadius: "4px",
-    fontSize: "0.85rem",
-  },
-  toggleBtn: {
-    backgroundColor: "#444",
-    color: "#fff",
-    border: "none",
-    padding: "4px 8px",
+    padding: "2px 6px",
+    marginLeft: "8px",
+    fontSize: "0.8rem",
+  };
+}
+
+function chapterHeaderStyle2(cs) {
+  return {
+    backgroundColor: "#222",
     borderRadius: "4px",
-    cursor: "pointer",
-    fontSize: "1.2rem",
-    lineHeight: "1",
-  },
-  dayContent: {
+    padding: "6px 10px",
+    fontWeight: "bold",
+    marginBottom: "4px",
+    border: `1px solid ${cs.borderColor || "#FFD700"}`,
+  };
+}
+
+function subchapterContainerStyle() {
+  return {
+    margin: "8px 0",
+    marginLeft: "1rem",
+    paddingLeft: "0.5rem",
+    borderLeft: "1px dashed #888",
+  };
+}
+
+function subchapterTitleStyle(cs) {
+  return {
+    fontWeight: "bold",
+    marginBottom: "4px",
+    color: cs.textColor || "#FFD700",
+  };
+}
+
+function activityRowStyle(cs) {
+  return {
+    display: "flex",
+    alignItems: "center",
+    backgroundColor: "#2F2F2F",
+    borderRadius: "4px",
+    margin: "2px 0",
+    padding: "4px 6px",
+  };
+}
+
+function summaryBoxStyle(cs) {
+  return {
+    backgroundColor: "#333",
+    padding: "6px 8px",
+    borderRadius: "4px",
     marginTop: "0.5rem",
-  },
-  sectionBlock: {
-    marginBottom: "1rem",
-  },
-  sectionTitle: {
-    fontSize: "1rem",
-    margin: "0 0 0.25rem 0",
-    color: "#fff",
-    borderBottom: "1px solid #555",
-    paddingBottom: "4px",
-  },
-  ul: {
-    margin: 0,
-    paddingLeft: "1.25rem",
-    listStyle: "disc",
-  },
-  li: {
-    marginBottom: "0.25rem",
-  },
-  noItems: {
-    fontStyle: "italic",
-    color: "#aaa",
-  },
-  futureNote: {
-    backgroundColor: "#444",
-    padding: "8px",
-    borderRadius: "4px",
-    marginTop: "0.5rem",
-  },
-};
+    display: "flex",
+    justifyContent: "space-around",
+  };
+}
