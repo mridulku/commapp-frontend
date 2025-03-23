@@ -25,12 +25,14 @@ const passThresholds = {
  *  1) Chapters -> subchapters -> subchapterConcepts
  *  2) reading_demo (to mark reading status)
  *  3) quizzes_demo + quizSubmissions (to see concept-level correctness)
- *  4) revisions_demo (if you want timeline data)
+ *  4) revisions_demo (optional timeline data)
  *
- * Then displays a table:
- *  -> One row PER CONCEPT of each subchapter
- *  -> "Reading" column uses subchapter read status
- *  -> For each stage (R/U/A/A), we compute concept-level pass/fail with quizSubmission data
+ * Then displays a table of concept-level rows, plus *two new columns*:
+ *   - Exam Score (examPresenceScore)
+ *   - Guideline Score (guidelinePresenceScore)
+ *
+ * We also show subchapter-level totals at the bottom of each table,
+ * and a global total at the very end.
  */
 export default function AdaptivePlanConceptLoader() {
   // Basic user input for loading
@@ -78,8 +80,7 @@ export default function AdaptivePlanConceptLoader() {
           const subId = subDoc.id;
           const parsedSubName = parseName(sData.name || "");
 
-          // 2a) For each subchapter => fetch subchapterConcepts from subchapterConcepts
-          //     We'll attach them so we can display concept-level rows.
+          // 2a) For each subchapter => fetch subchapterConcepts
           const subchapterConceptsRef = collection(db, "subchapterConcepts");
           const qConcepts = query(
             subchapterConceptsRef,
@@ -94,8 +95,8 @@ export default function AdaptivePlanConceptLoader() {
             };
           });
 
-          // Sort the concepts by some field if you like (e.g. cData.order), or just keep default
-          // conceptArray.sort((a, b) => ... ) if needed
+          // Sort the concepts by some field if desired
+          // conceptArray.sort((a, b) => ... ) if you want
 
           subchaptersArray.push({
             id: subId,
@@ -140,7 +141,6 @@ export default function AdaptivePlanConceptLoader() {
       });
 
       // 4) quizzes_demo => quizMap[subChapterId][stage] = array of quiz attempt docs
-      //    Each quiz doc presumably has quizSubmission: [...]
       const quizRef = collection(db, "quizzes_demo");
       const qQuiz = query(
         quizRef,
@@ -202,7 +202,8 @@ export default function AdaptivePlanConceptLoader() {
           // If there's at least one reading doc, we call subchapter "read"
           sub.isRead = readArr.length > 0;
 
-          // We'll build stage-based quizRecords for the *subchapter*, but we need to do concept-level checks
+          // We'll build stage-based quizRecords for the *subchapter*, 
+          // but we need to do concept-level checks
           sub.quizRecords = {};
           sub.revisionRecords = {};
           ["remember", "understand", "apply", "analyze"].forEach((stage) => {
@@ -211,22 +212,25 @@ export default function AdaptivePlanConceptLoader() {
           });
 
           // Now let's annotate each concept with concept-level stage statuses
-          // e.g. sub.concepts[i].stageStatus = { remember: "Completed"/"WIP"/"Not Started", ... }
           sub.concepts.forEach((conceptObj) => {
             conceptObj.stageStatus = {};
 
             // Mark reading based on subchapter reading
-            // We'll store conceptObj.isRead = sub.isRead (since you said if subchapter is read, all concepts are read)
             conceptObj.isRead = sub.isRead;
 
             // For each stage => figure out if concept is Not Started, WIP, or Completed
             ["remember", "understand", "apply", "analyze"].forEach((stage) => {
               conceptObj.stageStatus[stage] = computeConceptStageStatus(
-                sub.quizRecords[stage], 
-                conceptObj.name,  // or conceptObj.conceptName
+                sub.quizRecords[stage],
+                conceptObj.name,  
                 stage
               );
             });
+
+            // OPTIONAL: if conceptObj has examPresenceScore or guidelinePresenceScore,
+            // let's ensure we have numeric defaults
+            conceptObj.examPresenceScore = conceptObj.examPresenceScore || 0;
+            conceptObj.guidelinePresenceScore = conceptObj.guidelinePresenceScore || 0;
           });
         });
       });
@@ -239,12 +243,17 @@ export default function AdaptivePlanConceptLoader() {
     }
   };
 
+  // We also want a global total across all chapters
+  // We'll compute it once in render. If you want it dynamic, you can store in state.
+  const { globalExamScore, globalGuidelineScore } = computeGlobalScores(chapters);
+
   return (
     <div style={styles.container}>
       <h1>Adaptive Plan Concept Loader</h1>
       <p style={{ marginBottom: "0.5rem" }}>
         Enter Book ID, Plan ID, User ID, then click <b>Load Data</b>.
-        This will display a <em>concept-level</em> breakdown for each subchapter.
+        This will display a <em>concept-level</em> breakdown for each subchapter,
+        plus "Exam Score" and "Guideline Score" columns.
       </p>
 
       <div style={styles.inputRow}>
@@ -281,73 +290,46 @@ export default function AdaptivePlanConceptLoader() {
 
       {status && <div style={styles.statusBox}>{status}</div>}
 
-      {/* Now render each chapter, subchapter, concept-level table */}
+      {/* Now render each chapter */}
       {chapters.map((chapter) => (
         <ChapterSection key={chapter.id} chapter={chapter} />
       ))}
+
+      {/* Finally, show global totals across all chapters */}
+      {chapters.length > 0 && (
+        <div style={{ marginTop: "1rem", backgroundColor: "#333", padding: "0.5rem" }}>
+          <h2>Global Totals</h2>
+          <p>
+            <b>Total Exam Score:</b> {globalExamScore.toFixed(2)}
+          </p>
+          <p>
+            <b>Total Guideline Score:</b> {globalGuidelineScore.toFixed(2)}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
 
 /**
- * computeConceptStageStatus
- * -------------------------
- * For a given stage's quizRecords (array of quiz attempts),
- * we look at quizSubmission[] inside each attempt to see
- * if this concept was tested & correct. 
- *
- * If the concept never appears => "Not Started"
- * If the concept appears at least once but never correct => "Work in Progress"
- * If the concept is correct at least once => "Completed"
+ * computeGlobalScores
+ *  - Summation of examPresenceScore and guidelinePresenceScore across ALL concepts
  */
-function computeConceptStageStatus(quizAttempts, conceptName, stage) {
-  if (!quizAttempts || !quizAttempts.length) {
-    return "Not Started";
-  }
+function computeGlobalScores(chapters) {
+  let globalExamScore = 0;
+  let globalGuidelineScore = 0;
 
-  // We'll track concept attempts
-  let foundAny = false;
-  let foundCorrect = false;
-
-  // quizAttempts is sorted desc. We'll just iterate all
-  quizAttempts.forEach((attempt) => {
-    const submissionArray = attempt.quizSubmission || [];
-    submissionArray.forEach((qItem) => {
-      // If qItem.conceptName matches the concept we're looking for
-      if ((qItem.conceptName || "").toLowerCase() === conceptName.toLowerCase()) {
-        foundAny = true;
-        // If score >= 1 => correct
-        if (parseFloat(qItem.score) >= 1.0) {
-          foundCorrect = true;
-        }
-      }
+  chapters.forEach((ch) => {
+    ch.subchapters.forEach((sub) => {
+      sub.concepts.forEach((c) => {
+        globalExamScore += c.examPresenceScore || 0;
+        globalGuidelineScore += c.guidelinePresenceScore || 0;
+      });
     });
   });
 
-  if (!foundAny) {
-    return "Not Started";
-  }
-  if (foundCorrect) {
-    return "Completed";
-  }
-  return "Work in Progress";
+  return { globalExamScore, globalGuidelineScore };
 }
-
-/** parseName => "1. Chapter Title" => { order: 1, label: "1. Chapter Title" } */
-function parseName(name = "") {
-  const pattern = /^(\d+)\.\s*(.*)$/;
-  const match = name.trim().match(pattern);
-  if (match) {
-    return {
-      order: parseInt(match[1], 10),
-      label: name,
-    };
-  } else {
-    return { order: 9999, label: name };
-  }
-}
-
-// ===========================  UI for Chapter / Subch / Concepts ===========================
 
 function ChapterSection({ chapter }) {
   const [expanded, setExpanded] = useState(true);
@@ -370,14 +352,11 @@ function ChapterSection({ chapter }) {
   );
 }
 
-/**
- * SubchapterBlock
- *  - Renders a table with each CONCEPT as a row
- *  - Reading => if sub.isRead => "Read", else "Not Read"
- *  - Then for each stage => conceptObj.stageStatus[stage]
- */
 function SubchapterBlock({ subchapter }) {
   const [expanded, setExpanded] = useState(true);
+
+  // compute subchapter-level totals (exam/guideline) for all concepts
+  const { subExamTotal, subGuidelineTotal } = computeSubchapterTotals(subchapter.concepts);
 
   return (
     <div style={styles.subchapterContainer}>
@@ -400,6 +379,10 @@ function SubchapterBlock({ subchapter }) {
                 <th style={styles.th}>Understand</th>
                 <th style={styles.th}>Apply</th>
                 <th style={styles.th}>Analyze</th>
+
+                {/* NEW columns */}
+                <th style={styles.th}>Exam Score</th>
+                <th style={styles.th}>Guideline Score</th>
               </tr>
             </thead>
             <tbody>
@@ -410,6 +393,19 @@ function SubchapterBlock({ subchapter }) {
                   subchapter={subchapter}
                 />
               ))}
+
+              {/* Subchapter-level totals row */}
+              <tr>
+                <td colSpan={6} style={styles.subchapterTotalCell}>
+                  <b>Subchapter Totals:</b>
+                </td>
+                <td style={styles.td}>
+                  <b>{subExamTotal.toFixed(2)}</b>
+                </td>
+                <td style={styles.td}>
+                  <b>{subGuidelineTotal.toFixed(2)}</b>
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -418,14 +414,24 @@ function SubchapterBlock({ subchapter }) {
   );
 }
 
+/**
+ * computeSubchapterTotals => sum exam/guideline scores across subchapter's concepts
+ */
+function computeSubchapterTotals(concepts) {
+  let subExamTotal = 0;
+  let subGuidelineTotal = 0;
+  concepts.forEach((c) => {
+    subExamTotal += c.examPresenceScore || 0;
+    subGuidelineTotal += c.guidelinePresenceScore || 0;
+  });
+  return { subExamTotal, subGuidelineTotal };
+}
+
 function ConceptRow({ concept, subchapter }) {
-  // "concept" has fields like { name, stageStatus: { remember, understand, etc. } }
-  // "subchapter" has the readingRecords if needed, but we said concept reading = subchap reading
+  // "concept" has fields like { name, examPresenceScore, guidelinePresenceScore, stageStatus, isRead, ... }
   return (
     <tr>
-      <td style={styles.subchapterTd}>
-        {concept.name || concept.id}
-      </td>
+      <td style={styles.subchapterTd}>{concept.name || concept.id}</td>
       <td style={styles.td}>
         {concept.isRead ? (
           <div style={styles.readIndicator}>Read</div>
@@ -446,6 +452,10 @@ function ConceptRow({ concept, subchapter }) {
       <td style={styles.td}>
         {renderConceptStageCell(concept.stageStatus.analyze, subchapter, concept, "analyze")}
       </td>
+
+      {/* NEW columns: Exam Score, Guideline Score */}
+      <td style={styles.td}>{(concept.examPresenceScore || 0).toFixed(2)}</td>
+      <td style={styles.td}>{(concept.guidelinePresenceScore || 0).toFixed(2)}</td>
     </tr>
   );
 }
@@ -453,7 +463,7 @@ function ConceptRow({ concept, subchapter }) {
 /**
  * renderConceptStageCell
  *  - "Not Started" / "WIP" / "Completed"
- *  - Possibly an info button for timeline if WIP/Completed
+ *  - Possibly an info button for timeline
  */
 function renderConceptStageCell(status, sub, concept, stage) {
   if (status === "Not Started") {
@@ -477,9 +487,7 @@ function renderConceptStageCell(status, sub, concept, stage) {
 }
 
 /**
- * ConceptInfoPopover
- *  - If type="stage", display a concept-level timeline of quiz attempts referencing that concept
- *  - We'll replicate your timeline logic, but filter out question items that match the conceptName
+ * ConceptInfoPopover => for showing timeline details if user clicks "i"
  */
 function ConceptInfoPopover({ type, sub, conceptName, stage }) {
   const [show, setShow] = useState(false);
@@ -504,8 +512,7 @@ function ConceptInfoPopover({ type, sub, conceptName, stage }) {
 }
 
 /**
- * renderConceptTimeline
- *  - We build a timeline of attempts that reference this concept in quizSubmission
+ * renderConceptTimeline => build timeline specifically for this concept, filtering quizSubmission
  */
 function renderConceptTimeline(quizArr, revArr, conceptName, stage) {
   if (!quizArr || !quizArr.length) {
@@ -515,10 +522,8 @@ function renderConceptTimeline(quizArr, revArr, conceptName, stage) {
   const ascQuizzes = [...quizArr].sort((a, b) => a.attemptNumber - b.attemptNumber);
   const timelineItems = [];
 
-  // For each quiz attempt, check if conceptName was tested
   ascQuizzes.forEach((quizDoc) => {
     const submissionArray = quizDoc.quizSubmission || [];
-    // see if this concept was tested
     const conceptItem = submissionArray.find(
       (qItem) => (qItem.conceptName || "").toLowerCase() === conceptName.toLowerCase()
     );
@@ -531,8 +536,8 @@ function renderConceptTimeline(quizArr, revArr, conceptName, stage) {
         score: conceptItem.score,
         timestamp: quizDoc.timestamp,
       });
-      // check if there's a matching revision
-      const matchingRev = revArr.find((r) => r.revisionNumber === quizDoc.attemptNumber);
+      // see if there's a matching revision
+      const matchingRev = (revArr || []).find((r) => r.revisionNumber === quizDoc.attemptNumber);
       if (matchingRev) {
         timelineItems.push({
           type: "revision",
@@ -546,7 +551,7 @@ function renderConceptTimeline(quizArr, revArr, conceptName, stage) {
   if (!timelineItems.length) {
     return (
       <div>
-        This concept (<b>{conceptName}</b>) was never tested in the quiz attempts for stage: {stage}
+        This concept (<b>{conceptName}</b>) wasn't tested in the quiz attempts for stage: {stage}
       </div>
     );
   }
@@ -563,9 +568,6 @@ function renderConceptTimeline(quizArr, revArr, conceptName, stage) {
   );
 }
 
-/**
- * TimelineBox => colored box for quiz or revision
- */
 function TimelineBox({ item }) {
   const { type, attemptNumber, passed, score, timestamp } = item;
   let label = "";
@@ -591,6 +593,55 @@ function TimelineBox({ item }) {
       {timeString && <div style={{ fontSize: "0.8rem", marginTop: "4px" }}>{timeString}</div>}
     </div>
   );
+}
+
+/**
+ * computeConceptStageStatus
+ * -------------------------
+ * For a given stage's quizAttempts array, see if conceptName was tested:
+ *  - If never tested => "Not Started"
+ *  - If tested & correct at least once => "Completed"
+ *  - Else => "Work in Progress"
+ */
+function computeConceptStageStatus(quizAttempts, conceptName, stage) {
+  if (!quizAttempts || !quizAttempts.length) {
+    return "Not Started";
+  }
+
+  let foundAny = false;
+  let foundCorrect = false;
+
+  quizAttempts.forEach((attempt) => {
+    const submissionArray = attempt.quizSubmission || [];
+    submissionArray.forEach((qItem) => {
+      if ((qItem.conceptName || "").toLowerCase() === conceptName.toLowerCase()) {
+        foundAny = true;
+        if (parseFloat(qItem.score) >= 1.0) {
+          foundCorrect = true;
+        }
+      }
+    });
+  });
+
+  if (!foundAny) return "Not Started";
+  if (foundCorrect) return "Completed";
+  return "Work in Progress";
+}
+
+/**
+ * parseName => "1. Chapter Title" => { order: 1, label: "1. Chapter Title" }
+ */
+function parseName(name = "") {
+  const pattern = /^(\d+)\.\s*(.*)$/;
+  const match = name.trim().match(pattern);
+  if (match) {
+    return {
+      order: parseInt(match[1], 10),
+      label: name,
+    };
+  } else {
+    return { order: 9999, label: name };
+  }
 }
 
 // ============== Styles ==============
@@ -652,8 +703,6 @@ const styles = {
     padding: "0.4rem 1rem",
     backgroundColor: "#3c3c3c",
   },
-
-  // Table
   tableWrapper: {
     overflowX: "auto",
     padding: "0.5rem",
@@ -661,7 +710,7 @@ const styles = {
   table: {
     width: "100%",
     borderCollapse: "collapse",
-    minWidth: "800px",
+    minWidth: "900px",
   },
   th: {
     border: "1px solid #666",
@@ -683,8 +732,14 @@ const styles = {
     backgroundColor: "#111",
     textAlign: "left",
   },
+  subchapterTotalCell: {
+    border: "1px solid #666",
+    padding: "8px",
+    backgroundColor: "#111",
+    textAlign: "right",
+  },
 
-  // Status indicators
+  // Indicators
   readIndicator: {
     color: "lightgreen",
     fontWeight: "bold",
