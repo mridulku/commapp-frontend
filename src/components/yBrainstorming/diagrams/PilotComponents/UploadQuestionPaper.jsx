@@ -23,6 +23,9 @@ export default function UploadQuestionPaper({ userId, onComplete }) {
   const [examTitle, setExamTitle] = useState("");
   const [autoGenerateTitle, setAutoGenerateTitle] = useState(false);
 
+  // NEW: Book ID state
+  const [bookId, setBookId] = useState("");
+
   // Upload states
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -65,12 +68,13 @@ export default function UploadQuestionPaper({ userId, onComplete }) {
       const path = `examPapers/${file.name}/${file.name}`;
       const storageRef = firebaseRef(storage, path);
 
-      // The crucial part: we set `category = "examPaper"`.
+      // Add the `bookId` field in the custom metadata
       const metadata = {
         customMetadata: {
           category: "examPaper", // triggers the new pipeline
           userId: currentUser?.uid || userId || "noUser",
           examName: examTitle,   // e.g., "Mock Test 1" or "TOEFL Reading"
+          bookId: bookId         // new field
         },
       };
 
@@ -159,7 +163,7 @@ export default function UploadQuestionPaper({ userId, onComplete }) {
         Upload Your Exam Paper
       </Typography>
       <Typography variant="body2" sx={{ mb: 2, color: "#ccc" }}>
-        Select a PDF file of your question paper, then optionally name the exam.
+        Select a PDF file of your question paper, then optionally name the exam and provide a book ID.
       </Typography>
 
       {/* File Picker */}
@@ -197,6 +201,17 @@ export default function UploadQuestionPaper({ userId, onComplete }) {
             />
           }
           label={<span style={{ color: "#ccc" }}>Auto-generate exam title</span>}
+        />
+      </Box>
+
+      {/* NEW: Book ID field */}
+      <Box sx={{ mt: 2 }}>
+        <TextField
+          label="Book ID"
+          variant="outlined"
+          value={bookId}
+          onChange={(e) => setBookId(e.target.value)}
+          sx={textFieldStyle}
         />
       </Box>
 

@@ -31,6 +31,9 @@ export default function UploadExamGuidelines({ userId, onComplete }) {
   const [examTitle, setExamTitle] = useState("");
   const [autoGenerateTitle, setAutoGenerateTitle] = useState(false);
 
+  // NEW: Book ID state
+  const [bookId, setBookId] = useState("");
+
   // Upload states
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -74,12 +77,13 @@ export default function UploadExamGuidelines({ userId, onComplete }) {
       const path = `examGuidelines/${file.name}/${file.name}`;
       const storageRef = firebaseRef(storage, path);
 
-      // The crucial part: we set `category = "examGuidelines"`.
+      // Include the bookId in customMetadata
       const metadata = {
         customMetadata: {
-          category: "examGuidelines", // triggers the new pipeline
+          category: "examGuidelines",
           userId: currentUser?.uid || userId || "noUser",
-          examTitle: examTitle, // e.g. "Official Syllabus"
+          examTitle: examTitle,   // e.g. "Official Syllabus"
+          bookId: bookId,         // NEW field
         },
       };
 
@@ -206,6 +210,17 @@ export default function UploadExamGuidelines({ userId, onComplete }) {
             />
           }
           label={<span style={{ color: "#ccc" }}>Auto-generate guidelines title</span>}
+        />
+      </Box>
+
+      {/* NEW: Book ID field */}
+      <Box sx={{ mt: 2 }}>
+        <TextField
+          label="Book ID"
+          variant="outlined"
+          value={bookId}
+          onChange={(e) => setBookId(e.target.value)}
+          sx={textFieldStyle}
         />
       </Box>
 
