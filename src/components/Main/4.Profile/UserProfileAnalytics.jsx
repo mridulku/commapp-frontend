@@ -8,8 +8,7 @@ import { signOut } from "firebase/auth";
 import { Box, Button } from "@mui/material";
 
 import UserHistory from "./UserHistory";
-import AdaptivePlanGrid from "./AdaptivePlanGrid";
-import AdaptivePlanDayCards from "./AdaptivePlanDayCards";
+
 
 
 export default function UserProfileAnalytics({ colorScheme = {} }) {
@@ -134,8 +133,7 @@ export default function UserProfileAnalytics({ colorScheme = {} }) {
 
           {/* Child components */}
           <UserHistory userId={userId} colorScheme={colorScheme} />
-          <AdaptivePlanGrid userId={userId} colorScheme={colorScheme} />
-          <AdaptivePlanDayCards userId={userId} colorScheme={colorScheme} />
+         
 
 
           

@@ -2,10 +2,10 @@
 
 import React, { useState } from "react";
 import { Grid, Box, Tabs, Tab } from "@mui/material";
-import Child1 from "./LibraryChild/Child1";
-import Child2 from "./LibraryChild/Child2";
-import Child3 from "./LibraryChild/Child3";
-import ChildStats from "./LibraryChild/ChildStats";
+import Child1 from "./LibraryChild/SelectionPanel/Child1";
+import Child2 from "./LibraryChild/AdaptivePlanView/Child2";
+import Child3 from "./LibraryChild/FullCourseView/Child3";
+import ChildStats from "./LibraryChild/StatsPanel/ChildStats";
 
 export default function MaterialsDashboard({
   userId,

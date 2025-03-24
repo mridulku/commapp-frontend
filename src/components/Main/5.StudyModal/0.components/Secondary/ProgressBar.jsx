@@ -1,5 +1,5 @@
 import React from "react";
-import { progressBarContainer, progressBarFill } from "./styles";
+import { progressBarContainer, progressBarFill } from "./Support/styles";
 
 /**
  * ProgressBar
