@@ -18,9 +18,10 @@ export default function TOEFLOnboardingCarousel({ onFinish }) {
   const sliderRef = useRef(null);
   const [currentSlide, setCurrentSlide] = useState(0);
 
+  // React-slick slider settings
   const settings = {
     infinite: false,
-    speed: 600,
+    speed: 500,
     slidesToShow: 1,
     slidesToScroll: 1,
     arrows: false,
@@ -28,14 +29,15 @@ export default function TOEFLOnboardingCarousel({ onFinish }) {
     beforeChange: (oldIndex, newIndex) => setCurrentSlide(newIndex),
   };
 
+  // Go to next/previous slides
   const goNext = () => sliderRef.current?.slickNext();
   const goPrev = () => sliderRef.current?.slickPrev();
 
-  // Reuse your accent color
+  // Theme colors
   const accentPurple = "#9b59b6";
   const accentPurpleHover = "#8e44ad";
 
-  // Shared style references
+  // Shared styling
   const slideStyle = {
     display: "flex",
     flexDirection: "column",
@@ -65,10 +67,18 @@ export default function TOEFLOnboardingCarousel({ onFinish }) {
     justifyContent: "center",
   };
 
+  const buttonRowStyle = {
+    display: "flex",
+    justifyContent: "space-between",
+    marginTop: "1rem",
+    width: "100%",
+  };
+
   const backButtonStyle = {
     color: "#fff",
     borderColor: "#fff",
     textTransform: "none",
+    fontWeight: "bold",
     "&:hover": { borderColor: "#ccc" },
   };
 
@@ -96,82 +106,98 @@ export default function TOEFLOnboardingCarousel({ onFinish }) {
       }}
     >
       <Slider ref={sliderRef} {...settings}>
-        {/* Slide 1: Baseline Assessment */}
+        
+        {/* Slide 1 */}
         <Box sx={slideStyle}>
           <Box sx={cardStyle}>
             <Box sx={iconContainerStyle}>
               <CheckCircle sx={{ fontSize: 40, color: accentPurple }} />
             </Box>
             <Typography variant="h4" sx={headingStyle}>
-              Baseline Your TOEFL Skills
+              Hey! Welcome to Your TOEFL Journey
             </Typography>
             <Typography variant="body1" sx={{ marginBottom: "1.5rem", color: "#ccc" }}>
-              First, we assess your current TOEFL reading and listening level.
-              Upload a sample passage or take a quick diagnostic so our AI can 
-              understand where you stand and craft a plan that’s right for you.
+              {/* Keep it short & bullet-like, with an emoji or two */}
+              <div>• We’ll prep Reading, Listening, Speaking, & Writing ✍️</div>
+              <div>• No big test first. Just quick questions 🤗</div>
+              <div>• Let’s set up your exam details in a jiffy ⏱️</div>
             </Typography>
-            <Box sx={{ display: "flex", justifyContent: "space-between", marginTop: "1rem" }}>
-              {currentSlide > 0 && (
-                <Button variant="outlined" sx={backButtonStyle} onClick={goPrev}>
-                  Back
-                </Button>
-              )}
-              <Button variant="contained" sx={primaryButtonStyle} onClick={goNext}>
+            {/* 
+              For the first slide, we only show the Next button (on the right). 
+              The Back button is hidden because currentSlide=0 
+            */}
+            <Box sx={buttonRowStyle}>
+              <Box /> {/* Empty box placeholder to keep Next on the right */}
+              <Button
+                variant="contained"
+                sx={primaryButtonStyle}
+                onClick={goNext}
+              >
                 Next
               </Button>
             </Box>
           </Box>
         </Box>
 
-        {/* Slide 2: Adaptive Daily Tasks */}
+        {/* Slide 2 */}
         <Box sx={slideStyle}>
           <Box sx={cardStyle}>
             <Box sx={iconContainerStyle}>
               <CheckCircle sx={{ fontSize: 40, color: accentPurple }} />
             </Box>
             <Typography variant="h4" sx={headingStyle}>
-              Adaptive Daily Tasks
+              What We'll Ask You
             </Typography>
             <Typography variant="body1" sx={{ marginBottom: "1.5rem", color: "#ccc" }}>
-              Each day, you'll get reading and listening exercises tailored to your 
-              weaknesses, plus quick vocab drills. The system automatically adjusts the 
-              difficulty and question types based on how you perform, ensuring you steadily 
-              boost your TOEFL score.
+              <div>• Your TOEFL exam date 🗓️</div>
+              <div>• Areas you want to focus on the most 🎯</div>
+              <div>• A quick sense of your current skill ⚙️</div>
             </Typography>
-            <Box sx={{ display: "flex", justifyContent: "space-between", marginTop: "1rem" }}>
-              {currentSlide > 0 && (
-                <Button variant="outlined" sx={backButtonStyle} onClick={goPrev}>
-                  Back
-                </Button>
-              )}
-              <Button variant="contained" sx={primaryButtonStyle} onClick={goNext}>
+            {/* 
+              Now we have both Back (left) and Next (right).
+              Because currentSlide=1 => you can go back to Slide 1
+            */}
+            <Box sx={buttonRowStyle}>
+              <Button
+                variant="outlined"
+                sx={backButtonStyle}
+                onClick={goPrev}
+              >
+                Back
+              </Button>
+              <Button
+                variant="contained"
+                sx={primaryButtonStyle}
+                onClick={goNext}
+              >
                 Next
               </Button>
             </Box>
           </Box>
         </Box>
 
-        {/* Slide 3: Track Score Improvement */}
+        {/* Slide 3 */}
         <Box sx={slideStyle}>
           <Box sx={cardStyle}>
             <Box sx={iconContainerStyle}>
               <CheckCircle sx={{ fontSize: 40, color: accentPurple }} />
             </Box>
             <Typography variant="h4" sx={headingStyle}>
-              Track Your Score Improvement
+              Ready for Lift-Off?
             </Typography>
             <Typography variant="body1" sx={{ marginBottom: "1.5rem", color: "#ccc" }}>
-              Regular mini-tests measure your progress in reading, listening, 
-              and even writing tasks. Watch your confidence soar as your 
-              predicted TOEFL scores climb—and let our AI pinpoint any final 
-              gaps before test day!
+              <div>• Daily tasks & quizzes adapt to you 🚀</div>
+              <div>• No stress: short practice sessions 🧘‍♂️</div>
+              <div>• Let’s finalize your plan & start improving!</div>
             </Typography>
-            <Box sx={{ display: "flex", justifyContent: "space-between", marginTop: "1rem" }}>
-              {currentSlide > 0 && (
-                <Button variant="outlined" sx={backButtonStyle} onClick={goPrev}>
-                  Back
-                </Button>
-              )}
+            <Box sx={buttonRowStyle}>
+              <Button
+                variant="outlined"
+                sx={backButtonStyle}
+                onClick={goPrev}
+              >
+                Back
+              </Button>
               <Button
                 variant="contained"
                 sx={primaryButtonStyle}
@@ -182,6 +208,7 @@ export default function TOEFLOnboardingCarousel({ onFinish }) {
             </Box>
           </Box>
         </Box>
+
       </Slider>
     </Box>
   );

@@ -44,7 +44,13 @@ import UploadQuestionPaper from './diagrams/Pilot|AddToDB|Coding/PilotComponents
 import UploadExamGuidelines from './diagrams/Pilot|AddToDB|Coding/PilotComponents/ExamQPUpload23Mar/UploadExamGuidelines';
 
 
+import Parent from './Parent';
 
+
+import QuickDeleteUserData from './diagrams/Pilot|AddToDB|Coding/AddToDatabase/QuickDeleteUserData';
+
+import TOEFLOnboardingTest from './diagrams/Pilot|AddToDB|Coding/PilotComponents/TOEFLOnboardingTest';
+import TOEFLOnboardingProcessing from './diagrams/Pilot|AddToDB|Coding/PilotComponents/TOEFLOnboardingProcessing';
 
 
 
@@ -92,7 +98,12 @@ const diagramComponents = {
   AdaptivePlanLoader,
   AdaptivePlanConceptLoader,
   UploadQuestionPaper,
-  UploadExamGuidelines
+  UploadExamGuidelines,
+  Parent,
+  QuickDeleteUserData,
+  TOEFLOnboardingTest,
+  TOEFLOnboardingProcessing,
+  
 };
 
 // Sample static data representing past brainstorming sessions.
@@ -392,6 +403,50 @@ const sampleBrainstormings = [
     diagramComponent: 'UploadExamGuidelines',
     isImportant: false
   },
+  {
+    id: 43,
+    title: 'PilotComponents: Parent',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'Parent',
+    isImportant: false
+  },
+  {
+    id: 44,
+    title: 'AdminPanel: QuickDeleteUserData',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'QuickDeleteUserData',
+    isImportant: false
+  },
+  {
+    id: 44,
+    title: 'PilotComponents: TOEFLOnboardingTest',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'TOEFLOnboardingTest',
+    isImportant: false
+  },
+  {
+    id: 45,
+    title: 'PilotComponents: TOEFLOnboardingProcessing',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'TOEFLOnboardingProcessing',
+    isImportant: false
+  },
+
+
+
+
+
+  
+
+
+  
+
+
+
+  
+
+
+  
 
 
 

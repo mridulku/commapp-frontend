@@ -16,7 +16,7 @@ import {
   uploadBytesResumable,
   getDownloadURL,
 } from "firebase/storage";
-import { storage, auth } from "../../../../firebase";
+import { storage, auth } from "../../../../../firebase";
 
 export default function UploadBook({ userId, onComplete }) {
   // States for PDF selection and title

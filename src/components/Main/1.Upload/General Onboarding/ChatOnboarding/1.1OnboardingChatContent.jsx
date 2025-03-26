@@ -18,7 +18,7 @@ import {
   uploadBytesResumable,
   getDownloadURL
 } from "firebase/storage";
-import { storage, auth } from "../../../firebase";
+import { storage, auth } from "../../../../../firebase";
 
 import CircularProgress from "@mui/material/CircularProgress";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";

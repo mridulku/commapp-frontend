@@ -7,8 +7,8 @@ import { useSelector, useDispatch } from "react-redux"; // <-- Make sure you hav
 import { useBooksViewer } from "./DashboardHooks";
 
 // Import the updated Onboarding modal
-import OnboardingModal from "../1.Upload/0.OnboardingModal";
-import TOEFLOnboardingModal from "../1.Upload/TOEFLOnboardingModal";
+import OnboardingModal from "../1.Upload/General Onboarding/ParentsOnboarding/0.OnboardingModal";
+import TOEFLOnboardingModal from "../1.Upload/TOEFLOnboarding/TOEFLOnboardingModal";
 
 
 // Import your separate Plan Editor modal

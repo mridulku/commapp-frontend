@@ -1,4 +1,4 @@
-// src/components/LandingPage.jsx
+// src/components/TOEFLLandingPage.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -20,8 +20,7 @@ import {
   Paper,
   IconButton,
   Drawer,
-  Stack,
-  Dialog
+  Stack
 } from "@mui/material";
 
 import MenuIcon from "@mui/icons-material/Menu";
@@ -38,10 +37,31 @@ import DoneAllIcon from "@mui/icons-material/DoneAll";
 import TableViewIcon from "@mui/icons-material/TableView";
 import DescriptionIcon from "@mui/icons-material/Description";
 
+// ---- Firebase Auth Imports ----
+import {
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithCustomToken
+} from "firebase/auth";
+import axios from "axios";
+import { auth } from "../../../../firebase";
+
 // Import your PanelAdaptiveProcess (if you have it)
 import PanelAdaptiveProcess from "../2.PanelAdaptiveProcess";
-// Import the sign-in component
-import AuthSignIn from "../1.AuthSignIn";
+
+// ---- Import a small Google "G" icon ----
+import googleIcon from "../logo.png"; // Make sure this file exists or adjust the path
+
+/** A small component to show the Google "G" icon */
+const GoogleLogo = () => (
+  <img
+    src={googleIcon}
+    alt="Google Logo"
+    width="18"
+    height="18"
+    style={{ marginRight: 8, verticalAlign: "middle" }}
+  />
+);
 
 /** ------------------------------------------------------------------
  * 1) CREATE THE DARK + PURPLE THEME
@@ -50,10 +70,10 @@ const theme = createTheme({
   palette: {
     mode: "dark",
     primary: {
-      main: "#B39DDB", // Purple accent
+      main: "#B39DDB" // Purple accent
     },
     secondary: {
-      main: "#FFD700", // Gold accent
+      main: "#FFD700" // Gold accent
     },
     background: {
       default: "#0F0F0F",
@@ -72,7 +92,7 @@ const theme = createTheme({
 /** ------------------------------------------------------------------
  * 2) NAVBAR (AppBar)
  * ------------------------------------------------------------------ */
-function LandingAppBar({ onOpenSignIn }) {
+function LandingAppBar({ onGoogleSignIn }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -90,18 +110,31 @@ function LandingAppBar({ onOpenSignIn }) {
           talk-ai.co | TOEFL Mastery
         </Typography>
 
-        {/* Large screens: sign in button */}
+        {/* Large screens: "Start My TOEFL Prep" button */}
         <Box sx={{ display: { xs: "none", md: "flex" }, gap: 2 }}>
-          <Button
-            variant="outlined"
-            color="primary"
-            sx={{ borderColor: "primary.main" }}
-            onClick={onOpenSignIn} // open modal
-          >
-            Sign In
-          </Button>
-        </Box>
+  <Button
+    variant="outlined"
+    color="primary"
+    sx={{
+      borderColor: "primary.main",
+      display: "flex",
+      alignItems: "center"
+    }}
+    onClick={() => {
+      // 1) Fire GA event
+      window.gtag('event', 'click_sign_in', {
+        event_category: 'engagement',
+        event_label: 'start_btn'
+      });
 
+      // 2) Then do the actual sign-in
+      onGoogleSignIn();
+    }}
+  >
+    <GoogleLogo />
+    Start My TOEFL Prep
+  </Button>
+</Box>
         {/* Small screen menu icon */}
         <IconButton
           onClick={toggleDrawer}
@@ -124,12 +157,18 @@ function LandingAppBar({ onOpenSignIn }) {
             <Button
               variant="outlined"
               color="primary"
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                borderColor: "primary.main"
+              }}
               onClick={() => {
                 toggleDrawer();
-                onOpenSignIn(); // open modal
+                onGoogleSignIn();
               }}
             >
-              Sign In
+              <GoogleLogo />
+              Start My TOEFL Prep
             </Button>
           </Stack>
         </Box>
@@ -139,9 +178,9 @@ function LandingAppBar({ onOpenSignIn }) {
 }
 
 /** ------------------------------------------------------------------
- * 3) HERO SECTION: Big Title + CTA => open the modal
+ * 3) HERO SECTION: Big Title + CTA => direct google sign-in
  * ------------------------------------------------------------------ */
-function HeroSection({ onOpenSignIn }) {
+function HeroSection({ onGoogleSignIn }) {
   return (
     <Box
       sx={{
@@ -166,14 +205,20 @@ function HeroSection({ onOpenSignIn }) {
           to your exact weaknesses. Focus on what truly boosts your TOEFL score.
         </Typography>
 
-        {/* CTA => open sign-in modal */}
+        {/* CTA => direct Google sign-in */}
         <Button
           variant="contained"
           color="primary"
           size="large"
-          sx={{ mr: 2, fontWeight: "bold" }}
-          onClick={onOpenSignIn}
+          sx={{
+            mr: 2,
+            fontWeight: "bold",
+            display: "flex",
+            alignItems: "center"
+          }}
+          onClick={onGoogleSignIn}
         >
+          <GoogleLogo />
           Start My TOEFL Prep
         </Button>
       </Container>
@@ -195,9 +240,12 @@ function PainGainSection() {
           Say Goodbye to Overwhelming TOEFL Passages
         </Typography>
 
-        <Typography variant="body1" sx={{ color: "text.secondary", textAlign: "center", maxWidth: 700, mx: "auto", mb: 4 }}>
-          Get rid of generic study approaches that waste time. Our AI-driven system analyzes your 
-          reading comprehension, vocabulary needs, and writing performance—ensuring each session 
+        <Typography
+          variant="body1"
+          sx={{ color: "text.secondary", textAlign: "center", maxWidth: 700, mx: "auto", mb: 4 }}
+        >
+          Get rid of generic study approaches that waste time. Our AI-driven system analyzes your
+          reading comprehension, vocabulary needs, and writing performance—ensuring each session
           directly impacts your TOEFL score.
         </Typography>
 
@@ -258,7 +306,7 @@ function LearningJourneySection() {
       bullets: [
         "Upload TOEFL reading passages or materials",
         "Baseline your reading speed & comprehension"
-      ],
+      ]
     },
     {
       icon: <AutoAwesomeMotionIcon sx={{ fontSize: 36, color: "primary.main", mb: 1 }} />,
@@ -266,7 +314,7 @@ function LearningJourneySection() {
       bullets: [
         "Pinpoint question types you miss (Inference, Negative Fact, etc.)",
         "Prioritize tough vocabulary & grammar"
-      ],
+      ]
     },
     {
       icon: <EmojiObjectsIcon sx={{ fontSize: 36, color: "primary.main", mb: 1 }} />,
@@ -274,7 +322,7 @@ function LearningJourneySection() {
       bullets: [
         "Adaptive quizzes mimic TOEFL reading complexity",
         "Review official question formats & sample tasks"
-      ],
+      ]
     },
     {
       icon: <TimelineIcon sx={{ fontSize: 36, color: "primary.main", mb: 1 }} />,
@@ -282,7 +330,7 @@ function LearningJourneySection() {
       bullets: [
         "Real-time analytics for reading speed & accuracy",
         "Plan evolves as your skills improve"
-      ],
+      ]
     },
     {
       icon: <DoneAllIcon sx={{ fontSize: 36, color: "primary.main", mb: 1 }} />,
@@ -290,8 +338,8 @@ function LearningJourneySection() {
       bullets: [
         "Hit your target TOEFL Reading & Writing scores",
         "Walk into test day with confidence"
-      ],
-    },
+      ]
+    }
   ];
 
   // same layout logic
@@ -321,7 +369,7 @@ function LearningJourneySection() {
                   flexDirection: "column",
                   alignItems: "center",
                   textAlign: "center",
-                  height: "100%",
+                  height: "100%"
                 }}
               >
                 {stage.icon}
@@ -351,7 +399,7 @@ function LearningJourneySection() {
                   flexDirection: "column",
                   alignItems: "center",
                   textAlign: "center",
-                  height: "100%",
+                  height: "100%"
                 }}
               >
                 {stage.icon}
@@ -615,7 +663,10 @@ function FeaturesSection() {
               >
                 <CardContent>
                   {feat.icon}
-                  <Typography variant="h6" sx={{ color: "primary.main", fontWeight: "bold", mb: 1 }}>
+                  <Typography
+                    variant="h6"
+                    sx={{ color: "primary.main", fontWeight: "bold", mb: 1 }}
+                  >
                     {feat.title}
                   </Typography>
                   <Typography variant="body2" sx={{ color: "text.secondary" }}>
@@ -644,17 +695,14 @@ function TestimonialSection() {
         >
           Hear From Our TOEFL Learners
         </Typography>
-        <Typography
-          variant="body1"
-          sx={{ color: "text.secondary", textAlign: "center", mb: 4 }}
-        >
+        <Typography variant="body1" sx={{ color: "text.secondary", textAlign: "center", mb: 4 }}>
           Thousands of aspirants trust our adaptive platform. Check out one user’s story:
         </Typography>
 
         <Paper sx={{ p: 3, textAlign: "center", bgcolor: "#2A2A2A" }}>
           <Typography variant="body1" sx={{ fontStyle: "italic", color: "#ffffff", mb: 2 }}>
-            “I raised my TOEFL Reading score from <strong>20 to 28</strong> in just five weeks! 
-            The AI quizzes honed in on my tricky question types and helped me master the 
+            “I raised my TOEFL Reading score from <strong>20 to 28</strong> in just five weeks!
+            The AI quizzes honed in on my tricky question types and helped me master the
             vocabulary I kept missing.”
           </Typography>
           <Typography variant="subtitle2" sx={{ color: "primary.main" }}>
@@ -701,11 +749,11 @@ function Footer() {
 }
 
 /** ------------------------------------------------------------------
- * 13) MAIN LANDING PAGE
+ * 13) MAIN LANDING PAGE (No Modal, Direct Google Sign-in)
  * ------------------------------------------------------------------ */
 export default function TOEFLLandingPage() {
   const navigate = useNavigate();
-  const [openSignIn, setOpenSignIn] = useState(false);
+  const backendURL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
 
   // If user is already logged in => skip landing
   useEffect(() => {
@@ -715,23 +763,71 @@ export default function TOEFLLandingPage() {
     }
   }, [navigate]);
 
-  // Handlers for open/close the sign-in modal
-  const handleOpenSignIn = () => {
-    setOpenSignIn(true);
-  };
-  const handleCloseSignIn = () => {
-    setOpenSignIn(false);
+  // Optional: create learner persona if needed
+  async function createLearnerPersonaIfNeeded() {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) return;
+
+      await axios.post(`${backendURL}/create-learner-persona`, {
+        userId: currentUser.uid,
+        wpm: 200,
+        dailyReadingTime: 30
+      });
+    } catch (err) {
+      console.error("Error creating learner persona:", err);
+    }
+  }
+
+  // Direct Google Sign-In flow
+  const handleGoogleSignInLanding = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+
+      // Get the Firebase ID token
+      const idToken = await auth.currentUser.getIdToken();
+
+      // Send to server
+      const response = await axios.post(`${backendURL}/login-google`, { idToken });
+      if (response.data.success) {
+        const { token, firebaseCustomToken, user } = response.data;
+
+        // Sign in to Firebase with custom token
+        await signInWithCustomToken(auth, firebaseCustomToken);
+
+        // Store userId
+        const currentUserId = auth.currentUser?.uid;
+        if (currentUserId) {
+          localStorage.setItem("userId", currentUserId);
+        }
+
+        // Attempt to create a default learnerPersona
+        await createLearnerPersonaIfNeeded();
+
+        // Store server JWT + user data
+        localStorage.setItem("token", token);
+        localStorage.setItem("userData", JSON.stringify(user));
+
+        // Navigate to Dashboard
+        navigate("/dashboard");
+      } else {
+        console.error("Google Sign-In failed:", response.data.error);
+      }
+    } catch (error) {
+      console.error("Error signing in with Google:", error);
+    }
   };
 
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
 
-      {/* 1) Navbar */}
-      <LandingAppBar onOpenSignIn={handleOpenSignIn} />
+      {/* 1) Navbar => pass direct sign-in func */}
+      <LandingAppBar onGoogleSignIn={handleGoogleSignInLanding} />
 
-      {/* 2) Hero - TOEFL Focus */}
-      <HeroSection onOpenSignIn={handleOpenSignIn} />
+      {/* 2) Hero => pass direct sign-in func */}
+      <HeroSection onGoogleSignIn={handleGoogleSignInLanding} />
 
       {/* 3) Pain+Solution => TOEFL */}
       <PainGainSection />
@@ -759,19 +855,6 @@ export default function TOEFLLandingPage() {
 
       {/* 11) Footer */}
       <Footer />
-
-      {/* Sign-In Modal */}
-      <Dialog
-        open={openSignIn}
-        onClose={handleCloseSignIn}
-        maxWidth="sm"
-        fullWidth
-        PaperProps={{
-          sx: { bgcolor: "background.paper" }
-        }}
-      >
-        <AuthSignIn />
-      </Dialog>
     </ThemeProvider>
   );
 }

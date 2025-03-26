@@ -1,8 +1,8 @@
 // src/components/DetailedBookViewer/OnboardingCarouselParent.jsx
 
 import React from "react";
-import TOEFLOnboardingCarousel from "./TOEFLOnboardingCarousel";
-import GeneralOnboardingCarousel from "./GeneralOnboardingCarousel";
+import TOEFLOnboardingCarousel from "../../TOEFLOnboarding/TOEFLOnboardingCarousel";
+import GeneralOnboardingCarousel from "../OnboardingCarousel/GeneralOnboardingCarousel";
 
 export default function OnboardingCarousel({ onFinish }) {
   // Hardcode or conditionally pick which to render
