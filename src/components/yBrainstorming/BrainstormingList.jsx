@@ -51,6 +51,10 @@ import QuickDeleteUserData from './diagrams/Pilot|AddToDB|Coding/AddToDatabase/Q
 
 import TOEFLOnboardingTest from './diagrams/Pilot|AddToDB|Coding/PilotComponents/TOEFLOnboardingTest';
 import TOEFLOnboardingProcessing from './diagrams/Pilot|AddToDB|Coding/PilotComponents/TOEFLOnboardingProcessing';
+import TOEFLOnboardingView from './diagrams/Pilot|AddToDB|Coding/PilotComponents/TOEFLOnboardingView';
+
+
+
 
 
 
@@ -103,6 +107,7 @@ const diagramComponents = {
   QuickDeleteUserData,
   TOEFLOnboardingTest,
   TOEFLOnboardingProcessing,
+  TOEFLOnboardingView,
   
 };
 
@@ -431,6 +436,19 @@ const sampleBrainstormings = [
     diagramComponent: 'TOEFLOnboardingProcessing',
     isImportant: false
   },
+  {
+    id: 46,
+    title: 'PilotComponents: TOEFLOnboardingView',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'TOEFLOnboardingView',
+    isImportant: false
+  },
+
+
+
+
+
+
 
 
 

@@ -3,42 +3,29 @@ import axios from "axios";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../../../firebase";
 
-// We’ll use some Material UI for visuals
 import {
-  Container,
-  Paper,
-  Typography,
   RadioGroup,
   FormControlLabel,
   Radio,
   Slider,
-  Button,
   Box,
   Divider,
-  LinearProgress,
+  LinearProgress
 } from "@mui/material";
 
-// Import the Carousel for step 0
+// 1) Import the separate PlanPreview
+import PlanPreview from "./PlanPreview";
+
+// 2) Import your Carousel (Step 0)
 import TOEFLOnboardingCarousel from "./TOEFLOnboardingCarousel";
 
-/**
- * TOEFLOnboardingModal
- *
- * Steps:
- *   0) TOEFLOnboardingCarousel (fullscreen overlay)
- *   1) Collect basic plan info (How soon is exam? Daily study minutes?)
- *   2) Processing screen while we create 4 adaptive plans => show "done" screen
- */
 export default function TOEFLOnboardingModal({ open, onClose, userId }) {
   const [currentStep, setCurrentStep] = useState(0);
 
-  // ------------------------------
-  // FIRESTORE: fetch user data / book IDs
-  // ------------------------------
-  const [toeflBooks, setToeflBooks] = useState([]); // e.g. { oldBookId, newBookId }
+  const [toeflBooks, setToeflBooks] = useState([]);
   useEffect(() => {
+    if (!userId) return;
     async function fetchUserDoc() {
-      if (!userId) return;
       try {
         const userRef = doc(db, "users", userId);
         const userSnap = await getDoc(userRef);
@@ -55,35 +42,41 @@ export default function TOEFLOnboardingModal({ open, onClose, userId }) {
     fetchUserDoc();
   }, [userId]);
 
-  // ------------------------------
-  // STEP DATA
-  // ------------------------------
-
-  // For "Step 1" (Exam Timeframe & Daily Study):
-  // We’ll store them in state so we can pass them to the plan creation.
+  // Step 1: timeframe + daily reading
   const [examTimeframe, setExamTimeframe] = useState("1_month");
-  const [dailyReadingTime, setdailyReadingTime] = useState(30);
-
-  // We'll compute the target date from timeframe once user finishes Step 1
+  const [dailyReadingTime, setDailyReadingTime] = useState(30);
   const [targetDate, setTargetDate] = useState("");
 
-  // We’ll hard-code these for the plan creation request:
-  const currentKnowledge = "none"; // or "some", etc.
-  const goalLevel = "advanced"; // or "basic", "moderate", etc.
+  // Hard-coded
+  const currentKnowledge = "none";
+  const goalLevel = "advanced";
 
-  // For plan creation status (Step 2)
+  // Step 2: plan creation
   const [isCreatingPlans, setIsCreatingPlans] = useState(false);
   const [serverError, setServerError] = useState(null);
   const [planCreationResults, setPlanCreationResults] = useState([]);
-  const [isDone, setIsDone] = useState(false); // once plan creation finishes
+  const [isDone, setIsDone] = useState(false);
   const [progress, setProgress] = useState(0);
   const [messageIndex, setMessageIndex] = useState(0);
   const [isTakingLong, setIsTakingLong] = useState(false);
 
-  // Step labels - we only have 3 steps in this version
-  const steps = ["Intro Slides", "Plan Info", "Processing"];
+  // Step 3: Plan Preview is now in a separate component
 
-  // Map from oldBookId to skill name
+  // We have 4 steps total now
+  const steps = ["Intro Slides", "Plan Info", "Processing", "Plan Preview"];
+
+  // For computing target date in Step 1
+  const TIMEFRAME_OFFSETS = {
+    "1_week": 7,
+    "2_weeks": 14,
+    "1_month": 30,
+    "2_months": 60,
+    "6_months": 180,
+    "not_sure": 60
+  };
+
+  // For plan creation (Step 2)
+  const planCreationEndpoint = "https://generateadaptiveplan2-zfztjkkvva-uc.a.run.app";
   const skillMap = {
     "NwNZ8WWCz54Y4BeCli0c": "Reading",
     "fuyAbhDo3GXLbtEdZ9jj": "Listening",
@@ -91,71 +84,54 @@ export default function TOEFLOnboardingModal({ open, onClose, userId }) {
     "pFAfUSWtwipFZG2RStKg": "Writing",
   };
 
-  // Example endpoint
-  const planCreationEndpoint = "https://generateadaptiveplan2-zfztjkkvva-uc.a.run.app";
-
-  // ------------------------------
-  // STEP NAV
-  // ------------------------------
+  // Step transitions
   const handleNext = async () => {
-    // Step 1 => Step 2: we compute the date, start the processing screen
+    // Step 1 => Step 2
     if (currentStep === 1) {
       computeTargetDate();
-      setCurrentStep(2); // Move to "Processing" step
-      // We'll trigger the plan creation once we mount Step 2
+      setCurrentStep(2);
       return;
     }
-    // Step 2 => finish (mark onboarded, close)
-    if (currentStep === 2) {
+    // Step 2 => Step 3 (only if done)
+    if (currentStep === 2 && isDone) {
+      setCurrentStep(3);
+      return;
+    }
+    // Step 3 => finish => mark onboarded => close
+    if (currentStep === 3) {
       await markUserOnboarded();
       if (onClose) onClose();
       return;
     }
-
     // Step 0 => Step 1
     setCurrentStep((prev) => prev + 1);
   };
 
   const handleBack = () => {
-    // If we’re at Step 1, going back => Step 0
     if (currentStep === 1) {
       setCurrentStep(0);
       return;
     }
-    // If we’re at Step 2, you can decide if you want to allow going back or not.
-    // Here, let's just do it for demonstration:
     if (currentStep === 2) {
       setCurrentStep(1);
       return;
     }
-    // If we’re at Step 0, close
+    if (currentStep === 3) {
+      setCurrentStep(2);
+      return;
+    }
     if (onClose) onClose();
   };
 
-  // ------------------------------
-  // Step 1 logic: compute the date from timeframe
-  // ------------------------------
-  const TIMEFRAME_OFFSETS = {
-    "1_week": 7,
-    "2_weeks": 14,
-    "1_month": 30,
-    "2_months": 60,
-    "6_months": 180,
-    "not_sure": 60, // default to e.g. 2 months
-  };
+  // Step 1
   function computeTargetDate() {
     const offset = TIMEFRAME_OFFSETS[examTimeframe] || 30;
     const date = new Date();
     date.setDate(date.getDate() + offset);
-    // Store in "yyyy-mm-dd" so we can pass to backend easily
-    const iso = date.toISOString().substring(0, 10);
-    setTargetDate(iso);
+    setTargetDate(date.toISOString().substring(0, 10));
   }
 
-  // ------------------------------
-  // Step 2: The Plan Creation + Animated Progress
-  // ------------------------------
-  // Rotating messages
+  // Step 2
   const LOADING_MESSAGES = [
     "Analyzing your data...",
     "Generating your reading plan...",
@@ -163,14 +139,9 @@ export default function TOEFLOnboardingModal({ open, onClose, userId }) {
     "Finalizing writing tasks...",
     "Reviewing everything...",
   ];
-
-  // Start plan creation once we enter Step 2
   useEffect(() => {
     if (currentStep === 2) {
-      // Start the progress animation
       startProgressAnimation();
-
-      // Immediately call createFourPlans
       createFourPlans();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -181,7 +152,6 @@ export default function TOEFLOnboardingModal({ open, onClose, userId }) {
     setIsDone(false);
     setIsTakingLong(false);
 
-    // Increments 5% every second => total ~20s to 100%
     const progressInterval = setInterval(() => {
       setProgress((prev) => {
         const nextVal = prev + 5;
@@ -193,7 +163,6 @@ export default function TOEFLOnboardingModal({ open, onClose, userId }) {
       });
     }, 1000);
 
-    // Rotate messages every 3 seconds
     const messageInterval = setInterval(() => {
       setMessageIndex((prev) => (prev + 1) % LOADING_MESSAGES.length);
     }, 3000);
@@ -204,7 +173,6 @@ export default function TOEFLOnboardingModal({ open, onClose, userId }) {
     };
   }
 
-  // Whenever progress hits 100%, if we’re not done => isTakingLong
   useEffect(() => {
     if (progress === 100 && !isDone && currentStep === 2) {
       setIsTakingLong(true);
@@ -215,10 +183,7 @@ export default function TOEFLOnboardingModal({ open, onClose, userId }) {
     setIsCreatingPlans(true);
     setServerError(null);
     setPlanCreationResults([]);
-
     try {
-      // Hard-coded knowledge + goal => "none-advanced"
-      // Adjust quizTime / reviseTime if you want different logic
       const planType = `${currentKnowledge}-${goalLevel}`;
       const quizTime = 3;
       const reviseTime = 3;
@@ -232,7 +197,6 @@ export default function TOEFLOnboardingModal({ open, onClose, userId }) {
         reviseTime,
       };
 
-      // Post plan creation for each TOEFL book
       const promises = toeflBooks.map(async (bookObj) => {
         const skillName = skillMap[bookObj.oldBookId] || "TOEFL Course";
         const response = await axios.post(planCreationEndpoint, {
@@ -249,8 +213,6 @@ export default function TOEFLOnboardingModal({ open, onClose, userId }) {
       const results = await Promise.all(promises);
       setPlanCreationResults(results);
       console.log("Plan creation succeeded, results:", results);
-
-      // Mark that we’re done
       setIsDone(true);
     } catch (err) {
       console.error("Error creating TOEFL plans:", err);
@@ -260,18 +222,17 @@ export default function TOEFLOnboardingModal({ open, onClose, userId }) {
     }
   }
 
-  // ------------------------------
-  // Mark User Onboarded
-  // ------------------------------
+  // Step 3 => PlanPreview is in a separate component now
+
+  // Mark Onboarded
   const [isMarkingOnboarded, setIsMarkingOnboarded] = useState(false);
   async function markUserOnboarded() {
     if (!userId) return;
     try {
       setIsMarkingOnboarded(true);
-      await axios.post(
-        `${import.meta.env.VITE_BACKEND_URL}/api/learner-personas/onboard`,
-        { userId }
-      );
+      await axios.post(`${import.meta.env.VITE_BACKEND_URL}/api/learner-personas/onboard`, {
+        userId
+      });
       console.log("User marked as onboarded (TOEFL):", userId);
     } catch (err) {
       console.error("Error marking user onboarded:", err);
@@ -281,12 +242,10 @@ export default function TOEFLOnboardingModal({ open, onClose, userId }) {
     }
   }
 
-  // ------------------------------
-  // RENDER
-  // ------------------------------
+  // Render
   if (!open) return null;
 
-  // Step 0 => Fullscreen Carousel
+  // Step 0 => Carousel
   if (currentStep === 0) {
     return (
       <div style={styles.carouselOverlay}>
@@ -294,13 +253,12 @@ export default function TOEFLOnboardingModal({ open, onClose, userId }) {
           X
         </button>
         <TOEFLOnboardingCarousel
-          onFinish={() => setCurrentStep(1)} // Move to Step 1
+          onFinish={() => setCurrentStep(1)}
         />
       </div>
     );
   }
 
-  // If we’re not on step 0 => show the "modal" container
   return (
     <div style={styles.overlay}>
       <div style={styles.modal}>
@@ -318,15 +276,25 @@ export default function TOEFLOnboardingModal({ open, onClose, userId }) {
     </div>
   );
 
-  // ------------------------------
-  // Step-specific UI
-  // ------------------------------
   function renderStepContent() {
     if (currentStep === 1) {
       return renderPlanInfoForm();
     }
     if (currentStep === 2) {
-      return renderProcessingScreen();
+      return renderProcessing();
+    }
+    if (currentStep === 3) {
+      // 3) Show the new PlanPreview component
+      return (
+        <PlanPreview
+          plans={planCreationResults}
+          onFinish={async () => {
+            // Called when user clicks "Finish Onboarding" inside PlanPreview
+            await markUserOnboarded();
+            if (onClose) onClose();
+          }}
+        />
+      );
     }
     return null;
   }
@@ -335,8 +303,9 @@ export default function TOEFLOnboardingModal({ open, onClose, userId }) {
   function renderPlanInfoForm() {
     return (
       <div style={styles.innerContent}>
-        <h2 style={{ marginBottom: "1rem", color: "#fff" }}>Configure Your TOEFL Plan</h2>
-
+        <h2 style={{ marginBottom: "1rem", color: "#fff" }}>
+          Configure Your TOEFL Plan
+        </h2>
         <div
           style={{
             display: "flex",
@@ -347,7 +316,6 @@ export default function TOEFLOnboardingModal({ open, onClose, userId }) {
             borderRadius: "8px",
           }}
         >
-          {/* EXAM TIMEFRAME */}
           <div>
             <p style={{ color: "#fff", margin: "0 0 4px" }}>
               How soon do you plan to take your TOEFL exam?
@@ -398,14 +366,13 @@ export default function TOEFLOnboardingModal({ open, onClose, userId }) {
 
           <Divider style={{ backgroundColor: "#bbb" }} />
 
-          {/* DAILY STUDY TIME */}
           <div>
             <p style={{ color: "#fff", margin: "0 0 4px" }}>
               How many minutes do you plan to study each day?
             </p>
             <Slider
               value={dailyReadingTime}
-              onChange={(e, val) => setdailyReadingTime(val)}
+              onChange={(e, val) => setDailyReadingTime(val)}
               step={5}
               min={5}
               max={120}
@@ -420,8 +387,7 @@ export default function TOEFLOnboardingModal({ open, onClose, userId }) {
   }
 
   // Step 2 UI
-  function renderProcessingScreen() {
-    // If we have an error
+  function renderProcessing() {
     if (serverError) {
       return (
         <div style={styles.innerContent}>
@@ -432,11 +398,9 @@ export default function TOEFLOnboardingModal({ open, onClose, userId }) {
       );
     }
 
-    // If plan creation is still in progress OR we haven't recognized it as done
     if (!isDone) {
       return (
         <div style={styles.innerContent}>
-          {/* If progress <100 and not taking too long => normal */}
           {!isTakingLong && (
             <>
               <h2 style={{ color: "#fff", marginBottom: "1rem" }}>
@@ -452,15 +416,9 @@ export default function TOEFLOnboardingModal({ open, onClose, userId }) {
               <p style={{ color: "#ccc", marginBottom: "1.5rem" }}>
                 {progress}% Complete
               </p>
-
-              {/* Rotating message */}
-              <p style={{ color: "#ccc" }}>
-                {LOADING_MESSAGES[messageIndex]}
-              </p>
+              <p style={{ color: "#ccc" }}>{LOADING_MESSAGES[messageIndex]}</p>
             </>
           )}
-
-          {/* If we’re at 100% but not done => taking longer */}
           {isTakingLong && (
             <>
               <h2 style={{ color: "#fff", marginBottom: "1rem" }}>Still Working...</h2>
@@ -477,25 +435,19 @@ export default function TOEFLOnboardingModal({ open, onClose, userId }) {
       );
     }
 
-    // If done => show success
+    // If done => brief success message
     return (
       <div style={styles.innerContent}>
         <h2 style={{ color: "#fff" }}>Your Plan is Ready!</h2>
         <p style={{ color: "#ccc", marginBottom: "1rem" }}>
-          We’ve finished creating your TOEFL study plan. Click “Finish” to finalize.
+          We’ve finished creating your TOEFL study plan. Click “Next” to preview it.
         </p>
-        {/* We won't display planCreationResults to the user here,
-            but we can log to console or do so in your real UI */}
       </div>
     );
   }
 
-  // ------------------------------
-  // Bottom button row
-  // ------------------------------
+  // Buttons
   function renderButtons() {
-    // On step 2 => if the plan creation is done (isDone = true), the button is “Finish.”
-    // On step 2 => if not done, maybe the button is disabled or says "Working..."
     return (
       <div
         style={{
@@ -504,7 +456,6 @@ export default function TOEFLOnboardingModal({ open, onClose, userId }) {
           justifyContent: "space-between",
         }}
       >
-        {/* BACK BUTTON */}
         {currentStep > 0 && (
           <button
             onClick={handleBack}
@@ -514,8 +465,6 @@ export default function TOEFLOnboardingModal({ open, onClose, userId }) {
             Back
           </button>
         )}
-
-        {/* NEXT / FINISH BUTTON */}
         <button
           onClick={handleNext}
           style={styles.primaryButton}
@@ -529,23 +478,17 @@ export default function TOEFLOnboardingModal({ open, onClose, userId }) {
 
   function renderNextButtonLabel() {
     if (currentStep === 2) {
-      // If we’re at Step 2, is the plan done?
-      if (!isDone) {
-        return "Preparing...";
-      }
-      if (isMarkingOnboarded) {
-        return "Marking Onboarded...";
-      }
-      return "Finish";
+      if (!isDone) return "Preparing...";
+      return "Next";
     }
-    // If Step 1 => "Next"
+    if (currentStep === 3) {
+      return isMarkingOnboarded ? "Marking Onboarded..." : "Finish";
+    }
     return "Next";
   }
 }
 
-// ------------------------------
-// STYLES
-// ------------------------------
+// Styles
 const styles = {
   carouselOverlay: {
     position: "fixed",
