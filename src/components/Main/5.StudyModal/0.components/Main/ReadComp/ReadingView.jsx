@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
-import { useSelector } from "react-redux";
+import React, { useEffect, useState, useRef } from "react";
+import { useSelector, useDispatch } from "react-redux";
 import axios from "axios";
+import { fetchReadingTime, incrementReadingTime } from "../../../../../../store/readingSlice";
 
 // Utility to format mm:ss
 function formatTime(totalSeconds) {
@@ -9,149 +10,145 @@ function formatTime(totalSeconds) {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+/**
+ * ReadingView
+ * -----------
+ * Posts usage in 15s chunks to the server, but retains leftover partial seconds in local UI.
+ * So the user sees a continuous timer with no backward jumps, 
+ * while the server doc only increments by multiples of 15.
+ */
 export default function ReadingView({ activity }) {
-  // For demonstration, we’re still expecting "activity" to have at least { subChapterId }.
-  // If none is provided, we show a fallback.
   if (!activity) {
     return <div style={styles.outerContainer}>No activity provided.</div>;
   }
 
   const subChapterId = activity.subChapterId;
   const userId = useSelector((state) => state.auth?.userId || "demoUser");
-
-  // If your plan is stored in Redux similarly to the revision code:
   const planId = useSelector((state) => state.plan?.planDoc?.id);
 
-  const backendURL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
+  const dispatch = useDispatch();
 
-  // === Local State ===
+  // Subchapter content
   const [subChapter, setSubChapter] = useState(null);
 
-  // We’ll track local reading state/proficiency just for UI
-  const [localProficiency, setLocalProficiency] = useState("empty"); 
-  // "empty" => haven't started
-  // "reading" => currently reading
-  // "read" => finished reading
+  // serverTime => total usage stored in Firestore (always multiple of 15).
+  // leftoverSec => local leftover partial below 15s.
+  // We'll combine them to show the displayedTime => serverTime + leftoverSec.
+  const [serverTime, setServerTime] = useState(0); 
+  const [leftoverSec, setLeftoverSec] = useState(0); 
 
-  const [isExpanded, setIsExpanded] = useState(false);
+  // The real-clock moment we last "snapped" or posted lumps. 
+  // leftoverSec is how many seconds remain since the last multiple of 15.
+  const [lastSnapMs, setLastSnapMs] = useState(null);
 
-  const [localStartMs, setLocalStartMs] = useState(null);
-  const [localEndMs, setLocalEndMs] = useState(null);
-  const [readingSeconds, setReadingSeconds] = useState(0);
-  const [finalReadingTime, setFinalReadingTime] = useState(null);
-
-  // For demonstration, we’ll track a “productReadingPerformance” – 
-  // you can imagine a numeric or string measure of performance
-  const [productReadingPerformance, setProductReadingPerformance] = useState("N/A");
-
-  // For debug overlay
+  // For a second-level local timer
   const [showDebug, setShowDebug] = useState(false);
 
-  // --- Fetch subchapter for display ---
-  useEffect(() => {
-    if (!subChapterId) return;
+  // Track subChapter changes
+  const prevSubChapterId = useRef(null);
 
-    async function fetchSubChapter() {
+  // ----------------------------------------------------------------------------
+  // 1) On mount / subChapter change => fetch subChapter content + usage
+  // ----------------------------------------------------------------------------
+  useEffect(() => {
+    // If switching subCh => do final leftover lumps or not (we can do final leftover lumps if you like)
+    if (prevSubChapterId.current && prevSubChapterId.current !== subChapterId) {
+      // we won't post leftover lumps <15 here if you truly only want multiples of 15
+      // or if you want partial leftover posted, do it here
+    }
+    prevSubChapterId.current = subChapterId;
+
+    async function fetchSubChapterData() {
       try {
-        // The same GET approach as before
-        const res = await axios.get(`${backendURL}/api/subchapters/${subChapterId}`);
-        const data = res.data;
-        if (!data) return;
-
-        setSubChapter(data);
+        const res = await axios.get(`http://localhost:3001/api/subchapters/${subChapterId}`);
+        setSubChapter(res.data);
       } catch (err) {
-        console.error("Error fetching subchapter details:", err);
+        console.error("Failed to fetch subchapter:", err);
       }
     }
 
-    // Reset local states on each new subChapterId
-    setLocalProficiency("empty");
-    setIsExpanded(false);
-    setLocalStartMs(null);
-    setLocalEndMs(null);
-    setReadingSeconds(0);
-    setFinalReadingTime(null);
+    async function fetchUsage() {
+      try {
+        const resultAction = await dispatch(
+          fetchReadingTime({ userId, planId, subChapterId })
+        );
+        if (fetchReadingTime.fulfilled.match(resultAction)) {
+          // e.g. 30 if user previously posted 2 lumps
+          const existingSec = resultAction.payload || 0; 
+          setServerTime(existingSec);
+          setLeftoverSec(0);
+          setLastSnapMs(Date.now());
+        }
+      } catch (err) {
+        console.error("fetchReadingTime error:", err);
+      }
+    }
+
+    // reset states
     setSubChapter(null);
-    setProductReadingPerformance("N/A");
+    setServerTime(0);
+    setLeftoverSec(0);
+    setLastSnapMs(null);
 
-    fetchSubChapter();
-  }, [subChapterId, backendURL]);
-
-  // --- If currently "reading", update the readingSeconds every second ---
-  useEffect(() => {
-    if (localProficiency === "reading" && localStartMs && !localEndMs) {
-      const tick = () => {
-        const now = Date.now();
-        const diff = now - localStartMs;
-        setReadingSeconds(diff > 0 ? Math.floor(diff / 1000) : 0);
-      };
-      tick(); // run once immediately
-
-      const timerId = setInterval(tick, 1000);
-      return () => clearInterval(timerId);
-    } else {
-      setReadingSeconds(0);
+    if (subChapterId) {
+      fetchSubChapterData();
+      fetchUsage();
     }
-  }, [localProficiency, localStartMs, localEndMs]);
 
-  // --- Once user is "read" (stopped reading), compute final time ---
-  useEffect(() => {
-    if (localProficiency === "read" && localStartMs && localEndMs) {
-      const totalSec = Math.floor((localEndMs - localStartMs) / 1000);
-      if (totalSec > 0) {
-        setFinalReadingTime(formatTime(totalSec));
-      }
-    }
-  }, [localProficiency, localStartMs, localEndMs]);
-
-  // --- Start Reading Handler ---
-  async function handleStartReading() {
-    setLocalProficiency("reading");
-    setIsExpanded(true);
-    setLocalStartMs(Date.now());
-    setLocalEndMs(null);
-  }
-
-  // --- Stop (Done) Reading Handler ---
-  async function handleStopReading() {
-    // 1) Update local state so UI shows "read"
-    setLocalProficiency("read");
-    setIsExpanded(true);
-    const nowMs = Date.now();
-    setLocalEndMs(nowMs);
-
-    // 2) Build payload for our new "submitReading" endpoint
-    const readingStartTime = new Date(localStartMs).toISOString();
-    const readingEndTime = new Date(nowMs).toISOString();
-    const readingTimestamp = new Date().toISOString(); // The time we log the event
-
-    const payload = {
-      userId,
-      subChapterId,
-      readingStartTime,
-      readingEndTime,
-      productReadingPerformance,
-      planId,
-      // "timestamp" is the final recorded time of the submission
-      timestamp: readingTimestamp,
+    return () => {
+      // on unmount => optionally post leftover lumps
+      // if you want no partial leftover, do nothing 
     };
+    // eslint-disable-next-line
+  }, [subChapterId, userId, planId]);
 
-    try {
-      // 3) Post it to our new API
-      await axios.post(`${backendURL}/api/submitReading`, payload);
-      console.log("Reading submission successful:", payload);
-    } catch (error) {
-      console.error("Error submitting reading record:", error);
-      alert("Failed to submit reading record.");
-      // Optional: revert local changes or handle error
-    }
-  }
+  // ----------------------------------------------------------------------------
+  // 2) local second timer => leftoverSec++ each second
+  // ----------------------------------------------------------------------------
+  useEffect(() => {
+    const timerId = setInterval(() => {
+      setLeftoverSec((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(timerId);
+  }, []);
 
-  // --- Expand/Collapse UI ---
-  function toggleExpand() {
-    setIsExpanded((prev) => !prev);
-  }
+  // ----------------------------------------------------------------------------
+  // 3) Heartbeat => check how many lumps of 15 we can post
+  //    leftoverSec might be 31, meaning 2 lumps of 15 => 30 posted, leftover=1
+  // ----------------------------------------------------------------------------
+  useEffect(() => {
+    if (!lastSnapMs) return;
+    const heartbeatId = setInterval(async () => {
+      // leftoverSec is how many seconds have passed since the last multiple-of-15 
+      // plus any from previous lumps we posted
+      if (leftoverSec >= 15) {
+        // how many lumps can we post?
+        let lumps = Math.floor(leftoverSec / 15); // e.g. 31 => lumps=2
+        if (lumps > 0) {
+          const totalToPost = lumps * 15; 
+          // post lumps * 15 to server
+          const resultAction = await dispatch(
+            incrementReadingTime({ userId, planId, subChapterId, increment: totalToPost })
+          );
+          if (incrementReadingTime.fulfilled.match(resultAction)) {
+            const newTotal = resultAction.payload || (serverTime + totalToPost);
+            setServerTime(newTotal);
+          }
+          // leftover = leftoverSec % 15
+          const remainder = leftoverSec % 15; 
+          setLeftoverSec(remainder);
+          setLastSnapMs(Date.now() - (remainder * 1000));
+        }
+      }
+    }, 1000);
 
+    return () => clearInterval(heartbeatId);
+  }, [leftoverSec, lastSnapMs, userId, planId, subChapterId, serverTime, dispatch]);
+
+  // displayedTime => serverTime + leftoverSec
+  const displayedTime = serverTime + leftoverSec;
+
+  // If subChapter not loaded => show loading
   if (!subChapter) {
     return (
       <div style={styles.outerContainer}>
@@ -160,56 +157,22 @@ export default function ReadingView({ activity }) {
     );
   }
 
-  // ============ Summaries & Display ============
-
+  // show entire text
   let { summary = "" } = subChapter;
-  // Remove raw newlines:
   summary = summary.replace(/\r?\n/g, "");
-
-  const maxChars = 200;
-  const truncatedHtml =
-    summary.length > maxChars ? summary.slice(0, maxChars) + " ..." : summary;
-
-  let displayedHtml;
-  if (localProficiency === "empty") {
-    displayedHtml = truncatedHtml;
-  } else if (localProficiency === "reading") {
-    displayedHtml = summary;
-  } else {
-    // If "read", let user expand or collapse
-    displayedHtml = isExpanded ? summary : truncatedHtml;
-  }
-
-  // ============ JSX Return ============
 
   return (
     <div style={styles.outerContainer}>
-      <div
-        style={styles.readingContentArea}
-        dangerouslySetInnerHTML={{ __html: displayedHtml }}
-      />
+      <div style={styles.readingContentArea} dangerouslySetInnerHTML={{ __html: summary }} />
 
-      <div style={styles.footerActions}>
-        {renderActionButtons(localProficiency)}
-        {localProficiency === "read" && (
-          <button style={styles.btnStyle} onClick={toggleExpand}>
-            {isExpanded ? "Collapse" : "Expand"}
-          </button>
-        )}
+      <div style={{ marginTop: 12 }}>
+        <strong>Reading Time: </strong>{formatTime(displayedTime)}
+        <div style={{ fontSize: "0.9rem", marginTop: 4 }}>
+          <em>Server usage posted in 15-second increments.</em>
+        </div>
       </div>
 
-      {/* Show reading stats if desired */}
-      <div style={{ marginTop: "8px" }}>
-        {localProficiency === "reading" && (
-          <div>Reading time so far: {formatTime(readingSeconds)}</div>
-        )}
-        {localProficiency === "read" && finalReadingTime && (
-          <div>Total Reading Time: {finalReadingTime}</div>
-        )}
-        <div>ProductReadingPerformance: {productReadingPerformance}</div>
-      </div>
-
-      {/* Debug overlay */}
+      {/* Debug Overlay */}
       <div
         style={styles.debugEyeContainer}
         onMouseEnter={() => setShowDebug(true)}
@@ -219,48 +182,20 @@ export default function ReadingView({ activity }) {
         {showDebug && (
           <div style={styles.debugOverlay}>
             <h4 style={{ marginTop: 0 }}>Debug Info</h4>
-            <div style={styles.debugBlock}>
-              <strong>Activity:</strong>
-              <pre style={styles.debugPre}>{JSON.stringify(activity, null, 2)}</pre>
-            </div>
-            <div style={styles.debugBlock}>
-              <strong>SubChapter:</strong>
-              <pre style={styles.debugPre}>{JSON.stringify(subChapter, null, 2)}</pre>
-            </div>
+            <pre style={styles.debugPre}>
+              {JSON.stringify({ 
+                activity, 
+                subChapter, 
+                serverTime, 
+                leftoverSec 
+              }, null, 2)}
+            </pre>
           </div>
         )}
       </div>
     </div>
   );
-
-  // Helper to show the relevant button
-  function renderActionButtons(prof) {
-    switch (prof) {
-      case "empty":
-        return (
-          <button style={styles.btnStyle} onClick={handleStartReading}>
-            Start Reading
-          </button>
-        );
-      case "reading":
-        return (
-          <button style={styles.btnStyle} onClick={handleStopReading}>
-            Done Reading
-          </button>
-        );
-      case "read":
-        return (
-          <div style={styles.readingDoneMsg}>
-            <em>Reading Complete</em>
-          </div>
-        );
-      default:
-        return null;
-    }
-  }
 }
-
-// ============ Basic Styles ============
 
 const styles = {
   outerContainer: {
@@ -279,29 +214,8 @@ const styles = {
     flex: 1,
     overflowY: "auto",
     lineHeight: 1.6,
-    marginBottom: "10px",
     maxWidth: "60ch",
     margin: "0 auto",
-  },
-  footerActions: {
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: "8px",
-    marginTop: "10px",
-  },
-  btnStyle: {
-    backgroundColor: "#444",
-    color: "#fff",
-    border: "none",
-    borderRadius: "4px",
-    padding: "6px 12px",
-    cursor: "pointer",
-    fontSize: "0.85rem",
-  },
-  readingDoneMsg: {
-    fontSize: "0.9rem",
-    fontStyle: "italic",
   },
   debugEyeContainer: {
     position: "absolute",
@@ -333,9 +247,6 @@ const styles = {
     padding: "8px",
     zIndex: 9999,
     fontSize: "0.8rem",
-  },
-  debugBlock: {
-    marginBottom: "8px",
   },
   debugPre: {
     backgroundColor: "#333",
