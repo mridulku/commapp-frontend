@@ -1,10 +1,12 @@
+// TopBar.jsx
 import React, { useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { setCurrentIndex } from "../../../../../store/planSlice";
 
+// Basic container styles
 const containerStyle = {
   display: "flex",
-  flexDirection: "column", // so if you had a second row, it appears below
+  flexDirection: "column",
   backgroundColor: "#111",
   padding: "6px 12px",
   color: "#fff",
@@ -76,17 +78,24 @@ const closeStyle = {
   fontSize: "1.2rem",
 };
 
-// Simple example color function
+// A helper to pick color for "Reading", "Quiz", "Revision", etc.
 function getActivityColor(activityType) {
   const lowerType = (activityType || "").toLowerCase();
   if (lowerType.includes("read")) return "#4FC3F7";   // bright blue
   if (lowerType.includes("quiz")) return "#E57373";   // red
   if (lowerType.includes("revis")) return "#FFD54F";  // yellow
-  return "#BDBDBD";                                  // gray fallback
+  return "#BDBDBD";                                   // gray fallback
 }
 
+/**
+ * TopBar
+ *
+ * PROPS:
+ *  - dailyTime (number): total day-level usage in seconds (from Redux or PlanFetcher)
+ *  - onClose, onFontSizeIncrease, onFontSizeDecrease, onStarClick (callbacks)
+ */
 export default function TopBar({
-  secondsLeft,
+  dailyTime,
   onClose = () => {},
   onFontSizeIncrease = () => {},
   onFontSizeDecrease = () => {},
@@ -94,13 +103,21 @@ export default function TopBar({
 }) {
   const dispatch = useDispatch();
 
-  // Pull data from Redux store
+  // We still use plan's flattenedActivities & currentIndex for navigation
   const { flattenedActivities, currentIndex } = useSelector((state) => state.plan);
 
   // Local state to show/hide debug overlay on "i" hover
   const [showDebug, setShowDebug] = useState(false);
 
-  // Handle prev/next activity
+  // Convert dailyTime (seconds) to mm:ss
+  let timeDisplay = "";
+  if (typeof dailyTime === "number") {
+    const mm = Math.floor(dailyTime / 60);
+    const ss = String(dailyTime % 60).padStart(2, "0");
+    timeDisplay = `Today’s Study Time: ${mm}:${ss}`;
+  }
+
+  // Activity navigation logic
   function handlePrev() {
     if (currentIndex > 0) {
       dispatch(setCurrentIndex(currentIndex - 1));
@@ -112,18 +129,9 @@ export default function TopBar({
     }
   }
 
-  // Disabled state for arrows
   const disablePrev = currentIndex <= 0;
   const disableNext =
     !flattenedActivities || currentIndex >= (flattenedActivities.length - 1);
-
-  // Leftover time display
-  let timeDisplay = "";
-  if (secondsLeft != null) {
-    const mm = Math.floor(secondsLeft / 60);
-    const ss = String(secondsLeft % 60).padStart(2, "0");
-    timeDisplay = `${mm}:${ss} left`;
-  }
 
   // Identify the current activity
   let pillText = "";
@@ -153,10 +161,11 @@ export default function TopBar({
 
   return (
     <div style={containerStyle}>
-      {/* Top row: the main bar (arrows, pill, close, etc.) */}
       <div style={topRowStyle}>
+        {/* Left side => Day-level time display */}
         <div style={leftStyle}>{timeDisplay}</div>
 
+        {/* Center => prev/next arrows, activity pill, debug icon */}
         <div style={centerStyle}>
           {/* Prev arrow */}
           <button
@@ -173,17 +182,12 @@ export default function TopBar({
 
           {/* Activity Pill */}
           {pillText && (
-            <div
-              style={{
-                ...pillStyle,
-                backgroundColor: pillBg,
-              }}
-            >
+            <div style={{ ...pillStyle, backgroundColor: pillBg }}>
               {pillText}
             </div>
           )}
 
-          {/* Next arrow + debug icon */}
+          {/* Next arrow & debug */}
           <div style={{ display: "flex", alignItems: "center" }}>
             <button
               style={{
@@ -197,19 +201,17 @@ export default function TopBar({
               &gt;
             </button>
 
-            {/* "i" button container, shown after right arrow */}
+            {/* "i" debug eye */}
             <div
-              style={styles.debugEyeContainer}
+              style={debugStyles.debugEyeContainer}
               onMouseEnter={() => setShowDebug(true)}
               onMouseLeave={() => setShowDebug(false)}
             >
-              <div style={styles.debugEyeIcon}>i</div>
-
-              {/* When hovered, show debug overlay (for currentAct) */}
+              <div style={debugStyles.debugEyeIcon}>i</div>
               {showDebug && currentAct && (
-                <div style={styles.debugOverlay}>
+                <div style={debugStyles.debugOverlay}>
                   <h4 style={{ marginTop: 0 }}>Debug Info</h4>
-                  <pre style={styles.debugPre}>
+                  <pre style={debugStyles.debugPre}>
                     {JSON.stringify(currentAct, null, 2)}
                   </pre>
                 </div>
@@ -218,7 +220,7 @@ export default function TopBar({
           </div>
         </div>
 
-        {/* Right side icons */}
+        {/* Right side => font size & star & close */}
         <div style={rightStyle}>
           <div style={iconButtonStyle} onClick={onFontSizeDecrease}>
             A-
@@ -238,8 +240,7 @@ export default function TopBar({
   );
 }
 
-// Additional Debug Styles
-const styles = {
+const debugStyles = {
   debugEyeContainer: {
     position: "relative",
     marginLeft: "8px",
@@ -260,7 +261,7 @@ const styles = {
   },
   debugOverlay: {
     position: "absolute",
-    top: "30px", // just below the "i" icon
+    top: "30px",
     right: 0,
     width: "240px",
     backgroundColor: "#222",
