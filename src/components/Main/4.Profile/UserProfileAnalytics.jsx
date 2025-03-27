@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { auth } from "../../../firebase"; // Adjust path if needed
+import { auth, db } from "../../../firebase"; // Adjust path if needed
 import { signOut } from "firebase/auth";
 
 import { Box, Button } from "@mui/material";
 
 import UserHistory from "./UserHistory";
+import PlanUsageHistory from "./PlanUsageHistory";
 
 
 
@@ -133,6 +134,8 @@ export default function UserProfileAnalytics({ colorScheme = {} }) {
 
           {/* Child components */}
           <UserHistory userId={userId} colorScheme={colorScheme} />
+
+          <PlanUsageHistory userId={userId} db={db} colorScheme={colorScheme} />
          
 
 
