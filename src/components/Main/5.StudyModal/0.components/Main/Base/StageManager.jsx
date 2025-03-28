@@ -3,38 +3,72 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { useSelector } from "react-redux";
 
-// Children
+// Child Components
+import ReadingView from "./ReadingView";
 import ActivityView from "./ActivityView";
 import HistoryView from "./HistoryView";
-import ReadingView from "./ReadingView";
 
-// We’ll treat these as the four Bloom’s quiz stages:
+/**
+ * We treat these four as the recognized Bloom’s quiz stages.
+ */
 const QUIZ_STAGES = ["remember", "understand", "apply", "analyze"];
 
+/**
+ * StageManager
+ * ------------
+ * - Renders a top bar of tabs: Reading | Remember | Understand | Apply | Analyze
+ * - If "Reading" => render <ReadingView activity={...} />
+ * - If one of the quiz stages => fetch attempts & render sub-buttons "Activity" | "History"
+ * - Then load <ActivityView> or <HistoryView> for that stage.
+ *
+ * Props:
+ *  - examId
+ *  - activity (object with .type, .quizStage, .subChapterId, etc.)
+ *  - userId
+ *  - Optional: any extra fields you want to pass along
+ */
 export default function StageManager({ examId, activity, userId }) {
+  // Extract relevant data from `activity`
   const subChapterId = activity?.subChapterId || "";
+  const activityType = (activity?.type || "").toLowerCase();
+  const possibleQuizStage = (activity?.quizStage || "").toLowerCase();
+
+  // We'll also get `planId` from Redux if needed
   const planId = useSelector((state) => state.plan.planDoc?.id);
 
-  // For top-level tabs => "reading", "remember", "understand", "apply", "analyze"
-  const [activeTab, setActiveTab] = useState("reading");
+  // ========================= State for Tabs & SubView =========================
+  // If activity.type = "read", default tab => "reading".
+  // If we have a recognized quizStage => default to that. Else fallback "reading".
+  let defaultTab = "reading";
+  if (QUIZ_STAGES.includes(possibleQuizStage)) {
+    defaultTab = possibleQuizStage;  // e.g. "remember"
+  } else if (activityType === "quiz" && !QUIZ_STAGES.includes(possibleQuizStage)) {
+    // Unknown quiz stage => fallback to remember or reading
+    defaultTab = "remember"; 
+  }
+  const [activeTab, setActiveTab] = useState(defaultTab);
 
-  // For the sub-view when in a quiz stage => "activity" or "history"
+  // If user is in a quiz stage, subView => "activity" or "history"
+  // By default we go to "activity"
   const [subView, setSubView] = useState("activity");
 
-  // Data relevant to the quiz stage
+  // ========================= Loading / Error states =========================
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // ========================= Data: Quiz/Revision/Concepts =========================
   const [quizAttempts, setQuizAttempts] = useState([]);
   const [revisionAttempts, setRevisionAttempts] = useState([]);
   const [subchapterConcepts, setSubchapterConcepts] = useState([]);
 
-  // pass/fail mode => "NO_QUIZ_YET", "QUIZ_COMPLETED", etc.
+  // ========================= pass/fail Mode / Stats =========================
+  // "NO_QUIZ_YET", "QUIZ_COMPLETED", "NEED_REVISION", "CAN_TAKE_NEXT_QUIZ", "LOADING"
   const [mode, setMode] = useState("LOADING");
   const [lastQuizAttempt, setLastQuizAttempt] = useState(null);
   const [latestConceptStats, setLatestConceptStats] = useState(null);
   const [allAttemptsConceptStats, setAllAttemptsConceptStats] = useState([]);
 
-  // We'll define pass thresholds for each stage
+  // Pass thresholds for each stage (adjust as you like)
   const stagePassRatios = {
     remember: 0.6,
     understand: 0.6,
@@ -43,15 +77,17 @@ export default function StageManager({ examId, activity, userId }) {
   };
   const effectiveExamId = examId || "general";
 
-  // ---------------- useEffect => fetch data if we’re on a quiz stage ----------------
+  // ========================= useEffect => fetch if quiz stage =========================
   useEffect(() => {
+    // If no subChapterId/userId => skip
     if (!subChapterId || !userId) {
       console.log("StageManager: missing subChapterId/userId => skip fetch");
       return;
     }
-    // If the activeTab is "reading", no quiz data needed => skip
+
+    // If the activeTab is not a recognized quiz stage => skip quiz fetch
     if (!QUIZ_STAGES.includes(activeTab)) {
-      // Reset data? Or keep old data? Let's just reset for clarity
+      // We can reset our quiz data states to avoid confusion
       setMode("LOADING");
       setQuizAttempts([]);
       setRevisionAttempts([]);
@@ -62,29 +98,44 @@ export default function StageManager({ examId, activity, userId }) {
       return;
     }
 
-    // If the activeTab is one of the quiz stages => fetch
-    fetchData(activeTab);
+    // Otherwise, we fetch quiz attempts, revision attempts, concepts, etc.
+    fetchQuizData(activeTab);
     // eslint-disable-next-line
   }, [activeTab, subChapterId, userId]);
 
-  async function fetchData(quizStage) {
+  /**
+   * fetchQuizData
+   * -------------
+   * Load quiz attempts, revision attempts, subchapter concepts
+   */
+  async function fetchQuizData(currentStage) {
     try {
       setLoading(true);
       setError("");
 
-      // getQuiz
+      // 1) getQuiz
       const quizRes = await axios.get("http://localhost:3001/api/getQuiz", {
-        params: { userId, planId, subchapterId: subChapterId, quizType: quizStage },
+        params: {
+          userId,
+          planId,
+          subchapterId: subChapterId,
+          quizType: currentStage,
+        },
       });
       const quizArr = quizRes?.data?.attempts || [];
 
-      // getRevisions
+      // 2) getRevisions
       const revRes = await axios.get("http://localhost:3001/api/getRevisions", {
-        params: { userId, planId, subchapterId: subChapterId, revisionType: quizStage },
+        params: {
+          userId,
+          planId,
+          subchapterId: subChapterId,
+          revisionType: currentStage,
+        },
       });
       const revArr = revRes?.data?.revisions || [];
 
-      // getSubchapterConcepts
+      // 3) getSubchapterConcepts
       const conceptRes = await axios.get("http://localhost:3001/api/getSubchapterConcepts", {
         params: { subchapterId: subChapterId },
       });
@@ -95,18 +146,23 @@ export default function StageManager({ examId, activity, userId }) {
       setSubchapterConcepts(conceptArr);
 
       // Evaluate pass/fail => set 'mode'
-      computeMode(quizArr, revArr, conceptArr, quizStage);
+      computeMode(quizArr, revArr, conceptArr, currentStage);
 
       // Build concept stats => for all attempts
       buildAllAttemptsConceptStats(quizArr, conceptArr);
     } catch (err) {
-      console.error("StageManager => fetchData error:", err);
-      setError(err.message || "Error fetching data");
+      console.error("StageManager => fetchQuizData error:", err);
+      setError(err.message || "Error fetching quiz data");
     } finally {
       setLoading(false);
     }
   }
 
+  /**
+   * computeMode
+   * -----------
+   * From the latest quiz attempt => figure out if user passed or needs revision, etc.
+   */
   function computeMode(quizArr, revArr, conceptArr, quizStage) {
     if (!quizArr.length) {
       setMode("NO_QUIZ_YET");
@@ -138,7 +194,7 @@ export default function StageManager({ examId, activity, userId }) {
       }
     }
 
-    // If latest quiz had submissions => build concept stats
+    // If we have quizSubmission => build concept stats for that attempt
     if (latestQuiz?.quizSubmission && conceptArr.length > 0) {
       const stats = buildConceptStats(latestQuiz.quizSubmission, conceptArr);
       setLatestConceptStats(stats);
@@ -147,6 +203,11 @@ export default function StageManager({ examId, activity, userId }) {
     }
   }
 
+  /**
+   * buildAllAttemptsConceptStats
+   * -----------
+   * For the "History" view, we want concept stats for every attempt
+   */
   function buildAllAttemptsConceptStats(quizArr, conceptArr) {
     if (!quizArr.length || !conceptArr.length) {
       setAllAttemptsConceptStats([]);
@@ -163,30 +224,33 @@ export default function StageManager({ examId, activity, userId }) {
     setAllAttemptsConceptStats(mapped);
   }
 
-  // Child event handlers => re-fetch for whichever stage is active
+  // ========================= Child event handlers => re-fetch =========================
   function handleQuizComplete() {
     if (QUIZ_STAGES.includes(activeTab)) {
-      fetchData(activeTab);
+      fetchQuizData(activeTab);
     }
   }
   function handleQuizFail() {
     if (QUIZ_STAGES.includes(activeTab)) {
-      fetchData(activeTab);
+      fetchQuizData(activeTab);
     }
   }
   function handleRevisionDone() {
     if (QUIZ_STAGES.includes(activeTab)) {
-      fetchData(activeTab);
+      fetchQuizData(activeTab);
     }
   }
 
-  // Render
+  // ========================= Render Logic =========================
+  // 1) If subChapterId or userId missing => bail
   if (!subChapterId || !userId) {
     return <div style={{ color: "#fff" }}>No valid subChapterId/userId.</div>;
   }
+  // 2) If loading...
   if (loading) {
     return <div style={{ color: "#fff" }}>Loading attempts...</div>;
   }
+  // 3) If error
   if (error) {
     return <div style={{ color: "red" }}>{error}</div>;
   }
@@ -194,51 +258,47 @@ export default function StageManager({ examId, activity, userId }) {
   return (
     <div style={styles.container}>
 
-      {/* Top bar with logo + big row of tabs */}
-      <div style={styles.topBar}>
+      {/* Top row => 5 tabs: Reading, Remember, Understand, Apply, Analyze */}
+      <div style={styles.tabRow}>
+        {/* Reading */}
+        <button
+          style={activeTab === "reading" ? styles.tabButtonActive : styles.tabButton}
+          onClick={() => {
+            setActiveTab("reading");
+            setSubView("activity"); // reset subView if we switch away from quiz
+          }}
+        >
+          Reading
+        </button>
         
-        <div style={styles.tabRow}>
-          {/* Reading tab */}
-          <button
-            style={activeTab === "reading" ? styles.tabButtonActive : styles.tabButton}
-            onClick={() => {
-              setActiveTab("reading");
-              setSubView("activity"); // reset subView
-            }}
-          >
-            Reading
-          </button>
-
-          {/* Bloom’s stages: remember, understand, apply, analyze */}
-          {QUIZ_STAGES.map((st) => {
-            const isActive = activeTab === st;
-            return (
-              <button
-                key={st}
-                style={isActive ? styles.tabButtonActive : styles.tabButton}
-                onClick={() => {
-                  setActiveTab(st);
-                  // keep subView the same, or default to activity
-                  setSubView("activity");
-                }}
-              >
-                {capitalize(st)}
-              </button>
-            );
-          })}
-        </div>
+        {/* Bloom’s Quiz Stages */}
+        {QUIZ_STAGES.map((st) => {
+          const isActive = activeTab === st;
+          return (
+            <button
+              key={st}
+              style={isActive ? styles.tabButtonActive : styles.tabButton}
+              onClick={() => {
+                setActiveTab(st);
+                setSubView("activity"); // Usually default to showing "Activity"
+              }}
+            >
+              {capitalize(st)}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Main content */}
+      {/* Main content area */}
       <div style={styles.mainContent}>
-        {/* If we are on "reading," show the ReadingView. */}
+        {/* If "reading" => show <ReadingView> with the current activity data */}
         {activeTab === "reading" && (
           <ReadingView activity={activity} />
         )}
 
-        {/* Otherwise, we are on one of the quiz stages => show subView toggles + either ActivityView or HistoryView */}
+        {/* If one of the QUIZ_STAGES => show sub-row for "Activity" / "History" */}
         {QUIZ_STAGES.includes(activeTab) && (
-          <div style={styles.quizStageContainer}>
+          <div style={styles.quizContainer}>
             {/* Sub-buttons for Activity / History */}
             <div style={styles.subButtonRow}>
               <button
@@ -255,11 +315,10 @@ export default function StageManager({ examId, activity, userId }) {
               </button>
             </div>
 
-            {/* Depending on subView => show ActivityView or HistoryView */}
             {subView === "activity" && (
               <ActivityView
                 mode={mode}
-                quizStage={activeTab} // <-- pass the chosen Bloom’s stage
+                quizStage={activeTab}
                 examId={effectiveExamId}
                 subChapterId={subChapterId}
                 planId={planId}
@@ -288,17 +347,23 @@ export default function StageManager({ examId, activity, userId }) {
   );
 }
 
-/* ============= Utilities ============= */
+/* ============== Utilities ============== */
+
+/**
+ * parseScoreForRatio
+ *  - Takes a string like "80%", or "4/5", returns a number in [0..1]
+ */
 function parseScoreForRatio(scoreString) {
   if (!scoreString) return NaN;
   const trimmed = scoreString.trim();
+
   // If ends with '%'
   if (trimmed.endsWith("%")) {
     const numPart = trimmed.slice(0, -1);
     const parsed = parseFloat(numPart);
     return isNaN(parsed) ? NaN : parsed / 100;
   }
-  // If X/Y
+  // If "X/Y"
   if (trimmed.includes("/")) {
     const [numStr, denomStr] = trimmed.split("/");
     const numericScore = parseFloat(numStr);
@@ -310,30 +375,43 @@ function parseScoreForRatio(scoreString) {
   return NaN;
 }
 
+/**
+ * buildConceptStats
+ *  - from quizSubmission[] and subchapterConcepts[] => produce an array of
+ *    { conceptName, correct, total, ratio, passOrFail }
+ */
 function buildConceptStats(quizSubmission, conceptArr) {
   const countMap = {};
+
   quizSubmission.forEach((q) => {
     const cName = q.conceptName || "UnknownConcept";
     if (!countMap[cName]) {
       countMap[cName] = { correct: 0, total: 0 };
     }
     countMap[cName].total++;
+    // We assume q.score >= 1.0 => correct
     if (q.score && parseFloat(q.score) >= 1) {
       countMap[cName].correct++;
     }
   });
+
+  // Convert conceptArr to a set of concept names
   const conceptNamesSet = new Set(conceptArr.map((c) => c.name));
+  // If we had "UnknownConcept", ensure it’s included
   if (countMap["UnknownConcept"]) {
     conceptNamesSet.add("UnknownConcept");
   }
+
   const statsArray = [];
   conceptNamesSet.forEach((cName) => {
     const rec = countMap[cName] || { correct: 0, total: 0 };
     const ratio = rec.total > 0 ? rec.correct / rec.total : 0;
     let passOrFail = "FAIL";
-    if (rec.total === 0) passOrFail = "NOT_TESTED";
-    else if (ratio === 1.0) passOrFail = "PASS";
-
+    if (rec.total === 0) {
+      passOrFail = "NOT_TESTED";
+    } else if (ratio === 1.0) {
+      passOrFail = "PASS";
+    }
     statsArray.push({
       conceptName: cName,
       correct: rec.correct,
@@ -342,16 +420,22 @@ function buildConceptStats(quizSubmission, conceptArr) {
       passOrFail,
     });
   });
+
+  // Sort alphabetically by conceptName
   statsArray.sort((a, b) => a.conceptName.localeCompare(b.conceptName));
   return statsArray;
 }
 
+/**
+ * capitalize
+ *  - e.g. "remember" => "Remember"
+ */
 function capitalize(str) {
   if (!str) return "";
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-/* ============= Styles ============= */
+/* ============== Styles ============== */
 const styles = {
   container: {
     width: "100%",
@@ -363,23 +447,12 @@ const styles = {
     boxSizing: "border-box",
     fontFamily: "'Inter', sans-serif",
   },
-
-  topBar: {
-    display: "flex",
-    alignItems: "center",
-    backgroundColor: "#111",
-    padding: "8px",
-    gap: "16px",
-  },
-  logo: {
-    width: "120px",
-    height: "40px",
-    objectFit: "cover",
-  },
   tabRow: {
     display: "flex",
     flexDirection: "row",
     gap: "8px",
+    backgroundColor: "#111",
+    padding: "8px",
   },
   tabButton: {
     backgroundColor: "#222",
@@ -389,6 +462,8 @@ const styles = {
     padding: "6px 12px",
     cursor: "pointer",
     fontWeight: 500,
+    display: "flex",
+    alignItems: "center",
   },
   tabButtonActive: {
     backgroundColor: "#444",
@@ -398,14 +473,15 @@ const styles = {
     padding: "6px 12px",
     cursor: "pointer",
     fontWeight: "bold",
+    display: "flex",
+    alignItems: "center",
   },
-
   mainContent: {
     flex: 1,
     overflowY: "auto",
     padding: "8px",
   },
-  quizStageContainer: {
+  quizContainer: {
     display: "flex",
     flexDirection: "column",
     gap: "12px",

@@ -1,40 +1,26 @@
-// StageView.jsx
+// File: StageView.jsx
 import React from "react";
 import { useSelector } from "react-redux";
 import StageManager from "./StageManager";
-
-// Import the new dummy components
 import CumulativeQuiz from "../CumulativeComp/CumulativeQuiz";
 import CumulativeRevision from "../CumulativeComp/CumulativeRevision";
 
 export default function StageView({ examId, activity }) {
   const userId = useSelector((state) => state.auth?.userId || "demoUser");
+
+  // If this is "read" type, there's no quizStage on it. If it's a quiz type, we might have quizStage
+  const activityType = (activity.type || "").toLowerCase();
   const quizStage = (activity.quizStage || "").toLowerCase();
 
-  // 1) If no quizStage found
-  if (!quizStage) {
-    return (
-      <div style={styles.outerContainer}>
-        <h2>No quizStage found</h2>
-        <pre style={{ backgroundColor: "#222", padding: "8px", color: "#fff" }}>
-          {JSON.stringify(activity, null, 2)}
-        </pre>
-      </div>
-    );
-  }
-
-  // 2) Check for special "cumulative" stages
+  // 1) Check for special "cumulative" stages
   if (quizStage === "cumulativequiz") {
-    // Render the CumulativeQuiz dummy component
     return (
       <div style={styles.outerContainer}>
         <CumulativeQuiz examId={examId} activity={activity} userId={userId} />
       </div>
     );
   }
-
   if (quizStage === "cumulativerevision") {
-    // Render the CumulativeRevision dummy component
     return (
       <div style={styles.outerContainer}>
         <CumulativeRevision examId={examId} activity={activity} userId={userId} />
@@ -42,7 +28,8 @@ export default function StageView({ examId, activity }) {
     );
   }
 
-  // 3) Otherwise, default to the existing StageManager approach
+  // 2) Otherwise => pass to StageManager, even if it's reading
+  //    The StageManager will see if it's "read" type or a known quizStage, and show the right tab.
   return (
     <div style={styles.outerContainer}>
       <StageManager

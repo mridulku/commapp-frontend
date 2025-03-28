@@ -1,8 +1,6 @@
-// MainContent.jsx
+// File: MainContent.jsx
 import React from "react";
 import { useSelector } from "react-redux";
-
-import ReadingView from "../ReadComp/ReadingView";
 import StageView from "./StageView";
 
 export default function MainContent({ examId }) {
@@ -34,35 +32,12 @@ export default function MainContent({ examId }) {
     );
   }
 
-  // 4) Determine which view to render
-  const activityType = (currentAct.type || "").toLowerCase();
-  let content;
-  switch (activityType) {
-    case "read":
-    case "reading":
-      content = <ReadingView activity={currentAct} />;
-      break;
-
-    case "quiz":
-      // pass examId as a prop to QuizView
-      content = <StageView examId={examId} activity={currentAct} />;
-      break;
-
-    
-
-    default:
-      content = (
-        <div style={{ padding: 20, color: "#fff" }}>
-          <h2>Unknown Activity: {currentAct.type}</h2>
-          <pre>{JSON.stringify(currentAct, null, 2)}</pre>
-        </div>
-      );
-  }
-
-  // 5) Render
+  // 4) Always route to StageView
   return (
     <div style={styles.container}>
-      <div style={styles.contentArea}>{content}</div>
+      <div style={styles.contentArea}>
+        <StageView examId={examId} activity={currentAct} />
+      </div>
     </div>
   );
 }
