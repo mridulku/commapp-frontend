@@ -61,6 +61,21 @@ function TimePill({ minutes = 0 }) {
   );
 }
 
+/**
+ * formatMinutes
+ *  - Takes a total number of minutes
+ *  - Returns a string like "1h 20m" or "45m"
+ */
+function formatMinutes(totalMin) {
+  if (!totalMin) return "0m";
+  const hours = Math.floor(totalMin / 60);
+  const mins = totalMin % 60;
+  if (hours > 0) {
+    return `${hours}h ${mins}m`;
+  }
+  return `${mins}m`;
+}
+
 /** TruncateTooltip => truncated text with ellipsis + tooltip */
 function TruncateTooltip({ text, sx }) {
   return (
@@ -181,24 +196,46 @@ export default function LeftPanel({
     setExpanded({});
   }
 
+  // For displaying total day time + progress
+  // (If you have a real “minutesSpent” or “progress” from Redux, you can incorporate it here.)
+  function renderDayStats(session) {
+    const totalMinutes = session.activities?.reduce((acc, x) => acc + (x.timeNeeded || 0), 0) || 0;
+    const totalTimeStr = formatMinutes(totalMinutes);
+
+    // Example “progress” placeholder
+    const userProgress = 40; // or compute real usage / total
+    return (
+      <Box sx={{ color: "#fff", mb: 2, ml: 1 }}>
+        <Typography variant="body2" sx={{ fontSize: "0.75rem" }}>
+          <strong>Today's Total Time:</strong> {totalTimeStr}
+        </Typography>
+        <Typography variant="body2" sx={{ fontSize: "0.75rem" }}>
+          <strong>Today's Progress:</strong> {userProgress}%
+        </Typography>
+      </Box>
+    );
+  }
+
   // if planType="book" => single session
   if (planType === "book") {
     const singleSession = sessions[0] || {};
     const { activities = [] } = singleSession;
     return (
       <Box sx={containerSx}>
-        {renderTopRow()}
+        {renderTopRow("book")}
         {!isCollapsed && (
-          <Box sx={{ flex: 1, overflowY: "auto" }}>
-            {/* Now we call our custom "MasterList" that shows global vs. normal */}
-            <MasterList
-              activities={activities}
-              currentIndex={currentIndex}
-              onSelectAct={(idx) => dispatch(setCurrentIndex(idx))}
-              expanded={expanded}
-              onToggleExpand={(k) => setExpanded(toggleKey(expanded, k))}
-            />
-          </Box>
+          <>
+            {renderDayStats(singleSession)}
+            <Box sx={{ flex: 1, overflowY: "auto" }}>
+              <MasterList
+                activities={activities}
+                currentIndex={currentIndex}
+                onSelectAct={(idx) => dispatch(setCurrentIndex(idx))}
+                expanded={expanded}
+                onToggleExpand={(k) => setExpanded(toggleKey(expanded, k))}
+              />
+            </Box>
+          </>
         )}
       </Box>
     );
@@ -210,22 +247,25 @@ export default function LeftPanel({
 
   return (
     <Box sx={containerSx}>
-      {renderTopRow()}
-      <Box sx={{ flex: 1, overflowY: "auto" }}>
-        {!isCollapsed && (
-          <MasterList
-            activities={activities}
-            currentIndex={currentIndex}
-            onSelectAct={(idx) => dispatch(setCurrentIndex(idx))}
-            expanded={expanded}
-            onToggleExpand={(k) => setExpanded(toggleKey(expanded, k))}
-          />
-        )}
-      </Box>
+      {renderTopRow("adaptive")}
+      {!isCollapsed && (
+        <>
+          {renderDayStats(currentSession)}
+          <Box sx={{ flex: 1, overflowY: "auto" }}>
+            <MasterList
+              activities={activities}
+              currentIndex={currentIndex}
+              onSelectAct={(idx) => dispatch(setCurrentIndex(idx))}
+              expanded={expanded}
+              onToggleExpand={(k) => setExpanded(toggleKey(expanded, k))}
+            />
+          </Box>
+        </>
+      )}
     </Box>
   );
 
-  function renderTopRow() {
+  function renderTopRow(type) {
     return (
       <Box
         sx={{
@@ -248,7 +288,8 @@ export default function LeftPanel({
           <MenuIcon />
         </IconButton>
 
-        {!isCollapsed && planType !== "book" && (
+        {/* If not collapsed and planType is adaptive => show day selector */}
+        {!isCollapsed && type !== "book" && (
           <Box
             sx={{
               position: "absolute",
@@ -291,7 +332,7 @@ export default function LeftPanel({
  * ----------
  * This wraps:
  *   1) "Global" or "Cumulative" activities that have no chapter or 
- *      some quizStage like "cumulativequiz"/"cumulativerevision"
+ *      are quizStage like "cumulativequiz"/"cumulativerevision"
  *   2) Normal chapter-based activities (rendered via ChapterList).
  */
 function MasterList({
@@ -307,13 +348,11 @@ function MasterList({
 
   for (const act of activities) {
     // Identify condition(s) for "global/cumulative" vs normal
-    // Example check: (no chapterId) or (quizStage === "cumulativequiz" / "cumulativerevision")
     const quizStageLower = (act.quizStage || "").toLowerCase();
     const isCumulative =
       quizStageLower === "cumulativequiz" ||
       quizStageLower === "cumulativerevision";
 
-    // If subChapterId or chapterId is missing, or if it’s flagged as cumulative
     if (!act.chapterId || isCumulative) {
       globalActivities.push(act);
     } else {
@@ -408,7 +447,7 @@ function ChapterList({
       {chapters.map((ch) => {
         const chKey = `ch-${ch.chapterId}`;
         const isOpen = expanded[chKey] === true;
-        // total time
+        // total time for the entire chapter
         const chTime = ch.items.reduce((acc, x) => acc + (x.timeNeeded || 0), 0);
 
         return (
@@ -418,13 +457,20 @@ function ChapterList({
               onClick={() => onToggleExpand(chKey)}
             >
               {parseTitlePill(ch.chapterName, "#EC407A")}
-              <TimePill minutes={chTime} />
+              {/* 
+                Show chapter time only if collapsed.
+                If expanded, we hide the time to show 
+                it's "broken down" by sub-items.
+              */}
+              {!isOpen && <TimePill minutes={chTime} />}
+
               {isOpen ? (
                 <ExpandLessIcon sx={{ fontSize: "1rem", ml: 0.5 }} />
               ) : (
                 <ExpandMoreIcon sx={{ fontSize: "1rem", ml: 0.5 }} />
               )}
             </ListItemButton>
+
             <Collapse in={isOpen} timeout="auto" unmountOnExit>
               <List dense sx={{ p: 0, ml: 2 }}>
                 {/* sub-ch lines => each activity is its own line */}
@@ -443,15 +489,12 @@ function ChapterList({
  *  e.g.  "1. Some SubCh   [Reading or Understand or Apply etc.]   [5m]"
  */
 function renderSubChLines(subChActivities, currentIndex, onSelectAct) {
-  // We'll group them by subChapter, but each activity => 1 line
-  const lines = subChActivities.map((act) => act);
-
-  return lines.map((act, idx) => {
+  // We'll just map them directly
+  return subChActivities.map((act, idx) => {
     const isSelected = act.flatIndex === currentIndex;
     const { bgColor, textColor } = getActivityStyle(isSelected);
     const subName = act.subChapterName || `SubCh(${act.subChapterId})`;
 
-    // If type=READ => label "Reading"
     let stageLabel = "Reading";
     if (act.type === "QUIZ") {
       if (act.quizStage) {

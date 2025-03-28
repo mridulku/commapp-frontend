@@ -1,0 +1,88 @@
+// File: ActivityView.jsx
+import React from "react";
+import QuizComponent from "../QuizComp/QuizComponent";
+import ReviseComponent from "../RevComp/ReviseComponent";
+
+/**
+ * ActivityView
+ * ------------
+ * Child of StageManager that:
+ *  - Receives 'mode', 'lastQuizAttempt', etc.
+ *  - Decides whether to show "No Quiz Yet," "Quiz Completed," "Need Revision," etc.
+ *  - Renders the <QuizComponent> or <ReviseComponent> accordingly.
+ *
+ * Props (from StageManager):
+ *  - mode, quizStage, examId, subChapterId, planId, userId
+ *  - lastQuizAttempt
+ *  - onQuizComplete, onQuizFail, onRevisionDone
+ */
+export default function ActivityView({
+  mode,
+  quizStage,
+  examId,
+  subChapterId,
+  planId,
+  userId,
+  lastQuizAttempt,
+  onQuizComplete,
+  onQuizFail,
+  onRevisionDone,
+}) {
+  return (
+    <div style={styles.container}>
+      {/* 1) No quiz => show first quiz attempt */}
+      {mode === "NO_QUIZ_YET" && (
+        <QuizComponent
+          userId={userId}
+          planId={planId}
+          quizStage={quizStage}
+          examId={examId}
+          subChapterId={subChapterId}
+          attemptNumber={1}
+          onQuizComplete={onQuizComplete}
+          onQuizFail={onQuizFail}
+        />
+      )}
+
+      {/* 2) Quiz completed => success */}
+      {mode === "QUIZ_COMPLETED" && (
+        <div style={{ color: "lightgreen", marginBottom: "1rem" }}>
+          <p>Congratulations! You passed the <b>{quizStage}</b> stage.</p>
+        </div>
+      )}
+
+      {/* 3) If need revision => show ReviseComponent */}
+      {mode === "NEED_REVISION" && lastQuizAttempt && (
+        <ReviseComponent
+          userId={userId}
+          planId={planId}
+          quizStage={quizStage}
+          examId={examId}
+          subChapterId={subChapterId}
+          revisionNumber={lastQuizAttempt.attemptNumber}
+          onRevisionDone={onRevisionDone}
+        />
+      )}
+
+      {/* 4) If revision done => user can retake quiz */}
+      {mode === "CAN_TAKE_NEXT_QUIZ" && lastQuizAttempt && (
+        <QuizComponent
+          userId={userId}
+          planId={planId}
+          quizStage={quizStage}
+          examId={examId}
+          subChapterId={subChapterId}
+          attemptNumber={lastQuizAttempt.attemptNumber + 1}
+          onQuizComplete={onQuizComplete}
+          onQuizFail={onQuizFail}
+        />
+      )}
+    </div>
+  );
+}
+
+const styles = {
+  container: {
+    padding: "16px",
+  },
+};
