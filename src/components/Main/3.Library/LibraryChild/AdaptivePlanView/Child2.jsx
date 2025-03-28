@@ -259,20 +259,7 @@ export default function Child2({
       <Dialog
         open={showPlanDialog}
         onClose={() => setShowPlanDialog(false)}
-        maxWidth={false}
-        fullWidth={false}
-        sx={{
-          "& .MuiDialog-paper": {
-            width: "90vw",
-            maxWidth: "90vw",
-            height: "90vh",
-            maxHeight: "90vh",
-            backgroundColor: "#000",
-            color: "#fff",
-            borderRadius: 2,
-            boxShadow: "none",
-          },
-        }}
+        fullScreen
       >
         <DialogContent
           sx={{
@@ -287,6 +274,8 @@ export default function Child2({
               planId={dialogPlanId}
               initialActivityContext={dialogInitialActivity}
               userId={userId}
+              onClose={() => setShowPlanDialog(false)}
+
             />
           ) : (
             <p style={{ margin: "1rem" }}>No planId found. Cannot load plan.</p>

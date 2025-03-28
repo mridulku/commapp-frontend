@@ -1,4 +1,3 @@
-// TopBar.jsx
 import React, { useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { setCurrentIndex } from "../../../../../store/planSlice";
@@ -7,8 +6,8 @@ import { setCurrentIndex } from "../../../../../store/planSlice";
 const containerStyle = {
   display: "flex",
   flexDirection: "column",
-  backgroundColor: "#111",
-  padding: "6px 12px",
+  background: "#222 linear-gradient(180deg, #2a2a2a, #222)",
+  padding: "8px 16px",
   color: "#fff",
   boxSizing: "border-box",
 };
@@ -21,16 +20,18 @@ const topRowStyle = {
 };
 
 const leftStyle = {
-  fontSize: "0.8rem",
-  color: "#ccc",
   display: "flex",
   alignItems: "center",
+  fontSize: "0.9rem",
+  color: "#ccc",
+  position: "relative",
 };
 
 const centerStyle = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
+  gap: "12px",
 };
 
 const rightStyle = {
@@ -52,18 +53,6 @@ const arrowButtonStyle = {
   justifyContent: "center",
 };
 
-const pillStyle = {
-  display: "inline-flex",
-  alignItems: "center",
-  borderRadius: "999px",
-  padding: "4px 10px",
-  fontSize: "0.85rem",
-  fontWeight: "bold",
-  color: "#000",
-  backgroundColor: "#4FC3F7", // default fallback
-  margin: "0 8px",
-};
-
 const iconButtonStyle = {
   cursor: "pointer",
   fontSize: "0.9rem",
@@ -76,24 +65,74 @@ const iconButtonStyle = {
 const closeStyle = {
   cursor: "pointer",
   fontSize: "1.2rem",
+  color: "#fff",
+  backgroundColor: "#333",
+  borderRadius: "50%",
+  padding: "4px 6px",
+  border: "1px solid #555",
 };
 
-// A helper to pick color for "Reading", "Quiz", "Revision", etc.
-function getActivityColor(activityType) {
-  const lowerType = (activityType || "").toLowerCase();
-  if (lowerType.includes("read")) return "#4FC3F7";   // bright blue
-  if (lowerType.includes("quiz")) return "#E57373";   // red
-  if (lowerType.includes("revis")) return "#FFD54F";  // yellow
-  return "#BDBDBD";                                   // gray fallback
-}
+// Label styles for activity info (horizontally arranged)
+const activityInfoStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+};
 
-/**
- * TopBar
- *
- * PROPS:
- *  - dailyTime (number): total day-level usage in seconds (from Redux or PlanFetcher)
- *  - onClose, onFontSizeIncrease, onFontSizeDecrease, onStarClick (callbacks)
- */
+const chapterLabelStyle = {
+  backgroundColor: "#ff69b4", // pink background
+  color: "#000",
+  padding: "4px 8px",
+  borderRadius: "4px",
+  fontSize: "0.85rem",
+};
+
+const subchapterLabelStyle = {
+  backgroundColor: "#9370db", // purple background
+  color: "#fff",
+  padding: "4px 8px",
+  borderRadius: "4px",
+  fontSize: "0.85rem",
+};
+
+const activityLabelStyle = {
+  backgroundColor: "#4caf50", // green background for activity type
+  color: "#fff",
+  padding: "4px 8px",
+  borderRadius: "4px",
+  fontSize: "0.85rem",
+};
+
+const fontButtonStyle = {
+  cursor: "pointer",
+  fontSize: "0.9rem",
+  color: "#ccc",
+  backgroundColor: "#222",
+  borderRadius: "4px",
+  padding: "4px 8px",
+  border: "1px solid #444",
+  position: "relative",
+};
+
+const fontDropdownStyle = {
+  position: "absolute",
+  top: "110%",
+  right: 0,
+  backgroundColor: "#333",
+  border: "1px solid #555",
+  borderRadius: "4px",
+  zIndex: 9999,
+  minWidth: "60px",
+};
+
+const fontOptionStyle = {
+  padding: "6px 10px",
+  color: "#fff",
+  cursor: "pointer",
+  fontSize: "0.85rem",
+  borderBottom: "1px solid #444",
+};
+
 export default function TopBar({
   dailyTime,
   onClose = () => {},
@@ -102,22 +141,46 @@ export default function TopBar({
   onStarClick = () => {},
 }) {
   const dispatch = useDispatch();
-
-  // We still use plan's flattenedActivities & currentIndex for navigation
   const { flattenedActivities, currentIndex } = useSelector((state) => state.plan);
 
-  // Local state to show/hide debug overlay on "i" hover
-  const [showDebug, setShowDebug] = useState(false);
+  // Local state for font menu dropdown and time tooltip
+  const [showFontMenu, setShowFontMenu] = useState(false);
+  const [showTimeTooltip, setShowTimeTooltip] = useState(false);
 
-  // Convert dailyTime (seconds) to mm:ss
-  let timeDisplay = "";
-  if (typeof dailyTime === "number") {
-    const mm = Math.floor(dailyTime / 60);
-    const ss = String(dailyTime % 60).padStart(2, "0");
-    timeDisplay = `Today’s Study Time: ${mm}:${ss}`;
+  // Format the daily time (e.g. "3h 50m 10s")
+  const formatDailyTime = (totalSec) => {
+    if (totalSec >= 3600) {
+      const h = Math.floor(totalSec / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      const s = totalSec % 60;
+      return `${h}h ${m.toString().padStart(2, "0")}m ${s.toString().padStart(2, "0")}s`;
+    } else if (totalSec >= 60) {
+      const m = Math.floor(totalSec / 60);
+      const s = totalSec % 60;
+      return `${m}m ${s.toString().padStart(2, "0")}s`;
+    } else {
+      return `${totalSec}s`;
+    }
+  };
+
+  const formattedTime = formatDailyTime(dailyTime);
+  const tooltipText = `Today's Study Time: ${formattedTime}`;
+
+  // Determine current activity details
+  let chapterName = "Unknown Chapter";
+  let subchapterName = "Unknown Subchapter";
+  let activityType = "Activity";
+  if (flattenedActivities && currentIndex >= 0 && currentIndex < flattenedActivities.length) {
+    const currentAct = flattenedActivities[currentIndex];
+    chapterName = currentAct.chapterName || chapterName;
+    subchapterName = currentAct.subChapterName || subchapterName;
+    const typeLower = (currentAct.type || "").toLowerCase();
+    if (typeLower.includes("read")) activityType = "Reading";
+    else if (typeLower.includes("quiz")) activityType = "Quiz";
+    else if (typeLower.includes("revis")) activityType = "Revision";
   }
 
-  // Activity navigation logic
+  // Navigation arrow handlers
   function handlePrev() {
     if (currentIndex > 0) {
       dispatch(setCurrentIndex(currentIndex - 1));
@@ -128,108 +191,103 @@ export default function TopBar({
       dispatch(setCurrentIndex(currentIndex + 1));
     }
   }
-
   const disablePrev = currentIndex <= 0;
-  const disableNext =
-    !flattenedActivities || currentIndex >= (flattenedActivities.length - 1);
-
-  // Identify the current activity
-  let pillText = "";
-  let pillBg = "#BDBDBD";
-  let currentAct = null;
-
-  if (
-    flattenedActivities &&
-    currentIndex >= 0 &&
-    currentIndex < flattenedActivities.length
-  ) {
-    currentAct = flattenedActivities[currentIndex];
-
-    if (currentAct) {
-      const subCh = currentAct.subChapterName || "Untitled";
-      const actType = (currentAct.type || "").toLowerCase();
-
-      let label = "Activity";
-      if (actType.includes("read")) label = "Reading";
-      else if (actType.includes("quiz")) label = "Quiz";
-      else if (actType.includes("revis")) label = "Revision";
-
-      pillText = `${label}: ${subCh}`;
-      pillBg = getActivityColor(actType);
-    }
-  }
+  const disableNext = !flattenedActivities || currentIndex >= (flattenedActivities.length - 1);
 
   return (
     <div style={containerStyle}>
       <div style={topRowStyle}>
-        {/* Left side => Day-level time display */}
-        <div style={leftStyle}>{timeDisplay}</div>
+        {/* Left Section: Clock icon and time display */}
+        <div style={leftStyle}>
+          <div
+            style={{ marginRight: "6px", cursor: "default", position: "relative" }}
+            onMouseEnter={() => setShowTimeTooltip(true)}
+            onMouseLeave={() => setShowTimeTooltip(false)}
+          >
+            <span style={{ fontSize: "1.2rem" }}>🕒</span>
+            {showTimeTooltip && (
+              <div style={{
+                position: "absolute",
+                top: "120%",
+                left: "50%",
+                transform: "translateX(-50%)",
+                backgroundColor: "#333",
+                color: "#fff",
+                fontSize: "0.75rem",
+                padding: "4px 8px",
+                borderRadius: "4px",
+                zIndex: 10,
+                whiteSpace: "nowrap"
+              }}>
+                {tooltipText}
+              </div>
+            )}
+          </div>
+          <span style={{ fontSize: "1rem", fontWeight: "bold" }}>{formattedTime}</span>
+        </div>
 
-        {/* Center => prev/next arrows, activity pill, debug icon */}
+        {/* Center Section: Navigation arrows and activity info (horizontally stacked) */}
         <div style={centerStyle}>
-          {/* Prev arrow */}
           <button
             style={{
               ...arrowButtonStyle,
+              marginRight: "8px",
               opacity: disablePrev ? 0.3 : 1,
               pointerEvents: disablePrev ? "none" : "auto",
-              marginRight: "8px",
             }}
             onClick={handlePrev}
           >
             &lt;
           </button>
 
-          {/* Activity Pill */}
-          {pillText && (
-            <div style={{ ...pillStyle, backgroundColor: pillBg }}>
-              {pillText}
-            </div>
-          )}
-
-          {/* Next arrow & debug */}
-          <div style={{ display: "flex", alignItems: "center" }}>
-            <button
-              style={{
-                ...arrowButtonStyle,
-                opacity: disableNext ? 0.3 : 1,
-                pointerEvents: disableNext ? "none" : "auto",
-                marginLeft: "8px",
-              }}
-              onClick={handleNext}
-            >
-              &gt;
-            </button>
-
-            {/* "i" debug eye */}
-            <div
-              style={debugStyles.debugEyeContainer}
-              onMouseEnter={() => setShowDebug(true)}
-              onMouseLeave={() => setShowDebug(false)}
-            >
-              <div style={debugStyles.debugEyeIcon}>i</div>
-              {showDebug && currentAct && (
-                <div style={debugStyles.debugOverlay}>
-                  <h4 style={{ marginTop: 0 }}>Debug Info</h4>
-                  <pre style={debugStyles.debugPre}>
-                    {JSON.stringify(currentAct, null, 2)}
-                  </pre>
-                </div>
-              )}
-            </div>
+          <div style={activityInfoStyle}>
+            <div style={chapterLabelStyle}>Chapter: {chapterName}</div>
+            <div style={subchapterLabelStyle}>Subchapter: {subchapterName}</div>
+            <div style={activityLabelStyle}>{activityType}</div>
           </div>
+
+          <button
+            style={{
+              ...arrowButtonStyle,
+              marginLeft: "8px",
+              opacity: disableNext ? 0.3 : 1,
+              pointerEvents: disableNext ? "none" : "auto",
+            }}
+            onClick={handleNext}
+          >
+            &gt;
+          </button>
         </div>
 
-        {/* Right side => font size & star & close */}
+        {/* Right Section: Font options and Close button */}
         <div style={rightStyle}>
-          <div style={iconButtonStyle} onClick={onFontSizeDecrease}>
-            A-
-          </div>
-          <div style={iconButtonStyle} onClick={onFontSizeIncrease}>
-            A+
-          </div>
-          <div style={iconButtonStyle} onClick={onStarClick}>
-            ⭐
+          <div
+            style={fontButtonStyle}
+            onClick={() => setShowFontMenu(!showFontMenu)}
+          >
+            A-+
+            {showFontMenu && (
+              <div style={fontDropdownStyle}>
+                <div
+                  style={fontOptionStyle}
+                  onClick={() => {
+                    onFontSizeDecrease();
+                    setShowFontMenu(false);
+                  }}
+                >
+                  A-
+                </div>
+                <div
+                  style={{ ...fontOptionStyle, borderBottom: "none" }}
+                  onClick={() => {
+                    onFontSizeIncrease();
+                    setShowFontMenu(false);
+                  }}
+                >
+                  A+
+                </div>
+              </div>
+            )}
           </div>
           <div style={closeStyle} onClick={onClose}>
             ✕
@@ -241,45 +299,5 @@ export default function TopBar({
 }
 
 const debugStyles = {
-  debugEyeContainer: {
-    position: "relative",
-    marginLeft: "8px",
-  },
-  debugEyeIcon: {
-    width: "24px",
-    height: "24px",
-    backgroundColor: "#333",
-    borderRadius: "50%",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    color: "#fff",
-    fontSize: "0.8rem",
-    cursor: "pointer",
-    border: "1px solid #555",
-    textTransform: "uppercase",
-  },
-  debugOverlay: {
-    position: "absolute",
-    top: "30px",
-    right: 0,
-    width: "240px",
-    backgroundColor: "#222",
-    border: "1px solid #444",
-    borderRadius: "4px",
-    padding: "8px",
-    zIndex: 9999,
-  },
-  debugPre: {
-    backgroundColor: "#333",
-    padding: "6px",
-    borderRadius: "4px",
-    maxHeight: "120px",
-    overflowY: "auto",
-    whiteSpace: "pre-wrap",
-    marginTop: "6px",
-    fontSize: "0.75rem",
-    lineHeight: 1.4,
-    color: "#fff",
-  },
+  // (No debug styles since debug icon is removed)
 };

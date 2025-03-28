@@ -4,6 +4,8 @@ import authReducer from "./authSlice"; // <-- import your new auth slice
 import examReducer from "./examSlice"; // <--- import the new slice
 import timeTrackingReducer from "./timeTrackingSlice"; // <--- new
 import readingReducer from "./readingSlice";
+import quizTimeReducer from "./quizTimeSlice";
+import reviseTimeReducer from "./reviseTimeSlice";
 
 
 
@@ -15,6 +17,8 @@ export const store = configureStore({
     exam: examReducer, // <--- add the exam slice
     timeTracking: timeTrackingReducer, // <--- add it
     reading: readingReducer,
+    quizTime: quizTimeReducer,
+    reviseTime: reviseTimeReducer,
 
 
     // <-- add the auth slice

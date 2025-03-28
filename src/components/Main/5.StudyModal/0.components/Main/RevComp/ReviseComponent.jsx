@@ -1,19 +1,103 @@
-import React, { useEffect, useState } from "react";
+// File: ReviseView.jsx
+import React, { useEffect, useState, useRef } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../../../../../firebase"; // Adjust path as needed
-import { generateRevisionContent } from "./RevSupport/RevisionContentGenerator"; // The logic below
 import axios from "axios";
-import { useSelector } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
+
+// GPT logic
+import { generateRevisionContent } from "./RevSupport/RevisionContentGenerator";
+// revise-time actions
+import { fetchReviseTime, incrementReviseTime } from "../../../../../../store/reviseTimeSlice";
+import { setCurrentIndex } from "../../../../../../store/planSlice";
+
+/** Utility to format mm:ss */
+function formatTime(totalSeconds) {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
 
 /**
- * ReviseComponent
- * --------------
- * A React component for displaying revision content for a particular stage & attempt.
- * - It automatically fetches the relevant revision config doc, calls the revision generator,
- *   and displays the returned concept-based revision from GPT.
- * - On "Done with Revision", it stores a revision attempt in your backend (and includes planId).
+ * Splits an HTML string into ~180-word pages by paragraphs.
  */
-export default function ReviseComponent({
+function chunkHtmlByParagraphs(htmlString, chunkSize = 180) {
+  let sanitized = htmlString.replace(/\\n/g, "\n");  // convert literal "\n"
+  sanitized = sanitized.replace(/\r?\n/g, " ");      // remove real newlines -> spaces
+
+  // Split by </p>, re-append </p>
+  let paragraphs = sanitized
+    .split(/<\/p>/i)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0)
+    .map((p) => p + "</p>");
+
+  const pages = [];
+  let currentPageHtml = "";
+  let currentPageWordCount = 0;
+
+  paragraphs.forEach((paragraph) => {
+    // remove HTML tags for word count
+    const plainText = paragraph.replace(/<[^>]+>/g, "");
+    const wordCount = plainText.split(/\s+/).filter(Boolean).length;
+
+    if (currentPageWordCount + wordCount <= chunkSize) {
+      currentPageHtml += paragraph;
+      currentPageWordCount += wordCount;
+    } else {
+      if (currentPageHtml.trim().length > 0) {
+        pages.push(currentPageHtml);
+      }
+      currentPageHtml = paragraph;
+      currentPageWordCount = wordCount;
+    }
+  });
+  if (currentPageHtml.trim().length > 0) {
+    pages.push(currentPageHtml);
+  }
+  return pages;
+}
+
+function buildRevisionConfigDocId(exam, stage) {
+  const capExam = exam.charAt(0).toUpperCase() + exam.slice(1);
+  const capStage = stage.charAt(0).toUpperCase() + stage.slice(1);
+  return `revise${capExam}${capStage}`;
+}
+
+/** Convert GPT-based revisionData into a chunkable HTML string. */
+function createHtmlFromGPTData(revisionData) {
+  if (!revisionData) return "";
+
+  let html = "";
+  if (revisionData.title) {
+    html += `<h3>${revisionData.title}</h3>`;
+  }
+
+  if (Array.isArray(revisionData.concepts)) {
+    revisionData.concepts.forEach((cObj) => {
+      html += `<h4>${cObj.conceptName}</h4>`;
+      if (Array.isArray(cObj.notes)) {
+        html += "<ul>";
+        cObj.notes.forEach((n) => {
+          html += `<li>${n}</li>`;
+        });
+        html += "</ul>";
+      }
+    });
+  }
+  return html;
+}
+
+/**
+ * ReviseView
+ * ----------
+ * - "Revision" header + clock
+ * - chunked HTML pagination
+ * - lumps-of-15 time tracking
+ * - "Finish Revision" on last page
+ * - Removed the debug "i" button
+ */
+export default function ReviseView({
   userId,
   examId = "general",
   quizStage = "remember",
@@ -21,113 +105,183 @@ export default function ReviseComponent({
   revisionNumber = 1,
   onRevisionDone,
 }) {
-  // Redux: grab planId from state.plan.planDoc?.id (adjust if your naming is different)
-  const planId = useSelector((state) => state.plan.planDoc?.id);
+  const planId = useSelector((state) => state.plan?.planDoc?.id);
+  const dispatch = useDispatch();
 
-  // ====== ADDED LOG ======
-  console.log("[ReviseComponent] Current planId =>", planId);
-
+  // docId for usage logs: user_plan_subCh_quizStage_revX_YYYY-MM-DD
+  const docIdRef = useRef("");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
-  // JSON-based content from GPT
-  const [revisionContent, setRevisionContent] = useState(null);
+  // GPT => chunked pages
+  const [revisionHtml, setRevisionHtml] = useState("");
+  const [pages, setPages] = useState([]);
+  const [currentPageIndex, setCurrentPageIndex] = useState(0);
 
-  // The doc ID for "revisionConfigs", e.g. "reviseGeneralRemember"
-  const docId = buildRevisionConfigDocId(examId, quizStage);
+  // lumps-of-15
+  const [serverTime, setServerTime] = useState(0);
+  const [localLeftover, setLocalLeftover] = useState(0);
+  const [lastSnapMs, setLastSnapMs] = useState(null);
 
-  // We'll read the OpenAI API key from environment (Vite style, or your chosen method)
-  const openAiKey = import.meta.env.VITE_OPENAI_KEY || "";
-
+  // -------------------------------------------
+  // 1) On mount => fetch usage + GPT content
+  // -------------------------------------------
   useEffect(() => {
     if (!userId || !subChapterId) {
-      console.log(
-        "ReviseComponent: missing userId or subChapterId => skipping generation."
-      );
+      console.log("ReviseView: missing userId/subChapterId => skipping generation.");
       return;
     }
-    if (!openAiKey) {
-      console.warn(
-        "ReviseComponent: No OpenAI key found. GPT calls may fail."
-      );
-      return;
+
+    const openAiKey = import.meta.env.VITE_OPENAI_KEY || "";
+    const dateStr = new Date().toISOString().substring(0, 10);
+    const docId = `${userId}_${planId}_${subChapterId}_${quizStage}_rev${revisionNumber}_${dateStr}`;
+    docIdRef.current = docId;
+
+    // reset states
+    setLoading(true);
+    setStatus("Loading revision config...");
+    setError("");
+    setServerTime(0);
+    setLocalLeftover(0);
+    setLastSnapMs(null);
+    setRevisionHtml("");
+    setPages([]);
+    setCurrentPageIndex(0);
+
+    async function doFetchUsage() {
+      try {
+        const actionRes = await dispatch(fetchReviseTime({ docId }));
+        if (fetchReviseTime.fulfilled.match(actionRes)) {
+          const existingSec = actionRes.payload || 0;
+          setServerTime(existingSec);
+          setLocalLeftover(0);
+          setLastSnapMs(Date.now());
+        }
+      } catch (err) {
+        console.error("fetchReviseTime error:", err);
+      }
     }
-    // Trigger fetch & creation of revision content
-    fetchAndGenerateRevision();
+
+    async function doGenerateGPT() {
+      try {
+        const docIdForConfig = buildRevisionConfigDocId(examId, quizStage);
+        // fetch Firestore doc => "revisionConfigs/docIdForConfig"
+        const revRef = doc(db, "revisionConfigs", docIdForConfig);
+        const snap = await getDoc(revRef);
+        if (!snap.exists()) {
+          setStatus(`No revisionConfig doc found for '${docIdForConfig}'.`);
+          setLoading(false);
+          return;
+        }
+        const configData = snap.data();
+
+        setStatus("Generating revision content via GPT...");
+        const result = await generateRevisionContent({
+          db,
+          subChapterId,
+          openAiKey,
+          revisionConfig: configData,
+          userId,
+          quizStage,
+        });
+
+        if (!result.success) {
+          setStatus("Failed to generate revision content.");
+          setError(result.error || "Unknown GPT error.");
+          setLoading(false);
+          return;
+        }
+
+        // Convert GPT data => HTML => chunk
+        const fullHtml = createHtmlFromGPTData(result.revisionData);
+        setRevisionHtml(fullHtml);
+        setStatus("Revision content generated.");
+      } catch (err) {
+        console.error("ReviseView => GPT generation error:", err);
+        setError(err.message || "Error generating GPT content");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    doFetchUsage();
+    doGenerateGPT();
     // eslint-disable-next-line
-  }, [userId, subChapterId, examId, quizStage, revisionNumber]);
+  }, [userId, subChapterId, examId, quizStage, revisionNumber, planId, dispatch]);
 
-  /**
-   * fetchAndGenerateRevision
-   * ------------------------
-   * 1) Reads the revisionConfig doc from 'revisionConfigs/{docId}'
-   * 2) Uses 'generateRevisionContent' to build a GPT prompt for concepts the user needs to revise
-   * 3) Sets the local revisionContent state
-   */
-  async function fetchAndGenerateRevision() {
-    try {
-      setLoading(true);
-      setStatus("Fetching revision config & generating content...");
-      setError("");
+  // Once revisionHtml => chunk
+  useEffect(() => {
+    if (!revisionHtml) return;
+    const chunked = chunkHtmlByParagraphs(revisionHtml, 180);
+    setPages(chunked);
+    setCurrentPageIndex(0);
+  }, [revisionHtml]);
 
-      // 1) Fetch the revision config doc
-      const revConfigRef = doc(db, "revisionConfigs", docId);
-      const revConfigSnap = await getDoc(revConfigRef);
-      if (!revConfigSnap.exists()) {
-        setStatus(`No revisionConfig doc found for '${docId}'.`);
-        setLoading(false);
-        return;
+  // local second timer => leftover++
+  useEffect(() => {
+    const secondTimer = setInterval(() => {
+      setLocalLeftover((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(secondTimer);
+  }, []);
+
+  // lumps-of-15 => incrementReviseTime
+  useEffect(() => {
+    if (!lastSnapMs) return;
+    const heartbeatId = setInterval(async () => {
+      if (localLeftover >= 15) {
+        const lumps = Math.floor(localLeftover / 15);
+        if (lumps > 0) {
+          const toPost = lumps * 15;
+          const incrRes = await dispatch(
+            incrementReviseTime({
+              docId: docIdRef.current,
+              increment: toPost,
+              userId,
+              planId,
+              subChapterId,
+              quizStage,
+              dateStr: new Date().toISOString().substring(0, 10),
+              revisionNumber,
+            })
+          );
+          if (incrementReviseTime.fulfilled.match(incrRes)) {
+            const newTotal = incrRes.payload || (serverTime + toPost);
+            setServerTime(newTotal);
+          }
+          const remainder = localLeftover % 15;
+          setLocalLeftover(remainder);
+          setLastSnapMs(Date.now() - remainder * 1000);
+        }
       }
-      const configData = revConfigSnap.data(); // e.g. { instructions: "...", ... }
+    }, 1000);
+    return () => clearInterval(heartbeatId);
+  }, [lastSnapMs, localLeftover, dispatch, userId, planId, subChapterId, quizStage, revisionNumber, serverTime]);
 
-      // 2) Use a helper to call GPT & build concept-based revision data
-      const result = await generateRevisionContent({
-        db,
-        subChapterId,
-        openAiKey,
-        revisionConfig: configData,
-        userId,
-        quizStage,
-      });
+  // displayed time => serverTime + localLeftover
+  const displayedTime = serverTime + localLeftover;
 
-      if (!result.success) {
-        setStatus("Failed to generate revision content.");
-        setError(result.error);
-        setLoading(false);
-        return;
-      }
-
-      setRevisionContent(result.revisionData);
-      setStatus("Revision content generated successfully.");
-    } catch (err) {
-      console.error("ReviseComponent: Error generating revision content:", err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
+  // Pagination
+  function handleNextPage() {
+    if (currentPageIndex < pages.length - 1) {
+      setCurrentPageIndex(currentPageIndex + 1);
     }
   }
-
-  /**
-   * handleSubmitRevision
-   * --------------------
-   * Called when user finishes revision. We'll record a doc in 'revisions_demo' via our API,
-   * now including planId from Redux if available.
-   */
-  async function handleSubmitRevision() {
-    // Build payload so we can log it
-    const payload = {
-      userId,
-      subchapterId: subChapterId,
-      revisionType: quizStage,
-      revisionNumber,
-      planId, // Pass the plan ID from Redux
-    };
-
-    // ====== ADDED LOG ======
-    console.log("[ReviseComponent] handleSubmitRevision => payload:", payload);
-
+  function handlePrevPage() {
+    if (currentPageIndex > 0) {
+      setCurrentPageIndex(currentPageIndex - 1);
+    }
+  }
+  async function handleFinishRevision() {
     try {
+      const payload = {
+        userId,
+        subchapterId: subChapterId,
+        revisionType: quizStage,
+        revisionNumber,
+        planId,
+      };
       await axios.post("http://localhost:3001/api/submitRevision", payload);
       console.log("Revision attempt recorded on server!");
     } catch (err) {
@@ -135,111 +289,150 @@ export default function ReviseComponent({
       alert("Failed to record revision attempt.");
       return;
     }
-
-    // Fire callback if provided
     onRevisionDone?.();
   }
 
-  /**
-   * Renders the revision content in a concept-by-concept manner, as returned by GPT.
-   * Example structure:
-   * {
-   *   "title": "Short Title",
-   *   "concepts": [
-   *     {
-   *       "conceptName": "Newton's First Law",
-   *       "notes": ["Point 1", "Point 2"]
-   *     },
-   *     { ... }
-   *   ]
-   * }
-   */
-  function renderRevisionContent() {
-    if (!revisionContent) return null;
-
-    const { title, concepts } = revisionContent;
-
+  // fallback if no pages
+  if (!pages.length && !loading) {
     return (
-      <div style={styles.revisionBox}>
-        {title && <h4>{title}</h4>}
-
-        {Array.isArray(concepts) && concepts.length > 0 && (
-          <div>
-            {concepts.map((cObj, idx) => (
-              <div key={idx} style={{ marginBottom: "1rem" }}>
-                <h5 style={{ margin: "0.5rem 0" }}>{cObj.conceptName}</h5>
-                {Array.isArray(cObj.notes) && (
-                  <ul>
-                    {cObj.notes.map((n, i) => (
-                      <li key={i}>{n}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+      <div style={styles.outerContainer}>
+        <p>No revision content to display.</p>
       </div>
     );
   }
 
+  const currentPageHtml = pages[currentPageIndex] || "";
+
   return (
-    <div style={styles.container}>
-      <h2 style={styles.heading}>
-        Revision ({quizStage}) – Attempt #{revisionNumber}
-      </h2>
+    <div style={styles.outerContainer}>
+      <div style={styles.card}>
+        {/* Header => "Revision" + clock */}
+        <div style={styles.cardHeader}>
+          <h2 style={{ margin: 0 }}>Revision</h2>
+          <div style={styles.clockWrapper}>
+            <span style={styles.clockIcon}>🕒</span>
+            {formatTime(displayedTime)}
+          </div>
+        </div>
 
-      {loading && <p>Loading... {status}</p>}
-      {!loading && status && <p style={{ color: "lightgreen" }}>{status}</p>}
-      {error && <p style={{ color: "red" }}>{error}</p>}
+        {/* Body => chunked HTML */}
+        <div style={styles.cardBody}>
+          {loading && <p>Loading... {status}</p>}
+          {!loading && error && <p style={{ color: "red" }}>{error}</p>}
+          {!loading && status && !error && (
+            <p style={{ color: "lightgreen" }}>{status}</p>
+          )}
 
-      {/* Display the GPT-based revision content */}
-      {renderRevisionContent()}
+          <div
+            style={styles.pageContent}
+            dangerouslySetInnerHTML={{ __html: currentPageHtml }}
+          />
+        </div>
 
-      {/* Button to finalize revision */}
-      <button style={styles.submitBtn} onClick={handleSubmitRevision}>
-        Done with Revision
-      </button>
+        {/* Footer => Prev, Next, Finish */}
+        <div style={styles.cardFooter}>
+          <div style={styles.navButtons}>
+            {currentPageIndex > 0 && (
+              <button style={styles.button} onClick={handlePrevPage}>
+                Previous
+              </button>
+            )}
+            {currentPageIndex < pages.length - 1 && (
+              <button style={styles.button} onClick={handleNextPage}>
+                Next
+              </button>
+            )}
+            {currentPageIndex === pages.length - 1 && (
+              <button style={styles.finishButton} onClick={handleFinishRevision}>
+                Finish Revision
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-/**
- * buildRevisionConfigDocId
- * ------------------------
- * Helper to build docId => "reviseExamStage", e.g. "reviseGeneralRemember"
- */
-function buildRevisionConfigDocId(exam, stage) {
-  const capExam = exam.charAt(0).toUpperCase() + exam.slice(1);
-  const capStage = stage.charAt(0).toUpperCase() + stage.slice(1);
-  return `revise${capExam}${capStage}`;
-}
-
+// ----------------------- Styles -----------------------
 const styles = {
-  container: {
-    padding: "1rem",
+  outerContainer: {
+    position: "relative",
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#000",
     color: "#fff",
-    maxWidth: "600px",
-    margin: "0 auto",
-    backgroundColor: "#222",
-    borderRadius: "4px",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    boxSizing: "border-box",
+    padding: "20px",
+    fontFamily: `'Inter', 'Roboto', sans-serif`,
   },
-  heading: {
-    marginBottom: "1rem",
+  card: {
+    width: "80%",
+    maxWidth: "700px",
+    backgroundColor: "#111",
+    borderRadius: "8px",
+    border: "1px solid #333",
+    display: "flex",
+    flexDirection: "column",
+    boxSizing: "border-box",
+    overflow: "hidden",
   },
-  revisionBox: {
+  cardHeader: {
+    background: "#222",
+    padding: "12px 16px",
+    borderBottom: "1px solid #333",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  clockWrapper: {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
     backgroundColor: "#333",
-    padding: "8px",
+    color: "#ddd",
+    padding: "4px 8px",
     borderRadius: "4px",
-    marginTop: "1rem",
   },
-  submitBtn: {
-    marginTop: "1rem",
-    padding: "8px 16px",
-    backgroundColor: "teal",
+  clockIcon: {
+    fontSize: "1rem",
+  },
+  cardBody: {
+    flex: 1,
+    padding: "16px",
+    overflowY: "auto",
+  },
+  pageContent: {
+    fontSize: "1.1rem",
+    lineHeight: 1.6,
+  },
+  cardFooter: {
+    borderTop: "1px solid #333",
+    padding: "12px 16px",
+  },
+  navButtons: {
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: "8px",
+  },
+  button: {
+    backgroundColor: "#444",
     color: "#fff",
     border: "none",
+    padding: "8px 12px",
     borderRadius: "4px",
     cursor: "pointer",
+  },
+  finishButton: {
+    backgroundColor: "#28a745",
+    color: "#fff",
+    border: "none",
+    padding: "8px 16px",
+    borderRadius: "4px",
+    cursor: "pointer",
+    fontWeight: "bold",
   },
 };

@@ -53,6 +53,7 @@ import TOEFLOnboardingTest from './diagrams/Pilot|AddToDB|Coding/PilotComponents
 import TOEFLOnboardingProcessing from './diagrams/Pilot|AddToDB|Coding/PilotComponents/TOEFLOnboardingProcessing';
 import TOEFLOnboardingView from './diagrams/Pilot|AddToDB|Coding/PilotComponents/TOEFLOnboardingView';
 import TOEFLActivitySimulator from './diagrams/Pilot|AddToDB|Coding/PilotComponents/TOEFLActivitySimulator';
+import StageManagerPlayground from './diagrams/Pilot|AddToDB|Coding/PilotComponents/StageManagerPlayground';
 
 
 
@@ -110,6 +111,7 @@ const diagramComponents = {
   TOEFLOnboardingProcessing,
   TOEFLOnboardingView,
   TOEFLActivitySimulator,
+  StageManagerPlayground,
   
 };
 
@@ -452,6 +454,17 @@ const sampleBrainstormings = [
     diagramComponent: 'TOEFLActivitySimulator',
     isImportant: false
   },
+  {
+    id: 48,
+    title: 'PilotComponents: StageManagerPlayground',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'StageManagerPlayground',
+    isImportant: false
+  },
+
+
+
+  
 
 
 
