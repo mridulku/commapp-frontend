@@ -8,8 +8,10 @@ import {
   DialogContent,
   Button,
 } from "@mui/material";
-import HistoryTab from "./HistoryTab";
+import PlanUsageHistory from "./PlanUsageHistory";
 import PlanFetcher from "../../../5.StudyModal/StudyModal"; // Adjust path if needed
+import { auth, db } from "../../../../../firebase"; // Adjust path if needed
+
 
 export default function Child2({
   userId = null,
@@ -301,7 +303,7 @@ export default function Child2({
             style={tabStyle(activeSessionIndex === 0)}
             onClick={() => setActiveSessionIndex(0)}
           >
-            History
+            
           </div>
 
           {sessions.map((sess, index) => {
@@ -330,9 +332,20 @@ export default function Child2({
           })}
         </div>
 
-        {activeSessionIndex === 0
-          ? <HistoryTab />
-          : renderSessionContent(sessions[activeSessionIndex - 1])}
+        {
+  activeSessionIndex === 0
+    ? (
+      <PlanUsageHistory
+        userId={userId}
+        planId={selectedPlanId}   // <-- pass planId as a prop
+        planData={plan}   // <-- pass the plan doc as a prop
+        db={db}
+        colorScheme={colorScheme}
+      />
+    ) : (
+      renderSessionContent(sessions[activeSessionIndex - 1])
+    )
+}
       </>
     );
   }

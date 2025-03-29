@@ -8,7 +8,6 @@ import { signOut } from "firebase/auth";
 import { Box, Button } from "@mui/material";
 
 import UserHistory from "./UserHistory";
-import PlanUsageHistory from "./PlanUsageHistory";
 
 
 
@@ -135,7 +134,6 @@ export default function UserProfileAnalytics({ colorScheme = {} }) {
           {/* Child components */}
           <UserHistory userId={userId} colorScheme={colorScheme} />
 
-          <PlanUsageHistory userId={userId} db={db} colorScheme={colorScheme} />
          
 
 
