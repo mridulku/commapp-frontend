@@ -17,11 +17,43 @@ import {
 } from "@mui/material";
 
 import MenuIcon from "@mui/icons-material/Menu";
+import LockIcon from "@mui/icons-material/Lock";
 
 //
 // Helpers
 //
 
+/**
+ * getStageNumberAndLabel(act)
+ * - If act.type="READ" => "Stage 1: Reading"
+ * - If quizStage="remember"/"understand"/"apply"/"analyze" => "Stage X: Label"
+ */
+function getStageNumberAndLabel(act) {
+  if (act.type === "READ") {
+    return "Stage 1: Reading";
+  }
+  const stageMap = {
+    remember: 2,
+    understand: 3,
+    apply: 4,
+    analyze: 5,
+  };
+  const sKey = (act.quizStage || "").toLowerCase();
+  const number = stageMap[sKey] || 0;
+
+  if (!number) {
+    // fallback if quizStage is unknown => "Quiz"
+    return "Quiz";
+  }
+  const label = sKey.charAt(0).toUpperCase() + sKey.slice(1);
+  return `Stage ${number}: ${label}`;
+}
+
+/**
+ * getActivityStyle(isSelected)
+ * - If selected => highlight red
+ * - else => dark gray
+ */
 function getActivityStyle(isSelected) {
   if (isSelected) {
     return {
@@ -35,6 +67,58 @@ function getActivityStyle(isSelected) {
   };
 }
 
+/**
+ * aggregatorTaskPill(taskLabel)
+ * - Renders aggregatorTask (e.g. "QUIZ1"|"REVISION2") as a styled orange pill
+ */
+function aggregatorTaskPill(taskLabel) {
+  return (
+    <Box
+      sx={{
+        mt: 0.5,
+        px: 0.8,
+        py: 0.3,
+        borderRadius: "0.2rem",
+        fontSize: "0.7rem",
+        bgcolor: "#FFA726", // orange pill
+        color: "#000",
+      }}
+    >
+      {taskLabel}
+    </Box>
+  );
+}
+
+/**
+ * aggregatorLockedOverlay()
+ * - Semi-transparent box with a lock icon,
+ *   BUT pointerEvents="none" => user can still click the underlying item
+ */
+function aggregatorLockedOverlay() {
+  return (
+    <Box
+      sx={{
+        position: "absolute",
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
+        bgcolor: "rgba(0,0,0,0.4)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: "4px",
+        pointerEvents: "none", // do NOT block clicks
+      }}
+    >
+      <LockIcon sx={{ color: "#fff", opacity: 0.8, fontSize: 30 }} />
+    </Box>
+  );
+}
+
+/**
+ * TimePill => "5m" bubble
+ */
 function TimePill({ minutes = 0 }) {
   return (
     <Box
@@ -54,6 +138,10 @@ function TimePill({ minutes = 0 }) {
   );
 }
 
+/**
+ * formatMinutes(totalMin)
+ * => "1h 20m" or "45m"
+ */
 function formatMinutes(totalMin) {
   if (!totalMin) return "0m";
   const hours = Math.floor(totalMin / 60);
@@ -64,8 +152,9 @@ function formatMinutes(totalMin) {
   return `${mins}m`;
 }
 
-/** 
- * Simple truncated text that shows a tooltip with the full string on hover
+/**
+ * TruncateTooltip
+ * => truncated text with tooltip
  */
 function TruncateTooltip({ text, sx }) {
   return (
@@ -90,8 +179,10 @@ function TruncateTooltip({ text, sx }) {
 /**
  * ActivityList
  * -------------
- * Now includes aggregatorTask & aggregatorStatus in the rendered info,
- * assuming they exist in each 'act' object.
+ * - Renders each activity as a card
+ * - "Stage 1: Reading" or "Stage 2: Remember" or "Stage 3: Understand" ...
+ * - aggregatorTask => pill if quiz, none if reading
+ * - aggregatorStatus="locked" => translucent lock overlay
  */
 function ActivityList({ activities, currentIndex, onSelectAct }) {
   return (
@@ -100,73 +191,85 @@ function ActivityList({ activities, currentIndex, onSelectAct }) {
         const isSelected = act.flatIndex === currentIndex;
         const { bgColor, textColor } = getActivityStyle(isSelected);
 
-        // Derive an activity label like "Reading", "Quiz", etc.
-        let stageLabel = "Reading";
-        if (act.type && act.type.toUpperCase().includes("QUIZ")) {
-          if (act.quizStage) {
-            stageLabel =
-              act.quizStage.charAt(0).toUpperCase() + act.quizStage.slice(1);
-          } else {
-            stageLabel = "Quiz";
-          }
-        } else if (act.type && act.type.toUpperCase().includes("REVIS")) {
-          stageLabel = "Revision";
-        }
+        // 1) Stage label
+        const stageLabel = getStageNumberAndLabel(act);
 
+        // 2) Basic info
         const chapterName = act.chapterName || "No Chapter";
         const subChapterName = act.subChapterName || "No Subchapter";
         const minutes = act.timeNeeded || 0;
 
-        // aggregator fields if present
-        const aggregatorTask = act.aggregatorTask || null;
-        const aggregatorStatus = act.aggregatorStatus || null;
+        // 3) aggregator fields
+        const aggregatorTask = act.aggregatorTask || "";
+        const aggregatorStatus = (act.aggregatorStatus || "").toLowerCase();
+
+        // aggregatorTask => skip if reading
+        let aggregatorTaskNode = null;
+        if (act.type !== "READ" && aggregatorTask) {
+          aggregatorTaskNode = aggregatorTaskPill(aggregatorTask);
+        }
+
+        // aggregatorStatus => "locked" => show overlay
+        let lockedOverlay = null;
+        if (aggregatorStatus === "locked") {
+          lockedOverlay = aggregatorLockedOverlay();
+        }
 
         return (
-          <ListItemButton
+          <Box
             key={act.flatIndex}
             sx={{
-              ...listItemButtonSx,
-              flexDirection: "column", // stack vertically
-              alignItems: "flex-start",
-              bgcolor: bgColor,
-              color: textColor,
+              position: "relative",
               mb: 0.8,
+              borderRadius: "4px",
+              overflow: "hidden" // for the overlay
             }}
-            onClick={() => onSelectAct(act.flatIndex)}
           >
-            {/* Chapter name */}
-            <TruncateTooltip
-              text={`Chapter: ${chapterName}`}
-              sx={{ fontSize: "0.8rem", fontWeight: 600 }}
-            />
-            {/* Subchapter name */}
-            <TruncateTooltip
-              text={`Subchapter: ${subChapterName}`}
-              sx={{ fontSize: "0.75rem", mt: 0.5 }}
-            />
-            {/* Stage label (Reading, Quiz, etc.) */}
-            <TruncateTooltip
-              text={stageLabel}
-              sx={{ fontSize: "0.75rem", mt: 0.5 }}
-            />
-
-            {/* aggregatorTask & aggregatorStatus (if available) */}
-            {aggregatorTask && (
+            <ListItemButton
+              sx={{
+                flexDirection: "column",
+                alignItems: "flex-start",
+                bgcolor: bgColor,
+                color: textColor,
+                minHeight: 0,
+                py: 1,
+                px: 1,
+                "&:hover": { bgcolor: "#444" },
+              }}
+              onClick={() => onSelectAct(act.flatIndex)}
+            >
+              {/* 1) Chapter name */}
               <TruncateTooltip
-                text={`Task: ${aggregatorTask}`}
-                sx={{ fontSize: "0.7rem", mt: 0.5 }}
+                text={`Chapter: ${chapterName}`}
+                sx={{ fontSize: "0.8rem", fontWeight: 600 }}
               />
-            )}
-            {aggregatorStatus && (
-              <TruncateTooltip
-                text={`Status: ${aggregatorStatus}`}
-                sx={{ fontSize: "0.7rem", mt: 0.3 }}
-              />
-            )}
 
-            {/* Time pill */}
-            <TimePill minutes={minutes} />
-          </ListItemButton>
+              {/* 2) Subchapter name */}
+              <TruncateTooltip
+                text={`Subchapter: ${subChapterName}`}
+                sx={{ fontSize: "0.75rem", mt: 0.5 }}
+              />
+
+              {/* 3) Stage label => "Stage 1: Reading" etc. */}
+              <TruncateTooltip
+                text={stageLabel}
+                sx={{ fontSize: "0.75rem", mt: 0.5 }}
+              />
+
+              {/* aggregatorTask => pill */}
+              {aggregatorTaskNode && (
+                <Box sx={{ mt: 0.5 }}>
+                  {aggregatorTaskNode}
+                </Box>
+              )}
+
+              {/* Time pill */}
+              <TimePill minutes={minutes} />
+            </ListItemButton>
+
+            {/* If locked => translucent overlay w/ lock icon (non-blocking) */}
+            {lockedOverlay}
+          </Box>
         );
       })}
     </List>
@@ -220,7 +323,7 @@ export default function LeftPanel({
       session.activities?.reduce((acc, x) => acc + (x.timeNeeded || 0), 0) || 0;
     const totalTimeStr = formatMinutes(totalMinutes);
 
-    // Example placeholder
+    // example placeholder
     const userProgress = 40;
     return (
       <Box sx={{ color: "#fff", mb: 2, ml: 1 }}>
@@ -257,7 +360,7 @@ export default function LeftPanel({
     );
   }
 
-  // Else => "adaptive"
+  // else => "adaptive"
   const currentSession = sessions[selectedDayIndex] || {};
   const { activities = [] } = currentSession;
 
@@ -302,7 +405,7 @@ export default function LeftPanel({
           <MenuIcon />
         </IconButton>
 
-        {/* If not collapsed and planType is adaptive => day selector */}
+        {/* If not collapsed and planType != "book" => show day dropdown */}
         {!isCollapsed && type !== "book" && (
           <Box
             sx={{
@@ -341,7 +444,7 @@ export default function LeftPanel({
   }
 }
 
-// Styles
+// --------------------- STYLES ---------------------
 const containerSx = {
   height: "100%",
   bgcolor: "#1A1A1A",
@@ -350,15 +453,6 @@ const containerSx = {
   flexDirection: "column",
   p: 1,
   boxSizing: "border-box",
-};
-
-const listItemButtonSx = {
-  minHeight: 0,
-  py: 1,
-  px: 1,
-  "&:hover": { bgcolor: "#444" },
-  mb: 0.5,
-  borderRadius: "4px",
 };
 
 const selectSx = {
