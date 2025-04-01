@@ -69,13 +69,16 @@ export default function ReadingView({ activity }) {
   const [pages, setPages] = useState([]);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
 
+  // We'll track a reading start time so that we can submit it upon finishing
+  const readingStartRef = useRef(null);
+
   const [showDebug, setShowDebug] = useState(false);
   const prevSubChapterId = useRef(null);
 
-  // 1) On subChapter change => fetch
+  // 1) On subChapter change => fetch subchapter + usage
   useEffect(() => {
     if (prevSubChapterId.current && prevSubChapterId.current !== subChapterId) {
-      // leftover lumps if needed
+      // If needed, handle leftover lumps or cleanup here
     }
     prevSubChapterId.current = subChapterId;
 
@@ -85,6 +88,9 @@ export default function ReadingView({ activity }) {
     setLastSnapMs(null);
     setPages([]);
     setCurrentPageIndex(0);
+
+    // Record a fresh reading start time
+    readingStartRef.current = new Date();
 
     if (!subChapterId) return;
 
@@ -115,10 +121,10 @@ export default function ReadingView({ activity }) {
 
     fetchSubChapterData();
     fetchUsage();
-    // eslint-disable-next-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subChapterId, userId, planId]);
 
-  // 2) chunk once subChapter loads
+  // 2) Once we have subChapter.summary, chunk it up
   useEffect(() => {
     if (!subChapter?.summary) return;
     const chunked = chunkHtmlByParagraphs(subChapter.summary, 180);
@@ -126,7 +132,7 @@ export default function ReadingView({ activity }) {
     setCurrentPageIndex(0);
   }, [subChapter]);
 
-  // 3) local second-by-second => leftoverSec++
+  // 3) Increase leftoverSec every second to track local reading time
   useEffect(() => {
     const timerId = setInterval(() => {
       setLeftoverSec((prev) => prev + 1);
@@ -134,7 +140,7 @@ export default function ReadingView({ activity }) {
     return () => clearInterval(timerId);
   }, []);
 
-  // 4) Heartbeat => lumps of 15
+  // 4) Every second, check if leftoverSec >= 15 => post lumps of 15
   useEffect(() => {
     if (!lastSnapMs) return;
     const heartbeatId = setInterval(async () => {
@@ -165,13 +171,37 @@ export default function ReadingView({ activity }) {
       setCurrentPageIndex(currentPageIndex + 1);
     }
   }
+
   function handlePrevPage() {
     if (currentPageIndex > 0) {
       setCurrentPageIndex(currentPageIndex - 1);
     }
   }
-  function handleFinishReading() {
-    dispatch(setCurrentIndex(currentIndex + 1));
+
+  // 5) When user finishes, log to your /api/submitReading endpoint and then move on
+  async function handleFinishReading() {
+    const readingEndTime = new Date();
+
+    try {
+      // Make the POST call to record reading
+      await axios.post("http://localhost:3001/api/submitReading", {
+        userId,
+        subChapterId,
+        readingStartTime: readingStartRef.current?.toISOString(),
+        readingEndTime: readingEndTime.toISOString(),
+        // Optional if needed:
+        // productReadingPerformance: someMetricYouMightHave || null,
+        planId: planId ?? null,
+        timestamp: new Date().toISOString(), // or any date you want
+      });
+
+      // Once submission is successful, move to next index
+      dispatch(setCurrentIndex(currentIndex + 1));
+    } catch (err) {
+      console.error("Error submitting reading data:", err);
+      // Decide if you still want to move on or handle errors differently
+      dispatch(setCurrentIndex(currentIndex + 1));
+    }
   }
 
   if (!subChapter) {
@@ -252,6 +282,7 @@ export default function ReadingView({ activity }) {
                   leftoverSec,
                   currentPageIndex,
                   totalPages: pages.length,
+                  readingStartTime: readingStartRef.current,
                 },
                 null,
                 2

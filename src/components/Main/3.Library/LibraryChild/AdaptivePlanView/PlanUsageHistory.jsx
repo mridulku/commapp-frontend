@@ -1,3 +1,4 @@
+// PlanUsageHistory.jsx
 import React, { useState, useEffect } from "react";
 import {
   collection,
@@ -9,109 +10,55 @@ import {
 
 import RawView from "./RawView";
 import TimelineView from "./TimelineView";
-import PlanView from "./PlanView";  // <-- We'll pass readingStats to this
+import PlanView from "./PlanView";
 
-/**
- * buildReadingStats
- * -----------------
- * Creates a map: readingStats[subChapterId] = {
- *   totalTimeSpentMinutes: number,
- *   completionDate: Date | null,
- * }
- *
- * 'readActsArr' = array from readingSubActivity
- * 'readCompArr' = array from reading_demo
- */
-function buildReadingStats(readActsArr, readCompArr) {
-  const stats = {};
+import LibraryView from "./LibraryView"; // <-- NEW import
+import LibraryView2 from "./LibraryView2"; // <-- NEW import
+import LibraryView3 from "./LibraryView3"; // <-- NEW import
 
-  // 1) Summation of time lumps (readingSubActivity)
-  //    Each item => { subChapterId, totalSeconds }
-  for (const ra of readActsArr) {
-    const subId = ra.subChapterId;
-    if (!subId) continue;
+import TimeCalc from "./TimeCalc"; // <-- NEW import
+import PlanLog from "./PlanLog"; // <-- NEW import
+import AggregatorResultView from "./AggregatorResultView"; // <-- NEW import
 
-    if (!stats[subId]) {
-      stats[subId] = { totalTimeSpentMinutes: 0, completionDate: null };
-    }
-    // Convert seconds => minutes
-    stats[subId].totalTimeSpentMinutes += (ra.totalSeconds || 0) / 60;
-  }
 
-  // 2) The latest readingEndTime from reading_demo
-  //    Each item => { subChapterId, readingEndTime }
-  for (const rc of readCompArr) {
-    const subId = rc.subChapterId;
-    if (!subId) continue;
 
-    if (rc.readingEndTime && typeof rc.readingEndTime.toDate === "function") {
-      const endDate = rc.readingEndTime.toDate();
 
-      if (!stats[subId]) {
-        stats[subId] = { totalTimeSpentMinutes: 0, completionDate: endDate };
-      } else {
-        const existingDate = stats[subId].completionDate;
-        // If none yet or this is a later date, store it
-        if (!existingDate || endDate > existingDate) {
-          stats[subId].completionDate = endDate;
-        }
-      }
-    }
-  }
 
-  return stats;
-}
+import { buildReadingStats } from "./buildReadingStats"; // Optional if you had that logic extracted
 
-/**
- * PlanUsageHistory
- * ----------------
- * A parent component with 3 tabs:
- *   1) RAW (time lumps + completions),
- *   2) TIMELINE (chronological listing),
- *   3) PLAN => now passes readingStats + planData to PlanView
- *
- * Props:
- *   - db: Firestore instance
- *   - userId
- *   - planId
- *   - planData (the plan doc fetched in Child2)
- *   - colorScheme
- */
 export default function PlanUsageHistory({
   db,
   userId,
   planId,
-  planData = null,    // from Child2
+  planData = null,
+  bookId = "",          // <-- we add a new prop for bookId
   colorScheme = {},
 }) {
-  // State: for loading / errors
+  // -- State for loading/error
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // We'll show usage data by "date"
+  // -- We still show day-based usage => "RAW" & "TIMELINE"
   const [dateOptions, setDateOptions] = useState([]);
   const [selectedDate, setSelectedDate] = useState("");
 
-  // Time-lump arrays
+  // lumps
   const [dailyRecords, setDailyRecords] = useState([]);
-  const [readingActs, setReadingActs] = useState([]);    // from readingSubActivity
-  const [quizActs, setQuizActs] = useState([]);          // from quizTimeSubActivity
-  const [revisionActs, setRevisionActs] = useState([]);  // from reviseTimeSubActivity
+  const [readingActs, setReadingActs] = useState([]);
+  const [quizActs, setQuizActs] = useState([]);
+  const [revisionActs, setRevisionActs] = useState([]);
 
-  // Completion arrays
+  // completions
   const [readingCompletions, setReadingCompletions] = useState([]);
   const [quizCompletions, setQuizCompletions] = useState([]);
   const [revisionCompletions, setRevisionCompletions] = useState([]);
 
-  // We'll build readingStats => subChapterId => { totalTimeSpentMinutes, completionDate }
+  // readingStats => { [subChapterId]: { totalTimeSpentMinutes, completionDate } }
   const [readingStats, setReadingStats] = useState({});
 
-  // Tab: "RAW", "TIMELINE", "PLAN"
+  // tabs: "RAW", "TIMELINE", "PLAN", "LIBRARY"
   const [activeTab, setActiveTab] = useState("RAW");
 
-  // ------------------------------------
-  // Convert Firestore timestamp => "YYYY-MM-DD" for date-based usage grouping
-  // ------------------------------------
   function toDateStr(timestamp) {
     if (!timestamp || !timestamp.seconds) return "UnknownDate";
     const dateObj = new Date(timestamp.seconds * 1000);
@@ -121,9 +68,6 @@ export default function PlanUsageHistory({
     return `${year}-${month}-${day}`;
   }
 
-  // ------------------------------------
-  // On mount / whenever planId changes => fetch lumps + completions
-  // ------------------------------------
   useEffect(() => {
     if (!db || !planId || !userId) {
       return;
@@ -132,7 +76,7 @@ export default function PlanUsageHistory({
     setLoading(true);
     setError(null);
 
-    // Clear old data
+    // clear old
     setDailyRecords([]);
     setReadingActs([]);
     setQuizActs([]);
@@ -164,7 +108,7 @@ export default function PlanUsageHistory({
         });
         setDailyRecords(dailyArr);
 
-        // 2) readingSubActivity => lumps for reading
+        // 2) readingSubActivity
         const readSubQ = query(
           collection(db, "readingSubActivity"),
           where("userId", "==", userId),
@@ -184,7 +128,7 @@ export default function PlanUsageHistory({
         });
         setReadingActs(readActsArr);
 
-        // 3) quizTimeSubActivity => lumps for quiz
+        // 3) quizTimeSubActivity
         const quizSubQ = query(
           collection(db, "quizTimeSubActivity"),
           where("userId", "==", userId),
@@ -206,7 +150,7 @@ export default function PlanUsageHistory({
         });
         setQuizActs(quizActsArr);
 
-        // 4) reviseTimeSubActivity => lumps for revision
+        // 4) reviseTimeSubActivity
         const revSubQ = query(
           collection(db, "reviseTimeSubActivity"),
           where("userId", "==", userId),
@@ -229,7 +173,7 @@ export default function PlanUsageHistory({
         setRevisionActs(revActsArr);
 
         // ======= COMPLETIONS =======
-        // 5) reading_demo => reading completions
+        // reading_demo
         const readDemoQ = query(
           collection(db, "reading_demo"),
           where("userId", "==", userId),
@@ -251,7 +195,7 @@ export default function PlanUsageHistory({
         });
         setReadingCompletions(readCompArr);
 
-        // 6) quizzes_demo => quiz completions
+        // quizzes_demo
         const quizDemoQ = query(
           collection(db, "quizzes_demo"),
           where("userId", "==", userId),
@@ -274,7 +218,7 @@ export default function PlanUsageHistory({
         });
         setQuizCompletions(quizCompArr);
 
-        // 7) revisions_demo => revision completions
+        // revisions_demo
         const revDemoQ = query(
           collection(db, "revisions_demo"),
           where("userId", "==", userId),
@@ -295,9 +239,7 @@ export default function PlanUsageHistory({
         });
         setRevisionCompletions(revCompArr);
 
-        // --------------------------------------------------
-        // unify all possible dateStr => for the day dropdown
-        // --------------------------------------------------
+        // unify dateStr
         const dateSet = new Set();
         dailyArr.forEach((r) => dateSet.add(r.dateStr));
         readActsArr.forEach((r) => dateSet.add(r.dateStr));
@@ -313,11 +255,9 @@ export default function PlanUsageHistory({
           setSelectedDate(finalDates[0]);
         }
 
-        // --------------------------------------------------
-        // Build "readingStats" => subChapterId => { timeSpent, completionDate }
-        // --------------------------------------------------
-        const builtStats = buildReadingStats(readActsArr, readCompArr);
-        setReadingStats(builtStats);
+        // Build readingStats => time lumps + completion
+        const readingStatsObj = buildReadingStats(readActsArr, readCompArr);
+        setReadingStats(readingStatsObj);
 
       } catch (err) {
         console.error("Error fetching usage data:", err);
@@ -330,32 +270,25 @@ export default function PlanUsageHistory({
     fetchAllData();
   }, [db, planId, userId]);
 
-  // --------------------------------------------------
   // Filter lumps & completions by selectedDate
-  // --------------------------------------------------
   const chosenDailyRecord = dailyRecords.find((dr) => dr.dateStr === selectedDate) || null;
-
   const readingActsForDate = readingActs.filter((ra) => ra.dateStr === selectedDate);
-  const quizActsForDate   = quizActs.filter((qa) => qa.dateStr === selectedDate);
-  const revisionActsForDate = revisionActs.filter((rv) => rv.dateStr === selectedDate);
+  const quizActsForDate    = quizActs.filter((qa) => qa.dateStr === selectedDate);
+  const revisionActsForDate= revisionActs.filter((rv) => rv.dateStr === selectedDate);
 
   const readingCompletionsForDate = readingCompletions.filter((rc) => rc.dateStr === selectedDate);
   const quizCompletionsForDate    = quizCompletions.filter((qc) => qc.dateStr === selectedDate);
-  const revisionCompletionsForDate = revisionCompletions.filter((rvc) => rvc.dateStr === selectedDate);
+  const revisionCompletionsForDate= revisionCompletions.filter((rvc) => rvc.dateStr === selectedDate);
 
-  // --------------------------------------------------
-  // Build TIMELINE events
-  // --------------------------------------------------
+  // Build timeline
   function buildTimelineEvents() {
     const events = [];
-
     function toJsDateObj(ts) {
       if (!ts || !ts.seconds) return null;
       return new Date(ts.seconds * 1000);
     }
-
-    // Reading completions
-    for (let rc of readingCompletionsForDate) {
+    // reading
+    for (const rc of readingCompletionsForDate) {
       const d = toJsDateObj(rc.timestamp);
       if (d) {
         events.push({
@@ -367,8 +300,8 @@ export default function PlanUsageHistory({
         });
       }
     }
-    // Quiz completions
-    for (let qc of quizCompletionsForDate) {
+    // quiz
+    for (const qc of quizCompletionsForDate) {
       const d = toJsDateObj(qc.timestamp);
       if (d) {
         events.push({
@@ -380,8 +313,8 @@ export default function PlanUsageHistory({
         });
       }
     }
-    // Revision completions
-    for (let rvc of revisionCompletionsForDate) {
+    // revision
+    for (const rvc of revisionCompletionsForDate) {
       const d = toJsDateObj(rvc.timestamp);
       if (d) {
         events.push({
@@ -393,24 +326,18 @@ export default function PlanUsageHistory({
         });
       }
     }
-
-    // Sort by eventTime ascending
     events.sort((a, b) => a.eventTime - b.eventTime);
     return events;
   }
-
   const timelineEvents = buildTimelineEvents();
 
-  // --------------------------------------------------
-  // Rendering
-  // --------------------------------------------------
   return (
     <div style={styles.container}>
       <h2 style={styles.title}>Plan Usage History</h2>
 
-      {!planId || !userId ? (
+      {(!planId || !userId) && (
         <p style={{ color: "red" }}>No valid userId or planId provided.</p>
-      ) : null}
+      )}
 
       {loading && <p style={styles.infoText}>Loading...</p>}
       {error && <p style={{ ...styles.infoText, color: "red" }}>{error}</p>}
@@ -419,7 +346,6 @@ export default function PlanUsageHistory({
         <p style={styles.infoText}>No records found for this plan.</p>
       )}
 
-      {/* If we do have date options, show the dropdown */}
       {dateOptions.length > 0 && (
         <div style={{ marginBottom: "1rem" }}>
           <label style={{ marginRight: "8px" }}>Select Date:</label>
@@ -437,30 +363,50 @@ export default function PlanUsageHistory({
         </div>
       )}
 
-      {/* 3-tab row */}
+      {/* Tab row => now has 4 tabs */}
       <div style={styles.tabRow}>
-        <div
-          style={tabStyle(activeTab === "RAW")}
-          onClick={() => setActiveTab("RAW")}
-        >
+        <div style={tabStyle(activeTab === "RAW")} onClick={() => setActiveTab("RAW")}>
           Raw View
         </div>
-        <div
-          style={tabStyle(activeTab === "TIMELINE")}
-          onClick={() => setActiveTab("TIMELINE")}
-        >
+        <div style={tabStyle(activeTab === "TIMELINE")} onClick={() => setActiveTab("TIMELINE")}>
           Timeline View
         </div>
-        <div
-          style={tabStyle(activeTab === "PLAN")}
-          onClick={() => setActiveTab("PLAN")}
-        >
+        <div style={tabStyle(activeTab === "PLAN")} onClick={() => setActiveTab("PLAN")}>
           Plan View
         </div>
+        <div style={tabStyle(activeTab === "LIBRARY")} onClick={() => setActiveTab("LIBRARY")}>
+          Library
+        </div>
+        <div style={tabStyle(activeTab === "LIBRARY2")} onClick={() => setActiveTab("LIBRARY2")}>
+          Library2
+        </div>
+        <div style={tabStyle(activeTab === "TIMECALC")} onClick={() => setActiveTab("TIMECALC")}>
+          TimeCalc
+        </div>
+        <div style={tabStyle(activeTab === "PLANLOG")} onClick={() => setActiveTab("PLANLOG")}>
+          PlanLog
+        </div>
+        <div style={tabStyle(activeTab === "AGGRESULTVIEW")} onClick={() => setActiveTab("AGGRESULTVIEW")}>
+        AggregatorResultView
+        </div>
+        <div style={tabStyle(activeTab === "LIBRARY3")} onClick={() => setActiveTab("LIBRARY3")}>
+        Library3
+        </div>
+
+
+
+        
+
+
+
+        
+
+
+
       </div>
 
-      {/* If no data for this date => show a small message (only for RAW/TIMELINE) */}
-      {activeTab !== "PLAN" && selectedDate &&
+      {/* If no data => show message (only RAW/TIMELINE) */}
+      {activeTab !== "PLAN" && activeTab !== "LIBRARY" && selectedDate &&
         readingActsForDate.length === 0 &&
         quizActsForDate.length === 0 &&
         revisionActsForDate.length === 0 &&
@@ -473,7 +419,7 @@ export default function PlanUsageHistory({
         )
       }
 
-      {/* Render child components */}
+      {/* RENDER child components based on tab */}
       {activeTab === "RAW" && (
         <RawView
           selectedDate={selectedDate}
@@ -495,7 +441,6 @@ export default function PlanUsageHistory({
       )}
 
       {activeTab === "PLAN" && (
-        // Now we also pass readingStats so PlanView can display
         <PlanView
           planId={planId}
           userId={userId}
@@ -504,6 +449,79 @@ export default function PlanUsageHistory({
           colorScheme={colorScheme}
         />
       )}
+
+      {activeTab === "LIBRARY" && (
+        <LibraryView
+          db={db}
+          userId={userId}
+          planId={planId}
+          readingStats={readingStats}
+          bookId={bookId}  // The key: pass the bookId for chapters
+        />
+      )}
+
+      {activeTab === "LIBRARY2" && (
+        <LibraryView2
+          db={db}
+          userId={userId}
+          planId={planId}
+          readingStats={readingStats}
+          bookId={bookId}  // The key: pass the bookId for chapters
+        />
+      )}
+
+      {activeTab === "TIMECALC" && (
+        <TimeCalc
+          db={db}
+          userId={userId}
+          planId={planId}
+          readingStats={readingStats}
+          bookId={bookId}  // The key: pass the bookId for chapters
+        />
+      )} 
+
+
+      {activeTab === "PLANLOG" && (
+        <PlanLog
+          db={db}
+          userId={userId}
+          planId={planId}
+          readingStats={readingStats}
+          bookId={bookId}  // The key: pass the bookId for chapters
+        />
+      )}   
+
+
+      {activeTab === "AGGRESULTVIEW" && (
+        <AggregatorResultView
+          db={db}
+          userId={userId}
+          planId={planId}
+          readingStats={readingStats}
+          bookId={bookId}  // The key: pass the bookId for chapters
+        />
+      )}   
+
+
+      {activeTab === "LIBRARY3" && (
+        <LibraryView3
+          db={db}
+          userId={userId}
+          planId={planId}
+          readingStats={readingStats}
+          bookId={bookId}  // The key: pass the bookId for chapters
+        />
+      )}  
+
+
+
+
+
+
+
+
+
+
     </div>
   );
 
@@ -520,7 +538,6 @@ export default function PlanUsageHistory({
   }
 }
 
-// Styles
 const styles = {
   container: {
     padding: "16px",

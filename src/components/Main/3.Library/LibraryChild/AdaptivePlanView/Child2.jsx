@@ -336,6 +336,7 @@ export default function Child2({
   activeSessionIndex === 0
     ? (
       <PlanUsageHistory
+        bookId={bookId}
         userId={userId}
         planId={selectedPlanId}   // <-- pass planId as a prop
         planData={plan}   // <-- pass the plan doc as a prop
