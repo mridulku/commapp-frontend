@@ -1,3 +1,5 @@
+// File: planSlice.js
+
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import axios from "axios";
 
@@ -45,17 +47,24 @@ export const fetchPlan = createAsyncThunk(
  * Helper: addFlatIndexes
  *  1) Iterates over planDoc.sessions
  *  2) For each activity, adds { dayIndex, flatIndex }.
- *  3) Returns: { updatedPlanDoc, flattenedActivities }
+ *  3) Optionally ensures aggregatorTask & aggregatorStatus exist (null if missing).
+ *  4) Returns: { updatedPlanDoc, flattenedActivities }
  */
 function addFlatIndexes(planDoc) {
   let globalIndex = 0;
   console.log("[planSlice] addFlatIndexes => start, planDoc.sessions length:", (planDoc.sessions || []).length);
 
-  // 1) create a mutated copy of planDoc where each activity gets flatIndex
   const newSessions = (planDoc.sessions || []).map((sess, dayIndex) => {
     const newActivities = (sess.activities || []).map((act) => {
+      // If the server is providing aggregatorTask, aggregatorStatus, we keep them.
+      // If they are missing, we set them to null so the UI can still display them gracefully.
+      const aggregatorTask = act.aggregatorTask ?? null;
+      const aggregatorStatus = act.aggregatorStatus ?? null;
+
       const updatedAct = {
         ...act,
+        aggregatorTask,
+        aggregatorStatus,
         dayIndex,
         flatIndex: globalIndex,
       };
@@ -67,7 +76,7 @@ function addFlatIndexes(planDoc) {
 
   const updatedPlanDoc = { ...planDoc, sessions: newSessions };
 
-  // 2) build flattened array
+  // build flattened array
   const flattenedActivities = [];
   newSessions.forEach((sess) => {
     (sess.activities || []).forEach((act) => {
@@ -75,7 +84,10 @@ function addFlatIndexes(planDoc) {
     });
   });
 
-  console.log("[planSlice] addFlatIndexes => final flattenedActivities length:", flattenedActivities.length);
+  console.log(
+    "[planSlice] addFlatIndexes => final flattenedActivities length:",
+    flattenedActivities.length
+  );
   return { updatedPlanDoc, flattenedActivities };
 }
 
@@ -115,18 +127,15 @@ const planSlice = createSlice({
         console.log("[planSlice] initialActivityContext =>", initialActivityContext);
         console.log("[planSlice] requestedPlanId =>", requestedPlanId);
 
-        // 1) Insert dayIndex + flatIndex into planDoc activities
+        // 1) Insert dayIndex + flatIndex + aggregator fields
         const { updatedPlanDoc, flattenedActivities } = addFlatIndexes(planDoc);
 
-        // 2) If the server didn't return a .id or .planId, forcibly set them
-        //    (Pick whichever field your front-end actually uses, e.g. "planId" or "id")
+        // 2) If there's no planId in the doc => forcibly set them
         if (requestedPlanId) {
-          // If there's no planId in the doc, set it:
           if (!updatedPlanDoc.planId) {
             updatedPlanDoc.planId = requestedPlanId;
             console.log(`[planSlice] forcibly set updatedPlanDoc.planId = ${requestedPlanId}`);
           }
-          // If there's no .id in the doc, set it as well:
           if (!updatedPlanDoc.id) {
             updatedPlanDoc.id = requestedPlanId;
             console.log(`[planSlice] forcibly set updatedPlanDoc.id = ${requestedPlanId}`);

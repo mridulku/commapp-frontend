@@ -22,10 +22,6 @@ import MenuIcon from "@mui/icons-material/Menu";
 // Helpers
 //
 
-/** 
- * getActivityStyle
- * For color highlighting if the user has selected that item 
- */
 function getActivityStyle(isSelected) {
   if (isSelected) {
     return {
@@ -39,7 +35,6 @@ function getActivityStyle(isSelected) {
   };
 }
 
-/** A small pill for e.g. "5m" */
 function TimePill({ minutes = 0 }) {
   return (
     <Box
@@ -59,11 +54,6 @@ function TimePill({ minutes = 0 }) {
   );
 }
 
-/**
- * formatMinutes
- *  - Takes a total number of minutes
- *  - Returns a string like "1h 20m" or "45m"
- */
 function formatMinutes(totalMin) {
   if (!totalMin) return "0m";
   const hours = Math.floor(totalMin / 60);
@@ -75,8 +65,7 @@ function formatMinutes(totalMin) {
 }
 
 /** 
- * TruncateTooltip
- * Wraps text in a Tooltip and truncates with ellipsis if it's too long.
+ * Simple truncated text that shows a tooltip with the full string on hover
  */
 function TruncateTooltip({ text, sx }) {
   return (
@@ -101,8 +90,8 @@ function TruncateTooltip({ text, sx }) {
 /**
  * ActivityList
  * -------------
- * A single big list of activities. 
- * Each item is a "block" with chapter name, subchapter, activity label, time needed.
+ * Now includes aggregatorTask & aggregatorStatus in the rendered info,
+ * assuming they exist in each 'act' object.
  */
 function ActivityList({ activities, currentIndex, onSelectAct }) {
   return (
@@ -115,7 +104,6 @@ function ActivityList({ activities, currentIndex, onSelectAct }) {
         let stageLabel = "Reading";
         if (act.type && act.type.toUpperCase().includes("QUIZ")) {
           if (act.quizStage) {
-            // e.g. 'applyQuiz' => 'ApplyQuiz'
             stageLabel =
               act.quizStage.charAt(0).toUpperCase() + act.quizStage.slice(1);
           } else {
@@ -128,6 +116,10 @@ function ActivityList({ activities, currentIndex, onSelectAct }) {
         const chapterName = act.chapterName || "No Chapter";
         const subChapterName = act.subChapterName || "No Subchapter";
         const minutes = act.timeNeeded || 0;
+
+        // aggregator fields if present
+        const aggregatorTask = act.aggregatorTask || null;
+        const aggregatorStatus = act.aggregatorStatus || null;
 
         return (
           <ListItemButton
@@ -152,11 +144,26 @@ function ActivityList({ activities, currentIndex, onSelectAct }) {
               text={`Subchapter: ${subChapterName}`}
               sx={{ fontSize: "0.75rem", mt: 0.5 }}
             />
-            {/* Activity label (NO "Type:" prefix) */}
+            {/* Stage label (Reading, Quiz, etc.) */}
             <TruncateTooltip
               text={stageLabel}
               sx={{ fontSize: "0.75rem", mt: 0.5 }}
             />
+
+            {/* aggregatorTask & aggregatorStatus (if available) */}
+            {aggregatorTask && (
+              <TruncateTooltip
+                text={`Task: ${aggregatorTask}`}
+                sx={{ fontSize: "0.7rem", mt: 0.5 }}
+              />
+            )}
+            {aggregatorStatus && (
+              <TruncateTooltip
+                text={`Status: ${aggregatorStatus}`}
+                sx={{ fontSize: "0.7rem", mt: 0.3 }}
+              />
+            )}
+
             {/* Time pill */}
             <TimePill minutes={minutes} />
           </ListItemButton>
