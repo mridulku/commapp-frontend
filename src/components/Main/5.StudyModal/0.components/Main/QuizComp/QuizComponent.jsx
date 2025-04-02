@@ -1,5 +1,4 @@
-// File: components/Main/5.StudyModal/0.components/Main/QuizComp/QuizView.jsx
-
+// File: QuizView.jsx
 import React, { useEffect, useState, useRef } from "react";
 import { doc, getDoc, collection, getDocs } from "firebase/firestore";
 import { db } from "../../../../../../firebase"; // Adjust path if needed
@@ -29,10 +28,12 @@ function formatTime(totalSeconds) {
  *   - Shows a top bar "Quiz" + a timer
  *   - Paginates questions in sets of (e.g.) 3 per page
  *   - Submits them all at once on the final page
- *   - Then displays pass/fail and "Finish" or "Ok" button
+ *   - Then displays pass/fail summary
+ *   - If pass => "Finish" moves user to next LeftPanel item + calls onQuizComplete
+ *   - If fail => "Take Revision Now" calls onQuizFail, or "Take Revision Later" moves index
  *   - 15-second lumps time tracking in background
  */
-export default function QuizComponent({
+export default function QuizView({
   userId = "",
   examId = "general",
   quizStage = "remember",
@@ -42,9 +43,9 @@ export default function QuizComponent({
   onQuizFail,
 }) {
   const planId = useSelector((state) => state.plan.planDoc?.id);
+  const currentIndex = useSelector((state) => state.plan.currentIndex);
   const dispatch = useDispatch();
   const [showDebug, setShowDebug] = useState(false);
-
 
   // ---------- Quiz State ----------
   const [questionTypes, setQuestionTypes] = useState([]); 
@@ -77,7 +78,7 @@ export default function QuizComponent({
   const openAiKey = import.meta.env.VITE_OPENAI_KEY || "";
 
   // ===================================================
-  // 1) On mount => fetch questionTypes
+  // 1) On mount => fetch questionTypes from Firestore
   // ===================================================
   useEffect(() => {
     async function fetchQuestionTypes() {
@@ -255,7 +256,17 @@ export default function QuizComponent({
       }
     }, 1000);
     return () => clearInterval(heartbeatId);
-  }, [lastSnapMs, localLeftover, serverTotal, dispatch, userId, planId, subChapterId, quizStage, attemptNumber]);
+  }, [
+    lastSnapMs,
+    localLeftover,
+    serverTotal,
+    dispatch,
+    userId,
+    planId,
+    subChapterId,
+    quizStage,
+    attemptNumber,
+  ]);
 
   // displayedTime => sum lumps + leftover
   const displayedTime = serverTotal + localLeftover;
@@ -342,7 +353,7 @@ export default function QuizComponent({
     const avgFloat = qCount > 0 ? totalScore / qCount : 0;
     const percentageString = (avgFloat * 100).toFixed(2) + "%";
     setFinalPercentage(percentageString);
-    const passThreshold = 0.6; 
+    const passThreshold = 0.6; // e.g. 60% is pass
     const isPassed = avgFloat >= passThreshold;
     setQuizPassed(isPassed);
 
@@ -378,18 +389,39 @@ export default function QuizComponent({
     setStatus("Grading complete.");
   }
 
-  function handleProceed() {
-    if (quizPassed && onQuizComplete) {
-      onQuizComplete();
-    } else if (!quizPassed && onQuizFail) {
+  // ===================================================
+  // New Buttons after Grading
+  // ===================================================
+
+  // 1) If quiz is passed => "Finish" => call onQuizComplete + move to next item
+  function handleQuizSuccess() {
+    try {
+      if (onQuizComplete) {
+        onQuizComplete();
+      }
+      // Also move user to next activity
+      dispatch(setCurrentIndex(currentIndex + 1));
+    } catch (err) {
+      console.error("handleQuizSuccess error:", err);
+    }
+  }
+
+  // 2) If quiz is failed => "Take Revision Now" => call onQuizFail
+  function handleTakeRevisionNow() {
+    if (onQuizFail) {
       onQuizFail();
     }
   }
 
+  // 3) If quiz is failed => "Take Revision Later" => skip revision => next index
+  function handleTakeRevisionLater() {
+    dispatch(setCurrentIndex(currentIndex + 1));
+  }
+
   // ===================================================
-  // PAGINATION RENDER
+  // PAGINATION / RENDER
   // ===================================================
-  // pages[] is an array of question-index arrays => e.g. pages[0] = [0,1,2], pages[1] = [3,4,5], etc.
+  const hasQuestions = generatedQuestions.length > 0 && pages.length > 0;
   const isOnLastPage = currentPageIndex === pages.length - 1;
   const currentQuestions = pages[currentPageIndex] || [];
 
@@ -403,12 +435,6 @@ export default function QuizComponent({
       setCurrentPageIndex(currentPageIndex - 1);
     }
   }
-
-  // ===================================================
-  // RENDER
-  // ===================================================
-  // If we have grading results, we show them. Otherwise we show the quiz form.
-  const hasQuestions = generatedQuestions.length > 0 && pages.length > 0;
 
   return (
     <div style={styles.outerContainer}>
@@ -427,7 +453,6 @@ export default function QuizComponent({
 
         {/* Body => show instructions, questions, or grading results */}
         <div style={styles.cardBody}>
-
           {loading && <p style={{ color: "#fff" }}>Loading... {status}</p>}
           {!loading && status && !error && <p style={{ color: "lightgreen" }}>{status}</p>}
           {error && <p style={{ color: "red" }}>{error}</p>}
@@ -458,7 +483,9 @@ export default function QuizComponent({
           {showGradingResults && (
             <div style={styles.gradingContainer}>
               <h3>Overall Summary</h3>
-              <p>Your final score: <b>{finalPercentage}</b></p>
+              <p>
+                Your final score: <b>{finalPercentage}</b>
+              </p>
               {quizPassed ? (
                 <p style={{ color: "lightgreen" }}>You passed!</p>
               ) : (
@@ -466,13 +493,12 @@ export default function QuizComponent({
               )}
             </div>
           )}
-
         </div>
 
-        {/* Footer => pagination or "Submit" or "Finish" */}
+        {/* Footer => pagination or "Submit" or pass/fail buttons */}
         <div style={styles.cardFooter}>
           <div style={styles.navButtons}>
-            {/* If not graded yet => show pagination + last page => Submit */}
+            {/* 1) If not graded yet => show pagination + last page => Submit */}
             {!showGradingResults && hasQuestions && (
               <>
                 {currentPageIndex > 0 && (
@@ -493,11 +519,23 @@ export default function QuizComponent({
               </>
             )}
 
-            {/* If showGradingResults => a Finish or OK button */}
-            {showGradingResults && (
-              <button style={styles.finishButton} onClick={handleProceed}>
-                {quizPassed ? "Finish" : "Ok"}
+            {/* 2) If showGradingResults => show pass/fail flows */}
+            {showGradingResults && quizPassed && (
+              // If quiz passed => single "Finish" => quiz success
+              <button style={styles.finishButton} onClick={handleQuizSuccess}>
+                Finish
               </button>
+            )}
+            {showGradingResults && !quizPassed && (
+              // If quiz failed => two buttons => "Take Revision Now" or "Take Revision Later"
+              <>
+                <button style={styles.button} onClick={handleTakeRevisionNow}>
+                  Take Revision Now
+                </button>
+                <button style={styles.button} onClick={handleTakeRevisionLater}>
+                  Take Revision Later
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -567,7 +605,8 @@ function localGradeQuestion(qObj, userAnswer) {
         feedback = "Correct!";
       } else {
         score = 0.0;
-        const correctOpt = Array.isArray(qObj.options) && qObj.options[correctIndex];
+        const correctOpt =
+          Array.isArray(qObj.options) && qObj.options[correctIndex];
         feedback = `Incorrect. Correct option: ${correctOpt}`;
       }
       break;
@@ -583,8 +622,9 @@ function localGradeQuestion(qObj, userAnswer) {
       break;
     }
     case "fillInBlank": {
-      const correct = (userAnswer || "").trim().toLowerCase() ===
-                      (qObj.answerKey || "").trim().toLowerCase();
+      const correct =
+        (userAnswer || "").trim().toLowerCase() ===
+        (qObj.answerKey || "").trim().toLowerCase();
       if (correct) {
         score = 1.0;
         feedback = "Correct fill-in!";
