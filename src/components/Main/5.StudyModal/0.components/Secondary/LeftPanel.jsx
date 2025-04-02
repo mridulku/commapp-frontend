@@ -25,13 +25,19 @@ import LockIcon from "@mui/icons-material/Lock";
 
 /**
  * getStageNumberAndLabel(act)
- * - If act.type="READ" => "Stage 1: Reading"
- * - If quizStage="remember"/"understand"/"apply"/"analyze" => "Stage X: Label"
+ * - If act.type = "read" => "Stage 1: Reading"
+ * - If quizStage = "remember"/"understand"/"apply"/"analyze" => "Stage X: Label"
+ *   Otherwise fallback => "Quiz"
  */
 function getStageNumberAndLabel(act) {
-  if (act.type === "READ") {
+  // Convert .type to lowerCase so we consistently handle "read"/"quiz"
+  const lowerType = (act.type || "").toLowerCase();
+
+  if (lowerType === "read") {
     return "Stage 1: Reading";
   }
+
+  // If it's quiz, figure out which stage number
   const stageMap = {
     remember: 2,
     understand: 3,
@@ -45,6 +51,7 @@ function getStageNumberAndLabel(act) {
     // fallback if quizStage is unknown => "Quiz"
     return "Quiz";
   }
+
   const label = sKey.charAt(0).toUpperCase() + sKey.slice(1);
   return `Stage ${number}: ${label}`;
 }
@@ -203,9 +210,12 @@ function ActivityList({ activities, currentIndex, onSelectAct }) {
         const aggregatorTask = act.aggregatorTask || "";
         const aggregatorStatus = (act.aggregatorStatus || "").toLowerCase();
 
+        // Convert the activity type to lowercase for consistency
+        const lowerType = (act.type || "").toLowerCase();
+
         // aggregatorTask => skip if reading
         let aggregatorTaskNode = null;
-        if (act.type !== "READ" && aggregatorTask) {
+        if (lowerType !== "read" && aggregatorTask) {
           aggregatorTaskNode = aggregatorTaskPill(aggregatorTask);
         }
 
@@ -222,7 +232,7 @@ function ActivityList({ activities, currentIndex, onSelectAct }) {
               position: "relative",
               mb: 0.8,
               borderRadius: "4px",
-              overflow: "hidden" // for the overlay
+              overflow: "hidden", // for the overlay
             }}
           >
             <ListItemButton
@@ -257,11 +267,7 @@ function ActivityList({ activities, currentIndex, onSelectAct }) {
               />
 
               {/* aggregatorTask => pill */}
-              {aggregatorTaskNode && (
-                <Box sx={{ mt: 0.5 }}>
-                  {aggregatorTaskNode}
-                </Box>
-              )}
+              {aggregatorTaskNode && <Box sx={{ mt: 0.5 }}>{aggregatorTaskNode}</Box>}
 
               {/* Time pill */}
               <TimePill minutes={minutes} />

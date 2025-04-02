@@ -52,14 +52,44 @@ export const fetchPlan = createAsyncThunk(
  */
 function addFlatIndexes(planDoc) {
   let globalIndex = 0;
-  console.log("[planSlice] addFlatIndexes => start, planDoc.sessions length:", (planDoc.sessions || []).length);
+  console.log(
+    "[planSlice] addFlatIndexes => start, planDoc.sessions length:",
+    (planDoc.sessions || []).length
+  );
 
   const newSessions = (planDoc.sessions || []).map((sess, dayIndex) => {
     const newActivities = (sess.activities || []).map((act) => {
-      // If the server is providing aggregatorTask, aggregatorStatus, we keep them.
-      // If they are missing, we set them to null so the UI can still display them gracefully.
+      // Keep aggregatorTask/aggregatorStatus if they exist (harmless to keep)
       const aggregatorTask = act.aggregatorTask ?? null;
       const aggregatorStatus = act.aggregatorStatus ?? null;
+
+      // -----------------------------------------------------------------
+      // 1) Derive .type (either "read" or "quiz")
+      //    - If the server sometimes uses "READ" vs. "QUIZ", convert them to lowercase
+      //    - If the server is definitely giving them as "read" or "quiz" already,
+      //      you can skip the conditional logic and just assign them directly.
+      // -----------------------------------------------------------------
+      let derivedType = (act.type || "").toLowerCase();
+      if (!derivedType) {
+        // In case 'type' is missing or empty, default to "read"
+        derivedType = "read";
+      }
+
+      // -----------------------------------------------------------------
+      // 2) Derive .quizStage (one of "remember", "understand", "apply", "analyze")
+      //    - Only relevant if .type === "quiz"
+      //    - Otherwise, leave it empty or null
+      // -----------------------------------------------------------------
+      let derivedQuizStage = "";
+      if (derivedType === "quiz") {
+        // If the server already provides it, convert to lower:
+        const rawStage = (act.quizStage || "").toLowerCase();
+        // If it's recognized, keep it. Otherwise default to "remember".
+        const recognizedStages = ["remember", "understand", "apply", "analyze"];
+        derivedQuizStage = recognizedStages.includes(rawStage)
+          ? rawStage
+          : "remember";
+      }
 
       const updatedAct = {
         ...act,
@@ -67,6 +97,10 @@ function addFlatIndexes(planDoc) {
         aggregatorStatus,
         dayIndex,
         flatIndex: globalIndex,
+
+        // Insert or override these fields:
+        type: derivedType,         // "read" or "quiz"
+        quizStage: derivedQuizStage, // "remember"/"understand"/"apply"/"analyze" (if quiz), else ""
       };
       globalIndex += 1;
       return updatedAct;
