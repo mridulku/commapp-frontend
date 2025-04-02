@@ -1,4 +1,5 @@
 // File: StageManager.jsx
+
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { useSelector } from "react-redux";
@@ -11,18 +12,31 @@ import HistoryView from "./HistoryView";
 const QUIZ_STAGES = ["remember", "understand", "apply", "analyze"];
 
 export default function StageManager({ examId, activity, userId }) {
-  // 1) Extract relevant data
+  // ----------------- Basic Activity Data -----------------
   const subChapterId = activity?.subChapterId || "";
-  const activityType = (activity?.type || "").toLowerCase();      // "read" or "quiz"
+  const activityType = (activity?.type || "").toLowerCase(); // "read" or "quiz"
   const possibleQuizStage = (activity?.quizStage || "").toLowerCase();
 
-  // 2) PlanId from Redux
+  // ----------------- Global Redux Data -----------------
   const planId = useSelector((state) => state.plan.planDoc?.id);
+  const effectiveExamId = examId || "general";
 
-  // 3) We'll keep a piece of local state for activeTab
+  // ----------------- Tab & subView States -----------------
   const [activeTab, setActiveTab] = useState("reading");
+  const [subView, setSubView] = useState("activity");
 
-  // 4) Whenever the `activity` prop changes, recalculate which tab to show
+  // ----------------- Refresh Key for Status Re-Fetch -----------------
+  // We increment this whenever we want to force a new subchapter-status fetch,
+  // even if subChapterId is unchanged.
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // A helper callback we can pass down to ReadingView/ActivityView, so they can
+  // tell StageManager: "We changed something, please refetch subchapter status."
+  function handleNeedsRefreshStatus() {
+    setRefreshKey((prev) => prev + 1);
+  }
+
+  // Whenever activity changes => choose the correct default tab
   useEffect(() => {
     let newTab = "reading";
     if (QUIZ_STAGES.includes(possibleQuizStage)) {
@@ -33,16 +47,12 @@ export default function StageManager({ examId, activity, userId }) {
     setActiveTab(newTab);
   }, [activity, possibleQuizStage, activityType]);
 
-  // 5) We also keep subView for quiz stages => "activity" or "history"
-  const [subView, setSubView] = useState("activity");
-
-  // 6) Whenever the `activity` changes, reset subView to "activity"
+  // Whenever activity changes => reset subView to "activity"
   useEffect(() => {
     setSubView("activity");
   }, [activity]);
 
-  // --- All your existing quiz logic is unchanged below ---
-  // (loading states, fetch quiz data, compute mode, etc.)
+  // ----------------- Quiz States -----------------
   const [quizAttempts, setQuizAttempts] = useState([]);
   const [revisionAttempts, setRevisionAttempts] = useState([]);
   const [subchapterConcepts, setSubchapterConcepts] = useState([]);
@@ -52,19 +62,21 @@ export default function StageManager({ examId, activity, userId }) {
   const [allAttemptsConceptStats, setAllAttemptsConceptStats] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Passing thresholds for each stage
   const stagePassRatios = {
     remember: 1,
     understand: 1,
     apply: 1,
     analyze: 1,
   };
-  const effectiveExamId = examId || "general";
 
-  // -------------- subchapter-status for lock info --------------
+  // ----------------- subchapter-status for Lock Info -----------------
   const [taskInfo, setTaskInfo] = useState([]);
   const [taskInfoLoading, setTaskInfoLoading] = useState(false);
   const [taskInfoError, setTaskInfoError] = useState("");
 
+  // Whenever userId/planId/subChapterId changes *or* refreshKey increments, re-fetch /subchapter-status
   useEffect(() => {
     if (!userId || !planId || !subChapterId) {
       setTaskInfo([]);
@@ -91,13 +103,13 @@ export default function StageManager({ examId, activity, userId }) {
       }
     }
     fetchSubchapterStatus();
-  }, [userId, planId, subChapterId]);
+  }, [userId, planId, subChapterId, refreshKey]);
 
   // If user selects a quiz tab => fetch quiz data
   useEffect(() => {
     if (!subChapterId || !userId) return;
     if (!QUIZ_STAGES.includes(activeTab)) {
-      // not a recognized quiz stage => skip
+      // If it's reading or something not in QUIZ_STAGES, clear quiz data
       setMode("LOADING");
       setQuizAttempts([]);
       setRevisionAttempts([]);
@@ -107,10 +119,11 @@ export default function StageManager({ examId, activity, userId }) {
       setLatestConceptStats(null);
       return;
     }
+    // else => fetch quiz data
     fetchQuizData(activeTab);
   }, [activeTab, subChapterId, userId]);
 
-  // The existing fetch logic
+  // ----------------- Quiz Data Fetching Logic -----------------
   async function fetchQuizData(currentStage) {
     try {
       setLoading(true);
@@ -137,7 +150,7 @@ export default function StageManager({ examId, activity, userId }) {
       });
       const revArr = revRes?.data?.revisions || [];
 
-      // 3) subchapter concepts
+      // 3) getSubchapterConcepts
       const conceptRes = await axios.get("http://localhost:3001/api/getSubchapterConcepts", {
         params: { subchapterId: subChapterId },
       });
@@ -147,9 +160,9 @@ export default function StageManager({ examId, activity, userId }) {
       setRevisionAttempts(revArr);
       setSubchapterConcepts(conceptArr);
 
-      // Evaluate pass/fail => mode
+      // Evaluate pass/fail => set 'mode'
       computeMode(quizArr, revArr, conceptArr, currentStage);
-      // Build concept stats for history
+      // Build concept stats => for "History" view
       buildAllAttemptsConceptStats(quizArr, conceptArr);
     } catch (err) {
       console.error("StageManager => fetchQuizData error:", err);
@@ -159,6 +172,7 @@ export default function StageManager({ examId, activity, userId }) {
     }
   }
 
+  // Decide the quiz mode
   function computeMode(quizArr, revArr, conceptArr, quizStage) {
     if (!quizArr.length) {
       setMode("NO_QUIZ_YET");
@@ -178,7 +192,7 @@ export default function StageManager({ examId, activity, userId }) {
       if (passed) {
         setMode("QUIZ_COMPLETED");
       } else {
-        // see if revision exists
+        // see if there's a matching revision
         const attemptNum = latestQuiz.attemptNumber;
         const match = revArr.find((r) => r.revisionNumber === attemptNum);
         if (match) {
@@ -188,7 +202,8 @@ export default function StageManager({ examId, activity, userId }) {
         }
       }
     }
-    // Build stats for latest attempt
+
+    // Build concept stats for the latest attempt
     if (latestQuiz?.quizSubmission && conceptArr.length > 0) {
       const stats = buildConceptStats(latestQuiz.quizSubmission, conceptArr);
       setLatestConceptStats(stats);
@@ -197,6 +212,7 @@ export default function StageManager({ examId, activity, userId }) {
     }
   }
 
+  // Build concept stats for all attempts => used in "History"
   function buildAllAttemptsConceptStats(quizArr, conceptArr) {
     if (!quizArr.length || !conceptArr.length) {
       setAllAttemptsConceptStats([]);
@@ -213,7 +229,8 @@ export default function StageManager({ examId, activity, userId }) {
     setAllAttemptsConceptStats(mapped);
   }
 
-  // Refresh quiz data after quiz or revision is done
+  // --------------- Public Callbacks for Child Components ---------------
+  // If a quiz or revision finishes, re-fetch quiz data for the current tab
   function handleQuizComplete() {
     if (QUIZ_STAGES.includes(activeTab)) {
       fetchQuizData(activeTab);
@@ -230,7 +247,7 @@ export default function StageManager({ examId, activity, userId }) {
     }
   }
 
-  // ------------ Render ------------
+  // --------------- UI Render ---------------
   if (taskInfoLoading) {
     return <div style={{ color: "#fff" }}>Loading stage statuses...</div>;
   }
@@ -243,16 +260,18 @@ export default function StageManager({ examId, activity, userId }) {
 
   return (
     <div style={styles.container}>
-      {/* Tabs */}
+      {/* 1) Tabs */}
       <div style={styles.tabRow}>
         {renderStageTab("reading", "Reading")}
         {QUIZ_STAGES.map((st) => renderStageTab(st, capitalize(st)))}
       </div>
 
-      {/* Main content */}
+      {/* 2) Main content area */}
       <div style={styles.mainContent}>
         {isTabLocked(activeTab) ? (
-          <div style={{ fontSize: "1.1rem", color: "#f00" }}>This stage is currently locked.</div>
+          <div style={{ fontSize: "1.1rem", color: "#f00" }}>
+            This stage is currently locked.
+          </div>
         ) : (
           renderTabContent(activeTab)
         )}
@@ -260,7 +279,7 @@ export default function StageManager({ examId, activity, userId }) {
     </div>
   );
 
-  // Helper: isTabLocked
+  // ---------- Helper: isTabLocked ----------
   function isTabLocked(tabKey) {
     const labelForTaskInfo = tabKey === "reading" ? "Reading" : capitalize(tabKey);
     const item = taskInfo.find(
@@ -269,7 +288,7 @@ export default function StageManager({ examId, activity, userId }) {
     return item?.locked === true;
   }
 
-  // Helper: renderStageTab
+  // ---------- Helper: renderStageTab ----------
   function renderStageTab(tabKey, tabLabel) {
     const isCurrent = activeTab === tabKey;
     const locked = isTabLocked(tabKey);
@@ -290,12 +309,22 @@ export default function StageManager({ examId, activity, userId }) {
     );
   }
 
-  // Helper: renderTabContent
+  // ---------- Helper: renderTabContent ----------
   function renderTabContent(tabKey) {
+    // 1) Reading stage
     if (tabKey === "reading") {
-      return <ReadingView activity={activity} />;
+      return (
+        <ReadingView
+          activity={activity}
+          // Pass our callback so that if the user finishes reading
+          // or does something that changes subchapter status,
+          // they can notify StageManager to refresh statuses.
+          onNeedsRefreshStatus={handleNeedsRefreshStatus}
+        />
+      );
     }
-    // Quiz stage
+
+    // 2) One of the quiz stages
     if (QUIZ_STAGES.includes(tabKey)) {
       if (loading) {
         return <div style={{ color: "#fff" }}>Loading quiz data...</div>;
@@ -305,6 +334,7 @@ export default function StageManager({ examId, activity, userId }) {
       }
       return (
         <div style={styles.quizContainer}>
+          {/* Sub-buttons for "Activity" or "History" */}
           <div style={styles.subButtonRow}>
             <button
               style={subView === "activity" ? styles.subBtnActive : styles.subBtn}
@@ -332,6 +362,8 @@ export default function StageManager({ examId, activity, userId }) {
               onQuizComplete={handleQuizComplete}
               onQuizFail={handleQuizFail}
               onRevisionDone={handleRevisionDone}
+              // Pass same callback to quiz screen
+              onNeedsRefreshStatus={handleNeedsRefreshStatus}
             />
           )}
 
@@ -349,11 +381,13 @@ export default function StageManager({ examId, activity, userId }) {
         </div>
       );
     }
+
+    // 3) Fallback if unknown tab
     return <div style={{ color: "#fff" }}>Unknown stage: {tabKey}</div>;
   }
 }
 
-// Utility: parseScoreForRatio
+// ---------- Utility: parseScoreForRatio ----------
 function parseScoreForRatio(scoreString) {
   if (!scoreString) return NaN;
   const trimmed = scoreString.trim();
@@ -372,7 +406,7 @@ function parseScoreForRatio(scoreString) {
   return NaN;
 }
 
-// Utility: buildConceptStats
+// ---------- Utility: buildConceptStats ----------
 function buildConceptStats(quizSubmission, conceptArr) {
   const countMap = {};
   quizSubmission.forEach((q) => {
@@ -409,13 +443,13 @@ function buildConceptStats(quizSubmission, conceptArr) {
   return statsArray;
 }
 
-// Utility: capitalize
+// ---------- Utility: capitalize ----------
 function capitalize(str) {
   if (!str) return "";
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-// Styles
+// ---------- Styles ----------
 const styles = {
   container: {
     width: "100%",

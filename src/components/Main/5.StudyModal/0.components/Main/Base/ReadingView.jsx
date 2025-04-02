@@ -50,7 +50,15 @@ function chunkHtmlByParagraphs(htmlString, chunkSize = 180) {
   return pages;
 }
 
-export default function ReadingView({ activity }) {
+/**
+ * ReadingView
+ * -----------
+ * Props:
+ *  - activity
+ *  - onNeedsRefreshStatus (optional callback) => notify parent (StageManager) that
+ *    we need to re-fetch subchapter status if something changed
+ */
+export default function ReadingView({ activity, onNeedsRefreshStatus }) {
   if (!activity) {
     return <div style={styles.outerContainer}>No activity provided.</div>;
   }
@@ -178,7 +186,7 @@ export default function ReadingView({ activity }) {
     }
   }
 
-  // 5) When user finishes, log to your /api/submitReading endpoint and then move on
+  // 5) When user finishes reading => mark on backend, then move to next activity
   async function handleFinishReading() {
     const readingEndTime = new Date();
 
@@ -189,17 +197,25 @@ export default function ReadingView({ activity }) {
         subChapterId,
         readingStartTime: readingStartRef.current?.toISOString(),
         readingEndTime: readingEndTime.toISOString(),
-        // Optional if needed:
-        // productReadingPerformance: someMetricYouMightHave || null,
         planId: planId ?? null,
         timestamp: new Date().toISOString(), // or any date you want
       });
+
+      // If finishing reading might unlock the next stage *within the same subchapter*,
+      // then we can tell StageManager to re-fetch subchapter-status.
+      if (typeof onNeedsRefreshStatus === "function") {
+        onNeedsRefreshStatus();
+      }
 
       // Once submission is successful, move to next index
       dispatch(setCurrentIndex(currentIndex + 1));
     } catch (err) {
       console.error("Error submitting reading data:", err);
       // Decide if you still want to move on or handle errors differently
+      // But let's assume we still proceed for now:
+      if (typeof onNeedsRefreshStatus === "function") {
+        onNeedsRefreshStatus();
+      }
       dispatch(setCurrentIndex(currentIndex + 1));
     }
   }

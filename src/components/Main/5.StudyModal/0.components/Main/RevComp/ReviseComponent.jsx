@@ -91,11 +91,17 @@ function createHtmlFromGPTData(revisionData) {
 /**
  * ReviseView
  * ----------
- * - "Revision" header + clock
- * - chunked HTML pagination
- * - lumps-of-15 time tracking
- * - "Finish Revision" on last page
- * - Removed the debug "i" button
+ * Props:
+ *  - userId
+ *  - examId        (default "general")
+ *  - quizStage     (e.g. "remember"/"understand"/"apply"/"analyze")
+ *  - subChapterId
+ *  - revisionNumber
+ *  - onRevisionDone => function to call when the revision is fully done
+ *
+ * This now has TWO buttons on the last page:
+ *  - "Take Quiz Now" => finishes revision + calls onRevisionDone
+ *  - "Take Quiz Later" => finishes revision + moves the LeftPanel index forward
  */
 export default function ReviseView({
   userId,
@@ -106,9 +112,10 @@ export default function ReviseView({
   onRevisionDone,
 }) {
   const planId = useSelector((state) => state.plan?.planDoc?.id);
+  const currentIndex = useSelector((state) => state.plan?.currentIndex);
   const dispatch = useDispatch();
 
-  // docId for usage logs: user_plan_subCh_quizStage_revX_YYYY-MM-DD
+  // docId for usage logs
   const docIdRef = useRef("");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
@@ -257,7 +264,17 @@ export default function ReviseView({
       }
     }, 1000);
     return () => clearInterval(heartbeatId);
-  }, [lastSnapMs, localLeftover, dispatch, userId, planId, subChapterId, quizStage, revisionNumber, serverTime]);
+  }, [
+    lastSnapMs,
+    localLeftover,
+    dispatch,
+    userId,
+    planId,
+    subChapterId,
+    quizStage,
+    revisionNumber,
+    serverTime,
+  ]);
 
   // displayed time => serverTime + localLeftover
   const displayedTime = serverTime + localLeftover;
@@ -273,23 +290,50 @@ export default function ReviseView({
       setCurrentPageIndex(currentPageIndex - 1);
     }
   }
-  async function handleFinishRevision() {
+
+  // -----------------------
+  // Shared function to mark the revision attempt done on the server.
+  // -----------------------
+  async function submitRevisionAttempt() {
+    const payload = {
+      userId,
+      subchapterId: subChapterId,
+      revisionType: quizStage,
+      revisionNumber,
+      planId,
+    };
+    await axios.post("http://localhost:3001/api/submitRevision", payload);
+    console.log("Revision attempt recorded on server!");
+  }
+
+  // -----------------------
+  // "Take Quiz Now" => same logic as old finish, calls onRevisionDone
+  // -----------------------
+  async function handleTakeQuizNow() {
     try {
-      const payload = {
-        userId,
-        subchapterId: subChapterId,
-        revisionType: quizStage,
-        revisionNumber,
-        planId,
-      };
-      await axios.post("http://localhost:3001/api/submitRevision", payload);
-      console.log("Revision attempt recorded on server!");
+      await submitRevisionAttempt();
+      // Now trigger parent's callback => presumably starts the quiz
+      onRevisionDone?.();
     } catch (err) {
-      console.error("Error submitting revision attempt:", err);
+      console.error("Error submitting revision attempt (Take Quiz Now):", err);
       alert("Failed to record revision attempt.");
-      return;
     }
-    onRevisionDone?.();
+  }
+
+  // -----------------------
+  // "Take Quiz Later" => also move the LeftPanel to next activity
+  // -----------------------
+  async function handleTakeQuizLater() {
+    try {
+      await submitRevisionAttempt();
+      // Then skip the quiz by moving to next left panel item
+      dispatch(setCurrentIndex(currentIndex + 1));
+    } catch (err) {
+      console.error("Error submitting revision attempt (Take Quiz Later):", err);
+      alert("Failed to record revision attempt.");
+      // We'll still move forward for now
+      dispatch(setCurrentIndex(currentIndex + 1));
+    }
   }
 
   // fallback if no pages
@@ -329,7 +373,7 @@ export default function ReviseView({
           />
         </div>
 
-        {/* Footer => Prev, Next, Finish */}
+        {/* Footer => Prev, Next, or 2 "Finish" buttons on last page */}
         <div style={styles.cardFooter}>
           <div style={styles.navButtons}>
             {currentPageIndex > 0 && (
@@ -343,9 +387,22 @@ export default function ReviseView({
               </button>
             )}
             {currentPageIndex === pages.length - 1 && (
-              <button style={styles.finishButton} onClick={handleFinishRevision}>
-                Finish Revision
-              </button>
+              <>
+                {/* 1) Take Quiz Now => calls handleTakeQuizNow */}
+                <button
+                  style={styles.button}
+                  onClick={handleTakeQuizNow}
+                >
+                  Take Quiz Now
+                </button>
+                {/* 2) Take Quiz Later => calls handleTakeQuizLater */}
+                <button
+                  style={styles.button}
+                  onClick={handleTakeQuizLater}
+                >
+                  Take Quiz Later
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -425,14 +482,5 @@ const styles = {
     padding: "8px 12px",
     borderRadius: "4px",
     cursor: "pointer",
-  },
-  finishButton: {
-    backgroundColor: "#28a745",
-    color: "#fff",
-    border: "none",
-    padding: "8px 16px",
-    borderRadius: "4px",
-    cursor: "pointer",
-    fontWeight: "bold",
   },
 };
