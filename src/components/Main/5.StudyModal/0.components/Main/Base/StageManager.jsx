@@ -8,24 +8,22 @@ import ReadingView from "./ReadingView";
 import ActivityView from "./ActivityView";
 import HistoryView from "./HistoryView";
 
-/**
- * We treat these four as the recognized Bloom’s quiz stages.
- */
+// The recognized quiz stages
 const QUIZ_STAGES = ["remember", "understand", "apply", "analyze"];
 
 /**
  * StageManager
  * ------------
+ * - Fetches subchapter status from /subchapter-status => gets "locked" info for each stage
  * - Renders a top bar of tabs: Reading | Remember | Understand | Apply | Analyze
- * - If "Reading" => render <ReadingView activity={...} />
- * - If one of the quiz stages => fetch attempts & render sub-buttons "Activity" | "History"
- * - Then load <ActivityView> or <HistoryView> for that stage.
+ *   * Each tab can show a lock icon if locked===true
+ * - If user clicks a locked tab => show a placeholder "This stage is currently locked."
+ * - Otherwise, the normal reading or quiz UI is shown.
  *
  * Props:
  *  - examId
  *  - activity (object with .type, .quizStage, .subChapterId, etc.)
- *  - userId
- *  - Optional: any extra fields you want to pass along
+ *  - userId (from Redux or passed in)
  */
 export default function StageManager({ examId, activity, userId }) {
   // Extract relevant data from `activity`
@@ -33,18 +31,15 @@ export default function StageManager({ examId, activity, userId }) {
   const activityType = (activity?.type || "").toLowerCase();
   const possibleQuizStage = (activity?.quizStage || "").toLowerCase();
 
-  // We'll also get `planId` from Redux if needed
+  // Get planId from Redux
   const planId = useSelector((state) => state.plan.planDoc?.id);
 
-  // ========================= State for Tabs & SubView =========================
-  // If activity.type = "read", default tab => "reading".
-  // If we have a recognized quizStage => default to that. Else fallback "reading".
+  // Determine defaultTab from activity
   let defaultTab = "reading";
   if (QUIZ_STAGES.includes(possibleQuizStage)) {
-    defaultTab = possibleQuizStage;  // e.g. "remember"
-  } else if (activityType === "quiz" && !QUIZ_STAGES.includes(possibleQuizStage)) {
-    // Unknown quiz stage => fallback to remember or reading
-    defaultTab = "remember"; 
+    defaultTab = possibleQuizStage;
+  } else if (activityType === "quiz") {
+    defaultTab = "remember";
   }
   const [activeTab, setActiveTab] = useState(defaultTab);
 
@@ -52,42 +47,76 @@ export default function StageManager({ examId, activity, userId }) {
   // By default we go to "activity"
   const [subView, setSubView] = useState("activity");
 
-  // ========================= Loading / Error states =========================
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  // ========================= Data: Quiz/Revision/Concepts =========================
+  // ------------------- Existing states for quiz logic (unchanged) -------------------
   const [quizAttempts, setQuizAttempts] = useState([]);
   const [revisionAttempts, setRevisionAttempts] = useState([]);
   const [subchapterConcepts, setSubchapterConcepts] = useState([]);
-
-  // ========================= pass/fail Mode / Stats =========================
-  // "NO_QUIZ_YET", "QUIZ_COMPLETED", "NEED_REVISION", "CAN_TAKE_NEXT_QUIZ", "LOADING"
   const [mode, setMode] = useState("LOADING");
   const [lastQuizAttempt, setLastQuizAttempt] = useState(null);
   const [latestConceptStats, setLatestConceptStats] = useState(null);
   const [allAttemptsConceptStats, setAllAttemptsConceptStats] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  // Pass thresholds for each stage (adjust as you like)
+  // Pass thresholds for each stage
   const stagePassRatios = {
-    remember: 0.6,
-    understand: 0.6,
-    apply: 0.6,
-    analyze: 0.6,
+    remember: 1,
+    understand: 1,
+    apply: 1,
+    analyze: 1,
   };
   const effectiveExamId = examId || "general";
 
-  // ========================= useEffect => fetch if quiz stage =========================
+  // ------------------- NEW: subchapter-status for lock info -------------------
+  const [taskInfo, setTaskInfo] = useState([]);
+  const [taskInfoLoading, setTaskInfoLoading] = useState(false);
+  const [taskInfoError, setTaskInfoError] = useState("");
+
+  /**
+   * 1) On mount (and whenever userId/planId/subChapterId changes) => fetch /subchapter-status
+   *    We won't render tabs or content until we have the lock info, so the lock icons appear immediately.
+   */
   useEffect(() => {
-    // If no subChapterId/userId => skip
-    if (!subChapterId || !userId) {
-      console.log("StageManager: missing subChapterId/userId => skip fetch");
+    if (!userId || !planId || !subChapterId) {
+      setTaskInfo([]);
       return;
     }
+    async function fetchSubchapterStatus() {
+      try {
+        setTaskInfoLoading(true);
+        setTaskInfoError("");
+        const res = await axios.get("http://localhost:3001/subchapter-status", {
+          params: {
+            userId,
+            planId,
+            subchapterId: subChapterId,
+          },
+        });
+        // res.data.taskInfo => array of 5 objects (Reading + quiz stages)
+        setTaskInfo(res.data.taskInfo || []);
+      } catch (err) {
+        console.error("StageManager => /subchapter-status error:", err);
+        setTaskInfoError(err.message || "Error loading subchapter status");
+        setTaskInfo([]);
+      } finally {
+        setTaskInfoLoading(false);
+      }
+    }
+    fetchSubchapterStatus();
+  }, [userId, planId, subChapterId]);
+
+  /**
+   * 2) If the user selects a QUIZ_STAGES tab => fetch local quiz data
+   *    We do so only after we have userId / subChapterId.
+   *    If it's locked => we'll still fetch the quiz data, or you could skip. 
+   *    We'll just let it fetch. But we'll show "locked" if the user tries to view it.
+   */
+  useEffect(() => {
+    if (!subChapterId || !userId) return;
 
     // If the activeTab is not a recognized quiz stage => skip quiz fetch
     if (!QUIZ_STAGES.includes(activeTab)) {
-      // We can reset our quiz data states to avoid confusion
+      // reset quiz states
       setMode("LOADING");
       setQuizAttempts([]);
       setRevisionAttempts([]);
@@ -97,17 +126,12 @@ export default function StageManager({ examId, activity, userId }) {
       setLatestConceptStats(null);
       return;
     }
-
-    // Otherwise, we fetch quiz attempts, revision attempts, concepts, etc.
+    // fetch quiz data
     fetchQuizData(activeTab);
     // eslint-disable-next-line
   }, [activeTab, subChapterId, userId]);
 
-  /**
-   * fetchQuizData
-   * -------------
-   * Load quiz attempts, revision attempts, subchapter concepts
-   */
+  // =============== Existing fetch quiz logic ===============
   async function fetchQuizData(currentStage) {
     try {
       setLoading(true);
@@ -147,8 +171,7 @@ export default function StageManager({ examId, activity, userId }) {
 
       // Evaluate pass/fail => set 'mode'
       computeMode(quizArr, revArr, conceptArr, currentStage);
-
-      // Build concept stats => for all attempts
+      // Build concept stats => for "History" view
       buildAllAttemptsConceptStats(quizArr, conceptArr);
     } catch (err) {
       console.error("StageManager => fetchQuizData error:", err);
@@ -158,11 +181,6 @@ export default function StageManager({ examId, activity, userId }) {
     }
   }
 
-  /**
-   * computeMode
-   * -----------
-   * From the latest quiz attempt => figure out if user passed or needs revision, etc.
-   */
   function computeMode(quizArr, revArr, conceptArr, quizStage) {
     if (!quizArr.length) {
       setMode("NO_QUIZ_YET");
@@ -170,7 +188,7 @@ export default function StageManager({ examId, activity, userId }) {
       setLatestConceptStats(null);
       return;
     }
-    // newest attempt => first item
+    // newest attempt => first item in quizArr
     const [latestQuiz] = quizArr;
     setLastQuizAttempt(latestQuiz);
 
@@ -194,7 +212,7 @@ export default function StageManager({ examId, activity, userId }) {
       }
     }
 
-    // If we have quizSubmission => build concept stats for that attempt
+    // Build concept stats for the latest attempt
     if (latestQuiz?.quizSubmission && conceptArr.length > 0) {
       const stats = buildConceptStats(latestQuiz.quizSubmission, conceptArr);
       setLatestConceptStats(stats);
@@ -203,11 +221,6 @@ export default function StageManager({ examId, activity, userId }) {
     }
   }
 
-  /**
-   * buildAllAttemptsConceptStats
-   * -----------
-   * For the "History" view, we want concept stats for every attempt
-   */
   function buildAllAttemptsConceptStats(quizArr, conceptArr) {
     if (!quizArr.length || !conceptArr.length) {
       setAllAttemptsConceptStats([]);
@@ -224,7 +237,7 @@ export default function StageManager({ examId, activity, userId }) {
     setAllAttemptsConceptStats(mapped);
   }
 
-  // ========================= Child event handlers => re-fetch =========================
+  // Refresh quiz data after quiz or revision is done
   function handleQuizComplete() {
     if (QUIZ_STAGES.includes(activeTab)) {
       fetchQuizData(activeTab);
@@ -241,122 +254,159 @@ export default function StageManager({ examId, activity, userId }) {
     }
   }
 
-  // ========================= Render Logic =========================
-  // 1) If subChapterId or userId missing => bail
+  // =============== Render ===============
+
+  // 1) If we're still loading the subchapter status => show a placeholder
+  if (taskInfoLoading) {
+    return <div style={{ color: "#fff" }}>Loading stage statuses...</div>;
+  }
+  // 2) If we got an error from subchapter-status => show it
+  if (taskInfoError) {
+    return <div style={{ color: "red" }}>{taskInfoError}</div>;
+  }
+
+  // If no subChapterId or userId => bail
   if (!subChapterId || !userId) {
-    return <div style={{ color: "#fff" }}>No valid subChapterId/userId.</div>;
-  }
-  // 2) If loading...
-  if (loading) {
-    return <div style={{ color: "#fff" }}>Loading attempts...</div>;
-  }
-  // 3) If error
-  if (error) {
-    return <div style={{ color: "red" }}>{error}</div>;
+    return <div style={{ color: "#fff" }}>No valid subChapterId/userId provided.</div>;
   }
 
   return (
     <div style={styles.container}>
-
-      {/* Top row => 5 tabs: Reading, Remember, Understand, Apply, Analyze */}
+      {/* 1) The row of tabs => Reading, Remember, Understand, Apply, Analyze */}
       <div style={styles.tabRow}>
-        {/* Reading */}
-        <button
-          style={activeTab === "reading" ? styles.tabButtonActive : styles.tabButton}
-          onClick={() => {
-            setActiveTab("reading");
-            setSubView("activity"); // reset subView if we switch away from quiz
-          }}
-        >
-          Reading
-        </button>
-        
-        {/* Bloom’s Quiz Stages */}
+        {renderStageTab("reading", "Reading")}
         {QUIZ_STAGES.map((st) => {
-          const isActive = activeTab === st;
-          return (
-            <button
-              key={st}
-              style={isActive ? styles.tabButtonActive : styles.tabButton}
-              onClick={() => {
-                setActiveTab(st);
-                setSubView("activity"); // Usually default to showing "Activity"
-              }}
-            >
-              {capitalize(st)}
-            </button>
-          );
+          return renderStageTab(st, capitalize(st));
         })}
       </div>
 
-      {/* Main content area */}
+      {/* 2) Main content => 
+          If reading => show reading 
+          If quiz stage => sub-buttons 
+          BUT if locked => show a locked placeholder 
+      */}
       <div style={styles.mainContent}>
-        {/* If "reading" => show <ReadingView> with the current activity data */}
-        {activeTab === "reading" && (
-          <ReadingView activity={activity} />
-        )}
-
-        {/* If one of the QUIZ_STAGES => show sub-row for "Activity" / "History" */}
-        {QUIZ_STAGES.includes(activeTab) && (
-          <div style={styles.quizContainer}>
-            {/* Sub-buttons for Activity / History */}
-            <div style={styles.subButtonRow}>
-              <button
-                style={subView === "activity" ? styles.subBtnActive : styles.subBtn}
-                onClick={() => setSubView("activity")}
-              >
-                Activity
-              </button>
-              <button
-                style={subView === "history" ? styles.subBtnActive : styles.subBtn}
-                onClick={() => setSubView("history")}
-              >
-                History
-              </button>
-            </div>
-
-            {subView === "activity" && (
-              <ActivityView
-                mode={mode}
-                quizStage={activeTab}
-                examId={effectiveExamId}
-                subChapterId={subChapterId}
-                planId={planId}
-                userId={userId}
-                lastQuizAttempt={lastQuizAttempt}
-                onQuizComplete={handleQuizComplete}
-                onQuizFail={handleQuizFail}
-                onRevisionDone={handleRevisionDone}
-              />
-            )}
-            {subView === "history" && (
-              <HistoryView
-                quizStage={activeTab}
-                quizAttempts={quizAttempts}
-                revisionAttempts={revisionAttempts}
-                lastQuizAttempt={lastQuizAttempt}
-                latestConceptStats={latestConceptStats}
-                allAttemptsConceptStats={allAttemptsConceptStats}
-                passRatio={stagePassRatios[activeTab] || 0.6}
-              />
-            )}
+        {isTabLocked(activeTab) ? (
+          // If the chosen tab is locked => show a placeholder
+          <div style={{ fontSize: "1.1rem", color: "#f00" }}>
+            This stage is currently locked.
           </div>
+        ) : (
+          // else => normal content
+          renderTabContent(activeTab)
         )}
       </div>
     </div>
   );
+
+  // =============== Helper: isTabLocked ===============
+  function isTabLocked(tabKey) {
+    // find the matching item in taskInfo
+    const labelForTaskInfo = tabKey === "reading" ? "Reading" : capitalize(tabKey);
+    const item = taskInfo.find(
+      (t) => (t.stageLabel || "").toLowerCase() === labelForTaskInfo.toLowerCase()
+    );
+    return item?.locked === true;
+  }
+
+  // =============== Helper: renderTabContent ===============
+  // Returns the normal content for reading or quiz stage
+  function renderTabContent(tabKey) {
+    if (tabKey === "reading") {
+      // Reading => show ReadingView
+      return <ReadingView activity={activity} />;
+    }
+
+    // else => quiz stage => show sub-buttons + ActivityView/HistoryView
+    if (QUIZ_STAGES.includes(tabKey)) {
+      // If there's an error or loading quiz data
+      if (loading) {
+        return <div style={{ color: "#fff" }}>Loading quiz data...</div>;
+      }
+      if (error) {
+        return <div style={{ color: "red" }}>{error}</div>;
+      }
+
+      return (
+        <div style={styles.quizContainer}>
+          {/* Sub-buttons for activity/history */}
+          <div style={styles.subButtonRow}>
+            <button
+              style={subView === "activity" ? styles.subBtnActive : styles.subBtn}
+              onClick={() => setSubView("activity")}
+            >
+              Activity
+            </button>
+            <button
+              style={subView === "history" ? styles.subBtnActive : styles.subBtn}
+              onClick={() => setSubView("history")}
+            >
+              History
+            </button>
+          </div>
+
+          {subView === "activity" && (
+            <ActivityView
+              mode={mode}
+              quizStage={tabKey}
+              examId={effectiveExamId}
+              subChapterId={subChapterId}
+              planId={planId}
+              userId={userId}
+              lastQuizAttempt={lastQuizAttempt}
+              onQuizComplete={handleQuizComplete}
+              onQuizFail={handleQuizFail}
+              onRevisionDone={handleRevisionDone}
+            />
+          )}
+
+          {subView === "history" && (
+            <HistoryView
+              quizStage={tabKey}
+              quizAttempts={quizAttempts}
+              revisionAttempts={revisionAttempts}
+              lastQuizAttempt={lastQuizAttempt}
+              latestConceptStats={latestConceptStats}
+              allAttemptsConceptStats={allAttemptsConceptStats}
+              passRatio={stagePassRatios[tabKey] || 0.6}
+            />
+          )}
+        </div>
+      );
+    }
+
+    // Fallback if unknown
+    return <div style={{ color: "#fff" }}>Unknown stage: {tabKey}</div>;
+  }
+
+  // =============== Helper: renderStageTab ===============
+  function renderStageTab(tabKey, tabLabel) {
+    const isCurrent = (activeTab === tabKey);
+    const locked = isTabLocked(tabKey);
+
+    return (
+      <button
+        key={tabKey}
+        style={isCurrent ? styles.tabButtonActive : styles.tabButton}
+        onClick={() => {
+          setActiveTab(tabKey);
+          if (QUIZ_STAGES.includes(tabKey)) {
+            setSubView("activity");
+          }
+        }}
+      >
+        {tabLabel}
+        {/* Show lock icon if locked */}
+        {locked && <span style={{ marginLeft: 6 }}>🔒</span>}
+      </button>
+    );
+  }
 }
 
-/* ============== Utilities ============== */
-
-/**
- * parseScoreForRatio
- *  - Takes a string like "80%", or "4/5", returns a number in [0..1]
- */
+/* ========== Utility: parseScoreForRatio ========== */
 function parseScoreForRatio(scoreString) {
   if (!scoreString) return NaN;
   const trimmed = scoreString.trim();
-
   // If ends with '%'
   if (trimmed.endsWith("%")) {
     const numPart = trimmed.slice(0, -1);
@@ -375,32 +425,21 @@ function parseScoreForRatio(scoreString) {
   return NaN;
 }
 
-/**
- * buildConceptStats
- *  - from quizSubmission[] and subchapterConcepts[] => produce an array of
- *    { conceptName, correct, total, ratio, passOrFail }
- */
+/* ========== Utility: buildConceptStats ========== */
 function buildConceptStats(quizSubmission, conceptArr) {
   const countMap = {};
-
   quizSubmission.forEach((q) => {
     const cName = q.conceptName || "UnknownConcept";
     if (!countMap[cName]) {
       countMap[cName] = { correct: 0, total: 0 };
     }
     countMap[cName].total++;
-    // We assume q.score >= 1.0 => correct
     if (q.score && parseFloat(q.score) >= 1) {
       countMap[cName].correct++;
     }
   });
-
-  // Convert conceptArr to a set of concept names
   const conceptNamesSet = new Set(conceptArr.map((c) => c.name));
-  // If we had "UnknownConcept", ensure it’s included
-  if (countMap["UnknownConcept"]) {
-    conceptNamesSet.add("UnknownConcept");
-  }
+  if (countMap["UnknownConcept"]) conceptNamesSet.add("UnknownConcept");
 
   const statsArray = [];
   conceptNamesSet.forEach((cName) => {
@@ -420,22 +459,16 @@ function buildConceptStats(quizSubmission, conceptArr) {
       passOrFail,
     });
   });
-
-  // Sort alphabetically by conceptName
-  statsArray.sort((a, b) => a.conceptName.localeCompare(b.conceptName));
   return statsArray;
 }
 
-/**
- * capitalize
- *  - e.g. "remember" => "Remember"
- */
+/* ========== Utility: capitalize ========== */
 function capitalize(str) {
   if (!str) return "";
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-/* ============== Styles ============== */
+/* ========== Styles ========== */
 const styles = {
   container: {
     width: "100%",
@@ -468,7 +501,6 @@ const styles = {
   tabButtonActive: {
     backgroundColor: "#444",
     color: "#fff",
-    border: "1px solid #444",
     borderRadius: "4px",
     padding: "6px 12px",
     cursor: "pointer",
