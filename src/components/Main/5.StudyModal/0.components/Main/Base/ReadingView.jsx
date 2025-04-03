@@ -1,13 +1,10 @@
 // File: ReadingView.jsx
-
 import React, { useEffect, useState, useRef } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import axios from "axios";
-import {
-  fetchReadingTime,
-  incrementReadingTime,
-} from "../../../../../../store/readingSlice";
-import { setCurrentIndex } from "../../../../../../store/planSlice";
+import { fetchReadingTime, incrementReadingTime } from "../../../../../../store/readingSlice";
+import { setCurrentIndex, fetchPlan } from "../../../../../../store/planSlice"; // <- Import fetchPlan
+// ^ Make sure you actually have fetchPlan from planSlice or wherever your plan is fetched
 
 // Utility: format mm:ss
 function formatTime(totalSeconds) {
@@ -16,11 +13,13 @@ function formatTime(totalSeconds) {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-// chunk by paragraphs
+/**
+ * chunkHtmlByParagraphs
+ * Splits an HTML string into ~180-word pages by paragraphs.
+ */
 function chunkHtmlByParagraphs(htmlString, chunkSize = 180) {
-  // remove / interpret any literal "\n"
-  let sanitized = htmlString.replace(/\\n/g, "\n"); // if your data has literal backslash-n
-  sanitized = sanitized.replace(/\r?\n/g, " "); // turn real newlines into spaces
+  let sanitized = htmlString.replace(/\\n/g, "\n"); 
+  sanitized = sanitized.replace(/\r?\n/g, " ");
 
   let paragraphs = sanitized
     .split(/<\/p>/i)
@@ -67,9 +66,7 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
     return <div style={styles.outerContainer}>No activity provided.</div>;
   }
 
-  // We assume the activity object has these fields:
-  // - subChapterId: used for reading-time usage
-  // - activityId:   used for marking completion
+  // Extract essential fields from activity
   const { subChapterId, activityId } = activity;
 
   const userId = useSelector((state) => state.auth?.userId || "demoUser");
@@ -85,14 +82,11 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
   const [pages, setPages] = useState([]);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
 
-  // We'll track a reading start time so that we can submit it upon finishing
+  // We'll track a reading start time so we can log it upon finishing
   const readingStartRef = useRef(null);
 
   const [showDebug, setShowDebug] = useState(false);
   const prevSubChapterId = useRef(null);
-
-  console.log(`Activity '${activityId}' marked deferred!`);
-
 
   // 1) On subChapter change => fetch subchapter + usage
   useEffect(() => {
@@ -115,9 +109,7 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
 
     async function fetchSubChapterData() {
       try {
-        const res = await axios.get(
-          `http://localhost:3001/api/subchapters/${subChapterId}`
-        );
+        const res = await axios.get(`http://localhost:3001/api/subchapters/${subChapterId}`);
         setSubChapter(res.data);
       } catch (err) {
         console.error("Failed to fetch subchapter:", err);
@@ -142,10 +134,9 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
 
     fetchSubChapterData();
     fetchUsage();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subChapterId, userId, planId]);
+  }, [subChapterId, userId, planId, dispatch]);
 
-  // 2) Once we have subChapter.summary, chunk it up
+  // 2) Once subChapter.summary is loaded => chunk it
   useEffect(() => {
     if (!subChapter?.summary) return;
     const chunked = chunkHtmlByParagraphs(subChapter.summary, 180);
@@ -153,7 +144,7 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
     setCurrentPageIndex(0);
   }, [subChapter]);
 
-  // 3) Increase leftoverSec every second to track local reading time
+  // 3) local second-by-second => leftoverSec++
   useEffect(() => {
     const timerId = setInterval(() => {
       setLeftoverSec((prev) => prev + 1);
@@ -161,7 +152,7 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
     return () => clearInterval(timerId);
   }, []);
 
-  // 4) Every second, check if leftoverSec >= 15 => post lumps of 15
+  // 4) lumps-of-15 => post lumps to the server
   useEffect(() => {
     if (!lastSnapMs) return;
     const heartbeatId = setInterval(async () => {
@@ -187,16 +178,9 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
         }
       }
     }, 1000);
+
     return () => clearInterval(heartbeatId);
-  }, [
-    leftoverSec,
-    lastSnapMs,
-    dispatch,
-    userId,
-    planId,
-    subChapterId,
-    serverTime,
-  ]);
+  }, [leftoverSec, lastSnapMs, dispatch, userId, planId, subChapterId, serverTime]);
 
   const displayedTime = serverTime + leftoverSec;
 
@@ -212,11 +196,14 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
     }
   }
 
-  // 5) When user finishes reading => mark on backend, then move to next activity
+  // 5) When user finishes reading => record usage, mark as complete, re-fetch plan, preserve index+1
   async function handleFinishReading() {
     const readingEndTime = new Date();
 
     try {
+      // Save old index, so we can reapply it after re-fetch
+      const oldIndex = currentIndex;
+
       // 1) Make the POST call to record reading usage
       await axios.post("http://localhost:3001/api/submitReading", {
         userId,
@@ -224,10 +211,10 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
         readingStartTime: readingStartRef.current?.toISOString(),
         readingEndTime: readingEndTime.toISOString(),
         planId: planId ?? null,
-        timestamp: new Date().toISOString(), // or any date
+        timestamp: new Date().toISOString(),
       });
 
-      // 2) Mark the activity's completionStatus in the plan by activityId
+      // 2) Mark the activity's completionStatus => "complete"
       await axios.post("http://localhost:3001/api/markActivityCompletion", {
         userId,
         planId,
@@ -235,20 +222,36 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
         completionStatus: "complete",
       });
 
-      // 3) If finishing reading might unlock the next stage *within the same subchapter*,
-      // then we can tell StageManager to re-fetch subchapter-status.
+      // 3) Optionally re-fetch subchapter status (like you had), but let's also re-fetch plan
+      //    if it might change anything else. We'll do both:
       if (typeof onNeedsRefreshStatus === "function") {
         onNeedsRefreshStatus();
       }
 
-      // 4) Once submission is successful, move to the next activity
-      dispatch(setCurrentIndex(currentIndex + 1));
+      // 4) Re-fetch the plan from backend
+      const backendURL = "http://localhost:3001";
+      const fetchUrl = "/api/adaptive-plan";
+
+      const fetchAction = await dispatch(
+        fetchPlan({
+          planId,
+          backendURL,
+          fetchUrl,
+        })
+      );
+
+      // 5) If re-fetch is successful => restore (oldIndex + 1)
+      if (fetchPlan.fulfilled.match(fetchAction)) {
+        dispatch(setCurrentIndex(oldIndex + 1));
+      } else {
+        // If re-fetch fails, fallback => just move next anyway
+        dispatch(setCurrentIndex(oldIndex + 1));
+      }
     } catch (err) {
       console.error("Error submitting reading data:", err);
-      // Decide if you still want to move on or handle errors differently
-      if (typeof onNeedsRefreshStatus === "function") {
-        onNeedsRefreshStatus();
-      }
+
+      // If there's an error, you might still want to move on or handle differently
+      // We'll do the same fallback:
       dispatch(setCurrentIndex(currentIndex + 1));
     }
   }
@@ -284,7 +287,6 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
         </div>
 
         <div style={styles.cardBody}>
-          {/* Use dangerouslySetInnerHTML to preserve HTML */}
           <div
             style={styles.pageContent}
             dangerouslySetInnerHTML={{ __html: currentPageHtml }}
@@ -312,7 +314,7 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
         </div>
       </div>
 
-      {/** Debug info **/}
+      {/** Debug Info */}
       <div
         style={styles.debugEyeContainer}
         onMouseEnter={() => setShowDebug(true)}
@@ -344,9 +346,9 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
   );
 }
 
-// ------------------------------------------------
+// --------------------------------
 // Styles
-// ------------------------------------------------
+// --------------------------------
 const styles = {
   outerContainer: {
     position: "relative",
