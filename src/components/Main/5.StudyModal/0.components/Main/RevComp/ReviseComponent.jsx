@@ -8,11 +8,10 @@ import { useSelector, useDispatch } from "react-redux";
 // GPT logic
 import { generateRevisionContent } from "./RevSupport/RevisionContentGenerator";
 // revise-time actions
-import {
-  fetchReviseTime,
-  incrementReviseTime,
-} from "../../../../../../store/reviseTimeSlice";
-import { setCurrentIndex } from "../../../../../../store/planSlice";
+import { fetchReviseTime, incrementReviseTime } from "../../../../../../store/reviseTimeSlice";
+
+// Import your plan slice actions/thunks
+import { setCurrentIndex, fetchPlan } from "../../../../../../store/planSlice";
 
 /** Utility to format mm:ss */
 function formatTime(totalSeconds) {
@@ -25,10 +24,9 @@ function formatTime(totalSeconds) {
  * Splits an HTML string into ~180-word pages by paragraphs.
  */
 function chunkHtmlByParagraphs(htmlString, chunkSize = 180) {
-  let sanitized = htmlString.replace(/\\n/g, "\n"); // convert literal "\n"
-  sanitized = sanitized.replace(/\r?\n/g, " "); // remove real newlines -> spaces
+  let sanitized = htmlString.replace(/\\n/g, "\n");
+  sanitized = sanitized.replace(/\r?\n/g, " ");
 
-  // Split by </p>, then re-append </p> to each chunk
   let paragraphs = sanitized
     .split(/<\/p>/i)
     .map((p) => p.trim())
@@ -40,10 +38,8 @@ function chunkHtmlByParagraphs(htmlString, chunkSize = 180) {
   let currentPageWordCount = 0;
 
   paragraphs.forEach((paragraph) => {
-    // remove HTML tags for word count
     const plainText = paragraph.replace(/<[^>]+>/g, "");
     const wordCount = plainText.split(/\s+/).filter(Boolean).length;
-
     if (currentPageWordCount + wordCount <= chunkSize) {
       currentPageHtml += paragraph;
       currentPageWordCount += wordCount;
@@ -55,6 +51,7 @@ function chunkHtmlByParagraphs(htmlString, chunkSize = 180) {
       currentPageWordCount = wordCount;
     }
   });
+
   if (currentPageHtml.trim().length > 0) {
     pages.push(currentPageHtml);
   }
@@ -101,7 +98,7 @@ function createHtmlFromGPTData(revisionData) {
  *  - subChapterId    (string)
  *  - revisionNumber  (number)
  *  - onRevisionDone  (function) => Called when "Take Quiz Now" finishes
- *  - activityId      (string) => The activity's unique ID; needed for deferral
+ *  - activity        (object with .activityId) => The activity's ID for deferral
  */
 export default function ReviseView({
   userId,
@@ -110,14 +107,13 @@ export default function ReviseView({
   subChapterId = "",
   revisionNumber = 1,
   onRevisionDone,
-  activity, // The ID we'll defer if user chooses "Take Quiz Later"
+  activity,
 }) {
+  const { activityId } = activity || {};
+
   const planId = useSelector((state) => state.plan?.planDoc?.id);
   const currentIndex = useSelector((state) => state.plan?.currentIndex);
   const dispatch = useDispatch();
-
-  const { activityId } = activity;
-
 
   // docId for usage logs
   const docIdRef = useRef("");
@@ -135,14 +131,10 @@ export default function ReviseView({
   const [localLeftover, setLocalLeftover] = useState(0);
   const [lastSnapMs, setLastSnapMs] = useState(null);
 
-  // -------------------------------------------
   // 1) On mount => fetch usage + GPT content
-  // -------------------------------------------
   useEffect(() => {
     if (!userId || !subChapterId) {
-      console.log(
-        "ReviseView: missing userId/subChapterId => skipping generation."
-      );
+      console.log("ReviseView: missing userId/subChapterId => skipping generation.");
       return;
     }
 
@@ -231,7 +223,7 @@ export default function ReviseView({
     dispatch,
   ]);
 
-  // Once revisionHtml => chunk
+  // 2) Once revisionHtml => chunk it
   useEffect(() => {
     if (!revisionHtml) return;
     const chunked = chunkHtmlByParagraphs(revisionHtml, 180);
@@ -239,7 +231,7 @@ export default function ReviseView({
     setCurrentPageIndex(0);
   }, [revisionHtml]);
 
-  // local second timer => leftover++
+  // 3) local second timer => leftover++
   useEffect(() => {
     const secondTimer = setInterval(() => {
       setLocalLeftover((prev) => prev + 1);
@@ -247,18 +239,18 @@ export default function ReviseView({
     return () => clearInterval(secondTimer);
   }, []);
 
-  // lumps-of-15 => incrementReviseTime
+  // 4) lumps-of-15 => incrementReviseTime
   useEffect(() => {
     if (!lastSnapMs) return;
     const heartbeatId = setInterval(async () => {
       if (localLeftover >= 15) {
         const lumps = Math.floor(localLeftover / 15);
         if (lumps > 0) {
-          const toPost = lumps * 15;
+          const totalToPost = lumps * 15;
           const incrRes = await dispatch(
             incrementReviseTime({
               docId: docIdRef.current,
-              increment: toPost,
+              increment: totalToPost,
               userId,
               planId,
               subChapterId,
@@ -268,7 +260,7 @@ export default function ReviseView({
             })
           );
           if (incrementReviseTime.fulfilled.match(incrRes)) {
-            const newTotal = incrRes.payload || serverTime + toPost;
+            const newTotal = incrRes.payload || serverTime + totalToPost;
             setServerTime(newTotal);
           }
           const remainder = localLeftover % 15;
@@ -290,10 +282,8 @@ export default function ReviseView({
     serverTime,
   ]);
 
-  // displayed time => serverTime + localLeftover
   const displayedTime = serverTime + localLeftover;
 
-  // Pagination
   function handleNextPage() {
     if (currentPageIndex < pages.length - 1) {
       setCurrentPageIndex(currentPageIndex + 1);
@@ -305,9 +295,7 @@ export default function ReviseView({
     }
   }
 
-  // -----------------------
-  // Shared function to mark the revision attempt done on the server
-  // -----------------------
+  // Mark the revision attempt on the server
   async function submitRevisionAttempt() {
     const payload = {
       userId,
@@ -320,9 +308,7 @@ export default function ReviseView({
     console.log("Revision attempt recorded on server!");
   }
 
-  // -----------------------
-  // "Take Quiz Now" => calls onRevisionDone
-  // -----------------------
+  // "Take Quiz Now"
   async function handleTakeQuizNow() {
     try {
       await submitRevisionAttempt();
@@ -334,14 +320,13 @@ export default function ReviseView({
     }
   }
 
-
-
-  // -----------------------
-  // "Take Quiz Later" => FIRST mark deferred, THEN do existing logic
-  // -----------------------
+  // "Take Quiz Later" => Mark deferred, re-fetch plan, maintain index, proceed
   async function handleTakeQuizLater() {
     try {
-      // 1) Mark the activity as deferred (right away)
+      // Store the old index so we can re-apply it after re-fetch
+      const oldIndex = currentIndex;
+
+      // 1) Mark the activity as deferred
       if (activityId) {
         await axios.post("http://localhost:3001/api/markActivityCompletion", {
           userId,
@@ -352,20 +337,38 @@ export default function ReviseView({
         console.log(`Activity '${activityId}' marked deferred!`);
       }
 
-      // 2) Next, submit the revision attempt
+      // 2) Re-fetch the plan
+      //    We assume you have a backendURL & fetchUrl
+      //    Adjust if needed, or pass them as props
+      const backendURL = "http://localhost:3001";
+      const fetchUrl = "/api/adaptive-plan";
+
+      const fetchAction = await dispatch(
+        fetchPlan({
+          planId,
+          backendURL,
+          fetchUrl,
+        })
+      );
+
+      if (fetchPlan.fulfilled.match(fetchAction)) {
+        // 3) Restore index but increment by 1 => move to next
+        dispatch(setCurrentIndex(oldIndex + 1));
+      }
+
+      // 4) Then submit revision attempt
       await submitRevisionAttempt();
 
-      // 3) Finally, skip the quiz by moving to the next left panel item
-      dispatch(setCurrentIndex(currentIndex + 1));
+      // Done. The user is on the next activity.
     } catch (err) {
       console.error("Error in handleTakeQuizLater:", err);
       alert("Failed to record revision attempt and/or mark deferred.");
+
       // We'll still move forward for now
       dispatch(setCurrentIndex(currentIndex + 1));
     }
   }
 
-  // fallback if no pages
   if (!pages.length && !loading) {
     return (
       <div style={styles.outerContainer}>
@@ -417,12 +420,9 @@ export default function ReviseView({
             )}
             {currentPageIndex === pages.length - 1 && (
               <>
-                {/* 1) Take Quiz Now => calls handleTakeQuizNow */}
                 <button style={styles.button} onClick={handleTakeQuizNow}>
                   Take Quiz Now
                 </button>
-
-                {/* 2) Take Quiz Later => "defer" first, THEN do the existing stuff */}
                 <button style={styles.button} onClick={handleTakeQuizLater}>
                   Take Quiz Later
                 </button>

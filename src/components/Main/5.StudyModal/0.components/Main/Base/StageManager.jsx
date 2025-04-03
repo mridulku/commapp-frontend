@@ -16,6 +16,7 @@ export default function StageManager({ examId, activity, userId }) {
   const subChapterId = activity?.subChapterId || "";
   const activityType = (activity?.type || "").toLowerCase(); // "read" or "quiz"
   const possibleQuizStage = (activity?.quizStage || "").toLowerCase();
+  const completionStatus = (activity?.completionStatus || "").toLowerCase();
 
   // ----------------- Global Redux Data -----------------
   const planId = useSelector((state) => state.plan.planDoc?.id);
@@ -26,17 +27,12 @@ export default function StageManager({ examId, activity, userId }) {
   const [subView, setSubView] = useState("activity");
 
   // ----------------- Refresh Key for Status Re-Fetch -----------------
-  // We increment this whenever we want to force a new subchapter-status fetch,
-  // even if subChapterId is unchanged.
   const [refreshKey, setRefreshKey] = useState(0);
-
-  // A helper callback we can pass down to ReadingView/ActivityView, so they can
-  // tell StageManager: "We changed something, please refetch subchapter status."
   function handleNeedsRefreshStatus() {
     setRefreshKey((prev) => prev + 1);
   }
 
-  // Whenever activity changes => choose the correct default tab
+  // Whenever activity changes => default tab
   useEffect(() => {
     let newTab = "reading";
     if (QUIZ_STAGES.includes(possibleQuizStage)) {
@@ -52,7 +48,7 @@ export default function StageManager({ examId, activity, userId }) {
     setSubView("activity");
   }, [activity]);
 
-  // ----------------- Quiz States -----------------
+  // ----------------- Quiz & Status Data -----------------
   const [quizAttempts, setQuizAttempts] = useState([]);
   const [revisionAttempts, setRevisionAttempts] = useState([]);
   const [subchapterConcepts, setSubchapterConcepts] = useState([]);
@@ -63,7 +59,7 @@ export default function StageManager({ examId, activity, userId }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Passing thresholds for each stage
+  // Pass thresholds
   const stagePassRatios = {
     remember: 1,
     understand: 1,
@@ -76,7 +72,7 @@ export default function StageManager({ examId, activity, userId }) {
   const [taskInfoLoading, setTaskInfoLoading] = useState(false);
   const [taskInfoError, setTaskInfoError] = useState("");
 
-  // Whenever userId/planId/subChapterId changes *or* refreshKey increments, re-fetch /subchapter-status
+  // Re-fetch /subchapter-status whenever userId/planId/subChapterId/refreshKey changes
   useEffect(() => {
     if (!userId || !planId || !subChapterId) {
       setTaskInfo([]);
@@ -105,11 +101,11 @@ export default function StageManager({ examId, activity, userId }) {
     fetchSubchapterStatus();
   }, [userId, planId, subChapterId, refreshKey]);
 
-  // If user selects a quiz tab => fetch quiz data
+  // If user selects quiz tab => fetch quiz data
   useEffect(() => {
     if (!subChapterId || !userId) return;
     if (!QUIZ_STAGES.includes(activeTab)) {
-      // If it's reading or something not in QUIZ_STAGES, clear quiz data
+      // If not a quiz tab
       setMode("LOADING");
       setQuizAttempts([]);
       setRevisionAttempts([]);
@@ -119,11 +115,10 @@ export default function StageManager({ examId, activity, userId }) {
       setLatestConceptStats(null);
       return;
     }
-    // else => fetch quiz data
+    // else => quiz tab => fetch data
     fetchQuizData(activeTab);
   }, [activeTab, subChapterId, userId]);
 
-  // ----------------- Quiz Data Fetching Logic -----------------
   async function fetchQuizData(currentStage) {
     try {
       setLoading(true);
@@ -229,8 +224,7 @@ export default function StageManager({ examId, activity, userId }) {
     setAllAttemptsConceptStats(mapped);
   }
 
-  // --------------- Public Callbacks for Child Components ---------------
-  // If a quiz or revision finishes, re-fetch quiz data for the current tab
+  // If a quiz or revision finishes, re-fetch
   function handleQuizComplete() {
     if (QUIZ_STAGES.includes(activeTab)) {
       fetchQuizData(activeTab);
@@ -247,7 +241,26 @@ export default function StageManager({ examId, activity, userId }) {
     }
   }
 
-  // --------------- UI Render ---------------
+  // ========== SHORT-CIRCUIT for DEFERRED / COMPLETE ==========
+  // If activity is "deferred" or "complete", just show a message and skip normal content.
+  if (completionStatus === "deferred") {
+    return (
+      <div style={styles.messageBox}>
+        <h2>This activity has been deferred.</h2>
+        <p style={{ marginTop: 8 }}>You can proceed to the next activity.</p>
+      </div>
+    );
+  }
+  if (completionStatus === "complete") {
+    return (
+      <div style={styles.messageBox}>
+        <h2>This activity is complete.</h2>
+        <p style={{ marginTop: 8 }}>You can proceed to the next activity.</p>
+      </div>
+    );
+  }
+
+  // --------------- Render the normal UI if not deferred/complete ---------------
   if (taskInfoLoading) {
     return <div style={{ color: "#fff" }}>Loading stage statuses...</div>;
   }
@@ -281,7 +294,8 @@ export default function StageManager({ examId, activity, userId }) {
 
   // ---------- Helper: isTabLocked ----------
   function isTabLocked(tabKey) {
-    const labelForTaskInfo = tabKey === "reading" ? "Reading" : capitalize(tabKey);
+    const labelForTaskInfo =
+      tabKey === "reading" ? "Reading" : capitalize(tabKey);
     const item = taskInfo.find(
       (t) => (t.stageLabel || "").toLowerCase() === labelForTaskInfo.toLowerCase()
     );
@@ -316,9 +330,6 @@ export default function StageManager({ examId, activity, userId }) {
       return (
         <ReadingView
           activity={activity}
-          // Pass our callback so that if the user finishes reading
-          // or does something that changes subchapter status,
-          // they can notify StageManager to refresh statuses.
           onNeedsRefreshStatus={handleNeedsRefreshStatus}
         />
       );
@@ -337,7 +348,9 @@ export default function StageManager({ examId, activity, userId }) {
           {/* Sub-buttons for "Activity" or "History" */}
           <div style={styles.subButtonRow}>
             <button
-              style={subView === "activity" ? styles.subBtnActive : styles.subBtn}
+              style={
+                subView === "activity" ? styles.subBtnActive : styles.subBtn
+              }
               onClick={() => setSubView("activity")}
             >
               Activity
@@ -363,7 +376,6 @@ export default function StageManager({ examId, activity, userId }) {
               onQuizComplete={handleQuizComplete}
               onQuizFail={handleQuizFail}
               onRevisionDone={handleRevisionDone}
-              // Pass same callback to quiz screen
               onNeedsRefreshStatus={handleNeedsRefreshStatus}
             />
           )}
@@ -388,7 +400,7 @@ export default function StageManager({ examId, activity, userId }) {
   }
 }
 
-// ---------- Utility: parseScoreForRatio ----------
+// ---------- parseScoreForRatio ----------
 function parseScoreForRatio(scoreString) {
   if (!scoreString) return NaN;
   const trimmed = scoreString.trim();
@@ -407,7 +419,7 @@ function parseScoreForRatio(scoreString) {
   return NaN;
 }
 
-// ---------- Utility: buildConceptStats ----------
+// ---------- buildConceptStats ----------
 function buildConceptStats(quizSubmission, conceptArr) {
   const countMap = {};
   quizSubmission.forEach((q) => {
@@ -444,7 +456,7 @@ function buildConceptStats(quizSubmission, conceptArr) {
   return statsArray;
 }
 
-// ---------- Utility: capitalize ----------
+// ---------- capitalize ----------
 function capitalize(str) {
   if (!str) return "";
   return str.charAt(0).toUpperCase() + str.slice(1);
@@ -521,5 +533,12 @@ const styles = {
     padding: "5px 12px",
     cursor: "pointer",
     fontWeight: "bold",
+  },
+  messageBox: {
+    padding: "24px",
+    fontSize: "1.1rem",
+    color: "#fff",
+    backgroundColor: "#111",
+    textAlign: "center",
   },
 };
