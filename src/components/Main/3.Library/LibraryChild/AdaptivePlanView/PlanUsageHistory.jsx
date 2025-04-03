@@ -10,6 +10,9 @@ import {
 
 import RawView from "./RawView";
 import TimelineView from "./TimelineView";
+import TimelineView2 from "./TimelineView2";
+import TimelineView3 from "./TimelineView3";
+
 import PlanView from "./PlanView";
 
 import LibraryView from "./LibraryView"; // <-- NEW import
@@ -19,6 +22,7 @@ import LibraryView3 from "./LibraryView3"; // <-- NEW import
 import TimeCalc from "./TimeCalc"; // <-- NEW import
 import PlanLog from "./PlanLog"; // <-- NEW import
 import AggregatorResultView from "./AggregatorResultView"; // <-- NEW import
+import AggregatorProgressView from "./AggregatorProgressView"; // <-- NEW import
 
 
 
@@ -369,8 +373,17 @@ export default function PlanUsageHistory({
           Raw View
         </div>
         <div style={tabStyle(activeTab === "TIMELINE")} onClick={() => setActiveTab("TIMELINE")}>
-          Timeline View
+          TimelineView
         </div>
+        <div style={tabStyle(activeTab === "TIMELINE2")} onClick={() => setActiveTab("TIMELINE2")}>
+          TimelineView2
+        </div>
+
+        <div style={tabStyle(activeTab === "TIMELINE3")} onClick={() => setActiveTab("TIMELINE3")}>
+          TimelineView3
+        </div>
+
+
         <div style={tabStyle(activeTab === "PLAN")} onClick={() => setActiveTab("PLAN")}>
           Plan View
         </div>
@@ -388,6 +401,9 @@ export default function PlanUsageHistory({
         </div>
         <div style={tabStyle(activeTab === "AGGRESULTVIEW")} onClick={() => setActiveTab("AGGRESULTVIEW")}>
         AggregatorResultView
+        </div>
+        <div style={tabStyle(activeTab === "AGGPROGVIEW")} onClick={() => setActiveTab("AGGPROGVIEW")}>
+        AggregatorProgressView
         </div>
         <div style={tabStyle(activeTab === "LIBRARY3")} onClick={() => setActiveTab("LIBRARY3")}>
         Library3
@@ -439,6 +455,32 @@ export default function PlanUsageHistory({
           timelineEvents={timelineEvents}
         />
       )}
+
+      {activeTab === "TIMELINE2" && (
+    <TimelineView2
+    selectedDate={selectedDate}
+    readingActsForDate={readingActsForDate}
+    quizActsForDate={quizActsForDate}
+    revisionActsForDate={revisionActsForDate}
+    readingCompletionsForDate={readingCompletionsForDate}
+    quizCompletionsForDate={quizCompletionsForDate}
+    revisionCompletionsForDate={revisionCompletionsForDate}
+  />
+)}
+
+
+
+
+{activeTab === "TIMELINE3" && (
+    <TimelineView3
+    db={db}
+  userId={userId}
+  planId={planId}
+  plan={planData}     // or whatever object has .sessions
+  selectedDate={selectedDate}
+
+  />
+)}
 
       {activeTab === "PLAN" && (
         <PlanView
@@ -501,6 +543,17 @@ export default function PlanUsageHistory({
           bookId={bookId}  // The key: pass the bookId for chapters
         />
       )}   
+
+      {activeTab === "AGGPROGVIEW" && (
+        <AggregatorProgressView
+          db={db}
+          userId={userId}
+          planId={planId}
+          readingStats={readingStats}
+          bookId={bookId}  // The key: pass the bookId for chapters
+        />
+      )}   
+
 
 
       {activeTab === "LIBRARY3" && (
