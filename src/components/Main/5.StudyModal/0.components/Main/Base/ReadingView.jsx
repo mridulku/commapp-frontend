@@ -1,8 +1,12 @@
 // File: ReadingView.jsx
+
 import React, { useEffect, useState, useRef } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import axios from "axios";
-import { fetchReadingTime, incrementReadingTime } from "../../../../../../store/readingSlice";
+import {
+  fetchReadingTime,
+  incrementReadingTime,
+} from "../../../../../../store/readingSlice";
 import { setCurrentIndex } from "../../../../../../store/planSlice";
 
 // Utility: format mm:ss
@@ -15,8 +19,8 @@ function formatTime(totalSeconds) {
 // chunk by paragraphs
 function chunkHtmlByParagraphs(htmlString, chunkSize = 180) {
   // remove / interpret any literal "\n"
-  let sanitized = htmlString.replace(/\\n/g, "\n");  // if your data has literal backslash-n
-  sanitized = sanitized.replace(/\r?\n/g, " ");      // turn real newlines into spaces
+  let sanitized = htmlString.replace(/\\n/g, "\n"); // if your data has literal backslash-n
+  sanitized = sanitized.replace(/\r?\n/g, " "); // turn real newlines into spaces
 
   let paragraphs = sanitized
     .split(/<\/p>/i)
@@ -54,8 +58,8 @@ function chunkHtmlByParagraphs(htmlString, chunkSize = 180) {
  * ReadingView
  * -----------
  * Props:
- *  - activity
- *  - onNeedsRefreshStatus (optional callback) => notify parent (StageManager) that
+ *  - activity (object with .activityId, .subChapterId, etc.)
+ *  - onNeedsRefreshStatus (optional callback) => notify parent that
  *    we need to re-fetch subchapter status if something changed
  */
 export default function ReadingView({ activity, onNeedsRefreshStatus }) {
@@ -63,7 +67,11 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
     return <div style={styles.outerContainer}>No activity provided.</div>;
   }
 
-  const subChapterId = activity.subChapterId;
+  // We assume the activity object has these fields:
+  // - subChapterId: used for reading-time usage
+  // - activityId:   used for marking completion
+  const { subChapterId, activityId } = activity;
+
   const userId = useSelector((state) => state.auth?.userId || "demoUser");
   const planId = useSelector((state) => state.plan?.planDoc?.id);
   const currentIndex = useSelector((state) => state.plan?.currentIndex);
@@ -104,7 +112,9 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
 
     async function fetchSubChapterData() {
       try {
-        const res = await axios.get(`http://localhost:3001/api/subchapters/${subChapterId}`);
+        const res = await axios.get(
+          `http://localhost:3001/api/subchapters/${subChapterId}`
+        );
         setSubChapter(res.data);
       } catch (err) {
         console.error("Failed to fetch subchapter:", err);
@@ -157,7 +167,12 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
         if (lumps > 0) {
           const totalToPost = lumps * 15;
           const resultAction = await dispatch(
-            incrementReadingTime({ userId, planId, subChapterId, increment: totalToPost })
+            incrementReadingTime({
+              userId,
+              planId,
+              subChapterId,
+              increment: totalToPost,
+            })
           );
           if (incrementReadingTime.fulfilled.match(resultAction)) {
             const newTotal = resultAction.payload || serverTime + totalToPost;
@@ -170,7 +185,15 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
       }
     }, 1000);
     return () => clearInterval(heartbeatId);
-  }, [leftoverSec, lastSnapMs, dispatch, userId, planId, subChapterId, serverTime]);
+  }, [
+    leftoverSec,
+    lastSnapMs,
+    dispatch,
+    userId,
+    planId,
+    subChapterId,
+    serverTime,
+  ]);
 
   const displayedTime = serverTime + leftoverSec;
 
@@ -191,28 +214,35 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
     const readingEndTime = new Date();
 
     try {
-      // Make the POST call to record reading
+      // 1) Make the POST call to record reading usage
       await axios.post("http://localhost:3001/api/submitReading", {
         userId,
         subChapterId,
         readingStartTime: readingStartRef.current?.toISOString(),
         readingEndTime: readingEndTime.toISOString(),
         planId: planId ?? null,
-        timestamp: new Date().toISOString(), // or any date you want
+        timestamp: new Date().toISOString(), // or any date
       });
 
-      // If finishing reading might unlock the next stage *within the same subchapter*,
+      // 2) Mark the activity's completionStatus in the plan by activityId
+      await axios.post("http://localhost:3001/api/markActivityCompletion", {
+        userId,
+        planId,
+        activityId,
+        completionStatus: "complete",
+      });
+
+      // 3) If finishing reading might unlock the next stage *within the same subchapter*,
       // then we can tell StageManager to re-fetch subchapter-status.
       if (typeof onNeedsRefreshStatus === "function") {
         onNeedsRefreshStatus();
       }
 
-      // Once submission is successful, move to next index
+      // 4) Once submission is successful, move to the next activity
       dispatch(setCurrentIndex(currentIndex + 1));
     } catch (err) {
       console.error("Error submitting reading data:", err);
       // Decide if you still want to move on or handle errors differently
-      // But let's assume we still proceed for now:
       if (typeof onNeedsRefreshStatus === "function") {
         onNeedsRefreshStatus();
       }
