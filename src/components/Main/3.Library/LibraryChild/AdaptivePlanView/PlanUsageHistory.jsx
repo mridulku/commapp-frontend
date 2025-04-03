@@ -14,6 +14,9 @@ import TimelineView2 from "./TimelineView2";
 import TimelineView3 from "./TimelineView3";
 
 import PlanView from "./PlanView";
+import PlanView2 from "./PlanView2";
+
+
 
 import LibraryView from "./LibraryView"; // <-- NEW import
 import LibraryView2 from "./LibraryView2"; // <-- NEW import
@@ -387,6 +390,13 @@ export default function PlanUsageHistory({
         <div style={tabStyle(activeTab === "PLAN")} onClick={() => setActiveTab("PLAN")}>
           Plan View
         </div>
+
+        <div style={tabStyle(activeTab === "PLAN2")} onClick={() => setActiveTab("PLAN2")}>
+          Plan View 2
+        </div>
+
+
+
         <div style={tabStyle(activeTab === "LIBRARY")} onClick={() => setActiveTab("LIBRARY")}>
           Library
         </div>
@@ -484,6 +494,16 @@ export default function PlanUsageHistory({
 
       {activeTab === "PLAN" && (
         <PlanView
+          planId={planId}
+          userId={userId}
+          plan={planData}
+          readingStats={readingStats}
+          colorScheme={colorScheme}
+        />
+      )}
+
+      {activeTab === "PLAN2" && (
+        <PlanView2
           planId={planId}
           userId={userId}
           plan={planData}

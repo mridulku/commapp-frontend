@@ -48,7 +48,7 @@ function getStageNumberAndLabel(act) {
   const number = stageMap[sKey] || 0;
 
   if (!number) {
-    // fallback if quizStage is unknown => "Quiz"
+    // fallback if quizStage is unknown => just "Quiz"
     return "Quiz";
   }
 
@@ -146,6 +146,45 @@ function TimePill({ minutes = 0 }) {
 }
 
 /**
+ * completionStatusPill
+ * - Renders a small pill for "deferred" or "complete" statuses
+ */
+function completionStatusPill(status) {
+  // If not present, do nothing
+  if (!status) return null;
+
+  let label = "";
+  let bgColor = "#424242"; // fallback color
+
+  if (status === "deferred") {
+    label = "Deferred";
+    bgColor = "#BDBDBD"; // a gray pill
+  } else if (status === "complete") {
+    label = "Complete";
+    bgColor = "#66BB6A"; // a green pill
+  } else {
+    // If it's some other unexpected value, do nothing
+    return null;
+  }
+
+  return (
+    <Box
+      sx={{
+        mt: 0.5,
+        px: 0.8,
+        py: 0.3,
+        borderRadius: "0.2rem",
+        fontSize: "0.7rem",
+        bgcolor: bgColor,
+        color: "#000",
+      }}
+    >
+      {label}
+    </Box>
+  );
+}
+
+/**
  * formatMinutes(totalMin)
  * => "1h 20m" or "45m"
  */
@@ -190,6 +229,7 @@ function TruncateTooltip({ text, sx }) {
  * - "Stage 1: Reading" or "Stage 2: Remember" or "Stage 3: Understand" ...
  * - aggregatorTask => pill if quiz, none if reading
  * - aggregatorStatus="locked" => translucent lock overlay
+ * - completionStatus => shows a small pill if "deferred" or "complete"
  */
 function ActivityList({ activities, currentIndex, onSelectAct }) {
   return (
@@ -224,6 +264,9 @@ function ActivityList({ activities, currentIndex, onSelectAct }) {
         if (aggregatorStatus === "locked") {
           lockedOverlay = aggregatorLockedOverlay();
         }
+
+        // 4) completionStatus pill
+        const completionStatusNode = completionStatusPill(act.completionStatus);
 
         return (
           <Box
@@ -266,8 +309,11 @@ function ActivityList({ activities, currentIndex, onSelectAct }) {
                 sx={{ fontSize: "0.75rem", mt: 0.5 }}
               />
 
-              {/* aggregatorTask => pill */}
+              {/* aggregatorTask => pill (only if quiz) */}
               {aggregatorTaskNode && <Box sx={{ mt: 0.5 }}>{aggregatorTaskNode}</Box>}
+
+              {/* completionStatus => pill */}
+              {completionStatusNode && <Box sx={{ mt: 0.5 }}>{completionStatusNode}</Box>}
 
               {/* Time pill */}
               <TimePill minutes={minutes} />
