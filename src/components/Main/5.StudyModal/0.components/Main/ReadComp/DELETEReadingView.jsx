@@ -72,6 +72,8 @@ export default function ReadingView({ activity }) {
   const [showDebug, setShowDebug] = useState(false);
   const prevSubChapterId = useRef(null);
 
+
+
   // 1) On subChapter change => fetch
   useEffect(() => {
     if (prevSubChapterId.current && prevSubChapterId.current !== subChapterId) {

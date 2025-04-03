@@ -91,6 +91,9 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
   const [showDebug, setShowDebug] = useState(false);
   const prevSubChapterId = useRef(null);
 
+  console.log(`Activity '${activityId}' marked deferred!`);
+
+
   // 1) On subChapter change => fetch subchapter + usage
   useEffect(() => {
     if (prevSubChapterId.current && prevSubChapterId.current !== subChapterId) {

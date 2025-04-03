@@ -352,6 +352,7 @@ export default function StageManager({ examId, activity, userId }) {
 
           {subView === "activity" && (
             <ActivityView
+              activity={activity}
               mode={mode}
               quizStage={tabKey}
               examId={effectiveExamId}

@@ -17,6 +17,7 @@ import ReviseComponent from "../RevComp/ReviseComponent";
  *  - onQuizComplete, onQuizFail, onRevisionDone
  */
 export default function ActivityView({
+  activity,
   mode,
   quizStage,
   examId,
@@ -33,6 +34,7 @@ export default function ActivityView({
       {/* 1) No quiz => show first quiz attempt */}
       {mode === "NO_QUIZ_YET" && (
         <QuizComponent
+           activity={activity}
           userId={userId}
           planId={planId}
           quizStage={quizStage}
@@ -54,6 +56,7 @@ export default function ActivityView({
       {/* 3) If need revision => show ReviseComponent */}
       {mode === "NEED_REVISION" && lastQuizAttempt && (
         <ReviseComponent
+        activity={activity}
           userId={userId}
           planId={planId}
           quizStage={quizStage}
@@ -67,6 +70,7 @@ export default function ActivityView({
       {/* 4) If revision done => user can retake quiz */}
       {mode === "CAN_TAKE_NEXT_QUIZ" && lastQuizAttempt && (
         <QuizComponent
+        activity={activity}
           userId={userId}
           planId={planId}
           quizStage={quizStage}
