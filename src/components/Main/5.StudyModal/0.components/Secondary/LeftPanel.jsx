@@ -1,5 +1,4 @@
 // File: LeftPanel.jsx
-
 import React, { useEffect, useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { setCurrentIndex } from "../../../../../store/planSlice";
@@ -30,14 +29,11 @@ import LockIcon from "@mui/icons-material/Lock";
  *   Otherwise fallback => "Quiz"
  */
 function getStageNumberAndLabel(act) {
-  // Convert .type to lowerCase so we consistently handle "read"/"quiz"
   const lowerType = (act.type || "").toLowerCase();
-
   if (lowerType === "read") {
     return "Stage 1: Reading";
   }
 
-  // If it's quiz, figure out which stage number
   const stageMap = {
     remember: 2,
     understand: 3,
@@ -46,10 +42,8 @@ function getStageNumberAndLabel(act) {
   };
   const sKey = (act.quizStage || "").toLowerCase();
   const number = stageMap[sKey] || 0;
-
   if (!number) {
-    // fallback if quizStage is unknown => just "Quiz"
-    return "Quiz";
+    return "Quiz"; // fallback if unknown
   }
 
   const label = sKey.charAt(0).toUpperCase() + sKey.slice(1);
@@ -87,7 +81,7 @@ function aggregatorTaskPill(taskLabel) {
         py: 0.3,
         borderRadius: "0.2rem",
         fontSize: "0.7rem",
-        bgcolor: "#FFA726", // orange pill
+        bgcolor: "#FFA726", // orange
         color: "#000",
       }}
     >
@@ -99,7 +93,7 @@ function aggregatorTaskPill(taskLabel) {
 /**
  * aggregatorLockedOverlay()
  * - Semi-transparent box with a lock icon,
- *   BUT pointerEvents="none" => user can still click the underlying item
+ *   pointerEvents="none" so user can still click underlying item
  */
 function aggregatorLockedOverlay() {
   return (
@@ -115,7 +109,7 @@ function aggregatorLockedOverlay() {
         alignItems: "center",
         justifyContent: "center",
         borderRadius: "4px",
-        pointerEvents: "none", // do NOT block clicks
+        pointerEvents: "none",
       }}
     >
       <LockIcon sx={{ color: "#fff", opacity: 0.8, fontSize: 30 }} />
@@ -124,7 +118,7 @@ function aggregatorLockedOverlay() {
 }
 
 /**
- * TimePill => "5m" bubble
+ * TimePill => small "5m" bubble
  */
 function TimePill({ minutes = 0 }) {
   return (
@@ -147,24 +141,21 @@ function TimePill({ minutes = 0 }) {
 
 /**
  * completionStatusPill
- * - Renders a small pill for "deferred" or "complete" statuses
+ * - Renders small pill for "deferred" or "complete"
  */
 function completionStatusPill(status) {
-  // If not present, do nothing
   if (!status) return null;
-
   let label = "";
-  let bgColor = "#424242"; // fallback color
+  let bgColor = "#424242";
 
   if (status === "deferred") {
     label = "Deferred";
-    bgColor = "#BDBDBD"; // a gray pill
+    bgColor = "#BDBDBD"; // gray
   } else if (status === "complete") {
     label = "Complete";
-    bgColor = "#66BB6A"; // a green pill
+    bgColor = "#66BB6A"; // green
   } else {
-    // If it's some other unexpected value, do nothing
-    return null;
+    return null; // unknown
   }
 
   return (
@@ -182,20 +173,6 @@ function completionStatusPill(status) {
       {label}
     </Box>
   );
-}
-
-/**
- * formatMinutes(totalMin)
- * => "1h 20m" or "45m"
- */
-function formatMinutes(totalMin) {
-  if (!totalMin) return "0m";
-  const hours = Math.floor(totalMin / 60);
-  const mins = totalMin % 60;
-  if (hours > 0) {
-    return `${hours}h ${mins}m`;
-  }
-  return `${mins}m`;
 }
 
 /**
@@ -225,11 +202,6 @@ function TruncateTooltip({ text, sx }) {
 /**
  * ActivityList
  * -------------
- * - Renders each activity as a card
- * - "Stage 1: Reading" or "Stage 2: Remember" or "Stage 3: Understand" ...
- * - aggregatorTask => pill if quiz, none if reading
- * - aggregatorStatus="locked" => translucent lock overlay
- * - completionStatus => shows a small pill if "deferred" or "complete"
  */
 function ActivityList({ activities, currentIndex, onSelectAct }) {
   return (
@@ -238,19 +210,18 @@ function ActivityList({ activities, currentIndex, onSelectAct }) {
         const isSelected = act.flatIndex === currentIndex;
         const { bgColor, textColor } = getActivityStyle(isSelected);
 
-        // 1) Stage label
+        // Stage label
         const stageLabel = getStageNumberAndLabel(act);
 
-        // 2) Basic info
+        // Basic info
         const chapterName = act.chapterName || "No Chapter";
         const subChapterName = act.subChapterName || "No Subchapter";
         const minutes = act.timeNeeded || 0;
 
-        // 3) aggregator fields
+        // aggregator fields
         const aggregatorTask = act.aggregatorTask || "";
         const aggregatorStatus = (act.aggregatorStatus || "").toLowerCase();
 
-        // Convert the activity type to lowercase for consistency
         const lowerType = (act.type || "").toLowerCase();
 
         // aggregatorTask => skip if reading
@@ -259,13 +230,13 @@ function ActivityList({ activities, currentIndex, onSelectAct }) {
           aggregatorTaskNode = aggregatorTaskPill(aggregatorTask);
         }
 
-        // aggregatorStatus => "locked" => show overlay
+        // aggregatorStatus => locked => overlay
         let lockedOverlay = null;
         if (aggregatorStatus === "locked") {
           lockedOverlay = aggregatorLockedOverlay();
         }
 
-        // 4) completionStatus pill
+        // completionStatus => pill
         const completionStatusNode = completionStatusPill(act.completionStatus);
 
         return (
@@ -275,7 +246,7 @@ function ActivityList({ activities, currentIndex, onSelectAct }) {
               position: "relative",
               mb: 0.8,
               borderRadius: "4px",
-              overflow: "hidden", // for the overlay
+              overflow: "hidden",
             }}
           >
             <ListItemButton
@@ -291,25 +262,25 @@ function ActivityList({ activities, currentIndex, onSelectAct }) {
               }}
               onClick={() => onSelectAct(act.flatIndex)}
             >
-              {/* 1) Chapter name */}
+              {/* Chapter */}
               <TruncateTooltip
                 text={`Chapter: ${chapterName}`}
                 sx={{ fontSize: "0.8rem", fontWeight: 600 }}
               />
 
-              {/* 2) Subchapter name */}
+              {/* Subchapter */}
               <TruncateTooltip
                 text={`Subchapter: ${subChapterName}`}
                 sx={{ fontSize: "0.75rem", mt: 0.5 }}
               />
 
-              {/* 3) Stage label => "Stage 1: Reading" etc. */}
+              {/* Stage Label */}
               <TruncateTooltip
                 text={stageLabel}
                 sx={{ fontSize: "0.75rem", mt: 0.5 }}
               />
 
-              {/* aggregatorTask => pill (only if quiz) */}
+              {/* aggregatorTask => pill */}
               {aggregatorTaskNode && <Box sx={{ mt: 0.5 }}>{aggregatorTaskNode}</Box>}
 
               {/* completionStatus => pill */}
@@ -319,7 +290,7 @@ function ActivityList({ activities, currentIndex, onSelectAct }) {
               <TimePill minutes={minutes} />
             </ListItemButton>
 
-            {/* If locked => translucent overlay w/ lock icon (non-blocking) */}
+            {/* locked overlay */}
             {lockedOverlay}
           </Box>
         );
@@ -351,7 +322,7 @@ export default function LeftPanel({
 
   const { planType = "adaptive", sessions = [] } = planDoc;
 
-  // Sync the day with the currentIndex
+  // Sync day with currentIndex
   useEffect(() => {
     if (!flattenedActivities?.length) return;
     if (currentIndex < 0 || currentIndex >= flattenedActivities.length) return;
@@ -369,21 +340,52 @@ export default function LeftPanel({
     setSelectedDayIndex(val);
   }
 
-  // For displaying total day time + progress
+  // Render a small progress bar for "Today's Progress" based on
+  // # of deferred/complete vs. total
   function renderDayStats(session) {
-    const totalMinutes =
-      session.activities?.reduce((acc, x) => acc + (x.timeNeeded || 0), 0) || 0;
-    const totalTimeStr = formatMinutes(totalMinutes);
+    const { activities = [] } = session;
+    const total = activities.length;
+    let doneCount = 0;
+    activities.forEach((act) => {
+      const cs = (act.completionStatus || "").toLowerCase();
+      if (cs === "deferred" || cs === "complete") {
+        doneCount++;
+      }
+    });
 
-    // example placeholder
-    const userProgress = 40;
+    const progressPct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
+
+    // We'll show a small bar + text
     return (
       <Box sx={{ color: "#fff", mb: 2, ml: 1 }}>
-        <Typography variant="body2" sx={{ fontSize: "0.75rem" }}>
-          <strong>Today's Total Time:</strong> {totalTimeStr}
+        <Typography variant="body2" sx={{ fontSize: "0.75rem", mb: 0.5 }}>
+          <strong>Today's Progress</strong>
         </Typography>
-        <Typography variant="body2" sx={{ fontSize: "0.75rem" }}>
-          <strong>Today's Progress:</strong> {userProgress}%
+        {/* progress bar container */}
+        <Box
+          sx={{
+            position: "relative",
+            width: "80%",
+            height: "8px",
+            bgcolor: "#444",
+            borderRadius: "4px",
+            overflow: "hidden",
+          }}
+        >
+          <Box
+            sx={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              bottom: 0,
+              width: `${progressPct}%`,
+              bgcolor: "#66BB6A",
+              borderRadius: "4px",
+            }}
+          />
+        </Box>
+        <Typography variant="body2" sx={{ fontSize: "0.75rem", mt: 0.5 }}>
+          {progressPct}%
         </Typography>
       </Box>
     );
