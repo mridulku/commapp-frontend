@@ -7,7 +7,7 @@ import {
 } from "firebase/firestore";
 import axios from "axios";
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button } from "@mui/material";
-import HistoryView from "../../../5.StudyModal/0.components/Main/Base/HistoryView";
+import HistoryView from "../../../../../5.StudyModal/0.components/Main/Base/HistoryView";
 
 /** The quiz stages, in the forced order: remember → understand → apply → analyze */
 const QUIZ_STAGES = ["remember", "understand", "apply", "analyze"];
@@ -16,7 +16,7 @@ const QUIZ_STAGES = ["remember", "understand", "apply", "analyze"];
 function parseNumericPrefix(title = "") {
   const match = title.trim().match(/^(\d+(\.\d+){0,2})/);
   if (match) {
-    return parseFloat(match[1]); 
+    return parseFloat(match[1]);
   }
   return Infinity;
 }
@@ -34,19 +34,22 @@ function formatTimeSpent(totalMinutes) {
 }
 
 /**
- * LibraryView2
+ * LibraryView3
  * ------------
- * - Subchapter
- * - Total Concepts
- * - Reading (with lock logic = always “unlocked,” but color-coded for done/in-progress/not-started)
- * - Remember
- * - Understand
- * - Apply
- * - Analyze
+ * Extends LibraryView2 with new logic:
+ *    1) Still shows subchapters in a table with Reading/Remember/Understand/Apply/Analyze columns.
+ *    2) Creates a "Tasks" concept:
+ *       - For each stage, figure out the next immediate task if not 100% done (READ, QUIZ1, REVISION1, QUIZ2, REVISION2, ...).
+ *       - We figure out which one is "active" based on chain logic (reading done => unlock remember => done => unlock understand => etc.).
+ *    3) Adds an info button in the subchapter cell that opens a modal listing all 5 stages plus:
+ *       - Next task label for each stage
+ *       - Whether it’s currently "active"
+ *       - Whether no more tasks are needed (stage is 100% done)
  *
- * We enforce the chain: Reading → Remember → Understand → Apply → Analyze
+ * This version does NOT limit you to 4 attempts. It can handle an unbounded
+ * quiz→revision→quiz→revision chain, stopping only once the user hits 100% mastery.
  */
-export default function LibraryView2({
+export default function LibraryView3({
   db,
   userId,
   planId,
@@ -60,26 +63,31 @@ export default function LibraryView2({
   /**
    * quizDataMap[subChId] = {
    *   maxConceptsSoFar: number,
-   *   remember: { ...dataForThatStage },
+   *   remember: {
+   *     quizAttempts:        array of quiz attempts,
+   *     revisionAttempts:    array of revision attempts,
+   *     subchapterConcepts:  array,
+   *     allAttemptsConceptStats: array,
+   *     timeSpentMinutes: number
+   *   },
    *   understand: { ... },
-   *   apply: { ... },
-   *   analyze: { ... }
-   * }
-   *
-   * dataForThatStage => {
-   *   quizAttempts, revisionAttempts, subchapterConcepts, allAttemptsConceptStats,
-   *   timeSpentMinutes: number
+   *   apply:      { ... },
+   *   analyze:    { ... }
    * }
    */
   const [quizDataMap, setQuizDataMap] = useState({});
 
-  // For local <HistoryView> modal
+  // For the existing <HistoryView> modal (like LibraryView2)
   const [modalOpen, setModalOpen] = useState(false);
   const [modalSubChId, setModalSubChId] = useState("");
   const [modalStage, setModalStage] = useState("");
 
+  // "Task Info" modal
+  const [taskInfoOpen, setTaskInfoOpen] = useState(false);
+  const [taskInfoSubChId, setTaskInfoSubChId] = useState("");
+
   // ----------------------------------------------
-  // On mount => fetch chapters => subchapters => quiz data
+  // 1) On mount => fetch chapters => subchapters => quiz data
   // ----------------------------------------------
   useEffect(() => {
     if (!db || !bookId || !userId || !planId) return;
@@ -97,7 +105,7 @@ export default function LibraryView2({
           c.subchapters.forEach((s) => allSubChIds.push(s.id));
         });
 
-        // For each subCh => fetch for each QUIZ_STAGE
+        // For each subCh => fetch data for each QUIZ_STAGE
         const tasks = [];
         for (let scId of allSubChIds) {
           for (let stage of QUIZ_STAGES) {
@@ -107,23 +115,23 @@ export default function LibraryView2({
         return Promise.all(tasks);
       })
       .catch((err) => {
-        console.error("LibraryView => fetchChapters error:", err);
+        console.error("LibraryView3 => fetchChapters error:", err);
         setError(err.message || "Failed to fetch chapters/subchapters.");
       })
       .finally(() => {
         setLoading(false);
       });
-  // eslint-disable-next-line
+    // eslint-disable-next-line
   }, [db, bookId, userId, planId]);
 
   // ----------------------------------------------
-  // fetchChaptersWithSubchapters
+  // 2) fetchChaptersWithSubchapters
   // ----------------------------------------------
-  async function fetchChaptersWithSubchapters(bookId) {
+  async function fetchChaptersWithSubchapters(bookIdParam) {
     const chaptersArr = [];
 
-    // 1) chapters
-    const chapQ = query(collection(db, "chapters_demo"), where("bookId", "==", bookId));
+    // a) fetch chapters
+    const chapQ = query(collection(db, "chapters_demo"), where("bookId", "==", bookIdParam));
     const chapSnap = await getDocs(chapQ);
     for (const cDoc of chapSnap.docs) {
       const cData = cDoc.data();
@@ -134,7 +142,7 @@ export default function LibraryView2({
       });
     }
 
-    // 2) subchapters
+    // b) fetch subchapters
     for (let chapObj of chaptersArr) {
       const subQ = query(collection(db, "subchapters_demo"), where("chapterId", "==", chapObj.id));
       const subSnap = await getDocs(subQ);
@@ -146,27 +154,102 @@ export default function LibraryView2({
           name: sData.title || sData.name || `SubCh ${sDoc.id}`,
         });
       }
+      // sort subchapters by numeric prefix
       subs.sort((a, b) => parseNumericPrefix(a.name) - parseNumericPrefix(b.name));
       chapObj.subchapters = subs;
     }
 
-    // 3) sort chapters
+    // c) sort chapters
     chaptersArr.sort((a, b) => parseNumericPrefix(a.title) - parseNumericPrefix(b.title));
     return chaptersArr;
   }
 
+  function computePassCount(allAttemptsConceptStats) {
+    if (!allAttemptsConceptStats?.length) return 0;
+    const passedSet = new Set();
+    for (let attempt of allAttemptsConceptStats) {
+      for (let cs of (attempt.conceptStats || [])) {
+        if (cs.passOrFail === "PASS") {
+          passedSet.add(cs.conceptName);
+        }
+      }
+    }
+    return passedSet.size;
+  }
+
+
+  function getReadingStatus(readObj) {
+    if (!readObj) {
+      return {
+        overall: "not-started",
+        style: { backgroundColor: "#ffcccc" },
+        completionDateStr: "",
+        timeSpentStr: "0 min",
+      };
+    }
+    const { totalTimeSpentMinutes, completionDate } = readObj;
+    let dateStr = "";
+    if (completionDate instanceof Date) {
+      dateStr = completionDate.toLocaleDateString();
+    }
+    const timeStr = formatTimeSpent(totalTimeSpentMinutes || 0);
+
+    if (completionDate instanceof Date) {
+      // done
+      return {
+        overall: "done",
+        style: { backgroundColor: "#ccffcc" },
+        completionDateStr: dateStr,
+        timeSpentStr: timeStr,
+      };
+    } else if ((totalTimeSpentMinutes || 0) > 0) {
+      // in-progress
+      return {
+        overall: "in-progress",
+        style: { backgroundColor: "#fff8b3" },
+        completionDateStr: dateStr,
+        timeSpentStr: timeStr,
+      };
+    }
+    // else => not started
+    return {
+      overall: "not-started",
+      style: { backgroundColor: "#ffcccc" },
+      completionDateStr: "",
+      timeSpentStr: "0 min",
+    };
+  }
+
+
+  function getQuizStageStatus(stageData) {
+    if (!stageData) {
+      return { overall: "not-started", masteryPct: 0, timeStr: "0 min" };
+    }
+    const totalConcepts = stageData.subchapterConcepts?.length || 0;
+    const passCount = computePassCount(stageData.allAttemptsConceptStats);
+    const masteryPct = totalConcepts === 0 ? 0 : (passCount / totalConcepts) * 100;
+    const timeStr = formatTimeSpent(stageData.timeSpentMinutes || 0);
+
+    if (masteryPct >= 100) {
+      return { overall: "done", masteryPct, timeStr };
+    } else if (masteryPct > 0 || (stageData.timeSpentMinutes || 0) > 0) {
+      return { overall: "in-progress", masteryPct, timeStr };
+    }
+    return { overall: "not-started", masteryPct, timeStr };
+  }
+
   // ----------------------------------------------
-  // fetchQuizData(subChId, stage)
-  // => calls aggregator + build concept stats
+  // 3) fetchQuizData(subChId, stage)
+  //    => calls aggregator + build concept stats
   // ----------------------------------------------
   async function fetchQuizData(subChId, quizStage) {
     try {
+      // If we've already loaded data for this subCh & stage => skip
       if (quizDataMap[subChId]?.[quizStage]) {
-        // already loaded
         return;
       }
 
-      // 1) getQuiz attempts
+      // a) getQuiz attempts
       const quizRes = await axios.get("http://localhost:3001/api/getQuiz", {
         params: {
           userId,
@@ -177,7 +260,7 @@ export default function LibraryView2({
       });
       const quizArr = quizRes?.data?.attempts || [];
 
-      // 2) getRevisions
+      // b) getRevisions
       const revRes = await axios.get("http://localhost:3001/api/getRevisions", {
         params: {
           userId,
@@ -188,25 +271,26 @@ export default function LibraryView2({
       });
       const revArr = revRes?.data?.revisions || [];
 
-      // 3) subchapterConcepts
+      // c) subchapterConcepts
       const conceptRes = await axios.get("http://localhost:3001/api/getSubchapterConcepts", {
         params: { subchapterId: subChId },
       });
       const conceptArr = conceptRes?.data?.concepts || [];
 
-      // 4) build concept stats
+      // d) build concept stats
       const allAttemptsConceptStats = buildAllAttemptsConceptStats(quizArr, conceptArr);
 
-      // 5) aggregator endpoints => quiz + revise => total
+      // e) aggregator endpoints => quiz + revise => total
       const quizSeconds   = await fetchCumulativeQuizTime(subChId, quizStage);
       const reviseSeconds = await fetchCumulativeReviseTime(subChId, quizStage);
       const totalMinutes = (quizSeconds + reviseSeconds) / 60.0;
 
-      // store
+      // f) store in quizDataMap
       setQuizDataMap((prev) => {
         const copy = { ...prev };
-        if (!copy[subChId]) copy[subChId] = { maxConceptsSoFar: 0 };
-
+        if (!copy[subChId]) {
+          copy[subChId] = { maxConceptsSoFar: 0 };
+        }
         copy[subChId][quizStage] = {
           quizAttempts: quizArr,
           revisionAttempts: revArr,
@@ -215,6 +299,7 @@ export default function LibraryView2({
           timeSpentMinutes: totalMinutes,
         };
 
+        // track max concept count
         const cLen = conceptArr.length;
         if (cLen > copy[subChId].maxConceptsSoFar) {
           copy[subChId].maxConceptsSoFar = cLen;
@@ -222,11 +307,10 @@ export default function LibraryView2({
         return copy;
       });
     } catch (err) {
-      console.error("LibraryView => fetchQuizData error:", err);
+      console.error("LibraryView3 => fetchQuizData error:", err);
     }
   }
 
-  // aggregator
   async function fetchCumulativeQuizTime(subChId, quizStage) {
     try {
       const url = `http://localhost:3001/api/cumulativeQuizTime?userId=${userId}&planId=${planId}&subChapterId=${subChId}&quizStage=${quizStage}`;
@@ -299,8 +383,8 @@ export default function LibraryView2({
     return statsArray;
   }
 
-  // local modal
-  const [modalContent, setModalContent] = useState(null);
+  // --------------- MODALS ---------------
+  // 1) Quiz HistoryView modal
   function handleOpenModal(subChId, stage) {
     setModalSubChId(subChId);
     setModalStage(stage);
@@ -332,12 +416,20 @@ export default function LibraryView2({
     );
   }
 
-  // ----------------------------------------------
-  // RENDER
-  // ----------------------------------------------
+  // 2) "Task Info" modal
+  function handleOpenTaskInfo(subChId) {
+    setTaskInfoSubChId(subChId);
+    setTaskInfoOpen(true);
+  }
+  function handleCloseTaskInfo() {
+    setTaskInfoOpen(false);
+    setTaskInfoSubChId("");
+  }
+
+  // --------------- RENDER ---------------
   return (
     <div style={styles.container}>
-      <h2 style={styles.heading}>Library View 2 - Stage Logic</h2>
+      <h2 style={styles.heading}>Library View 3 - Task Generation & Stages (Unlimited Attempts)</h2>
 
       {loading && <p>Loading data...</p>}
       {error && <p style={{ color: "red" }}>{error}</p>}
@@ -352,11 +444,12 @@ export default function LibraryView2({
           chapter={ch}
           readingStats={readingStats}
           quizDataMap={quizDataMap}
-          onOpenModal={handleOpenModal}
+          onOpenStageModal={handleOpenModal}
+          onOpenTaskInfoModal={handleOpenTaskInfo}
         />
       ))}
 
-      {/* Local modal => history */}
+      {/* 1) Quiz history modal */}
       {modalOpen && (
         <Dialog
           open={modalOpen}
@@ -378,22 +471,164 @@ export default function LibraryView2({
           </DialogActions>
         </Dialog>
       )}
+
+      {/* 2) "Task Info" modal => Reading + Quiz stages chain */}
+      {taskInfoOpen && (
+        <Dialog
+          open={taskInfoOpen}
+          onClose={handleCloseTaskInfo}
+          fullWidth
+          maxWidth="md"
+        >
+          <DialogTitle>Subchapter Task Info – {taskInfoSubChId}</DialogTitle>
+          <DialogContent dividers>
+            {renderTaskInfoContent(taskInfoSubChId)}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseTaskInfo} variant="contained" color="primary">
+              Close
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
     </div>
   );
+
+  // --------------- RENDER TASK INFO ---------------
+  function renderTaskInfoContent(subChId) {
+    if (!subChId) return <p>No subchapter selected.</p>;
+
+    // 1) read statuses
+    const rStatus = getReadingStatus(readingStats[subChId]);
+    const rememberData   = quizDataMap[subChId]?.remember;
+    const rememberStatus = getQuizStageStatus(rememberData);
+    const understandData = quizDataMap[subChId]?.understand;
+    const understandStatus = getQuizStageStatus(understandData);
+    const applyData = quizDataMap[subChId]?.apply;
+    const applyStatus = getQuizStageStatus(applyData);
+    const analyzeData = quizDataMap[subChId]?.analyze;
+    const analyzeStatus = getQuizStageStatus(analyzeData);
+
+    // 2) lock logic
+    const rememberLocked    = (rStatus.overall !== "done");
+    const understandLocked  = (rememberStatus.overall !== "done");
+    const applyLocked       = (understandStatus.overall !== "done");
+    const analyzeLocked     = (applyStatus.overall !== "done");
+
+    // 3) Next tasks
+    const readingTaskInfo    = getReadingTaskInfo(rStatus);
+    const rememberTaskInfo   = getQuizStageTaskInfo(rememberData, rememberStatus);
+    const understandTaskInfo = getQuizStageTaskInfo(understandData, understandStatus);
+    const applyTaskInfo      = getQuizStageTaskInfo(applyData, applyStatus);
+    const analyzeTaskInfo    = getQuizStageTaskInfo(analyzeData, analyzeStatus);
+
+    // 4) Which stage is currently "active"?
+    let readingIsActive      = false;
+    let rememberIsActive     = false;
+    let understandIsActive   = false;
+    let applyIsActive        = false;
+    let analyzeIsActive      = false;
+
+    if (rStatus.overall !== "done") {
+      readingIsActive = true;
+    } else if (rememberStatus.overall !== "done" && !rememberLocked) {
+      rememberIsActive = true;
+    } else if (understandStatus.overall !== "done" && !understandLocked) {
+      understandIsActive = true;
+    } else if (applyStatus.overall !== "done" && !applyLocked) {
+      applyIsActive = true;
+    } else if (analyzeStatus.overall !== "done" && !analyzeLocked) {
+      analyzeIsActive = true;
+    }
+
+    const rows = [
+      {
+        stageLabel: "Reading",
+        locked: false, // reading is never locked
+        status: rStatus.overall,
+        nextTaskLabel: readingTaskInfo.taskLabel,
+        hasTask: readingTaskInfo.hasTask,
+        isActive: readingIsActive,
+      },
+      {
+        stageLabel: "Remember",
+        locked: rememberLocked,
+        status: rememberStatus.overall,
+        nextTaskLabel: rememberTaskInfo.taskLabel,
+        hasTask: rememberTaskInfo.hasTask,
+        isActive: rememberIsActive,
+      },
+      {
+        stageLabel: "Understand",
+        locked: understandLocked,
+        status: understandStatus.overall,
+        nextTaskLabel: understandTaskInfo.taskLabel,
+        hasTask: understandTaskInfo.hasTask,
+        isActive: understandIsActive,
+      },
+      {
+        stageLabel: "Apply",
+        locked: applyLocked,
+        status: applyStatus.overall,
+        nextTaskLabel: applyTaskInfo.taskLabel,
+        hasTask: applyTaskInfo.hasTask,
+        isActive: applyIsActive,
+      },
+      {
+        stageLabel: "Analyze",
+        locked: analyzeLocked,
+        status: analyzeStatus.overall,
+        nextTaskLabel: analyzeTaskInfo.taskLabel,
+        hasTask: analyzeTaskInfo.hasTask,
+        isActive: analyzeIsActive,
+      },
+    ];
+
+    return (
+      <table style={styles.taskInfoTable}>
+        <thead>
+          <tr>
+            <th style={styles.tdCell}>Stage</th>
+            <th style={styles.tdCell}>Locked?</th>
+            <th style={styles.tdCell}>Status</th>
+            <th style={styles.tdCell}>Next Task</th>
+            <th style={styles.tdCell}>Active?</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.stageLabel}>
+              <td style={styles.tdCell}>{row.stageLabel}</td>
+              <td style={styles.tdCell}>{row.locked ? "Yes" : "No"}</td>
+              <td style={styles.tdCell}>{row.status}</td>
+              <td style={styles.tdCell}>
+                {row.hasTask ? row.nextTaskLabel : "No Task Needed"}
+              </td>
+              <td style={styles.tdCell}>
+                {row.isActive ? <strong>ACTIVE</strong> : "—"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
 }
 
-/** 
+/**
  * ChapterTable => columns:
- *   Subchapter | Total Concepts | Reading | Remember | Understand | Apply | Analyze
+ *    Subchapter | (i button) | Total Concepts | Reading | Remember | Understand | Apply | Analyze
  *
- * Lock logic: 
- *   1) Reading is never locked, but color-coded by done/in-progress/not-started
- *   2) remember locked unless Reading "done"
- *   3) understand locked unless remember "done"
- *   4) apply locked unless understand "done"
- *   5) analyze locked unless apply "done"
+ * We add a new "Task Info" button in the subchapter cell. The rest is identical
+ * chain logic for locked vs. not locked, color coding, etc.
  */
-function ChapterTable({ chapter, readingStats, quizDataMap, onOpenModal }) {
+function ChapterTable({
+  chapter,
+  readingStats,
+  quizDataMap,
+  onOpenStageModal,
+  onOpenTaskInfoModal,
+}) {
   const [expanded, setExpanded] = useState(true);
 
   return (
@@ -420,10 +655,9 @@ function ChapterTable({ chapter, readingStats, quizDataMap, onOpenModal }) {
             <tbody>
               {chapter.subchapters.map((sub) => {
                 const subChId = sub.id;
-                // 1) reading status
                 const rStatus = getReadingStatus(readingStats[subChId]);
 
-                // 2) quiz stage statuses
+                // quiz statuses
                 const rememberData = quizDataMap[subChId]?.remember;
                 const rememberStatus = getQuizStageStatus(rememberData);
                 const understandData = quizDataMap[subChId]?.understand;
@@ -433,48 +667,50 @@ function ChapterTable({ chapter, readingStats, quizDataMap, onOpenModal }) {
                 const analyzeData = quizDataMap[subChId]?.analyze;
                 const analyzeStatus = getQuizStageStatus(analyzeData);
 
-                // total concepts from subMap
                 const subMap = quizDataMap[subChId];
                 const totalConcepts = subMap?.maxConceptsSoFar || 0;
 
                 // lock logic
-                // reading => never locked
-                // remember => locked unless reading done
                 const rememberLocked = (rStatus.overall !== "done");
-                // understand => locked unless remember done
                 const understandLocked = (rememberStatus.overall !== "done");
-                // apply => locked unless understand done
-                const applyLocked = (understandStatus.overall !== "done");
-                // analyze => locked unless apply done
-                const analyzeLocked = (applyStatus.overall !== "done");
+                const applyLocked      = (understandStatus.overall !== "done");
+                const analyzeLocked    = (applyStatus.overall !== "done");
 
                 return (
                   <tr key={subChId}>
-                    <td style={styles.tdName}>{sub.name}</td>
-                    <td style={styles.tdCell}>
-                      {totalConcepts}
+                    {/* Subchapter + 'i' button => open tasks modal */}
+                    <td style={styles.tdName}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <div>{sub.name}</div>
+                        <button
+                          style={styles.infoBtn}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenTaskInfoModal(subChId);
+                          }}
+                        >
+                          i
+                        </button>
+                      </div>
                     </td>
+                    <td style={styles.tdCell}>{totalConcepts}</td>
 
                     {/* Reading */}
                     <td style={{ ...styles.tdCell, ...rStatus.style }}>
                       {renderReadingCell(rStatus)}
                     </td>
-
                     {/* Remember */}
                     <td style={renderStageCellStyle(rememberLocked, rememberStatus)}>
                       {renderQuizStageCell(subChId, "remember", rememberLocked, rememberStatus)}
                     </td>
-
                     {/* Understand */}
                     <td style={renderStageCellStyle(understandLocked, understandStatus)}>
                       {renderQuizStageCell(subChId, "understand", understandLocked, understandStatus)}
                     </td>
-
                     {/* Apply */}
                     <td style={renderStageCellStyle(applyLocked, applyStatus)}>
                       {renderQuizStageCell(subChId, "apply", applyLocked, applyStatus)}
                     </td>
-
                     {/* Analyze */}
                     <td style={renderStageCellStyle(analyzeLocked, analyzeStatus)}>
                       {renderQuizStageCell(subChId, "analyze", analyzeLocked, analyzeStatus)}
@@ -489,15 +725,12 @@ function ChapterTable({ chapter, readingStats, quizDataMap, onOpenModal }) {
     </div>
   );
 
-  // ---------------------------
-  // Reading => done/in-progress/not-started
-  // ---------------------------
+  // =========== Reading Helpers ===========
   function getReadingStatus(readObj) {
-    // If no readObj => not started
     if (!readObj) {
       return {
         overall: "not-started",
-        style: { backgroundColor: "#ffcccc" }, // pale red
+        style: { backgroundColor: "#ffcccc" },
         completionDateStr: "",
         timeSpentStr: "0 min",
       };
@@ -513,15 +746,15 @@ function ChapterTable({ chapter, readingStats, quizDataMap, onOpenModal }) {
       // done
       return {
         overall: "done",
-        style: { backgroundColor: "#ccffcc" }, // green
+        style: { backgroundColor: "#ccffcc" },
         completionDateStr: dateStr,
         timeSpentStr: timeStr,
       };
     } else if ((totalTimeSpentMinutes || 0) > 0) {
-      // in progress
+      // in-progress
       return {
         overall: "in-progress",
-        style: { backgroundColor: "#fff8b3" }, // yellow
+        style: { backgroundColor: "#fff8b3" },
         completionDateStr: dateStr,
         timeSpentStr: timeStr,
       };
@@ -550,31 +783,20 @@ function ChapterTable({ chapter, readingStats, quizDataMap, onOpenModal }) {
           <div style={{ fontSize: "0.8rem" }}>{rStatus.timeSpentStr}</div>
         </div>
       );
-    } else {
-      // done
-      return (
-        <div>
-          <div style={{ fontWeight: "bold" }}>Done</div>
-          <div style={{ fontSize: "0.8rem" }}>{rStatus.timeSpentStr}</div>
-        </div>
-      );
     }
+    // done
+    return (
+      <div>
+        <div style={{ fontWeight: "bold" }}>Done</div>
+        <div style={{ fontSize: "0.8rem" }}>{rStatus.timeSpentStr}</div>
+      </div>
+    );
   }
 
-  // ---------------------------
-  // Quiz stage => done/in-progress/not-started
-  // => mastery% color
-  // => done if 100% mastery
-  // => in-progress if >0% but <100%
-  // => not-started if 0% + 0 timeSpent
-  // ---------------------------
+  // =========== Quiz Stage Helpers ===========
   function getQuizStageStatus(stageData) {
     if (!stageData) {
-      return {
-        overall: "not-started",
-        masteryPct: 0,
-        timeStr: "0 min",
-      };
+      return { overall: "not-started", masteryPct: 0, timeStr: "0 min" };
     }
     const totalConcepts = stageData.subchapterConcepts?.length || 0;
     const passCount = computePassCount(stageData.allAttemptsConceptStats);
@@ -582,30 +804,15 @@ function ChapterTable({ chapter, readingStats, quizDataMap, onOpenModal }) {
     const timeStr = formatTimeSpent(stageData.timeSpentMinutes || 0);
 
     if (masteryPct >= 100) {
-      return {
-        overall: "done",
-        masteryPct,
-        timeStr,
-      };
+      return { overall: "done", masteryPct, timeStr };
     } else if (masteryPct > 0 || (stageData.timeSpentMinutes || 0) > 0) {
-      return {
-        overall: "in-progress",
-        masteryPct,
-        timeStr,
-      };
+      return { overall: "in-progress", masteryPct, timeStr };
     }
-    return {
-      overall: "not-started",
-      masteryPct,
-      timeStr,
-    };
+    return { overall: "not-started", masteryPct, timeStr };
   }
 
-  // unique PASS concepts across all attempts
   function computePassCount(allAttemptsConceptStats) {
-    if (!allAttemptsConceptStats?.length) {
-      return 0;
-    }
+    if (!allAttemptsConceptStats?.length) return 0;
     const passedSet = new Set();
     for (let attempt of allAttemptsConceptStats) {
       for (let cs of (attempt.conceptStats || [])) {
@@ -617,54 +824,31 @@ function ChapterTable({ chapter, readingStats, quizDataMap, onOpenModal }) {
     return passedSet.size;
   }
 
-  // lock => just show a lock icon
-  // else color-coded cell based on overall
   function renderStageCellStyle(isLocked, stageStatus) {
     if (isLocked) {
-      return {
-        ...styles.tdCell,
-        backgroundColor: "#ddd",
-      };
+      return { ...styles.tdCell, backgroundColor: "#ddd" };
     }
-    // color code by overall
     if (stageStatus.overall === "done") {
-      return {
-        ...styles.tdCell,
-        backgroundColor: "#ccffcc", // green
-      };
+      return { ...styles.tdCell, backgroundColor: "#ccffcc" };
     } else if (stageStatus.overall === "in-progress") {
-      return {
-        ...styles.tdCell,
-        backgroundColor: "#fff8b3", // yellow
-      };
+      return { ...styles.tdCell, backgroundColor: "#fff8b3" };
     }
     // not-started => pale red
-    return {
-      ...styles.tdCell,
-      backgroundColor: "#ffcccc",
-    };
+    return { ...styles.tdCell, backgroundColor: "#ffcccc" };
   }
 
   function renderQuizStageCell(subChId, stage, locked, stageStatus) {
     if (locked) {
-      return (
-        <span style={{ fontWeight: "bold", opacity: 0.6 }}>
-          🔒 Locked
-        </span>
-      );
+      return <span style={{ fontWeight: "bold", opacity: 0.6 }}>🔒 Locked</span>;
     }
     // else => show mastery + time + "View"
     return (
       <div>
-        <div style={{ fontWeight: "bold" }}>
-          {stageStatus.masteryPct.toFixed(0)}%
-        </div>
-        <div style={{ fontSize: "0.8rem" }}>
-          {stageStatus.timeStr}
-        </div>
+        <div style={{ fontWeight: "bold" }}>{stageStatus.masteryPct.toFixed(0)}%</div>
+        <div style={{ fontSize: "0.8rem" }}>{stageStatus.timeStr}</div>
         <button
           style={styles.viewBtn}
-          onClick={() => onOpenModal(subChId, stage)}
+          onClick={() => onOpenStageModal(subChId, stage)}
         >
           View
         </button>
@@ -673,12 +857,121 @@ function ChapterTable({ chapter, readingStats, quizDataMap, onOpenModal }) {
   }
 }
 
+// =========== Reading & Quiz Task Info Helpers ===========
+
+/**
+ * getReadingTaskInfo(rStatus)
+ * => { hasTask: boolean, taskLabel: string }
+ * If reading "done" => no new task needed
+ * else => "READ"
+ */
+function getReadingTaskInfo(rStatus) {
+  if (rStatus.overall === "done") {
+    return { hasTask: false, taskLabel: "" };
+  }
+  return { hasTask: true, taskLabel: "READ" };
+}
+
+/**
+ * getQuizStageTaskInfo(stageData, stageStatus)
+ * => If stageStatus is "done" => no more tasks
+ * => Else, figure out the last step (quizN or revisionN) => next step is:
+ *      if last was quizN => revisionN
+ *      if last was revisionN => quiz(N+1)
+ *      if none => quiz1
+ *
+ * We'll find the last step by sorting attempts by timestamp (fallback to attemptNumber).
+ */
+function getQuizStageTaskInfo(stageData, stageStatus) {
+  // if 100% done => no tasks
+  if (!stageData) {
+    // No data => not started => next is QUIZ1
+    return { hasTask: true, taskLabel: "QUIZ1" };
+  }
+
+  if (stageStatus === "done") {
+    return { hasTask: false, taskLabel: "" };
+  }
+
+  // gather quiz + revision attempts in chronological order
+  const quizAttempts = stageData.quizAttempts || [];
+  const revisionAttempts = stageData.revisionAttempts || [];
+  // build a combined array
+  const combined = [];
+
+  // push quiz
+  quizAttempts.forEach((q) => {
+    combined.push({
+      type: "quiz",
+      attemptNumber: q.attemptNumber || 1,
+      timestamp: q.timestamp || null,
+    });
+  });
+  // push revision
+  revisionAttempts.forEach((r) => {
+    combined.push({
+      type: "revision",
+      attemptNumber: r.revisionNumber || 1,
+      timestamp: r.timestamp || null,
+    });
+  });
+
+  // sort by timestamp => fallback to attemptNumber if timestamps missing
+  combined.sort((a, b) => {
+    // If both have timestamps, compare them
+    if (a.timestamp && b.timestamp) {
+      // Firestore timestamps or Date objects
+      const aTime = toMillis(a.timestamp);
+      const bTime = toMillis(b.timestamp);
+      return aTime - bTime;
+    }
+    // if only one has a timestamp
+    if (a.timestamp && !b.timestamp) return -1; // a first
+    if (!a.timestamp && b.timestamp) return 1;  // b first
+
+    // fallback => compare attemptNumber
+    return a.attemptNumber - b.attemptNumber;
+  });
+
+  if (combined.length === 0) {
+    // no attempts at all => next is quiz1
+    return { hasTask: true, taskLabel: "QUIZ1" };
+  }
+
+  // find the last item
+  const last = combined[combined.length - 1];
+  if (last.type === "quiz") {
+    // next => revision N
+    return { hasTask: true, taskLabel: `REVISION${last.attemptNumber}` };
+  }
+  // last.type === "revision"
+  return { hasTask: true, taskLabel: `QUIZ${last.attemptNumber + 1}` };
+}
+
+function toMillis(ts) {
+  // If Firestore Timestamp => ts.seconds => to ms
+  if (ts && typeof ts.seconds === "number") {
+    return ts.seconds * 1000;
+  }
+  // If Date object
+  if (ts instanceof Date) {
+    return ts.getTime();
+  }
+  // if possibly _seconds
+  if (ts && ts._seconds) {
+    return ts._seconds * 1000;
+  }
+  return 0; // fallback
+}
+
 // ===================== STYLES =====================
 const styles = {
   container: {
     backgroundColor: "#fafafa",
     padding: "8px",
     borderRadius: "4px",
+    maxWidth: "1200px",
+    margin: "0 auto",
   },
   heading: {
     marginTop: 0,
@@ -713,12 +1006,14 @@ const styles = {
     backgroundColor: "#ddd",
     padding: "8px",
     textAlign: "left",
+    fontWeight: "bold",
   },
   tdName: {
     border: "1px solid #ccc",
     padding: "8px",
     fontWeight: "bold",
-    width: "20%",
+    width: "18%",
+    whiteSpace: "nowrap",
   },
   tdCell: {
     border: "1px solid #ccc",
@@ -735,5 +1030,18 @@ const styles = {
     borderRadius: "4px",
     padding: "3px 6px",
     cursor: "pointer",
+  },
+  infoBtn: {
+    backgroundColor: "#444",
+    color: "#fff",
+    border: "none",
+    borderRadius: "4px",
+    padding: "2px 6px",
+    cursor: "pointer",
+    fontSize: "0.85rem",
+  },
+  taskInfoTable: {
+    width: "100%",
+    borderCollapse: "collapse",
   },
 };

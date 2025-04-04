@@ -15,7 +15,7 @@ import TOEFLOnboardingModal from "../1.Upload/TOEFLOnboarding/TOEFLOnboardingMod
 import EditAdaptivePlanModal from "../3.Library/LibraryChild/AdaptivePlanModal/EditAdaptivePlanModal";
 
 // Existing components
-import MaterialsDashboard from "../3.Library/MaterialsDashboard"; 
+import MaterialsDashboard from "../3.Library/LibraryChild/0.Parent/0.MaterialsDashboard"; 
 import UnifiedSidebar from "./UnifiedSidebar";
 import ToursManager from "./ToursManager";
 

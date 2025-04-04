@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import QuizHistoryModal from "./QuizHistoryModal"; // The existing modal
-import HistoryView from "../../../5.StudyModal/0.components/Main/Base/HistoryView"; 
+import QuizHistoryModal from "../../QuizHistoryModal"; // The existing modal
+import HistoryView from "../../../../../5.StudyModal/0.components/Main/Base/HistoryView"; 
 // If you want to show the same view inline
 
 /**

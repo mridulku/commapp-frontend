@@ -109,7 +109,7 @@ export default function TimelineView3({
 
   return (
     <div style={styles.container}>
-      <h3 style={styles.title}>TimelineView3 => aggregatorTask matching for {selectedDate}</h3>
+      <h3 style={styles.title}>TimelineView3 =&gt; aggregatorTask matching for {selectedDate}</h3>
 
       {plan.sessions.map((sess, idx) => {
         const actArr = sess.activities || [];
@@ -117,7 +117,7 @@ export default function TimelineView3({
           return (
             <div key={sess.sessionLabel} style={styles.sessionBox}>
               <div style={styles.sessionHeader}>
-                Day {sess.sessionLabel || (idx+1)} => No activities
+                Day {sess.sessionLabel || (idx+1)} {'>'} No activities
               </div>
             </div>
           );
@@ -151,7 +151,7 @@ function SessionBox({
   return (
     <div style={styles.sessionBox}>
       <div style={styles.sessionHeader}>
-        Day {label} => {acts.length} activities
+        Day {label} {'>'} {acts.length} activities
       </div>
       <div style={styles.tableHeaderRow}>
         <div style={{width:"12%",fontWeight:"bold"}}>Type</div>

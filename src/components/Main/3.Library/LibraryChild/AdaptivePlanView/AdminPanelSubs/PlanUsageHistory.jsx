@@ -9,23 +9,23 @@ import {
 } from "firebase/firestore";
 
 import RawView from "./RawView";
-import TimelineView from "./TimelineView";
-import TimelineView2 from "./TimelineView2";
-import TimelineView3 from "./TimelineView3";
+import TimelineView from "./AdminPanelSubs/Subs/TimelineView";
+import TimelineView2 from "./AdminPanelSubs/Subs/TimelineView2";
+import TimelineView3 from "./AdminPanelSubs/Subs/TimelineView3";
 
-import PlanView from "./PlanView";
-import PlanView2 from "./PlanView2";
+import PlanView from "./AdminPanelSubs/Subs/PlanView";
+import PlanView2 from "./AdminPanelSubs/Subs/PlanView2";
 
 
 
-import LibraryView from "./LibraryView"; // <-- NEW import
-import LibraryView2 from "./LibraryView2"; // <-- NEW import
-import LibraryView3 from "./LibraryView3"; // <-- NEW import
+import LibraryView from "./AdminPanelSubs/Subs/LibraryView"; // <-- NEW import
+import LibraryView2 from "./AdminPanelSubs/Subs/LibraryView2"; // <-- NEW import
+import LibraryView3 from "./AdminPanelSubs/Subs/LibraryView3"; // <-- NEW import
 
-import TimeCalc from "./TimeCalc"; // <-- NEW import
-import PlanLog from "./PlanLog"; // <-- NEW import
-import AggregatorResultView from "./AggregatorResultView"; // <-- NEW import
-import AggregatorProgressView from "./AggregatorProgressView"; // <-- NEW import
+import TimeCalc from "./AdminPanelSubs/Subs/TimeCalc"; // <-- NEW import
+import PlanLog from "./AdminPanelSubs/Subs/PlanLog"; // <-- NEW import
+import AggregatorResultView from "./AdminPanelSubs/Subs/AggregatorResultView"; // <-- NEW import
+import AggregatorProgressView from "./AdminPanelSubs/Subs/AggregatorProgressView"; // <-- NEW import
 
 
 

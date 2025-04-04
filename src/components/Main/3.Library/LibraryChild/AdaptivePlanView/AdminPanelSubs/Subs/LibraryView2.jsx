@@ -7,30 +7,21 @@ import {
 } from "firebase/firestore";
 import axios from "axios";
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button } from "@mui/material";
-import HistoryView from "../../../5.StudyModal/0.components/Main/Base/HistoryView";
+import HistoryView from "../../../../../5.StudyModal/0.components/Main/Base/HistoryView";
 
-/** We recognize these quiz stages in the UI. */
+/** The quiz stages, in the forced order: remember → understand → apply → analyze */
 const QUIZ_STAGES = ["remember", "understand", "apply", "analyze"];
 
-/**
- * parseNumericPrefix
- * ------------------
- * For sorting chapters/subchapters by leading numeric part (e.g. "1.2 Introduction").
- */
+/** For numeric sorting in chapter/subchapter titles, e.g. "1.2 Some Title" */
 function parseNumericPrefix(title = "") {
   const match = title.trim().match(/^(\d+(\.\d+){0,2})/);
   if (match) {
-    return parseFloat(match[1]); // e.g. "1.2" => 1.2
+    return parseFloat(match[1]); 
   }
   return Infinity;
 }
 
-/**
- * formatTimeSpent
- * ---------------
- * If < 1 minute => e.g. "45s"
- * else => e.g. "2.5 min"
- */
+/** Format time: if <1 minute => Xs, else X.Y min */
 function formatTimeSpent(totalMinutes) {
   if (!totalMinutes || totalMinutes <= 0) {
     return "0 min";
@@ -43,27 +34,24 @@ function formatTimeSpent(totalMinutes) {
 }
 
 /**
- * LibraryView
- * -----------
- * Columns displayed:
- *   - Subchapter
- *   - Reading (based on readingStats prop)
- *   - Total Concepts
- *   - remember / understand / analyze / apply
+ * LibraryView2
+ * ------------
+ * - Subchapter
+ * - Total Concepts
+ * - Reading (with lock logic = always “unlocked,” but color-coded for done/in-progress/not-started)
+ * - Remember
+ * - Understand
+ * - Apply
+ * - Analyze
  *
- * For the quiz portion, we do aggregator calls to:
- *   /api/cumulativeQuizTime
- *   /api/cumulativeReviseTime
- *   and store it inside quizDataMap[subChId][stage].timeSpentMinutes
- *
- * For reading, we STILL rely on readingStats[subChId] from the parent.
+ * We enforce the chain: Reading → Remember → Understand → Apply → Analyze
  */
-export default function LibraryView({
+export default function LibraryView2({
   db,
   userId,
   planId,
   bookId = "",
-  readingStats = {}, // { subChId: { totalTimeSpentMinutes, completionDate } }
+  readingStats = {}, // ex: { subChId: { totalTimeSpentMinutes, completionDate: Date } }
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError]   = useState("");
@@ -72,25 +60,27 @@ export default function LibraryView({
   /**
    * quizDataMap[subChId] = {
    *   maxConceptsSoFar: number,
-   *   [stageName]: {
-   *     quizAttempts,
-   *     revisionAttempts,
-   *     subchapterConcepts,
-   *     allAttemptsConceptStats,
-   *     timeSpentMinutes,  // aggregator quiz + revision time
-   *   }
+   *   remember: { ...dataForThatStage },
+   *   understand: { ... },
+   *   apply: { ... },
+   *   analyze: { ... }
+   * }
+   *
+   * dataForThatStage => {
+   *   quizAttempts, revisionAttempts, subchapterConcepts, allAttemptsConceptStats,
+   *   timeSpentMinutes: number
    * }
    */
   const [quizDataMap, setQuizDataMap] = useState({});
 
-  // For local modal => to show <HistoryView>
+  // For local <HistoryView> modal
   const [modalOpen, setModalOpen] = useState(false);
   const [modalSubChId, setModalSubChId] = useState("");
   const [modalStage, setModalStage] = useState("");
 
-  // -------------------------------------------------------
-  // On mount => fetch chapters + subchapters => fetch quiz data
-  // -------------------------------------------------------
+  // ----------------------------------------------
+  // On mount => fetch chapters => subchapters => quiz data
+  // ----------------------------------------------
   useEffect(() => {
     if (!db || !bookId || !userId || !planId) return;
 
@@ -101,13 +91,13 @@ export default function LibraryView({
       .then((chapArr) => {
         setChapters(chapArr);
 
-        // gather all subchapter IDs => fetch quiz data for each stage
+        // gather all subchapter IDs
         const allSubChIds = [];
         chapArr.forEach((c) => {
           c.subchapters.forEach((s) => allSubChIds.push(s.id));
         });
 
-        // For each subchapter => for each stage => fetch data
+        // For each subCh => fetch for each QUIZ_STAGE
         const tasks = [];
         for (let scId of allSubChIds) {
           for (let stage of QUIZ_STAGES) {
@@ -126,21 +116,14 @@ export default function LibraryView({
   // eslint-disable-next-line
   }, [db, bookId, userId, planId]);
 
-  /**
-   * fetchChaptersWithSubchapters
-   * ----------------------------
-   * 1) Load "chapters_demo" for this book
-   * 2) For each => load "subchapters_demo"
-   * 3) Sort them by numeric prefix
-   */
+  // ----------------------------------------------
+  // fetchChaptersWithSubchapters
+  // ----------------------------------------------
   async function fetchChaptersWithSubchapters(bookId) {
     const chaptersArr = [];
 
     // 1) chapters
-    const chapQ = query(
-      collection(db, "chapters_demo"),
-      where("bookId", "==", bookId)
-    );
+    const chapQ = query(collection(db, "chapters_demo"), where("bookId", "==", bookId));
     const chapSnap = await getDocs(chapQ);
     for (const cDoc of chapSnap.docs) {
       const cData = cDoc.data();
@@ -153,10 +136,7 @@ export default function LibraryView({
 
     // 2) subchapters
     for (let chapObj of chaptersArr) {
-      const subQ = query(
-        collection(db, "subchapters_demo"),
-        where("chapterId", "==", chapObj.id)
-      );
+      const subQ = query(collection(db, "subchapters_demo"), where("chapterId", "==", chapObj.id));
       const subSnap = await getDocs(subQ);
       const subs = [];
       for (const sDoc of subSnap.docs) {
@@ -166,7 +146,6 @@ export default function LibraryView({
           name: sData.title || sData.name || `SubCh ${sDoc.id}`,
         });
       }
-      // sort subchapters
       subs.sort((a, b) => parseNumericPrefix(a.name) - parseNumericPrefix(b.name));
       chapObj.subchapters = subs;
     }
@@ -176,21 +155,18 @@ export default function LibraryView({
     return chaptersArr;
   }
 
-  /**
-   * fetchQuizData(subChId, quizStage)
-   *  - calls aggregator endpoints:
-   *     /api/cumulativeQuizTime
-   *     /api/cumulativeReviseTime
-   *  - also calls getQuiz => getRevisions => getSubchapterConcepts => build concept stats
-   */
+  // ----------------------------------------------
+  // fetchQuizData(subChId, stage)
+  // => calls aggregator + build concept stats
+  // ----------------------------------------------
   async function fetchQuizData(subChId, quizStage) {
     try {
-      // If we already have data => skip
       if (quizDataMap[subChId]?.[quizStage]) {
+        // already loaded
         return;
       }
 
-      // 1) getQuiz
+      // 1) getQuiz attempts
       const quizRes = await axios.get("http://localhost:3001/api/getQuiz", {
         params: {
           userId,
@@ -221,18 +197,15 @@ export default function LibraryView({
       // 4) build concept stats
       const allAttemptsConceptStats = buildAllAttemptsConceptStats(quizArr, conceptArr);
 
-      // 5) aggregator calls => quiz + revise
+      // 5) aggregator endpoints => quiz + revise => total
       const quizSeconds   = await fetchCumulativeQuizTime(subChId, quizStage);
       const reviseSeconds = await fetchCumulativeReviseTime(subChId, quizStage);
-      const totalSeconds = quizSeconds + reviseSeconds;
-      const totalMinutes = totalSeconds / 60.0;
+      const totalMinutes = (quizSeconds + reviseSeconds) / 60.0;
 
       // store
       setQuizDataMap((prev) => {
         const copy = { ...prev };
-        if (!copy[subChId]) {
-          copy[subChId] = { maxConceptsSoFar: 0 };
-        }
+        if (!copy[subChId]) copy[subChId] = { maxConceptsSoFar: 0 };
 
         copy[subChId][quizStage] = {
           quizAttempts: quizArr,
@@ -242,7 +215,6 @@ export default function LibraryView({
           timeSpentMinutes: totalMinutes,
         };
 
-        // update maxConceptsSoFar
         const cLen = conceptArr.length;
         if (cLen > copy[subChId].maxConceptsSoFar) {
           copy[subChId].maxConceptsSoFar = cLen;
@@ -254,7 +226,7 @@ export default function LibraryView({
     }
   }
 
-  // aggregator endpoints
+  // aggregator
   async function fetchCumulativeQuizTime(subChId, quizStage) {
     try {
       const url = `http://localhost:3001/api/cumulativeQuizTime?userId=${userId}&planId=${planId}&subChapterId=${subChId}&quizStage=${quizStage}`;
@@ -278,9 +250,7 @@ export default function LibraryView({
 
   // concept stats
   function buildAllAttemptsConceptStats(quizArr, conceptArr) {
-    if (!quizArr.length || !conceptArr.length) {
-      return [];
-    }
+    if (!quizArr.length || !conceptArr.length) return [];
     return quizArr.map((attempt) => {
       const stats = buildConceptStats(attempt.quizSubmission || [], conceptArr);
       return {
@@ -330,6 +300,7 @@ export default function LibraryView({
   }
 
   // local modal
+  const [modalContent, setModalContent] = useState(null);
   function handleOpenModal(subChId, stage) {
     setModalSubChId(subChId);
     setModalStage(stage);
@@ -340,7 +311,6 @@ export default function LibraryView({
     setModalSubChId("");
     setModalStage("");
   }
-
   function getModalData() {
     if (!modalSubChId || !modalStage) return null;
     return quizDataMap[modalSubChId]?.[modalStage] || null;
@@ -348,7 +318,7 @@ export default function LibraryView({
   function renderModalContent() {
     const data = getModalData();
     if (!data) {
-      return <p style={{ color: "#999" }}>No data for {modalStage} or still loading.</p>;
+      return <p style={{ color: "#999" }}>No data or still loading.</p>;
     }
     return (
       <HistoryView
@@ -362,14 +332,14 @@ export default function LibraryView({
     );
   }
 
-  // ---------------------------------------
+  // ----------------------------------------------
   // RENDER
-  // ---------------------------------------
+  // ----------------------------------------------
   return (
     <div style={styles.container}>
-      <h2 style={styles.heading}>Library View (Chapters/Subchapters)</h2>
+      <h2 style={styles.heading}>Library View 2 - Stage Logic</h2>
 
-      {loading && <p>Loading library data + aggregator lumps...</p>}
+      {loading && <p>Loading data...</p>}
       {error && <p style={{ color: "red" }}>{error}</p>}
 
       {chapters.length === 0 && !loading && !error && (
@@ -380,13 +350,13 @@ export default function LibraryView({
         <ChapterTable
           key={ch.id}
           chapter={ch}
-          readingStats={readingStats}   // from parent
-          quizDataMap={quizDataMap}    // we store aggregator results here
+          readingStats={readingStats}
+          quizDataMap={quizDataMap}
           onOpenModal={handleOpenModal}
         />
       ))}
 
-      {/* Local Modal => show <HistoryView> if needed */}
+      {/* Local modal => history */}
       {modalOpen && (
         <Dialog
           open={modalOpen}
@@ -412,11 +382,16 @@ export default function LibraryView({
   );
 }
 
-/**
- * ChapterTable
- * -----------
- * Renders one chapter => table with subchapters & columns:
- *   Subchapter | Reading | Total Concepts | Remember | Understand | Analyze | Apply
+/** 
+ * ChapterTable => columns:
+ *   Subchapter | Total Concepts | Reading | Remember | Understand | Apply | Analyze
+ *
+ * Lock logic: 
+ *   1) Reading is never locked, but color-coded by done/in-progress/not-started
+ *   2) remember locked unless Reading "done"
+ *   3) understand locked unless remember "done"
+ *   4) apply locked unless understand "done"
+ *   5) analyze locked unless apply "done"
  */
 function ChapterTable({ chapter, readingStats, quizDataMap, onOpenModal }) {
   const [expanded, setExpanded] = useState(true);
@@ -428,41 +403,85 @@ function ChapterTable({ chapter, readingStats, quizDataMap, onOpenModal }) {
           {expanded ? "▾" : "▸"} {chapter.title}
         </h3>
       </div>
-
       {expanded && (
         <div style={styles.tableWrapper}>
           <table style={styles.table}>
             <thead>
               <tr>
                 <th style={styles.th}>Subchapter</th>
-                <th style={styles.th}>Reading</th>
                 <th style={styles.th}>Total Concepts</th>
+                <th style={styles.th}>Reading</th>
                 <th style={styles.th}>Remember</th>
                 <th style={styles.th}>Understand</th>
-                <th style={styles.th}>Analyze</th>
                 <th style={styles.th}>Apply</th>
+                <th style={styles.th}>Analyze</th>
               </tr>
             </thead>
             <tbody>
-              {chapter.subchapters.map((sub) => (
-                <tr key={sub.id}>
-                  <td style={styles.tdName}>{sub.name}</td>
-                  {/* Reading => date + time */}
-                  <td style={styles.tdCell}>
-                    {renderReadingCell(readingStats[sub.id])}
-                  </td>
-                  {/* total concepts => from quizDataMap[subId].maxConceptsSoFar */}
-                  <td style={styles.tdCell}>
-                    {renderTotalConcepts(sub.id)}
-                  </td>
+              {chapter.subchapters.map((sub) => {
+                const subChId = sub.id;
+                // 1) reading status
+                const rStatus = getReadingStatus(readingStats[subChId]);
 
-                  {/* 4 stages */}
-                  <td>{renderStageCell(sub.id, "remember")}</td>
-                  <td>{renderStageCell(sub.id, "understand")}</td>
-                  <td>{renderStageCell(sub.id, "analyze")}</td>
-                  <td>{renderStageCell(sub.id, "apply")}</td>
-                </tr>
-              ))}
+                // 2) quiz stage statuses
+                const rememberData = quizDataMap[subChId]?.remember;
+                const rememberStatus = getQuizStageStatus(rememberData);
+                const understandData = quizDataMap[subChId]?.understand;
+                const understandStatus = getQuizStageStatus(understandData);
+                const applyData = quizDataMap[subChId]?.apply;
+                const applyStatus = getQuizStageStatus(applyData);
+                const analyzeData = quizDataMap[subChId]?.analyze;
+                const analyzeStatus = getQuizStageStatus(analyzeData);
+
+                // total concepts from subMap
+                const subMap = quizDataMap[subChId];
+                const totalConcepts = subMap?.maxConceptsSoFar || 0;
+
+                // lock logic
+                // reading => never locked
+                // remember => locked unless reading done
+                const rememberLocked = (rStatus.overall !== "done");
+                // understand => locked unless remember done
+                const understandLocked = (rememberStatus.overall !== "done");
+                // apply => locked unless understand done
+                const applyLocked = (understandStatus.overall !== "done");
+                // analyze => locked unless apply done
+                const analyzeLocked = (applyStatus.overall !== "done");
+
+                return (
+                  <tr key={subChId}>
+                    <td style={styles.tdName}>{sub.name}</td>
+                    <td style={styles.tdCell}>
+                      {totalConcepts}
+                    </td>
+
+                    {/* Reading */}
+                    <td style={{ ...styles.tdCell, ...rStatus.style }}>
+                      {renderReadingCell(rStatus)}
+                    </td>
+
+                    {/* Remember */}
+                    <td style={renderStageCellStyle(rememberLocked, rememberStatus)}>
+                      {renderQuizStageCell(subChId, "remember", rememberLocked, rememberStatus)}
+                    </td>
+
+                    {/* Understand */}
+                    <td style={renderStageCellStyle(understandLocked, understandStatus)}>
+                      {renderQuizStageCell(subChId, "understand", understandLocked, understandStatus)}
+                    </td>
+
+                    {/* Apply */}
+                    <td style={renderStageCellStyle(applyLocked, applyStatus)}>
+                      {renderQuizStageCell(subChId, "apply", applyLocked, applyStatus)}
+                    </td>
+
+                    {/* Analyze */}
+                    <td style={renderStageCellStyle(analyzeLocked, analyzeStatus)}>
+                      {renderQuizStageCell(subChId, "analyze", analyzeLocked, analyzeStatus)}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -470,84 +489,116 @@ function ChapterTable({ chapter, readingStats, quizDataMap, onOpenModal }) {
     </div>
   );
 
-  // ---------------------------------------
-  // Render reading => from parent's readingStats
-  // ---------------------------------------
-  function renderReadingCell(readObj) {
+  // ---------------------------
+  // Reading => done/in-progress/not-started
+  // ---------------------------
+  function getReadingStatus(readObj) {
+    // If no readObj => not started
     if (!readObj) {
-      return <span style={{ color: "#999" }}>Not read</span>;
+      return {
+        overall: "not-started",
+        style: { backgroundColor: "#ffcccc" }, // pale red
+        completionDateStr: "",
+        timeSpentStr: "0 min",
+      };
     }
     const { totalTimeSpentMinutes, completionDate } = readObj;
-
-    // date
-    let dateStr = "—";
+    let dateStr = "";
     if (completionDate instanceof Date) {
       dateStr = completionDate.toLocaleDateString();
     }
-    // time
     const timeStr = formatTimeSpent(totalTimeSpentMinutes || 0);
 
-    return (
-      <div>
-        <div><strong>{dateStr}</strong></div>
-        <div style={{ fontSize: "0.8rem", color: "#666" }}>{timeStr}</div>
-      </div>
-    );
+    if (completionDate instanceof Date) {
+      // done
+      return {
+        overall: "done",
+        style: { backgroundColor: "#ccffcc" }, // green
+        completionDateStr: dateStr,
+        timeSpentStr: timeStr,
+      };
+    } else if ((totalTimeSpentMinutes || 0) > 0) {
+      // in progress
+      return {
+        overall: "in-progress",
+        style: { backgroundColor: "#fff8b3" }, // yellow
+        completionDateStr: dateStr,
+        timeSpentStr: timeStr,
+      };
+    }
+    // else => not started
+    return {
+      overall: "not-started",
+      style: { backgroundColor: "#ffcccc" },
+      completionDateStr: "",
+      timeSpentStr: "0 min",
+    };
   }
 
-  // ---------------------------------------
-  // Show # concepts from subMap.maxConceptsSoFar
-  // ---------------------------------------
-  function renderTotalConcepts(subChId) {
-    const subMap = quizDataMap[subChId];
-    if (!subMap) {
-      return 0;
+  function renderReadingCell(rStatus) {
+    if (rStatus.overall === "not-started") {
+      return (
+        <div>
+          <div style={{ fontWeight: "bold" }}>Not Started</div>
+          <div style={{ fontSize: "0.8rem" }}>{rStatus.timeSpentStr}</div>
+        </div>
+      );
+    } else if (rStatus.overall === "in-progress") {
+      return (
+        <div>
+          <div style={{ fontWeight: "bold" }}>In Progress</div>
+          <div style={{ fontSize: "0.8rem" }}>{rStatus.timeSpentStr}</div>
+        </div>
+      );
+    } else {
+      // done
+      return (
+        <div>
+          <div style={{ fontWeight: "bold" }}>Done</div>
+          <div style={{ fontSize: "0.8rem" }}>{rStatus.timeSpentStr}</div>
+        </div>
+      );
     }
-    return subMap.maxConceptsSoFar || 0;
   }
 
-  // ---------------------------------------
-  // Stage cell => mastery% + timeSpent + "View" button
-  // ---------------------------------------
-  function renderStageCell(subChId, stage) {
-    const subMap = quizDataMap[subChId];
-    if (!subMap || !subMap[stage]) {
-      return <div style={styles.stageCellBase}>—</div>;
+  // ---------------------------
+  // Quiz stage => done/in-progress/not-started
+  // => mastery% color
+  // => done if 100% mastery
+  // => in-progress if >0% but <100%
+  // => not-started if 0% + 0 timeSpent
+  // ---------------------------
+  function getQuizStageStatus(stageData) {
+    if (!stageData) {
+      return {
+        overall: "not-started",
+        masteryPct: 0,
+        timeStr: "0 min",
+      };
     }
-    const data = subMap[stage];
+    const totalConcepts = stageData.subchapterConcepts?.length || 0;
+    const passCount = computePassCount(stageData.allAttemptsConceptStats);
+    const masteryPct = totalConcepts === 0 ? 0 : (passCount / totalConcepts) * 100;
+    const timeStr = formatTimeSpent(stageData.timeSpentMinutes || 0);
 
-    // compute mastery
-    const totalConcepts = subMap.maxConceptsSoFar || 0;
-    const passCount = computePassCount(data.allAttemptsConceptStats);
-    const masteryPct = (totalConcepts === 0) ? 0 : (passCount / totalConcepts) * 100;
-
-    // timeSpent
-    const timeStr = formatTimeSpent(data.timeSpentMinutes || 0);
-
-    // color code by masteryPct
-    let bgColor = "#ffcccc"; // pale red => 0%
-    if (masteryPct === 100) {
-      bgColor = "#ccffcc"; // green
-    } else if (masteryPct > 0) {
-      bgColor = "#fff8b3"; // partial => yellow
+    if (masteryPct >= 100) {
+      return {
+        overall: "done",
+        masteryPct,
+        timeStr,
+      };
+    } else if (masteryPct > 0 || (stageData.timeSpentMinutes || 0) > 0) {
+      return {
+        overall: "in-progress",
+        masteryPct,
+        timeStr,
+      };
     }
-
-    return (
-      <div style={{ ...styles.stageCellBase, backgroundColor: bgColor }}>
-        <div style={{ fontWeight: "bold" }}>
-          {masteryPct.toFixed(0)}%
-        </div>
-        <div style={{ fontSize: "0.8rem" }}>
-          {timeStr}
-        </div>
-        <button
-          style={styles.viewBtn}
-          onClick={() => onOpenModal(subChId, stage)}
-        >
-          View
-        </button>
-      </div>
-    );
+    return {
+      overall: "not-started",
+      masteryPct,
+      timeStr,
+    };
   }
 
   // unique PASS concepts across all attempts
@@ -565,11 +616,64 @@ function ChapterTable({ chapter, readingStats, quizDataMap, onOpenModal }) {
     }
     return passedSet.size;
   }
+
+  // lock => just show a lock icon
+  // else color-coded cell based on overall
+  function renderStageCellStyle(isLocked, stageStatus) {
+    if (isLocked) {
+      return {
+        ...styles.tdCell,
+        backgroundColor: "#ddd",
+      };
+    }
+    // color code by overall
+    if (stageStatus.overall === "done") {
+      return {
+        ...styles.tdCell,
+        backgroundColor: "#ccffcc", // green
+      };
+    } else if (stageStatus.overall === "in-progress") {
+      return {
+        ...styles.tdCell,
+        backgroundColor: "#fff8b3", // yellow
+      };
+    }
+    // not-started => pale red
+    return {
+      ...styles.tdCell,
+      backgroundColor: "#ffcccc",
+    };
+  }
+
+  function renderQuizStageCell(subChId, stage, locked, stageStatus) {
+    if (locked) {
+      return (
+        <span style={{ fontWeight: "bold", opacity: 0.6 }}>
+          🔒 Locked
+        </span>
+      );
+    }
+    // else => show mastery + time + "View"
+    return (
+      <div>
+        <div style={{ fontWeight: "bold" }}>
+          {stageStatus.masteryPct.toFixed(0)}%
+        </div>
+        <div style={{ fontSize: "0.8rem" }}>
+          {stageStatus.timeStr}
+        </div>
+        <button
+          style={styles.viewBtn}
+          onClick={() => onOpenModal(subChId, stage)}
+        >
+          View
+        </button>
+      </div>
+    );
+  }
 }
 
-// ---------------------------------------------------------
-// Basic Styles
-// ---------------------------------------------------------
+// ===================== STYLES =====================
 const styles = {
   container: {
     backgroundColor: "#fafafa",
@@ -602,7 +706,7 @@ const styles = {
   table: {
     width: "100%",
     borderCollapse: "collapse",
-    minWidth: "800px",
+    minWidth: "900px",
   },
   th: {
     border: "1px solid #ccc",
@@ -614,20 +718,14 @@ const styles = {
     border: "1px solid #ccc",
     padding: "8px",
     fontWeight: "bold",
-    width: "16%",
+    width: "20%",
   },
   tdCell: {
     border: "1px solid #ccc",
     padding: "8px",
     textAlign: "center",
     color: "#666",
-    width: "12%",
-  },
-  stageCellBase: {
-    border: "1px solid #ccc",
-    padding: "8px",
-    textAlign: "center",
-    width: "12%",
+    width: "13%",
   },
   viewBtn: {
     marginTop: "4px",

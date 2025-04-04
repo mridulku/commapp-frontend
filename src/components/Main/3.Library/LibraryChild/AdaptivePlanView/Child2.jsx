@@ -1,21 +1,26 @@
-//
-// src/components/DetailedBookViewer/Child2.jsx
-//
+// File: Child2.jsx
+
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import {
   Dialog,
   DialogContent,
   Button,
+  LinearProgress,
+  MenuItem,
+  Select,
+  Tabs,
+  Tab,
 } from "@mui/material";
+
 import PlanUsageHistory from "./PlanUsageHistory";
 import PlanFetcher from "../../../5.StudyModal/StudyModal"; // Adjust path if needed
-import { auth, db } from "../../../../../firebase"; // Adjust path if needed
-
+import { db } from "../../../../../firebase"; // Adjust path if needed
 
 export default function Child2({
   userId = null,
   bookId = "",
+  bookName = "Untitled Book",
   planIds = [],
   onOverviewSelect = () => {},
   colorScheme = {},
@@ -28,12 +33,13 @@ export default function Child2({
     color: colorScheme.textColor || "#FFD700",
     padding: "1rem",
     minHeight: "100vh",
+    boxSizing: "border-box",
   };
 
   const headingStyle = {
     fontWeight: "bold",
-    marginBottom: "15px",
-    fontSize: "1.25rem",
+    marginBottom: "12px",
+    fontSize: "1.4rem",
     color: colorScheme.heading || "#FFD700",
   };
 
@@ -53,28 +59,26 @@ export default function Child2({
   }
 
   // ------------------------------------------
-  // 1) localPlanIds
+  // Plan state
   // ------------------------------------------
   const [localPlanIds, setLocalPlanIds] = useState(planIds);
+  const [selectedPlanId, setSelectedPlanId] = useState("");
+  const [plan, setPlan] = useState(null);
 
+  // Re-sync localPlanIds from props
   useEffect(() => {
     setLocalPlanIds(planIds);
   }, [planIds]);
 
-  // ------------------------------------------
-  // 2) Fetch plan IDs whenever bookId changes
-  // ------------------------------------------
-  const [selectedPlanId, setSelectedPlanId] = useState("");
-  const [plan, setPlan] = useState(null);
-
+  // If user/book changes => fetch plan IDs
   useEffect(() => {
+    if (!userId || !bookId) {
+      setLocalPlanIds([]);
+      setSelectedPlanId("");
+      setPlan(null);
+      return;
+    }
     async function fetchPlansForBook() {
-      if (!userId || !bookId) {
-        setLocalPlanIds([]);
-        setSelectedPlanId("");
-        setPlan(null);
-        return;
-      }
       try {
         const url = `${import.meta.env.VITE_BACKEND_URL}/api/adaptive-plan-id`;
         const res = await axios.get(url, { params: { userId, bookId } });
@@ -87,11 +91,10 @@ export default function Child2({
         setLocalPlanIds([]);
       }
     }
-
     fetchPlansForBook();
   }, [userId, bookId]);
 
-  // Whenever localPlanIds changes => pick the first or reset
+  // On localPlanIds => pick the first
   useEffect(() => {
     if (localPlanIds.length > 0) {
       setSelectedPlanId(localPlanIds[0]);
@@ -101,15 +104,12 @@ export default function Child2({
     }
   }, [localPlanIds]);
 
-  // ------------------------------------------
-  // 3) Fetched Plan (in local state)
-  // ------------------------------------------
+  // Fetch plan doc
   useEffect(() => {
     if (!selectedPlanId) {
       setPlan(null);
       return;
     }
-
     async function fetchPlanDoc() {
       try {
         const res = await axios.get(
@@ -125,12 +125,11 @@ export default function Child2({
         setPlan(null);
       }
     }
-
     fetchPlanDoc();
   }, [selectedPlanId]);
 
   // ------------------------------------------
-  // 4) Also fetch exam stages (once we have plan)
+  // Stage order
   // ------------------------------------------
   const [stageOrder, setStageOrder] = useState([]);
 
@@ -139,11 +138,7 @@ export default function Child2({
       setStageOrder([]);
       return;
     }
-    // plan.examId might be empty => default "general"
-    const effectiveExamId = plan.examId && plan.examId.trim()
-      ? plan.examId.trim()
-      : "general";
-
+    const effectiveExamId = plan.examId?.trim() || "general";
     fetchExamConfig(effectiveExamId);
   }, [plan]);
 
@@ -152,7 +147,6 @@ export default function Child2({
       const url = `${import.meta.env.VITE_BACKEND_URL}/api/exam-config`;
       const res = await axios.get(url, { params: { examId } });
       if (res.data && Array.isArray(res.data.stages)) {
-        // Transform the array of stages => e.g. "none","remember","..." => "Reading","Remember",...
         const finalStages = res.data.stages.map(transformStage);
         setStageOrder(finalStages);
       } else {
@@ -164,24 +158,41 @@ export default function Child2({
     }
   }
 
-  // Helper: "none" => "Reading", otherwise capitalized
   function transformStage(rawStage) {
     if (rawStage === "none") return "Reading";
     if (!rawStage) return "";
-    // Capitalize first letter
     return rawStage.charAt(0).toUpperCase() + rawStage.slice(1);
   }
 
   // ------------------------------------------
-  // 5) Session Tab
+  // Tabs: 0 => Daily Plan, 1 => Progress, 2 => Admin Panel
   // ------------------------------------------
-  const [activeSessionIndex, setActiveSessionIndex] = useState(0);
+  const [activeTab, setActiveTab] = useState(0);
 
+  // reset tab if plan changes
   useEffect(() => {
-    setActiveSessionIndex(0);
+    setActiveTab(0);
   }, [plan]);
 
-  // Expand/Collapse for chapters
+  function handleChangeTab(e, newVal) {
+    setActiveTab(newVal);
+  }
+
+  // ------------------------------------------
+  // dayDropIdx => which session is selected
+  // ------------------------------------------
+  const [dayDropIdx, setDayDropIdx] = useState(0);
+  useEffect(() => {
+    setDayDropIdx(0);
+  }, [plan]);
+
+  function handleDaySelect(e) {
+    setDayDropIdx(Number(e.target.value));
+  }
+
+  // ------------------------------------------
+  // expand/collapse chapters
+  // ------------------------------------------
   const [expandedChapters, setExpandedChapters] = useState([]);
   useEffect(() => {
     setExpandedChapters([]);
@@ -196,7 +207,7 @@ export default function Child2({
   }
 
   // ------------------------------------------
-  // 6) PlanFetcher Dialog
+  // PlanFetcher dialog
   // ------------------------------------------
   const [showPlanDialog, setShowPlanDialog] = useState(false);
   const [dialogPlanId, setDialogPlanId] = useState("");
@@ -204,16 +215,137 @@ export default function Child2({
 
   function handleOpenPlanFetcher(planId, activity) {
     setDialogPlanId(planId);
-    if (!activity) {
-      setDialogInitialActivity(null);
-    } else {
+    if (activity) {
       setDialogInitialActivity({
         subChapterId: activity.subChapterId,
         type: activity.type, // "READ" or "QUIZ"
         stage: activity.quizStage || null,
       });
+    } else {
+      setDialogInitialActivity(null);
     }
     setShowPlanDialog(true);
+  }
+
+  // ------------------------------------------
+  // Stats row => top portion
+  //    Book Name, Exam Date, Daily Plan Time, Chapters, SubChapters
+  //    Overall Progress bar
+  // ------------------------------------------
+  function renderTopStats() {
+    // Filler data
+    const examDate = plan?.targetDate || "2025-12-31"; // renamed from targetDate
+    const dailyPlanTime = 30; // filler
+    const chaptersCount = 5; // filler
+    const subChaptersCount = 12; // filler
+    const overallProgress = 65; // filler
+
+    return (
+      <div style={{ marginBottom: "1rem" }}>
+        {/* Book Name */}
+        <h2 style={headingStyle}>{bookName}</h2>
+
+        {/* Row of rectangular cards with icons + text */}
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "1rem",
+            marginBottom: "1rem",
+          }}
+        >
+          <IconCard
+            icon="📅"
+            label="Exam Date"
+            value={examDate}
+            color={colorScheme.heading || "#FFD700"}
+          />
+          <IconCard
+            icon="⏱"
+            label="Daily Plan"
+            value={`${dailyPlanTime} min`}
+            color={colorScheme.heading || "#FFD700"}
+          />
+          <IconCard
+            icon="📖"
+            label="Chapters"
+            value={chaptersCount}
+            color={colorScheme.heading || "#FFD700"}
+          />
+          <IconCard
+            icon="🗂"
+            label="SubChaps"
+            value={subChaptersCount}
+            color={colorScheme.heading || "#FFD700"}
+          />
+        </div>
+
+        {/* Overall progress bar (wide) */}
+        <div
+          style={{
+            backgroundColor: "#2F2F2F",
+            padding: "0.5rem",
+            borderRadius: "8px",
+            width: "100%",
+            maxWidth: "600px",
+          }}
+        >
+          <div style={{ fontWeight: "bold", marginBottom: 6 }}>
+            Overall Progress
+          </div>
+          <LinearProgress
+            variant="determinate"
+            value={overallProgress}
+            sx={{
+              height: 10,
+              borderRadius: 2,
+              backgroundColor: "rgba(255,255,255,0.2)",
+              "& .MuiLinearProgress-bar": {
+                backgroundColor: colorScheme.heading || "#FFD700",
+              },
+            }}
+          />
+          <div
+            style={{
+              marginTop: "4px",
+              fontWeight: "bold",
+              color: colorScheme.heading || "#FFD700",
+              textAlign: "right",
+            }}
+          >
+            {overallProgress}%
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Icon-based rectangular card
+  function IconCard({ icon, label, value, color }) {
+    return (
+      <div
+        style={{
+          width: 130,
+          backgroundColor: "#2F2F2F",
+          borderRadius: "8px",
+          padding: "0.6rem",
+          textAlign: "center",
+        }}
+      >
+        <div style={{ fontSize: "1.4rem", marginBottom: 4 }}>{icon}</div>
+        <div
+          style={{
+            textTransform: "uppercase",
+            fontSize: "0.7rem",
+            opacity: 0.8,
+            marginBottom: "4px",
+          }}
+        >
+          {label}
+        </div>
+        <div style={{ fontWeight: "bold", color }}>{value}</div>
+      </div>
+    );
   }
 
   // ------------------------------------------
@@ -222,16 +354,18 @@ export default function Child2({
   if (localPlanIds.length === 0 && !plan) {
     return (
       <div style={containerStyle}>
-        <h2 style={headingStyle}>Adaptive Plan</h2>
-        <div>No plan IDs found for user/book.</div>
+        <h2 style={headingStyle}>No Plans Found</h2>
+        <p>No plan IDs found for user/book.</p>
       </div>
     );
   }
 
   return (
     <div style={containerStyle}>
-      <h2 style={headingStyle}>Adaptive Plan</h2>
+      {/* 1) Stats row => top portion */}
+      {renderTopStats()}
 
+      {/* 2) If multiple plans => plan dropdown */}
       {localPlanIds.length > 1 && (
         <div style={{ marginBottom: "1rem" }}>
           <label>Select Plan:</label>
@@ -249,15 +383,31 @@ export default function Child2({
         </div>
       )}
 
+      {/* 3) Tabs => "Daily Plan"(0), "Progress"(1), "Admin Panel"(2) */}
+      <Tabs
+        value={activeTab}
+        onChange={handleChangeTab}
+        textColor="inherit"
+        TabIndicatorProps={{
+          style: { backgroundColor: colorScheme.heading || "#FFD700" },
+        }}
+        sx={{ marginBottom: "1rem" }}
+      >
+        <Tab label="Daily Plan" />
+        <Tab label="Progress" />
+        <Tab label="Admin Panel" />
+      </Tabs>
+
+      {/* 4) if no plan => etc. else => tab content */}
       {!selectedPlanId ? (
         <div>No Plan ID selected.</div>
       ) : !plan ? (
         <div>Loading plan data...</div>
       ) : (
-        renderLocalPlan(plan)
+        renderTabContent()
       )}
 
-      {/* PlanFetcher Dialog */}
+      {/* PlanFetcher => display plan reading/quiz in dialog */}
       <Dialog
         open={showPlanDialog}
         onClose={() => setShowPlanDialog(false)}
@@ -277,7 +427,6 @@ export default function Child2({
               initialActivityContext={dialogInitialActivity}
               userId={userId}
               onClose={() => setShowPlanDialog(false)}
-
             />
           ) : (
             <p style={{ margin: "1rem" }}>No planId found. Cannot load plan.</p>
@@ -287,88 +436,156 @@ export default function Child2({
     </div>
   );
 
-  // -----------------------------------------------
-  // RENDER LOCAL PLAN
-  // -----------------------------------------------
-  function renderLocalPlan(planObj) {
-    const { sessions = [] } = planObj;
-    if (sessions.length === 0) {
+  // Render content based on activeTab
+  function renderTabContent() {
+    if (activeTab === 0) {
+      return renderDailyPlan();
+    } else if (activeTab === 1) {
+      // "Progress" tab => filler
+      return (
+        <div style={{ marginTop: "1rem" }}>
+          <h3 style={headingStyle}>Progress (Filler)</h3>
+          <p style={{ marginBottom: "1rem" }}>
+            This is a placeholder content for the new Progress tab.
+          </p>
+          <p>We will add more progress metrics and charts here soon.</p>
+        </div>
+      );
+    } else {
+      // "Admin Panel"
+      return (
+        <div style={{ marginTop: "1rem" }}>
+          <h3 style={headingStyle}>Admin Panel</h3>
+          <PlanUsageHistory
+            bookId={bookId}
+            userId={userId}
+            planId={selectedPlanId}
+            planData={plan}
+            db={db}
+            colorScheme={colorScheme}
+          />
+        </div>
+      );
+    }
+  }
+
+  // "Daily Plan" tab => includes daily progress bar + day dropdown + session content
+  function renderDailyPlan() {
+    // filler data => daily progress
+    const dailyProgress = 20;
+
+    const sessions = plan?.sessions || [];
+    if (!sessions.length) {
       return <div>No sessions found in this plan.</div>;
     }
 
+    let safeIdx = dayDropIdx;
+    if (dayDropIdx >= sessions.length) {
+      safeIdx = 0;
+    }
+    const currentSession = sessions[safeIdx];
+
     return (
-      <>
-        <div style={{ display: "flex", marginBottom: "1rem" }}>
-          <div
-            style={tabStyle(activeSessionIndex === 0)}
-            onClick={() => setActiveSessionIndex(0)}
-          >
-            
+      <div style={{ marginTop: "1rem" }}>
+        {/* Daily Progress bar */}
+        <div
+          style={{
+            backgroundColor: "#2F2F2F",
+            padding: "0.5rem",
+            borderRadius: "8px",
+            width: "100%",
+            maxWidth: "600px",
+            marginBottom: "1rem",
+          }}
+        >
+          <div style={{ fontWeight: "bold", marginBottom: 6 }}>
+            Daily Progress
           </div>
-
-          {sessions.map((sess, index) => {
-            const tabIndex = index + 1;
-            const sLabel = Number(sess.sessionLabel);
-            let sessionDisplayName;
-            if (sLabel === 1) sessionDisplayName = "Today";
-            else if (sLabel === 2) sessionDisplayName = "Tomorrow";
-            else sessionDisplayName = `Day ${sLabel}`;
-
-            const totalTime = (sess.activities || []).reduce(
-              (acc, a) => acc + (a.timeNeeded || 0),
-              0
-            );
-            const label = `${sessionDisplayName} (${totalTime} min)`;
-
-            return (
-              <div
-                key={sess.sessionLabel}
-                style={tabStyle(activeSessionIndex === tabIndex)}
-                onClick={() => setActiveSessionIndex(tabIndex)}
-              >
-                {label}
-              </div>
-            );
-          })}
+          <LinearProgress
+            variant="determinate"
+            value={dailyProgress}
+            sx={{
+              height: 10,
+              borderRadius: 2,
+              backgroundColor: "rgba(255,255,255,0.2)",
+              "& .MuiLinearProgress-bar": {
+                backgroundColor: colorScheme.heading || "#FFD700",
+              },
+            }}
+          />
+          <div
+            style={{
+              marginTop: "4px",
+              fontWeight: "bold",
+              color: colorScheme.heading || "#FFD700",
+              textAlign: "right",
+            }}
+          >
+            {dailyProgress}%
+          </div>
         </div>
 
-        {
-  activeSessionIndex === 0
-    ? (
-      <PlanUsageHistory
-        bookId={bookId}
-        userId={userId}
-        planId={selectedPlanId}   // <-- pass planId as a prop
-        planData={plan}   // <-- pass the plan doc as a prop
-        db={db}
-        colorScheme={colorScheme}
-      />
-    ) : (
-      renderSessionContent(sessions[activeSessionIndex - 1])
-    )
-}
-      </>
+        {/* "Resume Learning" primary CTA button */}
+        <Button
+          variant="contained"
+          onClick={() => handleOpenPlanFetcher(selectedPlanId, null)}
+          sx={{
+            backgroundColor: colorScheme.heading || "#FFD700",
+            color: "#000",
+            fontWeight: "bold",
+            borderRadius: "4px",
+            marginBottom: "1rem",
+            "&:hover": {
+              backgroundColor: "#e5c100", // darker shade
+            },
+          }}
+        >
+          Resume Learning
+        </Button>
+
+        {/* Day dropdown => e.g. Today, Tomorrow, Day X */}
+        <div style={{ marginBottom: "1rem" }}>
+          <label style={{ marginRight: 8 }}>Select Day:</label>
+          <Select
+            value={safeIdx}
+            onChange={handleDaySelect}
+            sx={{
+              minWidth: 120,
+              backgroundColor: "#2F2F2F",
+              color: colorScheme.textColor || "#FFD700",
+            }}
+            MenuProps={{
+              PaperProps: {
+                sx: {
+                  bgcolor: "#2F2F2F",
+                  color: "#fff",
+                },
+              },
+            }}
+          >
+            {sessions.map((sess, idx) => {
+              const sLabel = Number(sess.sessionLabel);
+              let displayName = "";
+              if (sLabel === 1) displayName = "Today";
+              else if (sLabel === 2) displayName = "Tomorrow";
+              else displayName = `Day ${sLabel}`;
+              return (
+                <MenuItem key={sess.sessionLabel} value={idx}>
+                  {displayName}
+                </MenuItem>
+              );
+            })}
+          </Select>
+        </div>
+
+        {/* session content */}
+        {renderSessionContent(currentSession)}
+      </div>
     );
   }
 
-  function tabStyle(isActive) {
-    return {
-      padding: "0.5rem 1rem",
-      cursor: "pointer",
-      border: `1px solid ${colorScheme.borderColor || "#FFD700"}`,
-      borderBottom: isActive
-        ? "none"
-        : `1px solid ${colorScheme.borderColor || "#FFD700"}`,
-      borderRadius: "8px 8px 0 0",
-      marginRight: "5px",
-      backgroundColor: isActive ? "#2F2F2F" : "#3D3D3D",
-      color: colorScheme.textColor || "#FFD700",
-    };
-  }
-
-  // Render a single session => we skip “book name” if there's only 1 book
   function renderSessionContent(session) {
-    if (!session) return null;
+    if (!session) return <div>No session data.</div>;
     const { activities = [] } = session;
 
     // group by chapter
@@ -383,7 +600,7 @@ export default function Child2({
     const chapterIds = [...chapterMap.keys()];
 
     return (
-      <div style={{ marginTop: "1rem" }}>
+      <div>
         {chapterIds.map((chapterId) => {
           const cActs = chapterMap.get(chapterId) || [];
           const chapterName = cActs[0]?.chapterName || `Chapter(${chapterId})`;
@@ -394,14 +611,16 @@ export default function Child2({
 
           return (
             <div key={chapterId} style={{ marginBottom: "1rem" }}>
-              {/* Chapter header row => name + colored time box on right */}
+              {/* Chapter header */}
               <div
                 style={{
                   cursor: "pointer",
                   padding: "8px 12px",
                   backgroundColor: "#2F2F2F",
                   borderRadius: "4px",
-                  border: `1px solid ${colorScheme.borderColor || "#FFD700"}`,
+                  border: `1px solid ${
+                    colorScheme.borderColor || "#FFD700"
+                  }`,
                   fontWeight: "bold",
                   display: "flex",
                   alignItems: "center",
@@ -409,7 +628,10 @@ export default function Child2({
                 }}
                 onClick={() => toggleChapter(chapterKey)}
               >
-                <div>{isExpanded ? "▾ " : "▸ "}{chapterName}</div>
+                <div>
+                  {isExpanded ? "▾ " : "▸ "}
+                  {chapterName}
+                </div>
                 <div
                   style={{
                     backgroundColor: colorScheme.heading || "#FFD700",
@@ -448,7 +670,7 @@ export default function Child2({
 
     const subIds = [...subMap.keys()];
 
-    return subIds.map(subId => {
+    return subIds.map((subId) => {
       const sActs = subMap.get(subId) || [];
       const subName = sActs[0]?.subChapterName || `SubCh (${subId})`;
 
@@ -470,12 +692,12 @@ export default function Child2({
                 padding: "6px 8px",
               }}
             >
-              {/* Left: show timeNeeded */}
+              {/* timeNeeded */}
               <div style={{ fontSize: "0.85rem", marginRight: "6px" }}>
                 {act.timeNeeded || 0} min
               </div>
 
-              {/* The timeline bar => built from 'stageOrder' */}
+              {/* stage timeline */}
               <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                 {renderTimelineStages(act)}
               </div>
@@ -486,26 +708,20 @@ export default function Child2({
     });
   }
 
-  // Renders the timeline stages from our "stageOrder" state.
   function renderTimelineStages(activity) {
-    // Figure out which stage is "active"
-    // - if type=READ => activeStage="Reading"
-    // - if type=QUIZ => activeStage = quizStage (capitalized)
     let activeStage = "";
     if (activity.type === "READ") {
       activeStage = "Reading";
     } else if (activity.type === "QUIZ") {
       if (activity.quizStage) {
-        // e.g. "remember" => "Remember"
         activeStage = transformStage(activity.quizStage);
       } else {
         activeStage = "Quiz";
       }
     }
 
-    // if we haven't loaded exam config, stageOrder might be empty
-    if (!stageOrder || stageOrder.length === 0) {
-      // fallback to show just the active stage as a button
+    // if no stageOrder => single button
+    if (!stageOrder?.length) {
       return (
         <button
           style={activityButtonStyle()}
@@ -519,10 +735,9 @@ export default function Child2({
       );
     }
 
-    // Use the stageOrder array. For each stage, if it matches activeStage => button
+    // else => show each stage from stageOrder
     return stageOrder.map((stageName, idx) => {
-      const isActive =
-        stageName.toLowerCase() === activeStage.toLowerCase();
+      const isActive = stageName.toLowerCase() === activeStage.toLowerCase();
 
       const stageElem = isActive ? (
         <button
@@ -541,7 +756,7 @@ export default function Child2({
         </div>
       );
 
-      // Insert a small arrow (➔) after each stage except the last
+      // Insert arrow except last
       if (idx < stageOrder.length - 1) {
         return (
           <React.Fragment key={`${stageName}-${idx}`}>
