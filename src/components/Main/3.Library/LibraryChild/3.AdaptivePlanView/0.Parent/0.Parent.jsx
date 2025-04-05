@@ -331,6 +331,7 @@ export default function Child2({
       // Daily Plan
       return (
         <DailyPlan
+          userId={userId}
           plan={plan}
           planId={selectedPlanId}
           colorScheme={colorScheme}

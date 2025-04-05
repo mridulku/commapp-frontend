@@ -1,6 +1,7 @@
 // File: DailyPlan.jsx
 
-import React from "react";
+import React, { useState, useEffect } from "react";
+import axios from "axios";
 import { useDispatch, useSelector } from "react-redux";
 import { setCurrentIndex } from "../../../../../../store/planSlice";
 import {
@@ -8,31 +9,31 @@ import {
   Typography,
   Select,
   MenuItem,
-  Tooltip,
   List,
   ListItemButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
 } from "@mui/material";
 
-// MUI icons for demonstration
+// (Optional) MUI icons
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
 
 /** 
- * --------------------------------
- * UTILS & CONSTANTS
- * --------------------------------
+ * Format N seconds => "Xm Ys"
  */
-
-// Single pill color for chapter, subchapter, stage, aggregatorTask, time
-const PILL_BG = "#424242";
-const PILL_TEXT = "#fff";
-
-// If an item is selected => #EF5350 (red); else => #555 (gray)
-function getCardBackground(isSelected) {
-  return isSelected ? "#EF5350" : "#555";
+function formatSeconds(totalSeconds) {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}m ${s}s`;
 }
 
-// If aggregatorStatus === "locked", we show a semi-transparent overlay
+/** 
+ * If aggregatorStatus === "locked", show overlay
+ */
 function aggregatorLockedOverlay() {
   return (
     <Box
@@ -51,13 +52,13 @@ function aggregatorLockedOverlay() {
   );
 }
 
-/**
- * A simple pill component for consistent styling
+/** 
+ * Pill => small stylized label
  */
 function Pill({
   text,
-  bgColor = PILL_BG,
-  textColor = PILL_TEXT,
+  bgColor = "#424242",
+  textColor = "#fff",
   sx = {},
 }) {
   return (
@@ -81,15 +82,12 @@ function Pill({
 }
 
 /**
- * Convert an activity's type/quizStage into "Stage X, Reading/Remember/etc."
- * If none matches, fallback "Stage ?, Quiz"
+ * Return an English label for activity’s stage
  */
 function getStageLabel(act) {
-  // For reading
   if ((act.type || "").toLowerCase() === "read") {
     return "Stage 1, Reading";
   }
-
   const stage = (act.quizStage || "").toLowerCase();
   switch (stage) {
     case "remember":
@@ -101,184 +99,247 @@ function getStageLabel(act) {
     case "analyze":
       return "Stage 5, Analyze";
     default:
-      // fallback if quizStage is unknown
       return "Stage ?, Quiz";
   }
 }
 
 /**
- * "CompletionStatusBlock"
- * If "complete" or "deferred", show 3 pills:
- *  1) "Complete"/"Deferred" pill
- *  2) Clock icon pill with static "4:10 PM"
- *  3) Hourglass icon pill with static "2m 15s"
+ * Decide which "Reading"/"Remember"/"Understand"/"Apply"/"Analyze" to look for in taskInfo
  */
-function CompletionStatusBlock({ status }) {
-  if (!status) return null;
-  const norm = status.toLowerCase();
-
-  let bgColor = "#BDBDBD";
-  let label = status;
-  let textColor = "#000";
-
-  if (norm === "complete") {
-    bgColor = "#66BB6A";
-    label = "Complete";
-  } else if (norm === "deferred") {
-    bgColor = "#FFA726";
-    label = "Deferred";
+function getTaskInfoStageLabel(act) {
+  if ((act.type || "").toLowerCase() === "read") {
+    return "Reading";
   }
-
-  return (
-    <>
-      {/* 1) The completion pill */}
-      <Pill text={label} bgColor={bgColor} textColor={textColor} />
-
-      {/* 2) The static clock pill */}
-      <Pill
-        bgColor={bgColor}
-        textColor={textColor}
-        text={
-          <>
-            <AccessTimeIcon sx={{ fontSize: "0.8rem", mr: 0.5 }} />
-            4:10 PM
-          </>
-        }
-      />
-
-      {/* 3) The static duration pill */}
-      <Pill
-        bgColor={bgColor}
-        textColor={textColor}
-        text={
-          <>
-            <HourglassEmptyIcon sx={{ fontSize: "0.8rem", mr: 0.5 }} />
-            2m 15s
-          </>
-        }
-      />
-    </>
-  );
-}
-
-/**
- * (Optional) If you want truncated tooltips for some text
- */
-function TruncateTooltip({ text, sx }) {
-  return (
-    <Tooltip title={text} arrow>
-      <Typography
-        noWrap
-        sx={{
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-          display: "block",
-          width: "100%",
-          ...sx,
-        }}
-      >
-        {text}
-      </Typography>
-    </Tooltip>
-  );
+  const stage = (act.quizStage || "").toLowerCase();
+  switch (stage) {
+    case "remember":
+      return "Remember";
+    case "understand":
+      return "Understand";
+    case "apply":
+      return "Apply";
+    case "analyze":
+      return "Analyze";
+    default:
+      return "Quiz";
+  }
 }
 
 /**
  * ActivityList
  * ------------
- * Two-line layout:
- *   Row 1 => Chapter pill, Subchapter pill, Stage pill
- *   Row 2 => aggregatorTask pill (if present), time pill, completion status block on far right
- *           (the block includes the "complete/deferred" pill + clock + duration)
+ * The row 2 logic:
+ *  - If completionStatus === "complete" => single "Complete" pill + time
+ *  - Else if locked => "Locked" + time
+ *  - Else if completionStatus === "deferred" => "Deferred" + time, show nextTask
+ *  - Else if timeSpent>0 => "WIP" + time, show nextTask
+ *  - Else => "Not Started" + time, show nextTask
  */
-function ActivityList({ dayActivities, currentIndex, onClickActivity }) {
+function ActivityList({
+  dayActivities,
+  currentIndex,
+  onClickActivity,
+  timeMap,
+  subchapterStatusMap
+}) {
+  const [debugOpen, setDebugOpen] = useState(false);
+  const [debugTitle, setDebugTitle] = useState("");
+  const [debugData, setDebugData] = useState(null);
+
+  function handleOpenDebug(subChId, activity) {
+    const data = subchapterStatusMap[subChId] || null;
+    setDebugTitle(`Debug for subCh='${subChId}' type='${activity.type}'`);
+    setDebugData(data);
+    setDebugOpen(true);
+  }
+  function handleCloseDebug() {
+    setDebugOpen(false);
+    setDebugTitle("");
+    setDebugData(null);
+  }
+
   return (
-    <List dense sx={{ p: 0 }}>
-      {dayActivities.map((act) => {
-        const isSelected = act.flatIndex === currentIndex;
-        const cardBg = getCardBackground(isSelected);
+    <>
+      <List dense sx={{ p: 0 }}>
+        {dayActivities.map((act) => {
+          const isSelected = act.flatIndex === currentIndex;
+          const cardBg = isSelected ? "#EF5350" : "#555";
+          const aggregatorLocked = (act.aggregatorStatus || "").toLowerCase() === "locked";
 
-        // aggregator locked?
-        const locked = (act.aggregatorStatus || "").toLowerCase() === "locked";
+          // Stage label => might be displayed above
+          const stageLabel = getStageLabel(act);
+          // timeNeeded => "5m" if any
+          const timeNeeded = act.timeNeeded !== undefined
+            ? `${act.timeNeeded}m`
+            : null;
 
-        // Stage label => e.g. "Stage 2, Remember"
-        const stageLabel = getStageLabel(act);
+          // Real time from getActivityTime
+          const activityTime = timeMap[act.activityId] || 0;
 
-        // aggregatorTask => e.g. "Quiz 1" or "Read" or "5-Minute Quiz"
-        const aggregatorTask = act.aggregatorTask || "";
+          // subchapter-status => read `locked`, `nextTaskLabel`, etc.
+          let lockedFromAPI = false;
+          let nextTaskLabel = "";
+          let subChCompleteStatus = "not-started";
+          // Look up the correct "stage" from the new subchapter-status
+          const subChId = act.subChapterId || "";
+          const statusObj = subchapterStatusMap[subChId] || null;
+          if (statusObj && Array.isArray(statusObj.taskInfo)) {
+            const desiredLabel = getTaskInfoStageLabel(act);
+            const found = statusObj.taskInfo.find(
+              (ti) => (ti.stageLabel || "").toLowerCase() === desiredLabel.toLowerCase()
+            );
+            if (found) {
+              lockedFromAPI = !!found.locked;
+              nextTaskLabel = found.nextTaskLabel || "";
+              subChCompleteStatus = found.status || "not-started"; 
+              // e.g. "done", "in-progress", "not-started"
+            }
+          }
 
-        // time => e.g. "5m"
-        const timeNeeded = act.timeNeeded !== undefined 
-          ? `${act.timeNeeded}m`
-          : null;
+          // Also the plan doc has completionStatus => "complete"/"deferred"/...
+          const planCompletion = (act.completionStatus || "").toLowerCase();
 
-        return (
-          <Box
-            key={act.flatIndex}
-            sx={{
-              position: "relative",
-              mb: 0.8,
-              borderRadius: "4px",
-              overflow: "hidden",
-            }}
-          >
-            <ListItemButton
+          // Decide final label for the status pill
+          // If plan says "complete" => ignore locked, show "Complete"
+          // If aggregator says locked => show "Locked"
+          // Else if plan says "deferred" => "Deferred"
+          // Else if activityTime>0 => "WIP"
+          // else => "Not Started"
+          let finalStatusLabel = "";
+          let finalStatusColor = "#BDBDBD"; // default for WIP
+          let skipNext = false;
+
+          if (planCompletion === "complete") {
+            finalStatusLabel = "Complete";
+            finalStatusColor = "#66BB6A";
+            skipNext = true;
+          } else if (lockedFromAPI) {
+            finalStatusLabel = "Locked";
+            finalStatusColor = "#EF5350"; // or something
+            skipNext = true;
+          } else if (planCompletion === "deferred") {
+            finalStatusLabel = "Deferred";
+            finalStatusColor = "#FFA726";
+            skipNext = false; // user said if locked or complete => skip next, but not for deferred
+          } else {
+            // not complete, not locked, not deferred
+            if (activityTime > 0) {
+              finalStatusLabel = "WIP";
+              finalStatusColor = "#BDBDBD";
+            } else {
+              finalStatusLabel = "Not Started";
+              finalStatusColor = "#EF5350";
+            }
+            skipNext = false;
+          }
+
+          // We always display the time next to final status
+          const timePill = (
+            <Pill text={formatSeconds(activityTime)} bgColor="#424242" textColor="#fff" />
+          );
+
+          // Next Task => skip if skipNext===true
+          let nextTaskPill = null;
+          if (!skipNext && nextTaskLabel) {
+            nextTaskPill = (
+              <Pill text={`Next: ${nextTaskLabel}`} bgColor="#FFD700" textColor="#000" />
+            );
+          }
+
+          return (
+            <Box
+              key={act.flatIndex}
               sx={{
-                flexDirection: "column",
-                alignItems: "flex-start",
-                bgcolor: cardBg,
-                color: "#fff",
-                py: 1,
-                px: 1,
-                "&:hover": { bgcolor: "#444" },
+                position: "relative",
+                mb: 0.8,
+                borderRadius: "4px",
+                overflow: "hidden",
               }}
-              onClick={() => onClickActivity(act)}
             >
-              {/* Row 1 */}
-              <Box
+              <ListItemButton
                 sx={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: 1,
-                  width: "100%",
+                  flexDirection: "column",
+                  alignItems: "flex-start",
+                  bgcolor: cardBg,
+                  color: "#fff",
+                  py: 1,
+                  px: 1,
+                  "&:hover": { bgcolor: "#444" },
                 }}
+                onClick={() => onClickActivity(act)}
               >
-                {/* Chapter pill */}
-                <Pill text={act.chapterName || "Chapter ?"} />
-                {/* Subchapter pill */}
-                <Pill text={act.subChapterName || "Subchapter ?"} />
-                {/* Stage pill => e.g. "Stage 2, Remember" */}
-                <Pill text={stageLabel} />
-              </Box>
-
-              {/* Row 2 => aggregatorTask, time, completion block on far right */}
-              <Box
-                sx={{
-                  display: "flex",
-                  width: "100%",
-                  mt: 0.5,
-                  alignItems: "center",
-                  gap: 1,
-                }}
-              >
-                {/* aggregatorTask pill (left side) if we have aggregatorTask */}
-                {aggregatorTask && <Pill text={aggregatorTask} />}
-
-                {/* time pill if we have timeNeeded */}
-                {timeNeeded && <Pill text={timeNeeded} />}
-
-                {/* completion status block on far right */}
-                <Box sx={{ ml: "auto", display: "flex", gap: 1 }}>
-                  <CompletionStatusBlock status={act.completionStatus} />
+                {/* Row 1 => ChapterName, SubchapterName, Stage */}
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, width: "100%" }}>
+                  {/* Remove aggregatorTask => user requested that. */}
+                  <Pill text={act.chapterName || "Chapter ?"} />
+                  <Pill text={act.subChapterName || "Subchapter ?"} />
+                  <Pill text={stageLabel} />
                 </Box>
-              </Box>
-            </ListItemButton>
-            {locked && aggregatorLockedOverlay()}
-          </Box>
-        );
-      })}
-    </List>
+
+                {/* Row 2 => timeNeeded, debug button, final status + time pill, nextTask if any */}
+                <Box sx={{ display: "flex", width: "100%", mt: 0.5, alignItems: "center", gap: 1 }}>
+                  {/* If timeNeeded => show it */}
+                  {timeNeeded && <Pill text={timeNeeded} />}
+
+                  {/* The debug button => subchapter-status raw JSON */}
+                  <button
+                    style={{
+                      backgroundColor:"#666",
+                      color:"#fff",
+                      border:"none",
+                      borderRadius:"4px",
+                      padding:"4px 8px",
+                      cursor:"pointer",
+                      fontSize:"0.8rem"
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenDebug(subChId, act);
+                    }}
+                  >
+                    i
+                  </button>
+
+                  {/* final status pill + time pill */}
+                  <Box sx={{ ml: "auto", display: "flex", gap: 1 }}>
+                    <Pill text={finalStatusLabel} bgColor={finalStatusColor} textColor="#000" />
+                    {timePill}
+                    {/* If not skipNext => show nextTask */}
+                    {nextTaskPill}
+                  </Box>
+                </Box>
+              </ListItemButton>
+
+              {aggregatorLocked && aggregatorLockedOverlay()}
+            </Box>
+          );
+        })}
+      </List>
+
+      {/* Debug modal => raw JSON from subchapterStatusMap */}
+      <Dialog
+        open={debugOpen}
+        onClose={handleCloseDebug}
+        fullWidth
+        maxWidth="md"
+      >
+        <DialogTitle>{debugTitle}</DialogTitle>
+        <DialogContent sx={{ backgroundColor:"#222" }}>
+          {debugData ? (
+            <pre style={{ color:"#0f0", fontSize:"0.85rem", whiteSpace:"pre-wrap" }}>
+              {JSON.stringify(debugData, null, 2)}
+            </pre>
+          ) : (
+            <p style={{ color:"#fff" }}>No data found.</p>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ backgroundColor:"#222" }}>
+          <Button onClick={handleCloseDebug} variant="contained" color="secondary">
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 }
 
@@ -286,6 +347,7 @@ function ActivityList({ dayActivities, currentIndex, onClickActivity }) {
  * Main DailyPlan component
  */
 export default function DailyPlan({
+  userId,
   plan,
   planId,
   colorScheme,
@@ -311,6 +373,90 @@ export default function DailyPlan({
   const currentSession = sessions[safeIdx] || {};
   const { activities = [] } = currentSession;
 
+  // We'll store fetched times in a map => { [activityId]: number }
+  const [timeMap, setTimeMap] = useState({});
+
+  // We'll also store subchapter-status in a map => { [subChapterId]: response JSON }
+  const [subchapterStatusMap, setSubchapterStatusMap] = useState({});
+
+  // Log out the activities on initial render
+  useEffect(() => {
+    console.log("DailyPlan => dayActivities =>", activities);
+  }, [activities]);
+
+  // 1) getActivityTime => time lumps
+  useEffect(() => {
+    async function fetchActivityTimes() {
+      if (!activities.length) {
+        setTimeMap({});
+        return;
+      }
+
+      const newMap = {};
+      for (const act of activities) {
+        if (!act.activityId) {
+          console.log("Skipping activity with no activityId:", act);
+          continue;
+        }
+
+        const rawType = (act.type || "").toLowerCase();
+        const type = rawType.includes("read") ? "read" : "quiz";
+
+        try {
+          const res = await axios.get("http://localhost:3001/api/getActivityTime", {
+            params: {
+              activityId: act.activityId,
+              type,
+            },
+          });
+          const totalTime = res.data?.totalTime || 0;
+          newMap[act.activityId] = totalTime;
+        } catch (err) {
+          console.error("Error fetching time for", act.activityId, err);
+        }
+      }
+      setTimeMap(newMap);
+    }
+
+    fetchActivityTimes();
+  }, [activities]);
+
+  // 2) subchapter-status => locked, nextTaskLabel, etc.
+  useEffect(() => {
+    async function fetchAllSubchapterStatus() {
+      if (!activities.length) {
+        setSubchapterStatusMap({});
+        return;
+      }
+
+      const uniqueSubIds = new Set();
+      for (const act of activities) {
+        if (act.subChapterId) {
+          uniqueSubIds.add(act.subChapterId);
+        }
+      }
+
+      const newStatusMap = {};
+      for (const subId of uniqueSubIds) {
+        try {
+          const res = await axios.get("http://localhost:3001/subchapter-status", {
+            params: {
+              userId,
+              planId,
+              subchapterId: subId,
+            },
+          });
+          newStatusMap[subId] = res.data;
+        } catch (err) {
+          console.error("Error fetching subchapter-status for", subId, err);
+        }
+      }
+      setSubchapterStatusMap(newStatusMap);
+    }
+
+    fetchAllSubchapterStatus();
+  }, [activities, planId]);
+
   function handleClickActivity(act) {
     dispatch(setCurrentIndex(act.flatIndex));
     if (onOpenPlanFetcher) {
@@ -320,7 +466,7 @@ export default function DailyPlan({
 
   return (
     <div style={{ marginTop: "1rem" }}>
-      {/* Smaller day dropdown label: "Day" */}
+      {/* Day dropdown */}
       <Box sx={{ mb: 1, display: "flex", alignItems: "center", gap: 1 }}>
         <Typography
           variant="body2"
@@ -365,11 +511,13 @@ export default function DailyPlan({
         </Select>
       </Box>
 
-      {/* The updated ActivityList */}
+      {/* ActivityList */}
       <ActivityList
         dayActivities={activities}
         currentIndex={currentIndex}
         onClickActivity={handleClickActivity}
+        timeMap={timeMap}
+        subchapterStatusMap={subchapterStatusMap}
       />
     </div>
   );
