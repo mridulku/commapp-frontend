@@ -35,6 +35,7 @@ function formatTime(totalSeconds) {
  */
 export default function QuizView({
   activity,
+
   userId = "",
   examId = "general",
   quizStage = "remember",
@@ -148,6 +149,7 @@ export default function QuizView({
         setStatus("Generating questions via GPT...");
         const result = await generateQuestions({
           userId,
+          planId,
           db,
           subChapterId,
           examId,
