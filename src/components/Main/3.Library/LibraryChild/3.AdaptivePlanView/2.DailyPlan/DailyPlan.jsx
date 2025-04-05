@@ -72,7 +72,7 @@ function Pill({
         color: textColor,
         whiteSpace: "nowrap",
         cursor: onClick ? "pointer" : "default",
-        pointerEvents: "auto", // important for clickable elements in a bigger button
+        pointerEvents: "auto", // important for clickable elements
         ...sx,
       }}
     >
@@ -124,7 +124,10 @@ function getTaskInfoStageLabel(act) {
 /**
  * ActivityList
  * ------------
- * Adds a new "Previous" pill that opens a small modal with prior attempts
+ * Adds:
+ *   - "Previous" pill that opens prior attempts
+ *   - "History" pill
+ *   - **"Progress" pill** (new) for quiz stages => shows mastery stats in a modal
  */
 function ActivityList({
   dayActivities,
@@ -148,9 +151,16 @@ function ActivityList({
   // 3) "Previous" smaller modal
   const [prevModalOpen, setPrevModalOpen] = useState(false);
   const [prevModalTitle, setPrevModalTitle] = useState("");
-  const [prevModalItems, setPrevModalItems] = useState([]); // array of strings or objects?
+  const [prevModalItems, setPrevModalItems] = useState([]); // array of strings
 
-  // Show old subchapter-status
+  // 4) **Progress** modal (the new feature)
+  const [progressOpen, setProgressOpen] = useState(false);
+  const [progressTitle, setProgressTitle] = useState("");
+  const [progressData, setProgressData] = useState(null); // { masteryPct, conceptMastery: [...], etc. }
+
+  /* ------------------------------------------------------------------
+   * 1) Old subchapter-status debug
+   * ------------------------------------------------------------------ */
   function handleOpenDebug(subChId, activity) {
     const data = subchapterStatusMap[subChId] || null;
     setDebugTitle(`(Old) Subchapter-Status => subChId='${subChId}' type='${activity.type}'`);
@@ -163,7 +173,9 @@ function ActivityList({
     setDebugData(null);
   }
 
-  // Show entire subchapter-history JSON
+  /* ------------------------------------------------------------------
+   * 2) subchapter-history debug => entire JSON
+   * ------------------------------------------------------------------ */
   async function handleOpenHistoryDebug(subChId) {
     try {
       setHistoryTitle(`(New) Subchapter-History => subChId='${subChId}'`);
@@ -188,11 +200,11 @@ function ActivityList({
     setHistoryData(null);
   }
 
-  // "Previous" => open smaller modal with prior attempts
+  /* ------------------------------------------------------------------
+   * 3) "Previous" => smaller modal w/ quiz or revision attempts
+   * ------------------------------------------------------------------ */
   async function handleOpenPrevious(subChId, activity) {
     try {
-      // e.stopPropagation() is called outside
-      // We'll fetch subchapter-history => parse prior attempts
       const stage = (activity.quizStage || "").toLowerCase();
       const res = await axios.get("http://localhost:3001/subchapter-history", {
         params: {
@@ -209,9 +221,9 @@ function ActivityList({
         setPrevModalOpen(true);
         return;
       }
-      // combine quiz + revision attempts => sort
+      // combine quiz + revision attempts => sort by timestamp
       const quizArr = historyObj.quizAttempts || [];
-      const revArr  = historyObj.revisionAttempts || [];
+      const revArr = historyObj.revisionAttempts || [];
 
       const combined = [];
       quizArr.forEach((q) => {
@@ -231,10 +243,11 @@ function ActivityList({
         });
       });
 
-      combined.sort((a,b) => {
-        const aMs = toMillis(a.ts), bMs = toMillis(b.ts);
+      combined.sort((a, b) => {
+        const aMs = toMillis(a.ts),
+          bMs = toMillis(b.ts);
         if (aMs !== bMs) return aMs - bMs;
-        return (a.attemptNumber||0) - (b.attemptNumber||0);
+        return (a.attemptNumber || 0) - (b.attemptNumber || 0);
       });
 
       const lines = combined.length
@@ -242,7 +255,7 @@ function ActivityList({
             const dateStr = item.ts
               ? new Date(item.ts._seconds * 1000).toLocaleString()
               : "(no time)";
-            if (item.type==="quiz") {
+            if (item.type === "quiz") {
               return `Quiz${item.attemptNumber} => Score=${item.score}, ${dateStr}`;
             } else {
               return `Revision${item.attemptNumber} => ${dateStr}`;
@@ -266,6 +279,37 @@ function ActivityList({
     setPrevModalItems([]);
   }
 
+  /* ------------------------------------------------------------------
+   * 4) Progress Pill => shows mastery % and concept pass/fail
+   * ------------------------------------------------------------------ */
+  async function handleOpenProgress(subChId, stage) {
+    try {
+      setProgressTitle(`Progress => subCh='${subChId}', stage='${stage}'`);
+
+      // same endpoint as "History" but we only care about res.data.history[stage]
+      const res = await axios.get("http://localhost:3001/subchapter-history", {
+        params: {
+          userId,
+          planId,
+          subchapterId: subChId,
+        },
+      });
+      const stgData = res.data?.history?.[stage] || {};
+      // stgData => { masteryPct, conceptMastery: [{ conceptName, ratio, passOrFail }, ...], ... }
+      setProgressData(stgData);
+    } catch (err) {
+      console.error("handleOpenProgress => error:", err);
+      setProgressData({ error: err.message });
+    } finally {
+      setProgressOpen(true);
+    }
+  }
+  function handleCloseProgress() {
+    setProgressOpen(false);
+    setProgressTitle("");
+    setProgressData(null);
+  }
+
   return (
     <>
       <List dense sx={{ p: 0 }}>
@@ -274,17 +318,10 @@ function ActivityList({
           const cardBg = isSelected ? "#EF5350" : "#555";
           const aggregatorLocked = (act.aggregatorStatus || "").toLowerCase() === "locked";
 
-          // Stage label
           const stageLabel = getStageLabel(act);
-
-          // lumps => from aggregator
           const lumpsTime = timeMap[act.activityId] || 0;
-          // timeNeeded => "5m"
-          const timeNeededVal = act.timeNeeded !== undefined
-            ? `${act.timeNeeded}m`
-            : null;
+          const timeNeededVal = act.timeNeeded !== undefined ? `${act.timeNeeded}m` : null;
 
-          // aggregator => locked? nextTask
           let lockedFromAPI = false;
           let nextTaskLabel = "";
           const subChId = act.subChapterId || "";
@@ -300,7 +337,6 @@ function ActivityList({
             }
           }
 
-          // plan doc => complete/deferred
           const planCompletion = (act.completionStatus || "").toLowerCase();
 
           // final status => "Complete","Locked","Deferred","WIP","Not Started"
@@ -314,12 +350,12 @@ function ActivityList({
             skipNext = true;
           } else if (lockedFromAPI) {
             finalStatusLabel = (
-              <Box sx={{ display:"inline-flex", alignItems:"center", gap:0.5 }}>
-                <LockIcon sx={{ fontSize:"0.9rem" }} />
+              <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
+                <LockIcon sx={{ fontSize: "0.9rem" }} />
                 Locked
               </Box>
             );
-            finalStatusColor = "#9E9E9E"; 
+            finalStatusColor = "#9E9E9E";
             skipNext = true;
           } else if (planCompletion === "deferred") {
             finalStatusLabel = "Deferred";
@@ -336,7 +372,6 @@ function ActivityList({
             skipNext = false;
           }
 
-          // lumps pill => e.g. "3m"
           const lumpsPill = (
             <Pill text={formatSeconds(lumpsTime)} bgColor="#424242" textColor="#fff" />
           );
@@ -345,8 +380,12 @@ function ActivityList({
           let previousPill = null;
           let nextTaskPill = null;
 
+          // figure out if it's a quiz stage
+          const stageLower = (act.quizStage || "").toLowerCase();
+          const isQuizStage = ["remember", "understand", "apply", "analyze"].includes(stageLower);
+
           if (!skipNext && nextTaskLabel) {
-            // only if it's a quiz activity => we show the "Previous" pill
+            // only if it's quiz => show "Previous" pill
             if ((act.type || "").toLowerCase() === "quiz") {
               previousPill = (
                 <Pill
@@ -359,13 +398,12 @@ function ActivityList({
                 />
               );
             }
-
             nextTaskPill = (
               <Tooltip title={`Next Activity`}>
                 <Pill
                   text={
-                    <Box sx={{ display:"inline-flex", alignItems:"center", gap: 0.5 }}>
-                      <ArrowForwardIosIcon sx={{ fontSize:"0.9rem" }} />
+                    <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
+                      <ArrowForwardIosIcon sx={{ fontSize: "0.9rem" }} />
                       {nextTaskLabel}
                     </Box>
                   }
@@ -373,6 +411,21 @@ function ActivityList({
                   textColor="#000"
                 />
               </Tooltip>
+            );
+          }
+
+          // (NEW) "Progress" pill => if is quiz stage
+          let progressPill = null;
+          if (isQuizStage) {
+            progressPill = (
+              <Pill
+                text="Progress"
+                bgColor="#4CAF50"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenProgress(subChId, stageLower);
+                }}
+              />
             );
           }
 
@@ -405,7 +458,7 @@ function ActivityList({
                   <Pill text={stageLabel} />
                 </Box>
 
-                {/* Row 2 => [i], [History], [timeNeeded], [Previous], [Next], far right => final status + lumps */}
+                {/* Row 2 => [i], [History], [Progress?], [timeNeeded], [Previous], [Next], far right => final status + lumps */}
                 <Box sx={{ display: "flex", width: "100%", mt: 0.5, alignItems: "center", gap: 1 }}>
                   {/* "i" => old subchapter-status */}
                   <Pill
@@ -427,16 +480,19 @@ function ActivityList({
                     }}
                   />
 
+                  {/* (NEW) "Progress" => show concept pass/fail stats in a modal */}
+                  {progressPill}
+
                   {/* timeNeeded => with clock icon => user hover => "Expected Time" */}
                   {timeNeededVal && (
                     <Tooltip title="Expected Time">
                       <Pill
-                        text={(
-                          <Box sx={{ display:"inline-flex", alignItems:"center", gap: 0.5 }}>
-                            <AccessTimeIcon sx={{ fontSize:"0.9rem" }} />
+                        text={
+                          <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
+                            <AccessTimeIcon sx={{ fontSize: "0.9rem" }} />
                             {timeNeededVal}
                           </Box>
-                        )}
+                        }
                         bgColor="#424242"
                         textColor="#fff"
                       />
@@ -470,16 +526,16 @@ function ActivityList({
         maxWidth="md"
       >
         <DialogTitle>{debugTitle}</DialogTitle>
-        <DialogContent sx={{ backgroundColor:"#222" }}>
+        <DialogContent sx={{ backgroundColor: "#222" }}>
           {debugData ? (
-            <pre style={{ color:"#0f0", fontSize:"0.85rem", whiteSpace:"pre-wrap" }}>
+            <pre style={{ color: "#0f0", fontSize: "0.85rem", whiteSpace: "pre-wrap" }}>
               {JSON.stringify(debugData, null, 2)}
             </pre>
           ) : (
-            <p style={{ color:"#fff" }}>No data found.</p>
+            <p style={{ color: "#fff" }}>No data found.</p>
           )}
         </DialogContent>
-        <DialogActions sx={{ backgroundColor:"#222" }}>
+        <DialogActions sx={{ backgroundColor: "#222" }}>
           <Button onClick={handleCloseDebug} variant="contained" color="secondary">
             Close
           </Button>
@@ -494,16 +550,16 @@ function ActivityList({
         maxWidth="md"
       >
         <DialogTitle>{historyTitle}</DialogTitle>
-        <DialogContent sx={{ backgroundColor:"#222" }}>
+        <DialogContent sx={{ backgroundColor: "#222" }}>
           {historyData ? (
-            <pre style={{ color:"#0f0", fontSize:"0.85rem", whiteSpace:"pre-wrap" }}>
+            <pre style={{ color: "#0f0", fontSize: "0.85rem", whiteSpace: "pre-wrap" }}>
               {JSON.stringify(historyData, null, 2)}
             </pre>
           ) : (
-            <p style={{ color:"#fff" }}>No history data found.</p>
+            <p style={{ color: "#fff" }}>No history data found.</p>
           )}
         </DialogContent>
-        <DialogActions sx={{ backgroundColor:"#222" }}>
+        <DialogActions sx={{ backgroundColor: "#222" }}>
           <Button onClick={handleCloseHistory} variant="contained" color="secondary">
             Close
           </Button>
@@ -518,21 +574,62 @@ function ActivityList({
         maxWidth="sm"
       >
         <DialogTitle>{prevModalTitle}</DialogTitle>
-        <DialogContent sx={{ backgroundColor:"#222" }}>
+        <DialogContent sx={{ backgroundColor: "#222" }}>
           {prevModalItems && prevModalItems.length > 0 ? (
-            <ul style={{ color:"#0f0", fontSize:"0.85rem" }}>
+            <ul style={{ color: "#0f0", fontSize: "0.85rem" }}>
               {prevModalItems.map((line, idx) => (
-                <li key={idx} style={{ marginBottom:"0.4rem" }}>
+                <li key={idx} style={{ marginBottom: "0.4rem" }}>
                   {line}
                 </li>
               ))}
             </ul>
           ) : (
-            <p style={{ color:"#fff" }}>No data found.</p>
+            <p style={{ color: "#fff" }}>No data found.</p>
           )}
         </DialogContent>
-        <DialogActions sx={{ backgroundColor:"#222" }}>
+        <DialogActions sx={{ backgroundColor: "#222" }}>
           <Button onClick={handleClosePrevious} variant="contained" color="secondary">
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 4) (NEW) "Progress" modal => shows mastery % and pass/fail concepts */}
+      <Dialog
+        open={progressOpen}
+        onClose={handleCloseProgress}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>{progressTitle}</DialogTitle>
+        <DialogContent sx={{ backgroundColor: "#222", color: "#fff" }}>
+          {progressData && !progressData.error ? (
+            <Box>
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                Mastery: <strong>{(progressData.masteryPct || 0).toFixed(2)}%</strong>
+              </Typography>
+              {Array.isArray(progressData.conceptMastery) && progressData.conceptMastery.length > 0 ? (
+                <ul style={{ paddingLeft: "1.25rem" }}>
+                  {progressData.conceptMastery.map((cObj, idx) => (
+                    <li key={idx} style={{ marginBottom: "0.4rem" }}>
+                      <strong>{cObj.conceptName}</strong>:
+                      &nbsp;{cObj.passOrFail === "PASS" ? `PASS (on quiz attempt #${cObj.passAttempt})` : "FAIL"}
+                      &nbsp;({((cObj.ratio || 0) * 100).toFixed(0)}%)
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <Typography variant="body2">No concept data found.</Typography>
+              )}
+            </Box>
+          ) : (
+            <p style={{ color: "#f88" }}>
+              {progressData?.error || "No progress data found."}
+            </p>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ backgroundColor: "#222" }}>
+          <Button onClick={handleCloseProgress} variant="contained" color="secondary">
             Close
           </Button>
         </DialogActions>
@@ -641,7 +738,7 @@ export default function DailyPlan({
 
         const [finalTimeMap, finalStatusMap] = await Promise.all([
           fetchTimePromise,
-          fetchStatusPromise
+          fetchStatusPromise,
         ]);
 
         if (cancel) return;
@@ -657,7 +754,9 @@ export default function DailyPlan({
     }
 
     doFetch();
-    return () => { cancel = true; };
+    return () => {
+      cancel = true;
+    };
   }, [activities, planId, userId]);
 
   // row click => pick activity
@@ -670,7 +769,7 @@ export default function DailyPlan({
 
   if (loading) {
     return (
-      <div style={{ color:"#fff", marginTop:"1rem" }}>
+      <div style={{ color: "#fff", marginTop: "1rem" }}>
         <h2>Loading daily plan...</h2>
       </div>
     );
@@ -690,7 +789,7 @@ export default function DailyPlan({
           Day:
         </Typography>
         <Select
-          value={safeIdx}
+          value={dayDropIdx}
           onChange={(e) => onDaySelect(Number(e.target.value))}
           sx={{
             minWidth: 100,
