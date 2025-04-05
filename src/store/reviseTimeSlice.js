@@ -43,6 +43,7 @@ export const incrementReviseTime = createAsyncThunk(
   async (
     {
       docId,
+      activityId,
       increment,
       userId,
       planId,
@@ -56,6 +57,7 @@ export const incrementReviseTime = createAsyncThunk(
     try {
       const res = await axios.post("http://localhost:3001/api/incrementReviseTime", {
         docId,
+        activityId,
         increment,
         userId,
         planId,

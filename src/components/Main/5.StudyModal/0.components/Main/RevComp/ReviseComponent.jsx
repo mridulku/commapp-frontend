@@ -251,6 +251,7 @@ export default function ReviseView({
             incrementReviseTime({
               docId: docIdRef.current,
               increment: totalToPost,
+              activityId,
               userId,
               planId,
               subChapterId,
@@ -299,6 +300,7 @@ export default function ReviseView({
   async function submitRevisionAttempt() {
     const payload = {
       userId,
+      activityId,
       subchapterId: subChapterId,
       revisionType: quizStage,
       revisionNumber,

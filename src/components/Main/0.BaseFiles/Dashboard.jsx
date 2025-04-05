@@ -12,7 +12,7 @@ import TOEFLOnboardingModal from "../1.Upload/TOEFLOnboarding/TOEFLOnboardingMod
 
 
 // Import your separate Plan Editor modal
-import EditAdaptivePlanModal from "../3.Library/LibraryChild/AdaptivePlanModal/EditAdaptivePlanModal";
+import EditAdaptivePlanModal from "../3.Library/LibraryChild/2.CreateNewPlan/AdaptivePlanModal/EditAdaptivePlanModal";
 
 // Existing components
 import MaterialsDashboard from "../3.Library/LibraryChild/0.Parent/0.MaterialsDashboard"; 

@@ -8,30 +8,25 @@ import {
   getDocs
 } from "firebase/firestore";
 
-import RawView from "./RawView";
-import TimelineView from "./AdminPanelSubs/Subs/TimelineView";
-import TimelineView2 from "./AdminPanelSubs/Subs/TimelineView2";
-import TimelineView3 from "./AdminPanelSubs/Subs/TimelineView3";
-
-import PlanView from "./AdminPanelSubs/Subs/PlanView";
-import PlanView2 from "./AdminPanelSubs/Subs/PlanView2";
+import RawView from "./Subs/RawView";
 
 
-
-import LibraryView from "./AdminPanelSubs/Subs/LibraryView"; // <-- NEW import
-import LibraryView2 from "./AdminPanelSubs/Subs/LibraryView2"; // <-- NEW import
-import LibraryView3 from "./AdminPanelSubs/Subs/LibraryView3"; // <-- NEW import
-
-import TimeCalc from "./AdminPanelSubs/Subs/TimeCalc"; // <-- NEW import
-import PlanLog from "./AdminPanelSubs/Subs/PlanLog"; // <-- NEW import
-import AggregatorResultView from "./AdminPanelSubs/Subs/AggregatorResultView"; // <-- NEW import
-import AggregatorProgressView from "./AdminPanelSubs/Subs/AggregatorProgressView"; // <-- NEW import
+import PlanView from "./Subs/PlanView";
+import PlanView2 from "./Subs/PlanView2";
 
 
 
 
 
-import { buildReadingStats } from "./buildReadingStats"; // Optional if you had that logic extracted
+import TimeCalc from "./Subs/TimeCalc"; // <-- NEW import
+import PlanLog from "./Subs/PlanLog"; // <-- NEW import
+
+
+
+
+
+
+import { buildReadingStats } from "./Subs/buildReadingStats"; // Optional if you had that logic extracted
 
 export default function PlanUsageHistory({
   db,
@@ -375,16 +370,7 @@ export default function PlanUsageHistory({
         <div style={tabStyle(activeTab === "RAW")} onClick={() => setActiveTab("RAW")}>
           Raw View
         </div>
-        <div style={tabStyle(activeTab === "TIMELINE")} onClick={() => setActiveTab("TIMELINE")}>
-          TimelineView
-        </div>
-        <div style={tabStyle(activeTab === "TIMELINE2")} onClick={() => setActiveTab("TIMELINE2")}>
-          TimelineView2
-        </div>
-
-        <div style={tabStyle(activeTab === "TIMELINE3")} onClick={() => setActiveTab("TIMELINE3")}>
-          TimelineView3
-        </div>
+       
 
 
         <div style={tabStyle(activeTab === "PLAN")} onClick={() => setActiveTab("PLAN")}>
@@ -397,28 +383,15 @@ export default function PlanUsageHistory({
 
 
 
-        <div style={tabStyle(activeTab === "LIBRARY")} onClick={() => setActiveTab("LIBRARY")}>
-          Library
-        </div>
-        <div style={tabStyle(activeTab === "LIBRARY2")} onClick={() => setActiveTab("LIBRARY2")}>
-          Library2
-        </div>
+        
         <div style={tabStyle(activeTab === "TIMECALC")} onClick={() => setActiveTab("TIMECALC")}>
           TimeCalc
         </div>
         <div style={tabStyle(activeTab === "PLANLOG")} onClick={() => setActiveTab("PLANLOG")}>
           PlanLog
         </div>
-        <div style={tabStyle(activeTab === "AGGRESULTVIEW")} onClick={() => setActiveTab("AGGRESULTVIEW")}>
-        AggregatorResultView
-        </div>
-        <div style={tabStyle(activeTab === "AGGPROGVIEW")} onClick={() => setActiveTab("AGGPROGVIEW")}>
-        AggregatorProgressView
-        </div>
-        <div style={tabStyle(activeTab === "LIBRARY3")} onClick={() => setActiveTab("LIBRARY3")}>
-        Library3
-        </div>
-
+        
+       
 
 
         
@@ -459,38 +432,7 @@ export default function PlanUsageHistory({
         />
       )}
 
-      {activeTab === "TIMELINE" && (
-        <TimelineView
-          selectedDate={selectedDate}
-          timelineEvents={timelineEvents}
-        />
-      )}
-
-      {activeTab === "TIMELINE2" && (
-    <TimelineView2
-    selectedDate={selectedDate}
-    readingActsForDate={readingActsForDate}
-    quizActsForDate={quizActsForDate}
-    revisionActsForDate={revisionActsForDate}
-    readingCompletionsForDate={readingCompletionsForDate}
-    quizCompletionsForDate={quizCompletionsForDate}
-    revisionCompletionsForDate={revisionCompletionsForDate}
-  />
-)}
-
-
-
-
-{activeTab === "TIMELINE3" && (
-    <TimelineView3
-    db={db}
-  userId={userId}
-  planId={planId}
-  plan={planData}     // or whatever object has .sessions
-  selectedDate={selectedDate}
-
-  />
-)}
+  
 
       {activeTab === "PLAN" && (
         <PlanView
@@ -512,25 +454,7 @@ export default function PlanUsageHistory({
         />
       )}
 
-      {activeTab === "LIBRARY" && (
-        <LibraryView
-          db={db}
-          userId={userId}
-          planId={planId}
-          readingStats={readingStats}
-          bookId={bookId}  // The key: pass the bookId for chapters
-        />
-      )}
-
-      {activeTab === "LIBRARY2" && (
-        <LibraryView2
-          db={db}
-          userId={userId}
-          planId={planId}
-          readingStats={readingStats}
-          bookId={bookId}  // The key: pass the bookId for chapters
-        />
-      )}
+      
 
       {activeTab === "TIMECALC" && (
         <TimeCalc
@@ -553,38 +477,9 @@ export default function PlanUsageHistory({
         />
       )}   
 
-
-      {activeTab === "AGGRESULTVIEW" && (
-        <AggregatorResultView
-          db={db}
-          userId={userId}
-          planId={planId}
-          readingStats={readingStats}
-          bookId={bookId}  // The key: pass the bookId for chapters
-        />
-      )}   
-
-      {activeTab === "AGGPROGVIEW" && (
-        <AggregatorProgressView
-          db={db}
-          userId={userId}
-          planId={planId}
-          readingStats={readingStats}
-          bookId={bookId}  // The key: pass the bookId for chapters
-        />
-      )}   
+  
 
 
-
-      {activeTab === "LIBRARY3" && (
-        <LibraryView3
-          db={db}
-          userId={userId}
-          planId={planId}
-          readingStats={readingStats}
-          bookId={bookId}  // The key: pass the bookId for chapters
-        />
-      )}  
 
 
 

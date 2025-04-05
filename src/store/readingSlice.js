@@ -20,10 +20,11 @@ export const fetchReadingTime = createAsyncThunk(
 // POST /api/incrementReadingTime => returns { newTotalSeconds }
 export const incrementReadingTime = createAsyncThunk(
   "reading/incrementReadingTime",
-  async ({ userId, planId, subChapterId, increment }, { rejectWithValue }) => {
+  async ({ userId, planId, subChapterId, increment, activityId }, { rejectWithValue }) => {
     try {
       const res = await axios.post("http://localhost:3001/api/incrementReadingTime", {
         userId,
+        activityId,
         planId,
         subChapterId,
         increment,

@@ -27,7 +27,7 @@ import PlanSelection from "./AdaptivePlanSupport/PlanSelection";
 import PlanRender from "./AdaptivePlanSupport/PlanRender";
 
 // NEW IMPORT: your Redux-based plan fetcher
-import PlanFetcher from "../../../5.StudyModal/StudyModal";
+import PlanFetcher from "../../../../5.StudyModal/StudyModal";
 
 /**
  * Helper function to sort a list of { title: "1. something"} objects 

@@ -162,12 +162,18 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
           const totalToPost = lumps * 15;
           const resultAction = await dispatch(
             incrementReadingTime({
+              activityId,
               userId,
               planId,
               subChapterId,
               increment: totalToPost,
             })
           );
+          if (incrementReadingTime.fulfilled.match(resultAction)) {
+            console.log("Increment reading time success:", resultAction.payload);
+          } else {
+            console.error("Increment reading time failed:", resultAction);
+          }
           if (incrementReadingTime.fulfilled.match(resultAction)) {
             const newTotal = resultAction.payload || serverTime + totalToPost;
             setServerTime(newTotal);
@@ -207,6 +213,7 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
       // 1) Make the POST call to record reading usage
       await axios.post("http://localhost:3001/api/submitReading", {
         userId,
+        activityId,
         subChapterId,
         readingStartTime: readingStartRef.current?.toISOString(),
         readingEndTime: readingEndTime.toISOString(),

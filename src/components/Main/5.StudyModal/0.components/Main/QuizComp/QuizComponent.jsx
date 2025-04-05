@@ -34,6 +34,7 @@ function formatTime(totalSeconds) {
  *   - 15-second lumps time tracking in background
  */
 export default function QuizView({
+  activity,
   userId = "",
   examId = "general",
   quizStage = "remember",
@@ -55,6 +56,9 @@ export default function QuizView({
   const [showGradingResults, setShowGradingResults] = useState(false);
   const [quizPassed, setQuizPassed] = useState(false);
   const [finalPercentage, setFinalPercentage] = useState("");
+
+  const { activityId } = activity || {};
+
 
   // Additional info
   const [subchapterSummary, setSubchapterSummary] = useState("");
@@ -235,6 +239,7 @@ export default function QuizView({
           incrementQuizTime({
             docId: docIdRef.current,
             increment: toPost,
+            activityId,
             userId,
             planId,
             subChapterId,
@@ -361,6 +366,7 @@ export default function QuizView({
     try {
       const payload = {
         userId,
+        activityId,
         subchapterId: subChapterId,
         quizType: quizStage,
         quizSubmission: generatedQuestions.map((qObj, idx) => ({

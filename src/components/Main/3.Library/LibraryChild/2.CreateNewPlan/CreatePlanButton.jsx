@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import { Box, IconButton } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
-import EditAdaptivePlanModal from "../AdaptivePlanModal/EditAdaptivePlanModal";
+import EditAdaptivePlanModal from "./AdaptivePlanModal/EditAdaptivePlanModal";
 
 export default function ChildStats({
   userId,

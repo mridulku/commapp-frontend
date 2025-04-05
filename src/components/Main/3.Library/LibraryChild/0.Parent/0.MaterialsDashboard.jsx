@@ -4,8 +4,8 @@ import React, { useState } from "react";
 import { Grid, Box } from "@mui/material";
 
 import Child1 from "../1.SelectionPanel/Child1";
-import Child2 from "../AdaptivePlanView/Child2";
-import ChildStats from "../2.CreateNewPlan/ChildStats";
+import Child2 from "../3.AdaptivePlanView/0.Parent/0.Parent";
+import ChildStats from "../2.CreateNewPlan/CreatePlanButton";
 
 export default function MaterialsDashboard({
   userId,
