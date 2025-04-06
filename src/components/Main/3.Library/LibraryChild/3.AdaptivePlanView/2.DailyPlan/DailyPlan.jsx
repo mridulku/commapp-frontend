@@ -21,36 +21,16 @@ import {
 
 // Icons
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import ArrowForwardIosIcon from "@mui/icons-material/ArrowForwardIos";
 import LockIcon from "@mui/icons-material/Lock";
 
-/** Format N seconds => "Xm Ys" */
+/** Utility: Format N seconds => "Xm Ys" */
 function formatSeconds(totalSeconds) {
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
   return `${m}m ${s}s`;
 }
 
-/** If aggregatorStatus === "locked", show overlay. */
-function aggregatorLockedOverlay() {
-  return (
-    <Box
-      sx={{
-        position: "absolute",
-        inset: 0,
-        bgcolor: "rgba(0,0,0,0.4)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        pointerEvents: "none",
-      }}
-    >
-      <Typography sx={{ color: "#fff", opacity: 0.8 }}>LOCKED</Typography>
-    </Box>
-  );
-}
-
-/** A small stylized label ("pill") */
+/** A small "pill" component */
 function Pill({
   text,
   bgColor = "#424242",
@@ -72,7 +52,7 @@ function Pill({
         color: textColor,
         whiteSpace: "nowrap",
         cursor: onClick ? "pointer" : "default",
-        pointerEvents: "auto", // important for clickable elements
+        pointerEvents: "auto",
         ...sx,
       }}
     >
@@ -81,7 +61,26 @@ function Pill({
   );
 }
 
-/** Return e.g. "Stage 1, Reading" or "Stage 2, Remember" */
+/** aggregatorLocked => overlay if aggregator says locked */
+function aggregatorLockedOverlay() {
+  return (
+    <Box
+      sx={{
+        position: "absolute",
+        inset: 0,
+        bgcolor: "rgba(0,0,0,0.4)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        pointerEvents: "none",
+      }}
+    >
+      <Typography sx={{ color: "#fff", opacity: 0.8 }}>LOCKED</Typography>
+    </Box>
+  );
+}
+
+/** e.g. "Stage 1, Reading" or "Stage 2, Remember" */
 function getStageLabel(act) {
   if ((act.type || "").toLowerCase() === "read") {
     return "Stage 1, Reading";
@@ -101,7 +100,7 @@ function getStageLabel(act) {
   }
 }
 
-/** subchapter-status => "Reading","Remember","Understand","Apply","Analyze" */
+/** aggregator => "Reading","Remember","Understand","Apply","Analyze" */
 function getTaskInfoStageLabel(act) {
   if ((act.type || "").toLowerCase() === "read") {
     return "Reading";
@@ -121,13 +120,26 @@ function getTaskInfoStageLabel(act) {
   }
 }
 
+/** Example: Summation of quiz + revision attempts => "X tasks done" */
+function getTasksDoneCount(subchapterStatusMap, subChId, stageLower) {
+  const hist = subchapterStatusMap[subChId]?.history?.[stageLower];
+  if (!hist) return 0;
+  const quizArr = hist.quizAttempts || [];
+  const revArr = hist.revisionAttempts || [];
+  return quizArr.length + revArr.length;
+}
+
+/** Example: Mastery% from aggregator => "50%" */
+function getMasteryPct(subchapterStatusMap, subChId, stageLower) {
+  const hist = subchapterStatusMap[subChId]?.history?.[stageLower];
+  if (!hist || !hist.masteryPct) return 0;
+  return hist.masteryPct;
+}
+
 /**
  * ActivityList
  * ------------
- * Adds:
- *   - "Previous" pill that opens prior attempts
- *   - "History" pill
- *   - **"Progress" pill** (new) for quiz stages => shows mastery stats in a modal
+ * The main list of subchapter tasks for the day
  */
 function ActivityList({
   dayActivities,
@@ -138,12 +150,12 @@ function ActivityList({
   userId,
   planId,
 }) {
-  // 1) Old subchapter-status debug modal
+  // 1) Old aggregator debug
   const [debugOpen, setDebugOpen] = useState(false);
   const [debugTitle, setDebugTitle] = useState("");
   const [debugData, setDebugData] = useState(null);
 
-  // 2) New subchapter-history debug modal
+  // 2) subchapter-history debug
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyTitle, setHistoryTitle] = useState("");
   const [historyData, setHistoryData] = useState(null);
@@ -151,16 +163,19 @@ function ActivityList({
   // 3) "Previous" smaller modal
   const [prevModalOpen, setPrevModalOpen] = useState(false);
   const [prevModalTitle, setPrevModalTitle] = useState("");
-  const [prevModalItems, setPrevModalItems] = useState([]); // array of strings
+  const [prevModalItems, setPrevModalItems] = useState([]);
 
-  // 4) **Progress** modal (the new feature)
+  // 4) "Progress" modal => mastery
   const [progressOpen, setProgressOpen] = useState(false);
   const [progressTitle, setProgressTitle] = useState("");
-  const [progressData, setProgressData] = useState(null); // { masteryPct, conceptMastery: [...], etc. }
+  const [progressData, setProgressData] = useState(null);
 
-  /* ------------------------------------------------------------------
-   * 1) Old subchapter-status debug
-   * ------------------------------------------------------------------ */
+  // (NEW) => "Time Detail" => doc-level info from the updated getActivityTime
+  const [timeDetailOpen, setTimeDetailOpen] = useState(false);
+  const [timeDetailTitle, setTimeDetailTitle] = useState("");
+  const [timeDetailData, setTimeDetailData] = useState([]);
+
+  /** aggregator debug => old subchapterStatus */
   function handleOpenDebug(subChId, activity) {
     const data = subchapterStatusMap[subChId] || null;
     setDebugTitle(`(Old) Subchapter-Status => subChId='${subChId}' type='${activity.type}'`);
@@ -173,18 +188,12 @@ function ActivityList({
     setDebugData(null);
   }
 
-  /* ------------------------------------------------------------------
-   * 2) subchapter-history debug => entire JSON
-   * ------------------------------------------------------------------ */
+  /** subchapter-history => entire JSON debug */
   async function handleOpenHistoryDebug(subChId) {
     try {
       setHistoryTitle(`(New) Subchapter-History => subChId='${subChId}'`);
       const res = await axios.get("http://localhost:3001/subchapter-history", {
-        params: {
-          userId,
-          planId,
-          subchapterId: subChId,
-        },
+        params: { userId, planId, subchapterId: subChId },
       });
       setHistoryData(res.data);
     } catch (err) {
@@ -200,20 +209,13 @@ function ActivityList({
     setHistoryData(null);
   }
 
-  /* ------------------------------------------------------------------
-   * 3) "Previous" => smaller modal w/ quiz or revision attempts
-   * ------------------------------------------------------------------ */
+  /** "Previous" => show quiz + revision attempts in chronological order */
   async function handleOpenPrevious(subChId, activity) {
     try {
       const stage = (activity.quizStage || "").toLowerCase();
       const res = await axios.get("http://localhost:3001/subchapter-history", {
-        params: {
-          userId,
-          planId,
-          subchapterId: subChId,
-        },
+        params: { userId, planId, subchapterId: subChId },
       });
-
       const historyObj = res.data?.history?.[stage];
       if (!historyObj) {
         setPrevModalTitle(`Previous Attempts => subCh='${subChId}', stage='${stage}'`);
@@ -221,7 +223,6 @@ function ActivityList({
         setPrevModalOpen(true);
         return;
       }
-      // combine quiz + revision attempts => sort by timestamp
       const quizArr = historyObj.quizAttempts || [];
       const revArr = historyObj.revisionAttempts || [];
 
@@ -243,6 +244,7 @@ function ActivityList({
         });
       });
 
+      // sort by timestamp
       combined.sort((a, b) => {
         const aMs = toMillis(a.ts),
           bMs = toMillis(b.ts);
@@ -279,23 +281,14 @@ function ActivityList({
     setPrevModalItems([]);
   }
 
-  /* ------------------------------------------------------------------
-   * 4) Progress Pill => shows mastery % and concept pass/fail
-   * ------------------------------------------------------------------ */
-  async function handleOpenProgress(subChId, stage) {
+  /** "Progress" => mastery details */
+  async function handleOpenProgress(subChId, stageLower) {
     try {
-      setProgressTitle(`Progress => subCh='${subChId}', stage='${stage}'`);
-
-      // same endpoint as "History" but we only care about res.data.history[stage]
+      setProgressTitle(`Progress => subCh='${subChId}', stage='${stageLower}'`);
       const res = await axios.get("http://localhost:3001/subchapter-history", {
-        params: {
-          userId,
-          planId,
-          subchapterId: subChId,
-        },
+        params: { userId, planId, subchapterId: subChId },
       });
-      const stgData = res.data?.history?.[stage] || {};
-      // stgData => { masteryPct, conceptMastery: [{ conceptName, ratio, passOrFail }, ...], ... }
+      const stgData = res.data?.history?.[stageLower] || {};
       setProgressData(stgData);
     } catch (err) {
       console.error("handleOpenProgress => error:", err);
@@ -310,21 +303,50 @@ function ActivityList({
     setProgressData(null);
   }
 
+  /**
+   * (NEW) handleOpenTimeDetail => calls the updated /api/getActivityTime,
+   * which now returns { totalTime, details: [...] } so we can display each doc
+   */
+  async function handleOpenTimeDetail(activityId, type) {
+    try {
+      setTimeDetailTitle(`Time Breakdown => activityId='${activityId}'`);
+      const res = await axios.get("http://localhost:3001/api/getActivityTime", {
+        params: { activityId, type },
+      });
+      // res.data => { totalTime, details: [ { docId, collection, totalSeconds, lumps, ... }, ... ] }
+      setTimeDetailData(res.data?.details || []);
+    } catch (err) {
+      console.error("handleOpenTimeDetail => error:", err);
+      setTimeDetailData([{ error: err.message }]);
+    } finally {
+      setTimeDetailOpen(true);
+    }
+  }
+  function handleCloseTimeDetail() {
+    setTimeDetailOpen(false);
+    setTimeDetailTitle("");
+    setTimeDetailData([]);
+  }
+
   return (
     <>
       <List dense sx={{ p: 0 }}>
         {dayActivities.map((act) => {
           const isSelected = act.flatIndex === currentIndex;
           const cardBg = isSelected ? "#EF5350" : "#555";
-          const aggregatorLocked = (act.aggregatorStatus || "").toLowerCase() === "locked";
 
+          const aggregatorLocked = (act.aggregatorStatus || "").toLowerCase() === "locked";
           const stageLabel = getStageLabel(act);
-          const lumpsTime = timeMap[act.activityId] || 0;
+
+          // time tracking => lumpsSec from timeMap
+          const lumpsSec = timeMap[act.activityId] || 0;
+          const lumpsStr = formatSeconds(lumpsSec);
           const timeNeededVal = act.timeNeeded !== undefined ? `${act.timeNeeded}m` : null;
 
+          // aggregator subchapterStatus
+          const subChId = act.subChapterId || "";
           let lockedFromAPI = false;
           let nextTaskLabel = "";
-          const subChId = act.subChapterId || "";
           const statusObj = subchapterStatusMap[subChId] || null;
           if (statusObj && Array.isArray(statusObj.taskInfo)) {
             const desiredLabel = getTaskInfoStageLabel(act);
@@ -337,11 +359,10 @@ function ActivityList({
             }
           }
 
+          // plan completion => final status
           const planCompletion = (act.completionStatus || "").toLowerCase();
-
-          // final status => "Complete","Locked","Deferred","WIP","Not Started"
-          let finalStatusLabel;
-          let finalStatusColor = "#BDBDBD";
+          let finalStatusLabel = "Not Started";
+          let finalStatusColor = "#EF5350";
           let skipNext = false;
 
           if (planCompletion === "complete") {
@@ -360,72 +381,88 @@ function ActivityList({
           } else if (planCompletion === "deferred") {
             finalStatusLabel = "Deferred";
             finalStatusColor = "#FFA726";
-            skipNext = false;
-          } else {
-            if (lumpsTime > 0) {
-              finalStatusLabel = "WIP";
-              finalStatusColor = "#BDBDBD";
-            } else {
-              finalStatusLabel = "Not Started";
-              finalStatusColor = "#EF5350";
-            }
-            skipNext = false;
+          } else if (lumpsSec > 0) {
+            finalStatusLabel = "WIP";
+            finalStatusColor = "#BDBDBD";
           }
 
-          const lumpsPill = (
-            <Pill text={formatSeconds(lumpsTime)} bgColor="#424242" textColor="#fff" />
-          );
-
-          // If we do have a nextTask => we might show "Previous" (for quiz) + "Next"
-          let previousPill = null;
-          let nextTaskPill = null;
-
-          // figure out if it's a quiz stage
           const stageLower = (act.quizStage || "").toLowerCase();
           const isQuizStage = ["remember", "understand", "apply", "analyze"].includes(stageLower);
 
-          if (!skipNext && nextTaskLabel) {
-            // only if it's quiz => show "Previous" pill
-            if ((act.type || "").toLowerCase() === "quiz") {
-              previousPill = (
-                <Pill
-                  text="Previous"
-                  bgColor="#444"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleOpenPrevious(subChId, act);
-                  }}
-                />
-              );
-            }
-            nextTaskPill = (
-              <Tooltip title={`Next Activity`}>
-                <Pill
-                  text={
-                    <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
-                      <ArrowForwardIosIcon sx={{ fontSize: "0.9rem" }} />
-                      {nextTaskLabel}
-                    </Box>
-                  }
-                  bgColor="#FFD700"
-                  textColor="#000"
-                />
-              </Tooltip>
-            );
-          }
-
-          // (NEW) "Progress" pill => if is quiz stage
-          let progressPill = null;
+          // tasks done + mastery if quiz
+          let tasksDonePill = null;
+          let masteryPill = null;
           if (isQuizStage) {
-            progressPill = (
+            const doneCount = getTasksDoneCount(subchapterStatusMap, subChId, stageLower);
+            tasksDonePill = (
               <Pill
-                text="Progress"
+                text={`${doneCount} tasks done`}
+                bgColor="#444"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenPrevious(subChId, act);
+                }}
+              />
+            );
+
+            const masteryPct = getMasteryPct(subchapterStatusMap, subChId, stageLower);
+            const masteryLabel = `${masteryPct.toFixed(0)}%`;
+            masteryPill = (
+              <Pill
+                text={masteryLabel}
                 bgColor="#4CAF50"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleOpenProgress(subChId, stageLower);
                 }}
               />
+            );
+          }
+
+          // The type => "read" or "quiz" for the new doc-level breakdown
+          const rawType = (act.type || "").toLowerCase().includes("read") ? "read" : "quiz";
+
+          // if we have time => build timePill
+          let timePill;
+          if (timeNeededVal) {
+            const tooltipText = `Elapsed: ${lumpsStr}, Expected: ${timeNeededVal}`;
+            timePill = (
+              <Tooltip title={tooltipText}>
+                <Pill
+                  text={
+                    <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
+                      <AccessTimeIcon sx={{ fontSize: "0.9rem" }} />
+                      {lumpsStr} / {timeNeededVal}
+                    </Box>
+                  }
+                  bgColor="#424242"
+                  textColor="#fff"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenTimeDetail(act.activityId, rawType);
+                  }}
+                />
+              </Tooltip>
+            );
+          } else {
+            const tooltipText = `Elapsed: ${lumpsStr}`;
+            timePill = (
+              <Tooltip title={tooltipText}>
+                <Pill
+                  text={
+                    <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
+                      <AccessTimeIcon sx={{ fontSize: "0.9rem" }} />
+                      {lumpsStr}
+                    </Box>
+                  }
+                  bgColor="#424242"
+                  textColor="#fff"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenTimeDetail(act.activityId, rawType);
+                  }}
+                />
+              </Tooltip>
             );
           }
 
@@ -451,16 +488,16 @@ function ActivityList({
                 }}
                 onClick={() => onClickActivity(act)}
               >
-                {/* Row 1 => ChapterName, SubchapterName, Stage */}
+                {/* Row 1 => Chapter/Subchapter/Stage */}
                 <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, width: "100%" }}>
                   <Pill text={act.chapterName || "Chapter ?"} />
                   <Pill text={act.subChapterName || "Subchapter ?"} />
                   <Pill text={stageLabel} />
                 </Box>
 
-                {/* Row 2 => [i], [History], [Progress?], [timeNeeded], [Previous], [Next], far right => final status + lumps */}
+                {/* Row 2 => [i], [History], [tasksDone], [mastery], far right => finalStatus + time */}
                 <Box sx={{ display: "flex", width: "100%", mt: 0.5, alignItems: "center", gap: 1 }}>
-                  {/* "i" => old subchapter-status */}
+                  {/* aggregator debug => i */}
                   <Pill
                     text="i"
                     bgColor="#666"
@@ -470,7 +507,6 @@ function ActivityList({
                     }}
                   />
 
-                  {/* "History" => new subchapter-history JSON debug */}
                   <Pill
                     text="History"
                     bgColor="#999"
@@ -480,34 +516,13 @@ function ActivityList({
                     }}
                   />
 
-                  {/* (NEW) "Progress" => show concept pass/fail stats in a modal */}
-                  {progressPill}
+                  {tasksDonePill}
+                  {masteryPill}
 
-                  {/* timeNeeded => with clock icon => user hover => "Expected Time" */}
-                  {timeNeededVal && (
-                    <Tooltip title="Expected Time">
-                      <Pill
-                        text={
-                          <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
-                            <AccessTimeIcon sx={{ fontSize: "0.9rem" }} />
-                            {timeNeededVal}
-                          </Box>
-                        }
-                        bgColor="#424242"
-                        textColor="#fff"
-                      />
-                    </Tooltip>
-                  )}
-
-                  {/* "Previous" => small modal with prior attempts */}
-                  {previousPill}
-                  {/* "Next" => arrow */}
-                  {nextTaskPill}
-
-                  {/* far right => final status + lumps */}
+                  {/* final status + time => far right */}
                   <Box sx={{ ml: "auto", display: "flex", gap: 1 }}>
                     <Pill text={finalStatusLabel} bgColor={finalStatusColor} textColor="#000" />
-                    {lumpsPill}
+                    {timePill}
                   </Box>
                 </Box>
               </ListItemButton>
@@ -518,13 +533,8 @@ function ActivityList({
         })}
       </List>
 
-      {/* 1) Old subchapter-status debug modal */}
-      <Dialog
-        open={debugOpen}
-        onClose={handleCloseDebug}
-        fullWidth
-        maxWidth="md"
-      >
+      {/* 1) aggregator debug */}
+      <Dialog open={debugOpen} onClose={handleCloseDebug} fullWidth maxWidth="md">
         <DialogTitle>{debugTitle}</DialogTitle>
         <DialogContent sx={{ backgroundColor: "#222" }}>
           {debugData ? (
@@ -542,13 +552,8 @@ function ActivityList({
         </DialogActions>
       </Dialog>
 
-      {/* 2) subchapter-history debug modal */}
-      <Dialog
-        open={historyOpen}
-        onClose={handleCloseHistory}
-        fullWidth
-        maxWidth="md"
-      >
+      {/* 2) subchapter-history debug */}
+      <Dialog open={historyOpen} onClose={handleCloseHistory} fullWidth maxWidth="md">
         <DialogTitle>{historyTitle}</DialogTitle>
         <DialogContent sx={{ backgroundColor: "#222" }}>
           {historyData ? (
@@ -566,13 +571,8 @@ function ActivityList({
         </DialogActions>
       </Dialog>
 
-      {/* 3) "Previous" small modal => listing prior attempts */}
-      <Dialog
-        open={prevModalOpen}
-        onClose={handleClosePrevious}
-        fullWidth
-        maxWidth="sm"
-      >
+      {/* 3) "Previous" => tasks done list */}
+      <Dialog open={prevModalOpen} onClose={handleClosePrevious} fullWidth maxWidth="sm">
         <DialogTitle>{prevModalTitle}</DialogTitle>
         <DialogContent sx={{ backgroundColor: "#222" }}>
           {prevModalItems && prevModalItems.length > 0 ? (
@@ -594,13 +594,8 @@ function ActivityList({
         </DialogActions>
       </Dialog>
 
-      {/* 4) (NEW) "Progress" modal => shows mastery % and pass/fail concepts */}
-      <Dialog
-        open={progressOpen}
-        onClose={handleCloseProgress}
-        fullWidth
-        maxWidth="sm"
-      >
+      {/* 4) "Progress" => mastery details */}
+      <Dialog open={progressOpen} onClose={handleCloseProgress} fullWidth maxWidth="sm">
         <DialogTitle>{progressTitle}</DialogTitle>
         <DialogContent sx={{ backgroundColor: "#222", color: "#fff" }}>
           {progressData && !progressData.error ? (
@@ -634,11 +629,51 @@ function ActivityList({
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* (NEW) 5) Time Detail => doc-level breakdown */}
+      <Dialog open={timeDetailOpen} onClose={handleCloseTimeDetail} fullWidth maxWidth="md">
+        <DialogTitle>{timeDetailTitle}</DialogTitle>
+        <DialogContent sx={{ backgroundColor: "#222", color: "#fff" }}>
+          {/* We expect timeDetailData to be an array => [ { docId, collection, totalSeconds, lumps, ... }, ... ] */}
+          {timeDetailData && timeDetailData.length > 0 ? (
+            <ul style={{ color: "#0f0", fontSize: "0.85rem" }}>
+              {timeDetailData.map((item, idx) => {
+                // item => { docId, collection, totalSeconds, lumps, ... }
+                const lumpsCount = item.lumps?.length || 0;
+                return (
+                  <li key={idx} style={{ marginBottom: "0.6rem" }}>
+                    <p>
+                      <strong>DocID:</strong> {item.docId} <br />
+                      <strong>Collection:</strong> {item.collection} <br />
+                      <strong>TotalSeconds:</strong> {item.totalSeconds}
+                    </p>
+                    {lumpsCount > 0 && (
+                      <ul>
+                        {item.lumps.map((lump, i2) => (
+                          <li key={i2}>
+                            Lump #{i2 + 1}: {JSON.stringify(lump)}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p>No detailed docs found.</p>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ backgroundColor: "#222" }}>
+          <Button onClick={handleCloseTimeDetail} variant="contained" color="secondary">
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }
 
-/** convert Firestore timestamp => ms */
 function toMillis(ts) {
   if (!ts) return 0;
   if (ts.seconds) return ts.seconds * 1000;
@@ -667,14 +702,12 @@ export default function DailyPlan({
     return <div>No sessions found in this plan.</div>;
   }
 
-  // figure out day
   const sessions = plan.sessions;
   let safeIdx = dayDropIdx;
   if (safeIdx >= sessions.length) safeIdx = 0;
   const currentSession = sessions[safeIdx] || {};
   const { activities = [] } = currentSession;
 
-  // local => timeMap, subchapterStatusMap, loading
   const [timeMap, setTimeMap] = useState({});
   const [subchapterStatusMap, setSubchapterStatusMap] = useState({});
   const [loading, setLoading] = useState(false);
@@ -683,7 +716,6 @@ export default function DailyPlan({
     console.log("DailyPlan => dayActivities =>", activities);
   }, [activities]);
 
-  // fetch times + subchapter statuses in parallel
   useEffect(() => {
     let cancel = false;
     if (!activities.length) {
@@ -696,13 +728,16 @@ export default function DailyPlan({
       try {
         setLoading(true);
 
-        // 1) times
+        // 1) fetch times
         const fetchTimePromise = (async () => {
           const newMap = {};
           for (const act of activities) {
             if (!act.activityId) continue;
             const rawType = (act.type || "").toLowerCase();
             const type = rawType.includes("read") ? "read" : "quiz";
+
+            // updated or not => the code below only calls getActivityTime
+            // it still returns { totalTime, details } but we only store totalTime in timeMap
             try {
               const res = await axios.get("http://localhost:3001/api/getActivityTime", {
                 params: { activityId: act.activityId, type },
@@ -741,9 +776,10 @@ export default function DailyPlan({
           fetchStatusPromise,
         ]);
 
-        if (cancel) return;
-        setTimeMap(finalTimeMap);
-        setSubchapterStatusMap(finalStatusMap);
+        if (!cancel) {
+          setTimeMap(finalTimeMap);
+          setSubchapterStatusMap(finalStatusMap);
+        }
       } catch (err) {
         console.error("Error in doFetch dailyplan =>", err);
       } finally {
@@ -759,7 +795,6 @@ export default function DailyPlan({
     };
   }, [activities, planId, userId]);
 
-  // row click => pick activity
   function handleClickActivity(act) {
     dispatch(setCurrentIndex(act.flatIndex));
     if (onOpenPlanFetcher) {
@@ -779,13 +814,7 @@ export default function DailyPlan({
     <div style={{ marginTop: "1rem" }}>
       {/* Day dropdown */}
       <Box sx={{ mb: 1, display: "flex", alignItems: "center", gap: 1 }}>
-        <Typography
-          variant="body2"
-          sx={{
-            fontSize: "0.85rem",
-            color: colorScheme.textColor || "#FFD700",
-          }}
-        >
+        <Typography variant="body2" sx={{ fontSize: "0.85rem", color: colorScheme.textColor || "#FFD700" }}>
           Day:
         </Typography>
         <Select
