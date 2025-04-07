@@ -5,14 +5,24 @@ import StageManager from "./StageManager";
 import CumulativeQuiz from "../CumulativeComp/CumulativeQuiz";
 import CumulativeRevision from "../CumulativeComp/CumulativeRevision";
 
+// NEW import for the guide
+import GuideView from "./GuideView";
+
 export default function StageView({ examId, activity }) {
   const userId = useSelector((state) => state.auth?.userId || "demoUser");
-
-  // If this is "read" type, there's no quizStage on it. If it's a quiz type, we might have quizStage
   const activityType = (activity.type || "").toLowerCase();
   const quizStage = (activity.quizStage || "").toLowerCase();
 
-  // 1) Check for special "cumulative" stages
+  // 1) If it’s a “guide” activity => short-circuit here.
+  if (activityType === "guide") {
+    return (
+      <div style={styles.outerContainer}>
+        <GuideView examId={examId} activity={activity} userId={userId} />
+      </div>
+    );
+  }
+
+  // 2) If it’s a “cumulativequiz” => show cummulative
   if (quizStage === "cumulativequiz") {
     return (
       <div style={styles.outerContainer}>
@@ -20,6 +30,8 @@ export default function StageView({ examId, activity }) {
       </div>
     );
   }
+
+  // 3) If it’s a “cumulativerevision” => show cummulative revision
   if (quizStage === "cumulativerevision") {
     return (
       <div style={styles.outerContainer}>
@@ -28,14 +40,12 @@ export default function StageView({ examId, activity }) {
     );
   }
 
-  // 2) Otherwise => pass to StageManager, even if it's reading
-  //    The StageManager will see if it's "read" type or a known quizStage, and show the right tab.
+  // 4) Otherwise => pass to StageManager (READ or normal QUIZ)
   return (
     <div style={styles.outerContainer}>
       <StageManager
         examId={examId}
         activity={activity}
-        quizStage={quizStage}
         userId={userId}
       />
     </div>

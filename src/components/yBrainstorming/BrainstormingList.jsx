@@ -54,6 +54,7 @@ import TOEFLOnboardingProcessing from './diagrams/Pilot|AddToDB|Coding/PilotComp
 import TOEFLOnboardingView from './diagrams/Pilot|AddToDB|Coding/PilotComponents/TOEFLOnboardingView';
 import TOEFLActivitySimulator from './diagrams/Pilot|AddToDB|Coding/PilotComponents/TOEFLActivitySimulator';
 import StageManagerPlayground from './diagrams/Pilot|AddToDB|Coding/PilotComponents/StageManagerPlayground';
+import Explainer from './diagrams/Pilot|AddToDB|Coding/PilotComponents/Explainer';
 
 
 
@@ -112,7 +113,7 @@ const diagramComponents = {
   TOEFLOnboardingView,
   TOEFLActivitySimulator,
   StageManagerPlayground,
-  
+  Explainer,
 };
 
 // Sample static data representing past brainstorming sessions.
@@ -459,6 +460,13 @@ const sampleBrainstormings = [
     title: 'PilotComponents: StageManagerPlayground',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'StageManagerPlayground',
+    isImportant: false
+  },
+  {
+    id: 49,
+    title: 'PilotComponents: Explainer',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'Explainer',
     isImportant: false
   },
 
