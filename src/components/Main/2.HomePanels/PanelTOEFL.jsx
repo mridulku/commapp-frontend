@@ -21,7 +21,7 @@ const ICON_MAP = {
  * PanelTOEFL
  *
  * - Renders exactly 4 tiles: Reading (unlocked), Writing/Speaking/Listening (locked).
- * - If "Reading" has a plan, shows "40% complete" + a "Start Learning" button.
+ * - If "Reading" has a plan, shows "{X}% complete" + a "Start Learning" button.
  * - For locked books => 0% + lock icon.
  * - handleStartLearning(bookId) => call in the parent to open the plan (full-screen).
  */
@@ -29,6 +29,7 @@ export default function PanelTOEFL({
   books = [],
   plansData = {},
   handleStartLearning,
+  // If you need them, onOpenOnboarding, onSeeAllCourses, etc.
 }) {
   // For each of the 4 TOEFL book names, find if the user has it
   const finalBooks = DESIRED_BOOK_NAMES.map((desiredName) => {
@@ -54,6 +55,7 @@ export default function PanelTOEFL({
           let loading = false;
           let error = null;
           let hasPlan = false;
+          let aggregatorProgress = 0;
 
           if (item.bookObj) {
             const bookId = item.bookObj.id;
@@ -61,6 +63,7 @@ export default function PanelTOEFL({
             loading = planInfo.loading;
             error = planInfo.error;
             hasPlan = planInfo.hasPlan;
+            aggregatorProgress = planInfo.aggregatorProgress || 0;
           }
 
           return (
@@ -80,7 +83,7 @@ export default function PanelTOEFL({
               {item.bookObj && (
                 <>
                   {isLocked ? (
-                    /* LOCKED => always show 0%, locked label, no "Start Learning" */
+                    // LOCKED => always show 0%, locked label, no "Start Learning"
                     <>
                       <div style={styles.progressBarContainer}>
                         <div style={{ ...styles.progressBarFill, width: "0%" }} />
@@ -92,7 +95,7 @@ export default function PanelTOEFL({
                       </div>
                     </>
                   ) : (
-                    /* UNLOCKED => "Reading" tile */
+                    // UNLOCKED => "Reading" tile
                     <>
                       {loading && (
                         <p style={styles.statusText}>Loading plan...</p>
@@ -105,13 +108,18 @@ export default function PanelTOEFL({
                       )}
                       {!loading && !error && hasPlan && (
                         <>
-                          {/* Hardcoded 40% for demonstration; adjust as you like */}
+                          {/* Use aggregatorProgress instead of hard-coded 40% */}
                           <div style={styles.progressBarContainer}>
                             <div
-                              style={{ ...styles.progressBarFill, width: "40%" }}
+                              style={{
+                                ...styles.progressBarFill,
+                                width: `${aggregatorProgress}%`,
+                              }}
                             />
                           </div>
-                          <p style={styles.progressLabel}>40% complete</p>
+                          <p style={styles.progressLabel}>
+                            {aggregatorProgress.toFixed(1)}% complete
+                          </p>
 
                           {/* Start Learning button => triggers parent's modal */}
                           <button
@@ -154,7 +162,7 @@ const styles = {
   tile: {
     backgroundColor: "rgba(255, 255, 255, 0.2)",
     borderRadius: 6,
-    aspectRatio: "1 / 1", // or a fixed height like 300px
+    aspectRatio: "1 / 1", // or a fixed height if preferred
     padding: 15,
     display: "flex",
     flexDirection: "column",

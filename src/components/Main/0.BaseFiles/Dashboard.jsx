@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
 
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../../../firebase"; // Adjust path as needed
+
+
+
 // ADD THIS IMPORT if you haven't already:
 import axios from "axios";
 
@@ -265,6 +270,7 @@ function Dashboard() {
           }}
         >
           <PanelC
+            db = {db}
             userId={userId}
             onOpenOnboarding={() => setShowOnboardingModal(true)}
             onSeeAllCourses={() => setViewMode("home")}

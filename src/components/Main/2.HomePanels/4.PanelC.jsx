@@ -4,11 +4,54 @@ import axios from "axios";
 import { Dialog } from "@mui/material";
 import { useSelector } from "react-redux";
 
+// Firestore imports:
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  limit,
+} from "firebase/firestore";
+
 import PanelTOEFL from "./PanelTOEFL";
 import PanelGeneral from "./PanelGeneral";
 import PlanFetcher from "../5.StudyModal/StudyModal"; // adjust path if needed
 
+// Helper function to check if a stage is done
+function isStageDone(stageValue) {
+  if (!stageValue) return false;
+  const val = stageValue.toString().toLowerCase();
+  return (
+    val.includes("done") || val.includes("complete") || val.includes("pass")
+  );
+}
+
+// Compute overall progress for an aggregatorResult object
+function computeOverallProgress(aggregatorResult) {
+  const subChIds = Object.keys(aggregatorResult || {});
+  if (!subChIds.length) return 0;
+
+  let sumPercent = 0;
+  subChIds.forEach((subChId) => {
+    const row = aggregatorResult[subChId] || {};
+    let doneCount = 0;
+    if (isStageDone(row.reading)) doneCount++;
+    if (isStageDone(row.remember)) doneCount++;
+    if (isStageDone(row.understand)) doneCount++;
+    if (isStageDone(row.apply)) doneCount++;
+    if (isStageDone(row.analyze)) doneCount++;
+
+    const subChPercent = (doneCount / 5) * 100;
+    sumPercent += subChPercent;
+  });
+
+  // Average across all subchapters
+  return sumPercent / subChIds.length;
+}
+
 export default function PanelC({
+  db, // <-- Make sure you pass the Firestore instance here
   userId = "demoUser123",
   onOpenOnboarding = () => {},
   onSeeAllCourses = () => {},
@@ -45,8 +88,10 @@ export default function PanelC({
     fetchBooks();
   }, [userId]);
 
-  // 2) For each Book => fetch the latest plan
+  // 2) For each Book => fetch the latest plan, THEN fetch aggregator progress
   useEffect(() => {
+    // We define these helpers *inside* the effect so we can reference db, userId, etc.
+
     async function fetchPlanForBook(bookId) {
       setPlansData((prev) => ({
         ...prev,
@@ -54,6 +99,7 @@ export default function PanelC({
       }));
 
       try {
+        // 2.1) Fetch the plan
         const res = await axios.get(
           `${import.meta.env.VITE_BACKEND_URL}/api/adaptive-plans`,
           { params: { userId, bookId } }
@@ -79,7 +125,7 @@ export default function PanelC({
         });
         const recentPlan = allPlans[0];
 
-        // Summarize day1’s activities
+        // Summarize day1’s activities (just as in your original code)
         let readCount = 0;
         let quizCount = 0;
         let reviseCount = 0;
@@ -96,6 +142,10 @@ export default function PanelC({
           });
         }
 
+        // 2.2) Fetch aggregator doc => aggregator_v2
+        const aggregatorProgress = await fetchAggregatorDoc(bookId, recentPlan.id);
+
+        // 2.3) Update state
         setPlansData((prev) => ({
           ...prev,
           [bookId]: {
@@ -107,6 +157,8 @@ export default function PanelC({
             quizCount,
             reviseCount,
             totalTime,
+            // Store aggregator progress here
+            aggregatorProgress,
           },
         }));
       } catch (err) {
@@ -122,11 +174,46 @@ export default function PanelC({
       }
     }
 
+    // 2.2) Helper that queries aggregator_v2 for the latest aggregator doc
+    async function fetchAggregatorDoc(bookId, planId) {
+      if (!db) return 0; // If no Firestore instance, skip
+
+      try {
+        const colRef = collection(db, "aggregator_v2");
+        console.log("Querying aggregator_v2 for:", { userId, planId, bookId });
+
+        const q = query(
+          colRef,
+          where("userId", "==", userId),
+          where("planId", "==", planId),
+          where("bookId", "==", bookId),
+          orderBy("createdAt", "desc"),
+          limit(1)
+        );
+        const snap = await getDocs(q);
+        if (snap.empty) {
+          console.log("No aggregator doc found for these fields");
+        } else {
+          snap.forEach((d) => console.log("Aggregator doc found =>", d.data()));
+        }
+        const docSnap = snap.docs[0];
+        const data = docSnap.data() || {};
+        const aggregatorResult = data.aggregatorResult || {};
+        return computeOverallProgress(aggregatorResult);
+      } catch (err) {
+        console.error("Error fetching aggregator doc:", err);
+        return 0; // fallback
+      }
+    }
+
+    if (books.length === 0) return;
+
+    // For each book => fetch plan => aggregator
     books.forEach((b) => {
       if (!b.id) return;
       fetchPlanForBook(b.id);
     });
-  }, [books, userId]);
+  }, [books, db, userId]); // re-run if books change or db/userId change
 
   // 3) If user hits "Start Learning" => open Plan dialog
   function handleStartLearning(bookId) {
@@ -146,17 +233,18 @@ export default function PanelC({
         <PanelTOEFL
           books={books}
           plansData={plansData}
+          handleStartLearning={handleStartLearning}
+          // If you have other needed props, pass them here:
           onOpenOnboarding={onOpenOnboarding}
           onSeeAllCourses={onSeeAllCourses}
-          handleStartLearning={handleStartLearning}
         />
       ) : (
         <PanelGeneral
           books={books}
           plansData={plansData}
+          handleStartLearning={handleStartLearning}
           onOpenOnboarding={onOpenOnboarding}
           onSeeAllCourses={onSeeAllCourses}
-          handleStartLearning={handleStartLearning}
         />
       )}
 
@@ -165,7 +253,6 @@ export default function PanelC({
         open={showPlanDialog}
         onClose={() => setShowPlanDialog(false)}
         fullScreen
-        // Remove default Paper margins, corners
         PaperProps={{
           sx: {
             margin: 0,
@@ -176,17 +263,10 @@ export default function PanelC({
           },
         }}
       >
-        {/* 
-          We rely on PlanFetcher to handle its own top bar 
-          with a close button. 
-          If you want an extra "Close" button outside, 
-          you can re-add <DialogActions> or something similar.
-        */}
         {currentPlanId ? (
           <PlanFetcher
             planId={currentPlanId}
             userId={userId}
-            // Let PlanFetcher call onClose => we close the dialog
             onClose={() => setShowPlanDialog(false)}
           />
         ) : (
@@ -197,7 +277,6 @@ export default function PanelC({
   );
 }
 
-// Basic container styling
 const styles = {
   parentContainer: {
     padding: 20,
