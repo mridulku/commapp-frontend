@@ -1,5 +1,7 @@
+// File: Child1.jsx
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import { useSelector } from "react-redux";
 import {
   Box,
   Typography,
@@ -14,9 +16,7 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 
-/**
- * Helper function for an emoji icon based on the book's name
- */
+// Helper function for an emoji icon based on general book name
 function getBookIcon(bookName) {
   const lower = (bookName || "").toLowerCase();
   if (lower.includes("math")) return "📐";
@@ -26,35 +26,60 @@ function getBookIcon(bookName) {
   return "📚";
 }
 
+// TOEFL-specific names in the order we want
+const TOEFL_BOOK_ORDER = [
+  "TOEFL Reading Guidebook",
+  "TOEFL Writing Guidebook",
+  "TOEFL Speaking Guidebook",
+  "TOEFL Listening Guidebook",
+];
+
+// Small helper to pick an icon for each TOEFL book
+function getToeflBookIcon(bookName) {
+  switch (bookName) {
+    case "TOEFL Reading Guidebook":
+      return "📖";
+    case "TOEFL Writing Guidebook":
+      return "✍️";
+    case "TOEFL Speaking Guidebook":
+      return "🗣️";
+    case "TOEFL Listening Guidebook":
+      return "🎧";
+    default:
+      return "📚";
+  }
+}
+
 /**
  * Child1
  *
- * A panel listing the user's books, with search, sort, and pagination.
+ * A panel listing the user's books. If examType === "TOEFL", we show
+ * a locked/unlocked TOEFL panel. Otherwise, we show the generic search/sort/pagination UI.
  *
  * Props:
  *  - userId (string)
  *  - onBookSelect(bookId, bookName) => void
- *  - onOpenOnboarding() => void   // to trigger the same "upload" modal from parent
+ *  - onOpenOnboarding() => void   // triggers the same "upload" modal from parent
  */
 export default function Child1({
   userId,
   onBookSelect = () => {},
   onOpenOnboarding = () => {},
 }) {
+  // Get examType directly from Redux
+  const examType = useSelector((state) => state.exam.examType);
+
   const [booksData, setBooksData] = useState([]);
   const [selectedBookId, setSelectedBookId] = useState(null);
 
-  // Pagination
+  // For the generic mode
   const [page, setPage] = useState(1);
-  // CHANGED: only 5 books per page now
   const booksPerPage = 5;
-
-  // Search & Sort
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOption, setSortOption] = useState("NEWEST");
 
   // ----------------
-  // 1) Fetch Books
+  // Fetch Books
   // ----------------
   useEffect(() => {
     if (!userId) return;
@@ -80,9 +105,159 @@ export default function Child1({
     fetchBooks();
   }, [userId]);
 
-  // ----------------
+  // =================================================================
+  // ======================= TOEFL RENDER LOGIC =======================
+  // =================================================================
+  if (examType === "TOEFL") {
+    // Helper to compute progress for a single book
+    function computeProgress(book) {
+      if (!book) return 0;
+      const chapters = book.chapters || [];
+      let totalSubs = 0;
+      let doneSubs = 0;
+      chapters.forEach((chap) => {
+        const subs = chap.subChapters || [];
+        totalSubs += subs.length;
+        subs.forEach((sub) => {
+          if (sub.isDone) doneSubs++;
+        });
+      });
+      return totalSubs > 0 ? Math.round((doneSubs / totalSubs) * 100) : 0;
+    }
+
+    // Build array of 4 "TOEFL" books
+    const toeflBooks = TOEFL_BOOK_ORDER.map((title, idx) => {
+      const match = booksData.find((bk) => bk.name === title) || null;
+      const progressPercent = match ? computeProgress(match) : 0;
+      const isUnlocked = idx === 0; // only the first book is unlocked
+      return {
+        title,
+        bookObj: match,
+        progressPercent: isUnlocked ? progressPercent : 0,
+        locked: !isUnlocked,
+        icon: getToeflBookIcon(title),
+      };
+    });
+
+    return (
+      <Box sx={{ backgroundColor: "#000", color: "#FFF", p: 2 }}>
+        <Typography variant="h6" sx={{ fontWeight: "bold", mb: 2 }}>
+          My Materials
+        </Typography>
+
+        {/* No search bar, sort, or plus icon in TOEFL mode */}
+
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          {toeflBooks.map((tb) => {
+            const isSelected = tb.bookObj?.id === selectedBookId;
+            const found = Boolean(tb.bookObj);
+
+            const rowStyles = {
+              p: 2,
+              borderRadius: 1,
+              backgroundColor: isSelected
+                ? "rgba(187,134,252, 0.3)"
+                : "rgba(255,255,255,0.06)",
+              border: isSelected
+                ? "2px solid #BB86FC"
+                : "1px solid rgba(255,255,255,0.15)",
+              cursor: found && !tb.locked ? "pointer" : "default",
+            };
+
+            return (
+              <Box
+                key={tb.title}
+                sx={rowStyles}
+                onClick={() => {
+                  if (found && !tb.locked) {
+                    setSelectedBookId(tb.bookObj.id);
+                    onBookSelect(tb.bookObj.id, tb.bookObj.name);
+                  }
+                }}
+              >
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 1 }}>
+                  <Typography sx={{ fontSize: "1.5rem" }}>{tb.icon}</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: "bold", m: 0 }}>
+                    {tb.title}
+                  </Typography>
+                </Box>
+
+                {!found ? (
+                  <Typography variant="body2" sx={{ opacity: 0.7 }}>
+                    Not found in your library.
+                  </Typography>
+                ) : tb.locked ? (
+                  <>
+                    <Box sx={{ position: "relative", my: 1 }}>
+                      <LinearProgress
+                        variant="determinate"
+                        value={0}
+                        sx={{
+                          height: 6,
+                          borderRadius: 1,
+                          backgroundColor: "rgba(255,255,255,0.3)",
+                          "& .MuiLinearProgress-bar": {
+                            backgroundColor: "#FFD700",
+                          },
+                        }}
+                      />
+                    </Box>
+                    <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                      0% complete
+                    </Typography>
+                    <Box
+                      sx={{
+                        mt: 1,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 0.5,
+                        backgroundColor: "#333",
+                        color: "#fff",
+                        px: 1,
+                        py: 0.5,
+                        borderRadius: 1,
+                      }}
+                    >
+                      <span role="img" aria-label="Lock">
+                        🔒
+                      </span>
+                      Locked
+                    </Box>
+                  </>
+                ) : (
+                  <>
+                    <Box sx={{ position: "relative", my: 1 }}>
+                      <LinearProgress
+                        variant="determinate"
+                        value={tb.progressPercent}
+                        sx={{
+                          height: 6,
+                          borderRadius: 1,
+                          backgroundColor: "rgba(255,255,255,0.3)",
+                          "& .MuiLinearProgress-bar": {
+                            backgroundColor: "#FFD700",
+                          },
+                        }}
+                      />
+                    </Box>
+                    <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                      {tb.progressPercent}% complete
+                    </Typography>
+                  </>
+                )}
+              </Box>
+            );
+          })}
+        </Box>
+      </Box>
+    );
+  }
+
+  // =================================================================
+  // ===================== NON-TOEFL RENDER LOGIC =====================
+  // =================================================================
+
   // 2) Filter & Sort
-  // ----------------
   const filteredBooks = booksData.filter((book) => {
     const name = book.name || "";
     return name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -109,9 +284,7 @@ export default function Child1({
     }
   });
 
-  // ----------------
   // 3) Compute Stats
-  // ----------------
   const bookStats = sortedBooks.map((book) => {
     const chapters = book.chapters || [];
     let subChaptersCount = 0;
@@ -138,22 +311,15 @@ export default function Child1({
     };
   });
 
-  // ----------------
-  // Pagination
-  // ----------------
+  // 4) Pagination
   const startIndex = (page - 1) * booksPerPage;
   const endIndex = startIndex + booksPerPage;
   const pagedBooks = bookStats.slice(startIndex, endIndex);
 
-  // ----------------
-  // 4) Handlers
-  // ----------------
   function handleCardClick(bookId, bookName) {
     setSelectedBookId(bookId);
     onBookSelect(bookId, bookName);
   }
-
-  // Search & sort
   const handleSearchChange = (e) => {
     setSearchQuery(e.target.value);
     setPage(1);
@@ -163,9 +329,7 @@ export default function Child1({
     setPage(1);
   };
 
-  // ----------------
-  // 5) Render
-  // ----------------
+  // Render Non-TOEFL layout
   return (
     <Box
       sx={{
@@ -177,16 +341,12 @@ export default function Child1({
         gap: 2,
       }}
     >
-      {/* 
-         Title row: "My Materials" + plus icon 
-         Moved AddIcon here next to "My Materials"
-      */}
+      {/* Title + Add button */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
         <Typography variant="h6" sx={{ fontWeight: "bold", mb: 0 }}>
           My Materials
         </Typography>
 
-        {/* Calls onOpenOnboarding() from parent to trigger the same Upload flow */}
         <IconButton
           onClick={onOpenOnboarding}
           sx={{ color: "#4CAF50" }}
@@ -196,10 +356,7 @@ export default function Child1({
         </IconButton>
       </Box>
 
-      {/* 
-         Row for Search & Sort 
-         (the plus button was removed from here and placed above)
-      */}
+      {/* Search & Sort row */}
       <Box
         sx={{
           display: "flex",
@@ -265,7 +422,7 @@ export default function Child1({
         </FormControl>
       </Box>
 
-      {/* If no books at all */}
+      {/* Book list or no data */}
       {bookStats.length === 0 ? (
         <Typography variant="body2">
           No books found for userId="{userId}".

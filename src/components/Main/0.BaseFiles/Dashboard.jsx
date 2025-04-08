@@ -23,6 +23,7 @@ import BookProgress from "../../zArchive/2.2Library/BookProgress";
 import SubchapterContent from "../../zArchive/4.Subchapter Content/0.SubchapterContent";
 import UserProfileAnalytics from "../4.Profile/UserProfileAnalytics";
 import PanelC from "../2.HomePanels/4.PanelC";
+import ProfilePanel from "../2.HomePanels/ProfilePanel";
 import PanelAdaptiveProcess from "../2.HomePanels/PanelAdaptiveProcess";
 import TOEFLAdaptiveProcess from "../2.HomePanels/TOEFLAdaptiveProcess";
 import PanelE from "../2.HomePanels/PanelE";
@@ -255,7 +256,7 @@ function Dashboard() {
   if (viewMode === "overview") {
     mainContent = (
       <>
-        <StatsPanel />
+        <StatsPanel userId={userId} />
         <div
           style={{
             display: "grid",
@@ -267,6 +268,9 @@ function Dashboard() {
             userId={userId}
             onOpenOnboarding={() => setShowOnboardingModal(true)}
             onSeeAllCourses={() => setViewMode("home")}
+          />
+          <ProfilePanel
+            userId={userId}
           />
           {examType === "TOEFL" || examType === "RELUX" ? (
             <TOEFLAdaptiveProcess />

@@ -1,12 +1,9 @@
 /**
  * File: ReadingGuide.jsx
  * Description:
- *   - A more visually guided introduction when the user first arrives:
- *     1) Welcomes them to the platform
- *     2) Highlights the 5-stage Bloom's flow
- *     3) Emphasizes that reading is the first step
- *     4) Tells them they'll do more tasks (Remember, Understand, etc.) afterwards
- *   - Encourages them to press “Continue” to begin the reading activity
+ *   - A more visually guided introduction when the user first arrives
+ *   - Encourages them to press “Continue” (Begin Reading) to move forward
+ *     in the plan flow by incrementing the activity index.
  */
 
 import React from "react";
@@ -20,17 +17,33 @@ import {
   useMediaQuery
 } from "@mui/material";
 
+import { useDispatch, useSelector } from "react-redux";
+// Adjust import path to wherever your planSlice is:
+import { setCurrentIndex } from "../../../../../../../store/planSlice";
+
 // Icons (example placeholders)
-import MenuBookIcon from "@mui/icons-material/MenuBook";       // for Reading
-import QuizIcon from "@mui/icons-material/Quiz";              // for Remember
+import MenuBookIcon from "@mui/icons-material/MenuBook";       // Reading
+import QuizIcon from "@mui/icons-material/Quiz";              // Remember
 import WbIncandescentIcon from "@mui/icons-material/WbIncandescent"; // Understand
 import BuildCircleIcon from "@mui/icons-material/BuildCircle"; // Apply
 import PsychologyIcon from "@mui/icons-material/Psychology";  // Analyze
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 
 export default function GuideReading({ activity, onFinish }) {
+  const dispatch = useDispatch();
+  // Adjust if your store shape is different:
+  const currentIndex = useSelector((state) => state.plan?.currentIndex ?? 0);
+
   // Use a media query to adjust layout on small screens
   const isSmallScreen = useMediaQuery("(max-width:600px)");
+
+  // Handle button click: increment the plan's activity index
+  function handleBeginReading() {
+    dispatch(setCurrentIndex(currentIndex + 1));
+    if (typeof onFinish === "function") {
+      onFinish();
+    }
+  }
 
   return (
     <Box sx={styles.container}>
@@ -53,7 +66,6 @@ export default function GuideReading({ activity, onFinish }) {
         </Typography>
 
         <Grid container spacing={2} sx={{ mt: 1 }}>
-          {/* Reading */}
           <Grid item xs={12} sm={6} md={2.4}>
             <Box sx={styles.stageBox}>
               <MenuBookIcon sx={styles.stageIcon} />
@@ -62,7 +74,6 @@ export default function GuideReading({ activity, onFinish }) {
               </Typography>
             </Box>
           </Grid>
-          {/* Remember */}
           <Grid item xs={12} sm={6} md={2.4}>
             <Box sx={styles.stageBox}>
               <QuizIcon sx={styles.stageIcon} />
@@ -71,7 +82,6 @@ export default function GuideReading({ activity, onFinish }) {
               </Typography>
             </Box>
           </Grid>
-          {/* Understand */}
           <Grid item xs={12} sm={6} md={2.4}>
             <Box sx={styles.stageBox}>
               <WbIncandescentIcon sx={styles.stageIcon} />
@@ -80,7 +90,6 @@ export default function GuideReading({ activity, onFinish }) {
               </Typography>
             </Box>
           </Grid>
-          {/* Apply */}
           <Grid item xs={12} sm={6} md={2.4}>
             <Box sx={styles.stageBox}>
               <BuildCircleIcon sx={styles.stageIcon} />
@@ -89,7 +98,6 @@ export default function GuideReading({ activity, onFinish }) {
               </Typography>
             </Box>
           </Grid>
-          {/* Analyze */}
           <Grid item xs={12} sm={6} md={2.4}>
             <Box sx={styles.stageBox}>
               <PsychologyIcon sx={styles.stageIcon} />
@@ -125,9 +133,7 @@ export default function GuideReading({ activity, onFinish }) {
           color="primary"
           endIcon={<ArrowForwardIcon />}
           sx={{ mt: 2, fontWeight: "bold" }}
-          onClick={() => {
-            if (onFinish) onFinish();
-          }}
+          onClick={handleBeginReading}
         >
           {isSmallScreen ? "Begin" : "Begin Reading"}
         </Button>

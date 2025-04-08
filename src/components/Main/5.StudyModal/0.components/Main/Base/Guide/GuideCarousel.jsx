@@ -1,6 +1,6 @@
-// src/components/DetailedBookViewer/TOEFLOnboardingCarousel.jsx
-
+// File: src/components/DetailedBookViewer/TOEFLOnboardingCarousel.jsx
 import React, { useState, useRef } from "react";
+import { useSelector, useDispatch } from "react-redux";
 import Slider from "react-slick";
 import {
   Box,
@@ -10,13 +10,27 @@ import {
   useTheme
 } from "@mui/material";
 import { CheckCircle } from "@mui/icons-material";
+import axios from "axios";
 
-export default function TOEFLOnboardingCarousel({ onFinish }) {
+import { fetchPlan, setCurrentIndex } from "../../../../../../../store/planSlice"; 
+// ^ Make sure your actual import paths match your project
+
+export default function GuideCarousel({ onFinish }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-
   const sliderRef = useRef(null);
   const [currentSlide, setCurrentSlide] = useState(0);
+
+  // Grab whatever you need from Redux (similar to ReadingView)
+  const dispatch = useDispatch();
+  const userId = useSelector((state) => state.auth?.userId);
+  const planId = useSelector((state) => state.plan?.planDoc?.id);
+  const currentIndex = useSelector((state) => state.plan?.currentIndex);
+
+  // Use a hypothetical ID for the “guide” activity
+  // If you actually have a real activity in your plan for the guide,
+  // replace this with the correct ID from your data.
+  const guideActivityId = "GUIDE_ACTIVITY_ID";
 
   // React-slick slider settings
   const settings = {
@@ -36,6 +50,45 @@ export default function TOEFLOnboardingCarousel({ onFinish }) {
   // Theme colors
   const accentPurple = "#9b59b6";
   const accentPurpleHover = "#8e44ad";
+
+  // When user clicks "Finish" on the last slide
+  async function handleFinishGuide() {
+    const oldIndex = currentIndex;
+
+    try {
+      // 1) Mark the “guide activity” as complete (optional; remove if no such activity)
+      await axios.post("http://localhost:3001/api/markActivityCompletion", {
+        userId,
+        planId,
+        activityId: guideActivityId,
+        completionStatus: "complete",
+      });
+
+      // 2) Re-fetch the plan from the backend
+      const backendURL = "http://localhost:3001"; 
+      const fetchUrl = "/api/adaptive-plan";
+
+      const fetchAction = await dispatch(
+        fetchPlan({ planId, backendURL, fetchUrl })
+      );
+
+      // 3) If success => increment index. If failure => still increment
+      if (fetchPlan.fulfilled.match(fetchAction)) {
+        dispatch(setCurrentIndex(oldIndex + 1));
+      } else {
+        dispatch(setCurrentIndex(oldIndex + 1));
+      }
+    } catch (err) {
+      console.error("Error finishing guide activity:", err);
+      // Even if there's an error, fallback to increment anyway
+      dispatch(setCurrentIndex(oldIndex + 1));
+    }
+
+    // 4) If you still want to run the old `onFinish` callback, do so here:
+    if (typeof onFinish === "function") {
+      onFinish();
+    }
+  }
 
   // Shared styling
   const slideStyle = {
@@ -122,12 +175,8 @@ export default function TOEFLOnboardingCarousel({ onFinish }) {
               <div>• No big test first. Just quick questions 🤗</div>
               <div>• Let’s set up your exam details in a jiffy ⏱️</div>
             </Typography>
-            {/* 
-              For the first slide, we only show the Next button (on the right). 
-              The Back button is hidden because currentSlide=0 
-            */}
             <Box sx={buttonRowStyle}>
-              <Box /> {/* Empty box placeholder to keep Next on the right */}
+              <Box /> {/* Empty box to align Next on the right */}
               <Button
                 variant="contained"
                 sx={primaryButtonStyle}
@@ -153,10 +202,6 @@ export default function TOEFLOnboardingCarousel({ onFinish }) {
               <div>• Areas you want to focus on the most 🎯</div>
               <div>• A quick sense of your current skill ⚙️</div>
             </Typography>
-            {/* 
-              Now we have both Back (left) and Next (right).
-              Because currentSlide=1 => you can go back to Slide 1
-            */}
             <Box sx={buttonRowStyle}>
               <Button
                 variant="outlined"
@@ -176,7 +221,7 @@ export default function TOEFLOnboardingCarousel({ onFinish }) {
           </Box>
         </Box>
 
-        {/* Slide 3 */}
+        {/* Slide 3 (Last Slide) */}
         <Box sx={slideStyle}>
           <Box sx={cardStyle}>
             <Box sx={iconContainerStyle}>
@@ -201,7 +246,7 @@ export default function TOEFLOnboardingCarousel({ onFinish }) {
               <Button
                 variant="contained"
                 sx={primaryButtonStyle}
-                onClick={onFinish}
+                onClick={handleFinishGuide}
               >
                 Finish
               </Button>

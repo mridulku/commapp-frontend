@@ -1,18 +1,67 @@
-// src/components/DetailedBookViewer/StatsPanel.jsx
+// File: src/components/DetailedBookViewer/StatsPanel.jsx
 
-import React from "react";
+import React, { useState, useEffect } from "react";
+import axios from "axios";
 
-/**
- * StatsPanel
- *
- * Four small “cards” in a row:
- *  1) Today's Schedule (Time)
- *  2) Today's Progress (progress bar)
- *  3) Daily Average
- *  4) Active Courses
- */
-function StatsPanel() {
-  // Container that holds all four stat cards
+import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import FlagIcon from "@mui/icons-material/Flag";
+import MenuBookIcon from "@mui/icons-material/MenuBook";
+
+export default function StatsPanel({ userId }) {
+  // We'll fetch from the server how many seconds the user studied today
+  const [timeStudiedTodaySec, setTimeStudiedTodaySec] = useState(0);
+
+  // For demonstration, placeholders for the other stats
+  const [todaysTargetPercent] = useState(60);
+  const [activeCoursesCount] = useState(1);
+
+  // On mount or if userId changes => fetch today's total from /api/daily-time
+  useEffect(() => {
+    if (!userId) return;
+
+    // Build a YYYY-MM-DD string for "today"
+    // (Alternatively, the server can do "today" logic if you prefer.)
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, "0");
+    const dd = String(today.getDate()).padStart(2, "0");
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+
+    async function fetchDailyTime() {
+      try {
+        const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/daily-time`, {
+          params: { userId, dateStr }
+        });
+        if (res.data && res.data.success) {
+          setTimeStudiedTodaySec(res.data.sumSeconds || 0);
+        } else {
+          console.warn("No success or missing data from /api/daily-time", res.data);
+          setTimeStudiedTodaySec(0);
+        }
+      } catch (err) {
+        console.error("Error fetching daily time:", err);
+        setTimeStudiedTodaySec(0);
+      }
+    }
+
+    fetchDailyTime();
+  }, [userId]);
+
+  // Convert seconds => "Xh Ym" or just "Xm"
+  function formatTimeStudied(seconds) {
+    const hours = Math.floor(seconds / 3600);
+    const remainderSec = seconds % 3600;
+    const minutes = Math.floor(remainderSec / 60);
+
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    return `${minutes}m`;
+  }
+
+  const timeStudiedToday = formatTimeStudied(timeStudiedTodaySec);
+
+  // ----- STYLES (unchanged) -----
   const panelContainerStyle = {
     display: "flex",
     gap: "20px",
@@ -24,8 +73,6 @@ function StatsPanel() {
     alignItems: "center",
     justifyContent: "space-around",
   };
-
-  // Each individual card
   const statCardStyle = {
     display: "flex",
     flexDirection: "row",
@@ -35,35 +82,30 @@ function StatsPanel() {
     borderRadius: "8px",
     minWidth: "160px",
     justifyContent: "space-between",
-    color: "#fff", // white text
+    color: "#fff",
   };
-
   const iconStyle = {
     fontSize: "1.4rem",
     marginRight: "10px",
+    display: "flex",
+    alignItems: "center",
   };
-
   const textContainerStyle = {
     display: "flex",
     flexDirection: "column",
     alignItems: "flex-start",
     flex: 1,
   };
-
-  // The main “big number” or info
   const valueStyle = {
     fontWeight: "bold",
     fontSize: "1.1rem",
-    color: "#B39DDB", // Purple accent
+    color: "#B39DDB",
   };
-
   const labelStyle = {
     fontSize: "0.9rem",
     opacity: 0.9,
   };
 
-  // For the progress bar in the “Today’s Progress” stat
-  const progressPercent = 60; // placeholder
   const progressBarContainer = {
     marginTop: "4px",
     width: "100%",
@@ -71,64 +113,52 @@ function StatsPanel() {
     backgroundColor: "rgba(255,255,255,0.3)",
     borderRadius: "3px",
   };
-
   const progressBarFill = {
-    width: `${progressPercent}%`,
+    width: `${todaysTargetPercent}%`,
     height: "100%",
-    backgroundColor: "#B39DDB", // purple
+    backgroundColor: "#B39DDB",
     borderRadius: "3px",
   };
 
   return (
     <div style={panelContainerStyle}>
-      {/* Stat #1: Today's Schedule */}
+
+      {/* Stat #1: Time Studied Today */}
       <div style={statCardStyle}>
-        <span role="img" aria-label="clock" style={iconStyle}>
-          ⏰
-        </span>
+        <div style={iconStyle}>
+          <AccessTimeIcon />
+        </div>
         <div style={textContainerStyle}>
-          <span style={valueStyle}>1h 30m</span>
-          <span style={labelStyle}>Today’s Schedule</span>
+          <span style={valueStyle}>{timeStudiedToday}</span>
+          <span style={labelStyle}>Time Studied Today</span>
         </div>
       </div>
 
-      {/* Stat #2: Today's Progress */}
+      {/* Stat #2: Today’s Target */}
       <div style={statCardStyle}>
-        <span role="img" aria-label="progress" style={iconStyle}>
-          📊
-        </span>
+        <div style={iconStyle}>
+          <FlagIcon />
+        </div>
         <div style={textContainerStyle}>
-          <span style={valueStyle}>{progressPercent}%</span>
-          <span style={labelStyle}>Today’s Progress</span>
+          <span style={valueStyle}>{todaysTargetPercent}%</span>
+          <span style={labelStyle}>Today’s Target</span>
           <div style={progressBarContainer}>
             <div style={progressBarFill} />
           </div>
         </div>
       </div>
 
-      {/* Stat #3: Daily Average */}
+      {/* Stat #3: Active Courses */}
       <div style={statCardStyle}>
-        <span role="img" aria-label="average" style={iconStyle}>
-          🕒
-        </span>
-        <div style={textContainerStyle}>
-          <span style={valueStyle}>1h 20m</span>
-          <span style={labelStyle}>Daily Average</span>
+        <div style={iconStyle}>
+          <MenuBookIcon />
         </div>
-      </div>
-
-      {/* Stat #4: Active Courses */}
-      <div style={statCardStyle}>
-        <span role="img" aria-label="courses" style={iconStyle}>
-          📚
-        </span>
         <div style={textContainerStyle}>
-          <span style={valueStyle}>4</span>
+          <span style={valueStyle}>{activeCoursesCount}</span>
           <span style={labelStyle}>Active Courses</span>
         </div>
       </div>
+
     </div>
   );
 }
-
-export default StatsPanel;

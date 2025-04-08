@@ -2,13 +2,11 @@
  * File: GuideRememberRevisionFlow.jsx
  * 
  * A single React component demonstrating:
- *   1) A "guide" screen for the Remember stage (like the old GuideRemember),
+ *   1) A "guide" screen for the Remember stage,
  *   2) Then a mini quiz with 2 questions,
  *   3) If pass => final explanation about how revision works,
  *   4) If fail => show revision content, retake just the missed Q(s) until pass,
- *   5) End with "done" screen.
- *
- * No external data – purely local states for demonstration / onboarding.
+ *   5) After final explanation => moves on (increments Redux activity index).
  */
 
 import React, { useState } from "react";
@@ -26,14 +24,22 @@ import QuizIcon from "@mui/icons-material/Quiz";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 
-// -------------- MAIN COMPONENT --------------
+// Redux imports
+import { useSelector, useDispatch } from "react-redux";
+// Adjust this import path to wherever your planSlice or store is located
+import { setCurrentIndex } from "../../../../../../../store/planSlice";
+
 export default function GuideRemember() {
-  // PHASES => 'guide' | 'quiz' | 'revision' | 'retake' | 'finalExplanation' | 'done'
+  // PHASES => 'guide' | 'quiz' | 'revision' | 'retake' | 'finalExplanation'
   const [phase, setPhase] = useState("guide");
 
   // Hard-coded reading speed for the "guide" portion
   const approximateReadingSpeed = 200;
   const isSmallScreen = useMediaQuery("(max-width:600px)");
+
+  // Redux bits
+  const dispatch = useDispatch();
+  const currentIndex = useSelector((state) => state.plan?.currentIndex ?? 0);
 
   // The two questions
   const initialQuestions = [
@@ -53,17 +59,16 @@ export default function GuideRemember() {
     },
   ];
 
-  // local quiz states
   const [questions] = useState(initialQuestions);
   const [userAnswers, setUserAnswers] = useState(Array(initialQuestions.length).fill(""));
   const [missedIndices, setMissedIndices] = useState([]);
   const [attemptNumber, setAttemptNumber] = useState(1);
 
-  // messages
+  // Feedback messages
   const [passMessage, setPassMessage] = useState("");
   const [failMessage, setFailMessage] = useState("");
 
-  // Hard-coded revision content
+  // Revision content
   const revisionHtml = `
     <h3>Revision Tips</h3>
     <p>Review the basic facts carefully:</p>
@@ -74,7 +79,7 @@ export default function GuideRemember() {
     <p>Once you’ve refreshed these facts, retake the quiz for the missed questions.</p>
   `;
 
-  // =========== GUIDE SCREEN (phase="guide") ===========
+  // ----------- RENDER PHASES -----------
   function renderGuideScreen() {
     return (
       <Box sx={styles.fullContainer}>
@@ -151,7 +156,6 @@ export default function GuideRemember() {
     );
   }
 
-  // =========== QUIZ (phase="quiz") ===========
   function renderQuizScreen() {
     return (
       <div style={styles.container}>
@@ -179,7 +183,6 @@ export default function GuideRemember() {
     );
   }
 
-  // =========== REVISION (phase="revision") ===========
   function renderRevisionScreen() {
     return (
       <div style={styles.container}>
@@ -198,7 +201,6 @@ export default function GuideRemember() {
     );
   }
 
-  // =========== RETAKE (phase="retake") ===========
   function renderRetakeScreen() {
     return (
       <div style={styles.container}>
@@ -229,7 +231,6 @@ export default function GuideRemember() {
     );
   }
 
-  // =========== FINAL EXPLANATION (phase="finalExplanation") ===========
   function renderFinalExplanationScreen() {
     return (
       <div style={styles.container}>
@@ -248,7 +249,8 @@ export default function GuideRemember() {
             This ensures a thorough grasp of all concepts before moving on.
           </p>
 
-          <button style={styles.button} onClick={() => setPhase("done")}>
+          {/* Instead of going to a "done" phase, increment the plan index and move on. */}
+          <button style={styles.button} onClick={handleFinish}>
             Continue
           </button>
         </div>
@@ -256,45 +258,21 @@ export default function GuideRemember() {
     );
   }
 
-  // =========== DONE (phase="done") ===========
-  function renderDoneScreen() {
-    return (
-      <div style={styles.container}>
-        <div style={styles.quizBox}>
-          <h2 style={{ color: "#fff" }}>All done!</h2>
-          <p style={{ color: "#ddd" }}>
-            This was a demonstration of how the “Remember” stage + revision loop 
-            might work. In the real platform, questions and revision 
-            content would be more elaborate or GPT-driven.
-          </p>
-          <button style={styles.button} onClick={() => alert("You can do anything next!")}>
-            Exit Demo
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // =========== QUIZ & RETAKE LOGIC ===========
-
+  // -------------- QUIZ & RETAKE LOGIC --------------
   function handleQuizSubmit() {
-    // We'll check each question vs userAnswers => pass or fail
     const newlyMissed = [];
     questions.forEach((qObj, i) => {
       const userAns = userAnswers[i];
-      const correctIdx = qObj.correctIndex;
-      if (parseInt(userAns, 10) !== correctIdx) {
+      if (parseInt(userAns, 10) !== qObj.correctIndex) {
         newlyMissed.push(i);
       }
     });
 
     if (newlyMissed.length === 0) {
-      // user passed all questions
       setPassMessage("Congrats! You got everything correct on this attempt.");
       setFailMessage("");
       setPhase("finalExplanation");
     } else {
-      // user missed something => show revision
       setMissedIndices(newlyMissed);
       setFailMessage(`You missed ${newlyMissed.length} question(s). Let's do revision!`);
       setPassMessage("");
@@ -318,13 +296,11 @@ export default function GuideRemember() {
     });
 
     if (newlyMissed.length === 0) {
-      // user fixed all mistakes
       setMissedIndices([]);
       setPassMessage(`Great job! You fixed all missed questions on attempt #${attemptNumber}.`);
       setFailMessage("");
       setPhase("finalExplanation");
     } else {
-      // still missed some => revision again
       setMissedIndices(newlyMissed);
       setFailMessage(`You still missed ${newlyMissed.length} question(s). Let's revise again.`);
       setPassMessage("");
@@ -332,6 +308,14 @@ export default function GuideRemember() {
     }
   }
 
+  // -------------- FINISH => INCREMENT REDUX INDEX --------------
+  function handleFinish() {
+    // Move to the next activity in the plan
+    dispatch(setCurrentIndex(currentIndex + 1));
+    // Optionally do more here, like navigation, etc.
+  }
+
+  // -------------- RENDER MCQ HELPER --------------
   function renderMCQ(qObj, qIdx) {
     return (
       <div>
@@ -357,7 +341,7 @@ export default function GuideRemember() {
     setUserAnswers(newAnswers);
   }
 
-  // =========== RENDER SWITCH ON PHASE ===========
+  // -------------- RENDER PHASE SWITCH --------------
   switch (phase) {
     case "guide":
       return renderGuideScreen();
@@ -369,14 +353,16 @@ export default function GuideRemember() {
       return renderRetakeScreen();
     case "finalExplanation":
       return renderFinalExplanationScreen();
-    case "done":
-      return renderDoneScreen();
     default:
-      return <div style={styles.container}>Unknown phase: {phase}</div>;
+      return (
+        <div style={styles.container}>
+          <p>Unknown phase: {phase}</p>
+        </div>
+      );
   }
 }
 
-// -------------- STYLES --------------
+// ---------------- STYLES ----------------
 const styles = {
   // For the "guide" portion
   fullContainer: {
