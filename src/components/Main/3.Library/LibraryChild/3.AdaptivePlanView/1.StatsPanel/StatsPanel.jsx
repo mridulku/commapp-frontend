@@ -105,9 +105,6 @@ export default function StatsPanel({
   const [examDate, setExamDate] = useState("N/A");
   const [chaptersCount, setChaptersCount] = useState(0);
 
-  // We'll keep the "daily progress" tile as filler for now
-  const dailyProgress = 20;
-
   // =========== 1) Approach B: aggregator doc fetch => generate => fetch again ===========
   useEffect(() => {
     if (!db || !userId || !planId || !bookId) {
@@ -225,15 +222,7 @@ export default function StatsPanel({
           colorScheme={colorScheme}
         />
 
-        {/* 2) Daily Progress tile => filler */}
-        <OverallProgressTile
-          title="Daily Progress"
-          progressValue={dailyProgress}
-          colorScheme={colorScheme}
-          daily={true}
-        />
-
-        {/* 3) Exam Date => from adaptive_demo => targetDate */}
+        {/* 2) Exam Date => from adaptive_demo => targetDate */}
         <IconCard
           icon="📅"
           label="Exam Date"
@@ -241,7 +230,7 @@ export default function StatsPanel({
           color={colorScheme.heading || "#FFD700"}
         />
 
-        {/* 4) Daily Plan => from adaptive_demo => dailyReadingTimeUsed */}
+        {/* 3) Daily Plan => from adaptive_demo => dailyReadingTimeUsed */}
         <IconCard
           icon="⏱"
           label="Daily Plan"
@@ -249,7 +238,7 @@ export default function StatsPanel({
           color={colorScheme.heading || "#FFD700"}
         />
 
-        {/* 5) Chapters => from chapters_demo */}
+        {/* 4) Chapters => from chapters_demo */}
         <IconCard
           icon="📖"
           label="Chapters"
@@ -262,10 +251,8 @@ export default function StatsPanel({
 }
 
 /** A tile that shows a title, a linear progress bar, and numeric % below it. */
-function OverallProgressTile({ title, progressValue, colorScheme, daily = false }) {
-  const barColor = daily
-    ? colorScheme.dailyBarColor || "#FF9800"
-    : colorScheme.heading || "#FFD700";
+function OverallProgressTile({ title, progressValue, colorScheme }) {
+  const barColor = colorScheme.heading || "#FFD700";
 
   const tileStyle = {
     backgroundColor: "#2F2F2F",

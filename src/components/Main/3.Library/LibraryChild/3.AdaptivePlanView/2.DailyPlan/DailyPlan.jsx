@@ -1,5 +1,4 @@
 // File: DailyPlan.jsx
-
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useDispatch, useSelector } from "react-redux";
@@ -22,6 +21,92 @@ import {
 // Icons
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import LockIcon from "@mui/icons-material/Lock";
+
+// ============== Utility functions ==============
+function parseCreatedAt(plan) {
+  // If your plan doc has plan.createdAt as a Firestore Timestamp or ISO string:
+  if (!plan?.createdAt) {
+    return dateOnly(new Date()); // fallback to today's date
+  }
+
+  // If Firestore timestamp => { _seconds, ... } or { seconds, ... }
+  if (plan.createdAt._seconds) {
+    return dateOnly(new Date(plan.createdAt._seconds * 1000));
+  } else if (plan.createdAt.seconds) {
+    return dateOnly(new Date(plan.createdAt.seconds * 1000));
+  } else {
+    // else assume it's a date-string
+    return dateOnly(new Date(plan.createdAt));
+  }
+}
+
+function DayProgressBar({ activities }) {
+  // Count how many are complete or deferred => doneCount
+  const total = activities.length;
+  let doneCount = 0;
+  activities.forEach((act) => {
+    const cs = (act.completionStatus || "").toLowerCase();
+    if (cs === "complete" || cs === "deferred") {
+      doneCount++;
+    }
+  });
+
+  const progressPct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
+
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", ml: "auto", flex: 1 }}>
+      {/* The progress bar container */}
+      <Box
+        sx={{
+          position: "relative",
+          flex: 1,
+          height: 8,
+          bgcolor: "#444",
+          borderRadius: "4px",
+          overflow: "hidden",
+          mr: 1,
+        }}
+      >
+        <Box
+          sx={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            bottom: 0,
+            width: `${progressPct}%`,
+            bgcolor: "#66BB6A",
+            borderRadius: "4px",
+          }}
+        />
+      </Box>
+      {/* The label => "42%" etc. */}
+      <Typography variant="body2" sx={{ fontSize: "0.75rem", color: "#fff" }}>
+        {progressPct}%
+      </Typography>
+    </Box>
+  );
+}
+
+/** Returns a Date object with hours/minutes/seconds zeroed out for "date-only" comparison */
+function dateOnly(d) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+/** Offsets a date by N days, returning a date-only result. */
+function addDays(baseDate, daysOffset) {
+  const d = new Date(baseDate);
+  d.setDate(d.getDate() + daysOffset);
+  return dateOnly(d);
+}
+
+/** Formats the date as e.g. "Apr 8, 2025" (no time). */
+function formatDate(d) {
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 
 /** Utility: Format N seconds => "Xm Ys" */
 function formatSeconds(totalSeconds) {
@@ -170,7 +255,7 @@ function ActivityList({
   const [progressTitle, setProgressTitle] = useState("");
   const [progressData, setProgressData] = useState(null);
 
-  // (NEW) => "Time Detail" => doc-level info from the updated getActivityTime
+  // (NEW) => "Time Detail"
   const [timeDetailOpen, setTimeDetailOpen] = useState(false);
   const [timeDetailTitle, setTimeDetailTitle] = useState("");
   const [timeDetailData, setTimeDetailData] = useState([]);
@@ -246,8 +331,8 @@ function ActivityList({
 
       // sort by timestamp
       combined.sort((a, b) => {
-        const aMs = toMillis(a.ts),
-          bMs = toMillis(b.ts);
+        const aMs = toMillis(a.ts);
+        const bMs = toMillis(b.ts);
         if (aMs !== bMs) return aMs - bMs;
         return (a.attemptNumber || 0) - (b.attemptNumber || 0);
       });
@@ -303,17 +388,13 @@ function ActivityList({
     setProgressData(null);
   }
 
-  /**
-   * (NEW) handleOpenTimeDetail => calls the updated /api/getActivityTime,
-   * which now returns { totalTime, details: [...] } so we can display each doc
-   */
+  /** (NEW) Time detail => doc-level breakdown */
   async function handleOpenTimeDetail(activityId, type) {
     try {
       setTimeDetailTitle(`Time Breakdown => activityId='${activityId}'`);
       const res = await axios.get("http://localhost:3001/api/getActivityTime", {
         params: { activityId, type },
       });
-      // res.data => { totalTime, details: [ { docId, collection, totalSeconds, lumps, ... }, ... ] }
       setTimeDetailData(res.data?.details || []);
     } catch (err) {
       console.error("handleOpenTimeDetail => error:", err);
@@ -363,12 +444,10 @@ function ActivityList({
           const planCompletion = (act.completionStatus || "").toLowerCase();
           let finalStatusLabel = "Not Started";
           let finalStatusColor = "#EF5350";
-          let skipNext = false;
 
           if (planCompletion === "complete") {
             finalStatusLabel = "Complete";
             finalStatusColor = "#66BB6A";
-            skipNext = true;
           } else if (lockedFromAPI) {
             finalStatusLabel = (
               <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
@@ -377,11 +456,11 @@ function ActivityList({
               </Box>
             );
             finalStatusColor = "#9E9E9E";
-            skipNext = true;
           } else if (planCompletion === "deferred") {
             finalStatusLabel = "Deferred";
             finalStatusColor = "#FFA726";
           } else if (lumpsSec > 0) {
+            // user started
             finalStatusLabel = "WIP";
             finalStatusColor = "#BDBDBD";
           }
@@ -419,10 +498,10 @@ function ActivityList({
             );
           }
 
-          // The type => "read" or "quiz" for the new doc-level breakdown
+          // The type => "read" or "quiz" for doc-level breakdown
           const rawType = (act.type || "").toLowerCase().includes("read") ? "read" : "quiz";
 
-          // if we have time => build timePill
+          // time pill => e.g. "Elapsed: 3m 10s / Expected: 5m"
           let timePill;
           if (timeNeededVal) {
             const tooltipText = `Elapsed: ${lumpsStr}, Expected: ${timeNeededVal}`;
@@ -533,7 +612,7 @@ function ActivityList({
         })}
       </List>
 
-      {/* 1) aggregator debug */}
+      {/* aggregator debug */}
       <Dialog open={debugOpen} onClose={handleCloseDebug} fullWidth maxWidth="md">
         <DialogTitle>{debugTitle}</DialogTitle>
         <DialogContent sx={{ backgroundColor: "#222" }}>
@@ -552,7 +631,7 @@ function ActivityList({
         </DialogActions>
       </Dialog>
 
-      {/* 2) subchapter-history debug */}
+      {/* subchapter-history debug */}
       <Dialog open={historyOpen} onClose={handleCloseHistory} fullWidth maxWidth="md">
         <DialogTitle>{historyTitle}</DialogTitle>
         <DialogContent sx={{ backgroundColor: "#222" }}>
@@ -571,7 +650,7 @@ function ActivityList({
         </DialogActions>
       </Dialog>
 
-      {/* 3) "Previous" => tasks done list */}
+      {/* "Previous" => tasks done list */}
       <Dialog open={prevModalOpen} onClose={handleClosePrevious} fullWidth maxWidth="sm">
         <DialogTitle>{prevModalTitle}</DialogTitle>
         <DialogContent sx={{ backgroundColor: "#222" }}>
@@ -594,7 +673,7 @@ function ActivityList({
         </DialogActions>
       </Dialog>
 
-      {/* 4) "Progress" => mastery details */}
+      {/* "Progress" => mastery details */}
       <Dialog open={progressOpen} onClose={handleCloseProgress} fullWidth maxWidth="sm">
         <DialogTitle>{progressTitle}</DialogTitle>
         <DialogContent sx={{ backgroundColor: "#222", color: "#fff" }}>
@@ -630,15 +709,13 @@ function ActivityList({
         </DialogActions>
       </Dialog>
 
-      {/* (NEW) 5) Time Detail => doc-level breakdown */}
+      {/* Time Detail => doc-level breakdown */}
       <Dialog open={timeDetailOpen} onClose={handleCloseTimeDetail} fullWidth maxWidth="md">
         <DialogTitle>{timeDetailTitle}</DialogTitle>
         <DialogContent sx={{ backgroundColor: "#222", color: "#fff" }}>
-          {/* We expect timeDetailData to be an array => [ { docId, collection, totalSeconds, lumps, ... }, ... ] */}
           {timeDetailData && timeDetailData.length > 0 ? (
             <ul style={{ color: "#0f0", fontSize: "0.85rem" }}>
               {timeDetailData.map((item, idx) => {
-                // item => { docId, collection, totalSeconds, lumps, ... }
                 const lumpsCount = item.lumps?.length || 0;
                 return (
                   <li key={idx} style={{ marginBottom: "0.6rem" }}>
@@ -681,9 +758,8 @@ function toMillis(ts) {
   return 0;
 }
 
-/**
- * Main DailyPlan component
- */
+// ============== Main DailyPlan Component =============
+
 export default function DailyPlan({
   userId,
   plan,
@@ -701,10 +777,76 @@ export default function DailyPlan({
   if (!plan?.sessions?.length) {
     return <div>No sessions found in this plan.</div>;
   }
-
   const sessions = plan.sessions;
+
+  // 1) We’ll store the dayIndex here. If dayDropIdx is controlled by parent, that’s fine.
+  //    If you want to internally override it, you can do so in a useEffect.
+  //    For now, we’ll assume you’re controlling it from outside => we rely on dayDropIdx.
+
+  // (A) We'll parse plan.createdAt => baseDate
+  const createdAtDate = parseCreatedAt(plan);
+  const today = dateOnly(new Date());
+  
+  // sessions.map => for each sessionLabel = N
+  // dayDate = createdAtDate + (N - 1) days
+  // if dayDate === today => label "Today (Apr 8, 2025)"
+  // else => "Day N (Apr 8, 2025)"
+  const dayLabels = sessions.map((sess) => {
+    const sNum = Number(sess.sessionLabel); // 1,2,3...
+    const dayDate = addDays(createdAtDate, sNum - 1);
+    const dayDateStr = formatDate(dayDate);
+  
+    // compare dayDate with today
+    if (dayDate.getTime() === today.getTime()) {
+      return `Today (${dayDateStr})`;
+    }
+  
+    return `Day ${sNum} (${dayDateStr})`;
+  });
+
+  // (C) We'll compute a "defaultDayIndex" that ensures:
+  //   - if today < first day => day 0
+  //   - if today > last day => last day
+  //   - else => whichever day matches "today"
+  // But in your code, you have dayDropIdx from the parent. We'll see if you want to override it.
+
+  // Let's do a small effect that sets dayDropIdx if needed:
+  useEffect(() => {
+    // Identify the first day date => createdAtDate
+    // last day date => createdAtDate + (sessions.length - 1)
+    const firstDayDate = addDays(createdAtDate, 0);
+    const lastDayDate = addDays(createdAtDate, sessions.length - 1);
+  
+    // If today < firstDay => pick dayIndex=0
+    if (today < firstDayDate) {
+      onDaySelect(0);
+      return;
+    }
+  
+    // If today > lastDay => pick dayIndex = sessions.length-1
+    if (today > lastDayDate) {
+      onDaySelect(sessions.length - 1);
+      return;
+    }
+  
+    // else "today" is within [firstDay, lastDay]
+    // so find the day offset
+    const daysDiff = (today.getTime() - firstDayDate.getTime()) / (1000 * 60 * 60 * 24);
+    // daysDiff => 0 => day1, 1 => day2, etc.
+    const exactIdx = Math.floor(daysDiff); // e.g. if daysDiff=2 => dayIndex=2 => sessionLabel=3
+    if (exactIdx < 0) {
+      onDaySelect(0);
+    } else if (exactIdx >= sessions.length) {
+      onDaySelect(sessions.length - 1);
+    } else {
+      onDaySelect(exactIdx);
+    }
+  }, [planId, sessions]);
+  // 2) The current day => sessions[dayDropIdx]
   let safeIdx = dayDropIdx;
-  if (safeIdx >= sessions.length) safeIdx = 0;
+  if (safeIdx < 0) safeIdx = 0;
+  if (safeIdx >= sessions.length) safeIdx = sessions.length - 1;
+
   const currentSession = sessions[safeIdx] || {};
   const { activities = [] } = currentSession;
 
@@ -716,6 +858,7 @@ export default function DailyPlan({
     console.log("DailyPlan => dayActivities =>", activities);
   }, [activities]);
 
+  // ============= Fetch times + subchapter-status for this day's activities =============
   useEffect(() => {
     let cancel = false;
     if (!activities.length) {
@@ -736,8 +879,6 @@ export default function DailyPlan({
             const rawType = (act.type || "").toLowerCase();
             const type = rawType.includes("read") ? "read" : "quiz";
 
-            // updated or not => the code below only calls getActivityTime
-            // it still returns { totalTime, details } but we only store totalTime in timeMap
             try {
               const res = await axios.get("http://localhost:3001/api/getActivityTime", {
                 params: { activityId: act.activityId, type },
@@ -751,7 +892,7 @@ export default function DailyPlan({
           return newMap;
         })();
 
-        // 2) subchapter-status
+        // 2) fetch aggregator subchapter-status
         const fetchStatusPromise = (async () => {
           const uniqueSubIds = new Set();
           for (const act of activities) {
@@ -795,6 +936,7 @@ export default function DailyPlan({
     };
   }, [activities, planId, userId]);
 
+  // 3) onClickActivity => setCurrentIndex => open PlanFetcher
   function handleClickActivity(act) {
     dispatch(setCurrentIndex(act.flatIndex));
     if (onOpenPlanFetcher) {
@@ -810,18 +952,23 @@ export default function DailyPlan({
     );
   }
 
+  // ============= Render =============
   return (
     <div style={{ marginTop: "1rem" }}>
-      {/* Day dropdown */}
+      {/* Row with day dropdown + progress bar */}
       <Box sx={{ mb: 1, display: "flex", alignItems: "center", gap: 1 }}>
-        <Typography variant="body2" sx={{ fontSize: "0.85rem", color: colorScheme.textColor || "#FFD700" }}>
+        <Typography
+          variant="body2"
+          sx={{ fontSize: "0.85rem", color: colorScheme.textColor || "#FFD700" }}
+        >
           Day:
         </Typography>
+
         <Select
-          value={dayDropIdx}
+          value={safeIdx}
           onChange={(e) => onDaySelect(Number(e.target.value))}
           sx={{
-            minWidth: 100,
+            minWidth: 180,
             fontSize: "0.8rem",
             height: 32,
             backgroundColor: "#2F2F2F",
@@ -836,21 +983,18 @@ export default function DailyPlan({
             },
           }}
         >
-          {sessions.map((sess, idx) => {
-            const sLabel = Number(sess.sessionLabel);
-            let displayName = "";
-            if (sLabel === 1) displayName = "Today";
-            else if (sLabel === 2) displayName = "Tomorrow";
-            else displayName = `Day ${sLabel}`;
-            return (
-              <MenuItem key={sess.sessionLabel} value={idx}>
-                {displayName}
-              </MenuItem>
-            );
-          })}
+          {sessions.map((sess, idx) => (
+            <MenuItem key={sess.sessionLabel} value={idx}>
+              {dayLabels[idx]}
+            </MenuItem>
+          ))}
         </Select>
+
+        {/* Here is the progress bar filling remaining space */}
+        <DayProgressBar activities={activities} />
       </Box>
 
+      {/* Activities list */}
       <ActivityList
         dayActivities={activities}
         currentIndex={currentIndex}
@@ -862,4 +1006,15 @@ export default function DailyPlan({
       />
     </div>
   );
+}
+
+/**
+ * Return difference in days (day2 - day1) ignoring time of day
+ */
+function diffInDays(date1, date2) {
+  // we want date2 - date1 => how many days from date1 to date2
+  const d1 = new Date(date1.getFullYear(), date1.getMonth(), date1.getDate());
+  const d2 = new Date(date2.getFullYear(), date2.getMonth(), date2.getDate());
+  const diffMs = d2 - d1;
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 }
