@@ -1,529 +1,473 @@
-import React, { useState, useEffect } from "react";
-import axios from "axios";
-import { doc, getDoc } from "firebase/firestore";
-import { db } from "../../../../../../../firebase";
+/**
+ * File: GuideRememberRevisionFlow.jsx
+ * 
+ * A single React component demonstrating:
+ *   1) A "guide" screen for the Remember stage (like the old GuideRemember),
+ *   2) Then a mini quiz with 2 questions,
+ *   3) If pass => final explanation about how revision works,
+ *   4) If fail => show revision content, retake just the missed Q(s) until pass,
+ *   5) End with "done" screen.
+ *
+ * No external data – purely local states for demonstration / onboarding.
+ */
 
-
-
+import React, { useState } from "react";
 import {
-  RadioGroup,
-  FormControlLabel,
-  Radio,
-  Slider,
   Box,
+  Paper,
+  Typography,
+  Button,
   Divider,
-  LinearProgress
+  Grid,
+  useMediaQuery
 } from "@mui/material";
 
-// Import the separate PlanPreview
-import PlanPreview from "./PlanPreview";
-// Import your Carousel (Step 0)
-import TOEFLOnboardingCarousel from "./TOEFLOnboardingCarousel";
+import QuizIcon from "@mui/icons-material/Quiz";
+import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
+import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 
-export default function GuideAnalyze({ userId }) {
-  const [currentStep, setCurrentStep] = useState(0);
+// -------------- MAIN COMPONENT --------------
+export default function GuideAnalyze() {
+  // PHASES => 'guide' | 'quiz' | 'revision' | 'retake' | 'finalExplanation' | 'done'
+  const [phase, setPhase] = useState("guide");
 
-  const [toeflBooks, setToeflBooks] = useState([]);
-  useEffect(() => {
-    if (!userId) return;
-    async function fetchUserDoc() {
-      try {
-        const userRef = doc(db, "users", userId);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-          const userData = userSnap.data();
-          if (Array.isArray(userData.clonedToeflBooks)) {
-            setToeflBooks(userData.clonedToeflBooks);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to fetch user doc:", err);
-      }
-    }
-    fetchUserDoc();
-  }, [userId]);
+  // Hard-coded reading speed for the "guide" portion
+  const approximateReadingSpeed = 200;
+  const isSmallScreen = useMediaQuery("(max-width:600px)");
 
-  // Step 1: timeframe + daily reading
-  const [examTimeframe, setExamTimeframe] = useState("1_month");
-  const [dailyReadingTime, setDailyReadingTime] = useState(30);
-  const [targetDate, setTargetDate] = useState("");
-
-  // Hard-coded
-  const currentKnowledge = "none";
-  const goalLevel = "advanced";
-
-  // Step 2: plan creation
-  const [isCreatingPlans, setIsCreatingPlans] = useState(false);
-  const [serverError, setServerError] = useState(null);
-  const [planCreationResults, setPlanCreationResults] = useState([]);
-  const [isDone, setIsDone] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [messageIndex, setMessageIndex] = useState(0);
-  const [isTakingLong, setIsTakingLong] = useState(false);
-
-  // We have 4 steps total
-  const steps = ["Intro Slides", "Plan Info", "Processing", "Plan Preview"];
-
-  // For computing target date in Step 1
-  const TIMEFRAME_OFFSETS = {
-    "1_week": 7,
-    "2_weeks": 14,
-    "1_month": 30,
-    "2_months": 60,
-    "6_months": 180,
-    "not_sure": 60
-  };
-
-  // For plan creation (Step 2)
-  const planCreationEndpoint = "https://generateadaptiveplan2-zfztjkkvva-uc.a.run.app";
-  const skillMap = {
-    "NwNZ8WWCz54Y4BeCli0c": "Reading",
-    "fuyAbhDo3GXLbtEdZ9jj": "Listening",
-    "5UWQEvQet8GgkZmjEwAO": "Speaking",
-    "pFAfUSWtwipFZG2RStKg": "Writing",
-  };
-
-  // Step transitions
-  const handleNext = async () => {
-    // Step 1 => Step 2
-    if (currentStep === 1) {
-      computeTargetDate();
-      setCurrentStep(2);
-      return;
-    }
-    // Step 2 => Step 3 (only if done)
-    if (currentStep === 2 && isDone) {
-      setCurrentStep(3);
-      return;
-    }
-    // Step 3 => finish => mark onboarded => maybe navigate away or show a success
-    if (currentStep === 3) {
-      await markUserOnboarded();
-      // e.g. navigate("/app") or show a success message
-      return;
-    }
-    // Step 0 => Step 1
-    setCurrentStep((prev) => prev + 1);
-  };
-
-  const handleBack = () => {
-    if (currentStep === 1) {
-      setCurrentStep(0);
-      return;
-    }
-    if (currentStep === 2) {
-      setCurrentStep(1);
-      return;
-    }
-    if (currentStep === 3) {
-      setCurrentStep(2);
-      return;
-    }
-    // If step=0, there's nowhere to go "Back" – you could do nothing or route out
-  };
-
-  // Step 1
-  function computeTargetDate() {
-    const offset = TIMEFRAME_OFFSETS[examTimeframe] || 30;
-    const date = new Date();
-    date.setDate(date.getDate() + offset);
-    setTargetDate(date.toISOString().substring(0, 10));
-  }
-
-  // Step 2
-  const LOADING_MESSAGES = [
-    "Analyzing your data...",
-    "Generating your reading plan...",
-    "Creating listening modules...",
-    "Finalizing writing tasks...",
-    "Reviewing everything...",
+  // The two questions
+  const initialQuestions = [
+    {
+      id: "Q1",
+      question: "What color is the sky on a clear day?",
+      type: "multipleChoice",
+      options: ["Green", "Red", "Blue", "White"],
+      correctIndex: 2,
+    },
+    {
+      id: "Q2",
+      question: "Which is heavier: 1kg of iron or 1kg of cotton?",
+      type: "multipleChoice",
+      options: ["Iron", "Cotton", "Both weigh 1kg", "Not sure"],
+      correctIndex: 2,
+    },
   ];
-  useEffect(() => {
-    if (currentStep === 2) {
-      startProgressAnimation();
-      createFourPlans();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStep]);
 
-  function startProgressAnimation() {
-    setProgress(0);
-    setIsDone(false);
-    setIsTakingLong(false);
+  // local quiz states
+  const [questions] = useState(initialQuestions);
+  const [userAnswers, setUserAnswers] = useState(Array(initialQuestions.length).fill(""));
+  const [missedIndices, setMissedIndices] = useState([]);
+  const [attemptNumber, setAttemptNumber] = useState(1);
 
-    const progressInterval = setInterval(() => {
-      setProgress((prev) => {
-        const nextVal = prev + 5;
-        if (nextVal >= 100) {
-          clearInterval(progressInterval);
-          return 100;
-        }
-        return nextVal;
-      });
-    }, 1000);
+  // messages
+  const [passMessage, setPassMessage] = useState("");
+  const [failMessage, setFailMessage] = useState("");
 
-    const messageInterval = setInterval(() => {
-      setMessageIndex((prev) => (prev + 1) % LOADING_MESSAGES.length);
-    }, 3000);
+  // Hard-coded revision content
+  const revisionHtml = `
+    <h3>Revision Tips</h3>
+    <p>Review the basic facts carefully:</p>
+    <ul>
+      <li>The sky is typically "blue" on a clear day.</li>
+      <li>1kg of iron and 1kg of cotton weigh the same: 1kg!</li>
+    </ul>
+    <p>Once you’ve refreshed these facts, retake the quiz for the missed questions.</p>
+  `;
 
-    return () => {
-      clearInterval(progressInterval);
-      clearInterval(messageInterval);
-    };
-  }
-
-  useEffect(() => {
-    if (progress === 100 && !isDone && currentStep === 2) {
-      setIsTakingLong(true);
-    }
-  }, [progress, isDone, currentStep]);
-
-  async function createFourPlans() {
-    setIsCreatingPlans(true);
-    setServerError(null);
-    setPlanCreationResults([]);
-    try {
-      const planType = `${currentKnowledge}-${goalLevel}`;
-      const quizTime = 3;
-      const reviseTime = 3;
-
-      const baseBody = {
-        userId,
-        targetDate,
-        dailyReadingTime,
-        planType,
-        quizTime,
-        reviseTime,
-      };
-
-      const promises = toeflBooks.map(async (bookObj) => {
-        const skillName = skillMap[bookObj.oldBookId] || "TOEFL Course";
-        const response = await axios.post(planCreationEndpoint, {
-          ...baseBody,
-          bookId: bookObj.newBookId,
-        });
-        return {
-          skill: skillName,
-          planId: response.data.planId,
-          planDoc: response.data.planDoc,
-        };
-      });
-
-      const results = await Promise.all(promises);
-      setPlanCreationResults(results);
-      console.log("Plan creation succeeded, results:", results);
-      setIsDone(true);
-    } catch (err) {
-      console.error("Error creating TOEFL plans:", err);
-      setServerError(err.message || "Failed to create TOEFL plans.");
-    } finally {
-      setIsCreatingPlans(false);
-    }
-  }
-
-  // Step 3 => PlanPreview is a separate component
-
-  // Mark Onboarded
-  const [isMarkingOnboarded, setIsMarkingOnboarded] = useState(false);
-  async function markUserOnboarded() {
-    if (!userId) return;
-    try {
-      setIsMarkingOnboarded(true);
-      await axios.post(`${import.meta.env.VITE_BACKEND_URL}/api/learner-personas/onboard`, {
-        userId
-      });
-      console.log("User marked as onboarded (TOEFL):", userId);
-    } catch (err) {
-      console.error("Error marking user onboarded:", err);
-      alert("Failed to mark you onboarded. Check console/logs.");
-    } finally {
-      setIsMarkingOnboarded(false);
-    }
-  }
-
-  // RENDER
-  return (
-    <div style={styles.pageWrapper}>
-      {/* If step=0 => show carousel full-page */}
-      {currentStep === 0 ? (
-        <div style={styles.carouselContainer}>
-          <button style={styles.carouselCloseButton} onClick={() => console.log("Leaving?")}>
-            X
-          </button>
-          <TOEFLOnboardingCarousel
-            onFinish={() => setCurrentStep(1)}
-          />
-        </div>
-      ) : (
-        <div style={styles.mainContainer}>
-          <p style={{ color: "#fff", textAlign: "center", fontWeight: "bold", marginBottom: 16 }}>
-            Step {currentStep} of {steps.length}: {steps[currentStep]}
-          </p>
-          {renderStepContent()}
-          {renderButtons()}
-        </div>
-      )}
-    </div>
-  );
-
-  function renderStepContent() {
-    if (currentStep === 1) {
-      return renderPlanInfoForm();
-    }
-    if (currentStep === 2) {
-      return renderProcessing();
-    }
-    if (currentStep === 3) {
-      // Show the PlanPreview
-      return (
-        <PlanPreview
-          plans={planCreationResults}
-          onFinish={async () => {
-            await markUserOnboarded();
-            console.log("Plans preview done. Possibly route away?");
-          }}
-        />
-      );
-    }
-    return null;
-  }
-
-  // Step 1 UI
-  function renderPlanInfoForm() {
+  // =========== GUIDE SCREEN (phase="guide") ===========
+  function renderGuideScreen() {
     return (
-      <div style={styles.innerContent}>
-        <h2 style={{ marginBottom: "1rem", color: "#fff" }}>
-          Configure Your TOEFL Plan
-        </h2>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "1rem",
-            backgroundColor: "rgba(255,255,255,0.1)",
-            padding: "1rem",
-            borderRadius: "8px",
-          }}
-        >
-          <div>
-            <p style={{ color: "#fff", margin: "0 0 4px" }}>
-              How soon do you plan to take your TOEFL exam?
-            </p>
-            <RadioGroup
-              name="exam-timeframe"
-              value={examTimeframe}
-              onChange={(e) => setExamTimeframe(e.target.value)}
-            >
-              <FormControlLabel
-                value="1_week"
-                control={<Radio sx={{ color: "#fff" }} />}
-                label="In 1 Week"
-                sx={{ color: "#fff" }}
-              />
-              <FormControlLabel
-                value="2_weeks"
-                control={<Radio sx={{ color: "#fff" }} />}
-                label="In 2 Weeks"
-                sx={{ color: "#fff" }}
-              />
-              <FormControlLabel
-                value="1_month"
-                control={<Radio sx={{ color: "#fff" }} />}
-                label="In 1 Month"
-                sx={{ color: "#fff" }}
-              />
-              <FormControlLabel
-                value="2_months"
-                control={<Radio sx={{ color: "#fff" }} />}
-                label="In 2 Months"
-                sx={{ color: "#fff" }}
-              />
-              <FormControlLabel
-                value="6_months"
-                control={<Radio sx={{ color: "#fff" }} />}
-                label="In 6 Months"
-                sx={{ color: "#fff" }}
-              />
-              <FormControlLabel
-                value="not_sure"
-                control={<Radio sx={{ color: "#fff" }} />}
-                label="Not sure yet"
-                sx={{ color: "#fff" }}
-              />
-            </RadioGroup>
-          </div>
+      <Box sx={styles.fullContainer}>
+        <Paper elevation={3} sx={styles.guidePaper}>
+          <Box sx={styles.headerRow}>
+            <EmojiEventsIcon sx={{ fontSize: 36, color: "#FFD700", mr: 1 }} />
+            <Typography variant="h4" sx={styles.guideTitle}>
+              Nice Job on the Reading!
+            </Typography>
+          </Box>
 
-          <Divider style={{ backgroundColor: "#bbb" }} />
+          <Typography variant="body1" sx={styles.guideParagraph}>
+            We estimate your reading speed is around 
+            <strong> {approximateReadingSpeed} words per minute</strong>.
+            This helps us plan your tasks more accurately.
+          </Typography>
 
-          <div>
-            <p style={{ color: "#fff", margin: "0 0 4px" }}>
-              How many minutes do you plan to study each day?
-            </p>
-            <Slider
-              value={dailyReadingTime}
-              onChange={(e, val) => setDailyReadingTime(val)}
-              step={5}
-              min={5}
-              max={120}
-              valueLabelDisplay="auto"
-              sx={{ color: "#fff" }}
-            />
-            <p style={{ color: "#ccc" }}>{dailyReadingTime} minutes/day</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+          <Divider sx={{ my: 2, borderColor: "#555" }} />
 
-  // Step 2
-  function renderProcessing() {
-    if (serverError) {
-      return (
-        <div style={styles.innerContent}>
-          <h2 style={{ color: "#fff" }}>Oops!</h2>
-          <p style={{ color: "red" }}>{serverError}</p>
-          <p style={{ color: "#ccc" }}>Please try again later.</p>
-        </div>
-      );
-    }
+          <Box sx={styles.stageRow}>
+            <QuizIcon sx={{ fontSize: 40, color: "#FFD700", mr: 2 }} />
+            <Typography variant="h5" sx={{ color: "#fff" }}>
+              The “Remember” Stage
+            </Typography>
+          </Box>
 
-    if (!isDone) {
-      return (
-        <div style={styles.innerContent}>
-          {!isTakingLong && (
-            <>
-              <h2 style={{ color: "#fff", marginBottom: "1rem" }}>
-                Preparing Your TOEFL Plan
-              </h2>
-              <p style={{ color: "#ccc", marginBottom: "1.5rem" }}>
-                Please hold on while we build your personalized plan.
-              </p>
+          <Typography variant="body2" sx={styles.introText}>
+            Time to lock in the basics with a short recall quiz. 
+            This ensures you don’t forget key points right after reading.
+          </Typography>
 
-              <Box sx={{ width: "100%", marginBottom: 2 }}>
-                <LinearProgress variant="determinate" value={progress} />
-              </Box>
-              <p style={{ color: "#ccc", marginBottom: "1.5rem" }}>
-                {progress}% Complete
-              </p>
-              <p style={{ color: "#ccc" }}>{LOADING_MESSAGES[messageIndex]}</p>
-            </>
-          )}
-          {isTakingLong && (
-            <>
-              <h2 style={{ color: "#fff", marginBottom: "1rem" }}>Still Working...</h2>
-              <p style={{ color: "#ccc", marginBottom: "1.5rem" }}>
-                It’s taking a bit longer than usual. We’re still preparing your plan.
-              </p>
-              <Box sx={{ width: "100%", marginBottom: 2 }}>
-                <LinearProgress variant="indeterminate" />
-              </Box>
-              <p style={{ color: "#ccc" }}>Please don’t close this page yet.</p>
-            </>
-          )}
-        </div>
-      );
-    }
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12} sm={6}>
+              <Typography variant="body2" sx={styles.bulletItem}>
+                • You’ll see simple questions (often MCQs).
+              </Typography>
+              <Typography variant="body2" sx={styles.bulletItem}>
+                • If you miss any concept, we’ll mark it for revision.
+              </Typography>
+              <Typography variant="body2" sx={styles.bulletItem}>
+                • Don’t stress! This stage is for reinforcing your memory.
+              </Typography>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Typography variant="body2" sx={styles.bulletItem}>
+                • Immediate recall helps push facts into long-term memory.
+              </Typography>
+              <Typography variant="body2" sx={styles.bulletItem}>
+                • Over time, repeated quizzes ensure strong retention.
+              </Typography>
+              <Typography variant="body2" sx={styles.bulletItem}>
+                • If you slip up, we’ll show revision tips and let you retry.
+              </Typography>
+            </Grid>
+          </Grid>
 
-    return (
-      <div style={styles.innerContent}>
-        <h2 style={{ color: "#fff" }}>Your Plan is Ready!</h2>
-        <p style={{ color: "#ccc", marginBottom: "1rem" }}>
-          We’ve finished creating your TOEFL study plan. Click “Next” to preview it.
-        </p>
-      </div>
-    );
-  }
+          <Divider sx={{ my: 2, borderColor: "#555" }} />
 
-  function renderButtons() {
-    return (
-      <div
-        style={{
-          marginTop: "1.5rem",
-          display: "flex",
-          justifyContent: "space-between",
-        }}
-      >
-        {currentStep > 0 && (
-          <button
-            onClick={handleBack}
-            style={styles.secondaryButton}
-            disabled={isCreatingPlans || isMarkingOnboarded}
+          <Typography variant="body2" sx={styles.guideParagraph}>
+            Ready to test what you remember so far? Let’s do a quick check!
+          </Typography>
+
+          <Button
+            variant="contained"
+            color="primary"
+            endIcon={<ArrowForwardIcon />}
+            onClick={() => setPhase("quiz")}
+            sx={{ mt: 2, fontWeight: "bold" }}
           >
-            Back
+            {isSmallScreen ? "Begin Quiz" : "Begin the Recall Quiz"}
+          </Button>
+        </Paper>
+      </Box>
+    );
+  }
+
+  // =========== QUIZ (phase="quiz") ===========
+  function renderQuizScreen() {
+    return (
+      <div style={styles.container}>
+        <div style={styles.quizBox}>
+          <h2 style={{ color: "#fff" }}>
+            Remember Stage (Attempt #{attemptNumber})
+          </h2>
+          {passMessage && <p style={{ color: "lightgreen" }}>{passMessage}</p>}
+          {failMessage && <p style={{ color: "tomato" }}>{failMessage}</p>}
+
+          {questions.map((qObj, i) => (
+            <div key={qObj.id} style={styles.questionBlock}>
+              <p style={{ color: "#ddd", marginBottom: 6 }}>
+                Q{i + 1}: {qObj.question}
+              </p>
+              {renderMCQ(qObj, i)}
+            </div>
+          ))}
+
+          <button style={styles.button} onClick={handleQuizSubmit}>
+            Submit
           </button>
-        )}
-        <button
-          onClick={handleNext}
-          style={styles.primaryButton}
-          disabled={isCreatingPlans || isMarkingOnboarded}
-        >
-          {renderNextButtonLabel()}
-        </button>
+        </div>
       </div>
     );
   }
 
-  function renderNextButtonLabel() {
-    if (currentStep === 2) {
-      if (!isDone) return "Preparing...";
-      return "Next";
+  // =========== REVISION (phase="revision") ===========
+  function renderRevisionScreen() {
+    return (
+      <div style={styles.container}>
+        <div style={styles.quizBox}>
+          <h2 style={{ color: "#fff" }}>Revision Content</h2>
+          {failMessage && <p style={{ color: "tomato" }}>{failMessage}</p>}
+          <div
+            style={styles.revisionArea}
+            dangerouslySetInnerHTML={{ __html: revisionHtml }}
+          />
+          <button style={styles.button} onClick={handleRevisionDone}>
+            Retake Missed Questions
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // =========== RETAKE (phase="retake") ===========
+  function renderRetakeScreen() {
+    return (
+      <div style={styles.container}>
+        <div style={styles.quizBox}>
+          <h2 style={{ color: "#fff" }}>
+            Retake Missed Questions (Attempt #{attemptNumber})
+          </h2>
+          {passMessage && <p style={{ color: "lightgreen" }}>{passMessage}</p>}
+          {failMessage && <p style={{ color: "tomato" }}>{failMessage}</p>}
+
+          {missedIndices.map((qIdx) => {
+            const qObj = questions[qIdx];
+            return (
+              <div key={qObj.id} style={styles.questionBlock}>
+                <p style={{ color: "#ddd", marginBottom: 6 }}>
+                  Q{qIdx + 1}: {qObj.question}
+                </p>
+                {renderMCQ(qObj, qIdx)}
+              </div>
+            );
+          })}
+
+          <button style={styles.button} onClick={handleRetakeSubmit}>
+            Submit Retake
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // =========== FINAL EXPLANATION (phase="finalExplanation") ===========
+  function renderFinalExplanationScreen() {
+    return (
+      <div style={styles.container}>
+        <div style={styles.quizBox}>
+          <h2 style={{ color: "#fff" }}>Stage Complete</h2>
+          {passMessage && <p style={{ color: "lightgreen" }}>{passMessage}</p>}
+          {failMessage && <p style={{ color: "tomato" }}>{failMessage}</p>}
+          
+          <p style={{ color: "#ddd", marginTop: 16 }}>
+            In a real scenario, if you had gotten anything wrong, 
+            we would have repeated the 
+            <strong> revision → retake → check again</strong> loop 
+            until you eventually pass all questions. 
+          </p>
+          <p style={{ color: "#ddd", marginTop: 8 }}>
+            This ensures a thorough grasp of all concepts before moving on.
+          </p>
+
+          <button style={styles.button} onClick={() => setPhase("done")}>
+            Continue
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // =========== DONE (phase="done") ===========
+  function renderDoneScreen() {
+    return (
+      <div style={styles.container}>
+        <div style={styles.quizBox}>
+          <h2 style={{ color: "#fff" }}>All done!</h2>
+          <p style={{ color: "#ddd" }}>
+            This was a demonstration of how the “Remember” stage + revision loop 
+            might work. In the real platform, questions and revision 
+            content would be more elaborate or GPT-driven.
+          </p>
+          <button style={styles.button} onClick={() => alert("You can do anything next!")}>
+            Exit Demo
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // =========== QUIZ & RETAKE LOGIC ===========
+
+  function handleQuizSubmit() {
+    // We'll check each question vs userAnswers => pass or fail
+    const newlyMissed = [];
+    questions.forEach((qObj, i) => {
+      const userAns = userAnswers[i];
+      const correctIdx = qObj.correctIndex;
+      if (parseInt(userAns, 10) !== correctIdx) {
+        newlyMissed.push(i);
+      }
+    });
+
+    if (newlyMissed.length === 0) {
+      // user passed all questions
+      setPassMessage("Congrats! You got everything correct on this attempt.");
+      setFailMessage("");
+      setPhase("finalExplanation");
+    } else {
+      // user missed something => show revision
+      setMissedIndices(newlyMissed);
+      setFailMessage(`You missed ${newlyMissed.length} question(s). Let's do revision!`);
+      setPassMessage("");
+      setPhase("revision");
     }
-    if (currentStep === 3) {
-      return isMarkingOnboarded ? "Marking Onboarded..." : "Finish";
+  }
+
+  function handleRevisionDone() {
+    setPhase("retake");
+    setAttemptNumber((prev) => prev + 1);
+  }
+
+  function handleRetakeSubmit() {
+    const newlyMissed = [];
+    missedIndices.forEach((qIdx) => {
+      const qObj = questions[qIdx];
+      const userAns = userAnswers[qIdx];
+      if (parseInt(userAns, 10) !== qObj.correctIndex) {
+        newlyMissed.push(qIdx);
+      }
+    });
+
+    if (newlyMissed.length === 0) {
+      // user fixed all mistakes
+      setMissedIndices([]);
+      setPassMessage(`Great job! You fixed all missed questions on attempt #${attemptNumber}.`);
+      setFailMessage("");
+      setPhase("finalExplanation");
+    } else {
+      // still missed some => revision again
+      setMissedIndices(newlyMissed);
+      setFailMessage(`You still missed ${newlyMissed.length} question(s). Let's revise again.`);
+      setPassMessage("");
+      setPhase("revision");
     }
-    return "Next";
+  }
+
+  function renderMCQ(qObj, qIdx) {
+    return (
+      <div>
+        {qObj.options.map((opt, i) => (
+          <label key={i} style={{ display: "block", marginLeft: 20 }}>
+            <input
+              type="radio"
+              name={`q_${qObj.id}`}
+              value={i}
+              checked={parseInt(userAnswers[qIdx], 10) === i}
+              onChange={() => handleAnswerChange(qIdx, i)}
+            />
+            {opt}
+          </label>
+        ))}
+      </div>
+    );
+  }
+
+  function handleAnswerChange(qIdx, val) {
+    const newAnswers = [...userAnswers];
+    newAnswers[qIdx] = val;
+    setUserAnswers(newAnswers);
+  }
+
+  // =========== RENDER SWITCH ON PHASE ===========
+  switch (phase) {
+    case "guide":
+      return renderGuideScreen();
+    case "quiz":
+      return renderQuizScreen();
+    case "revision":
+      return renderRevisionScreen();
+    case "retake":
+      return renderRetakeScreen();
+    case "finalExplanation":
+      return renderFinalExplanationScreen();
+    case "done":
+      return renderDoneScreen();
+    default:
+      return <div style={styles.container}>Unknown phase: {phase}</div>;
   }
 }
 
+// -------------- STYLES --------------
 const styles = {
-  pageWrapper: {
+  // For the "guide" portion
+  fullContainer: {
+    backgroundColor: "#000",
     width: "100%",
-    minHeight: "100vh",
+    minHeight: "100%",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    boxSizing: "border-box",
+    padding: "1rem",
+  },
+  guidePaper: {
+    maxWidth: "750px",
+    width: "100%",
+    backgroundColor: "#111",
+    color: "#fff",
+    borderRadius: "8px",
+    padding: "24px",
+    textAlign: "left",
+  },
+  headerRow: {
+    display: "flex",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  guideTitle: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
+  guideParagraph: {
+    color: "#ccc",
+    marginBottom: "1rem",
+    fontSize: "0.95rem",
+  },
+  stageRow: {
+    display: "flex",
+    alignItems: "center",
+    marginTop: 16,
+  },
+  introText: {
+    marginTop: "1rem",
+    color: "#bbb",
+  },
+  bulletItem: {
+    marginBottom: "0.5rem",
+    color: "#ccc",
+  },
+
+  // For the quiz portion
+  container: {
+    width: "100%",
+    minHeight: "100%",
     backgroundColor: "#000",
     color: "#fff",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "flex-start",
+    padding: 20,
+    boxSizing: "border-box",
+    fontFamily: "'Inter', sans-serif",
   },
-  carouselContainer: {
-    position: "relative",
-    minHeight: "100vh",
+  quizBox: {
+    width: "100%",
+    maxWidth: 600,
+    backgroundColor: "#111",
+    borderRadius: 8,
+    border: "1px solid #333",
+    padding: 16,
   },
-  carouselCloseButton: {
-    position: "absolute",
-    top: 10,
-    right: 10,
-    background: "none",
+  questionBlock: {
+    backgroundColor: "#222",
+    borderRadius: 6,
+    padding: 8,
+    marginBottom: 12,
+  },
+  revisionArea: {
+    backgroundColor: "#222",
+    borderRadius: 6,
+    padding: 8,
+    margin: "12px 0",
+    color: "#ccc",
+  },
+  button: {
+    backgroundColor: "#444",
+    color: "#fff",
     border: "none",
-    color: "#fff",
-    fontSize: "18px",
+    borderRadius: 4,
+    padding: "8px 12px",
     cursor: "pointer",
-    zIndex: 1001,
-  },
-  mainContainer: {
-    maxWidth: "600px",
-    margin: "0 auto",
-    padding: "2rem 1rem",
-  },
-  innerContent: {
-    marginTop: "1rem",
-    textAlign: "center",
-  },
-  primaryButton: {
-    backgroundColor: "#9b59b6",
-    border: "none",
-    color: "#fff",
-    padding: "0.5rem 1.25rem",
-    borderRadius: "6px",
-    cursor: "pointer",
-    fontSize: "1rem",
     fontWeight: "bold",
-  },
-  secondaryButton: {
-    backgroundColor: "transparent",
-    border: "2px solid #9b59b6",
-    color: "#fff",
-    padding: "0.5rem 1.25rem",
-    borderRadius: "6px",
-    cursor: "pointer",
-    fontSize: "1rem",
-    fontWeight: "bold",
+    marginTop: 8,
   },
 };

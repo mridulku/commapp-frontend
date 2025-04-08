@@ -7,6 +7,8 @@ import GuideRemember from "./Guide/GuideRemember";
 import GuideUnderstand from "./Guide/GuideUnderstand";
 import GuideApply from "./Guide/GuideApply";
 import GuideAnalyze from "./Guide/GuideAnalyze";
+import GuideOnboarding from "./Guide/GuideOnboarding";
+
 
 // OPTIONAL: a fallback, if you have one
 import GuideGeneric from "./Guide/GuideGeneric";
@@ -30,6 +32,9 @@ export default function GuideView({ examId, activity, userId }) {
 
     case "analyze":
       return <GuideAnalyze examId={examId} activity={activity} userId={userId} />;
+
+    case "onboarding":
+      return <GuideOnboarding examId={examId} activity={activity} userId={userId} />;  
 
     default:
       return <GuideGeneric examId={examId} activity={activity} userId={userId} />;

@@ -1,21 +1,21 @@
-// src/components/DetailedBookViewer/BooksViewer2.jsx (Dashboard)
-
 import React, { useState, useEffect } from "react";
-import { useSelector, useDispatch } from "react-redux"; // <-- Make sure you have this
+import { useSelector, useDispatch } from "react-redux";
 
+// ADD THIS IMPORT if you haven't already:
+import axios from "axios";
 
+import PlanFetcher from "../../Main/5.StudyModal/StudyModal";
 import { useBooksViewer } from "./DashboardHooks";
 
 // Import the updated Onboarding modal
 import OnboardingModal from "../1.Upload/General Onboarding/ParentsOnboarding/0.OnboardingModal";
 import TOEFLOnboardingModal from "../1.Upload/TOEFLOnboarding/TOEFLOnboardingModal";
 
-
 // Import your separate Plan Editor modal
 import EditAdaptivePlanModal from "../3.Library/LibraryChild/2.CreateNewPlan/AdaptivePlanModal/EditAdaptivePlanModal";
 
 // Existing components
-import MaterialsDashboard from "../3.Library/LibraryChild/0.Parent/0.MaterialsDashboard"; 
+import MaterialsDashboard from "../3.Library/LibraryChild/0.Parent/0.MaterialsDashboard";
 import UnifiedSidebar from "./UnifiedSidebar";
 import ToursManager from "./ToursManager";
 
@@ -32,7 +32,7 @@ import LibraryHome from "../../zArchive/2.2Library/LibraryHome";
 import AdaptiveHome from "../../zArchive/2.3Adaptive/AdaptiveHome";
 
 // The cinematic "player" modal
-import AdaptivePlayerModal from "../../zArchive/3.AdaptiveModal/AdaptivePlayerModal"; 
+import AdaptivePlayerModal from "../../zArchive/3.AdaptiveModal/AdaptivePlayerModal";
 
 function Dashboard() {
   const {
@@ -150,7 +150,9 @@ function Dashboard() {
     setIsSidebarCollapsed((prev) => !prev);
   };
 
-  // Monitor onboarding status & open the modal if needed
+  // -------------------------------------------
+  // MONITOR ONBOARDING STATUS & open if needed
+  // -------------------------------------------
   useEffect(() => {
     if (isOnboarded === false) {
       setShowOnboardingModal(true);
@@ -159,17 +161,67 @@ function Dashboard() {
     }
   }, [isOnboarded]);
 
+  // -------------------------------------------
+  // Manage Onboarding Plan for TOEFL
+  // -------------------------------------------
+  const examType = useSelector((state) => state.exam.examType);
+
+  const [onboardingPlanId, setOnboardingPlanId] = useState(null);
+  const [isCheckingPlanId, setIsCheckingPlanId] = useState(false);
+
+  useEffect(() => {
+    let intervalId;
+    // Only do this if user is TOEFL, is logged in, and we want to show onboarding
+    if (examType === "TOEFL" && showOnboardingModal && userId) {
+      setIsCheckingPlanId(true);
+
+      // A small function to fetch the user's doc from your backend
+      const fetchPlanId = async () => {
+        try {
+          // Adjust this endpoint to match your actual API route
+          const res = await axios.get(
+            `${import.meta.env.VITE_BACKEND_URL}/userDoc`,
+            { params: { userId } }
+          );
+          // Suppose the structure is { success: true, userDoc: { onboardingBook: { planId: ... } } }
+          if (
+            res.data?.success &&
+            res.data.userDoc?.onboardingBook?.planId
+          ) {
+            setOnboardingPlanId(res.data.userDoc.onboardingBook.planId);
+
+            // Once we have it, no need to keep polling
+            setIsCheckingPlanId(false);
+            if (intervalId) clearInterval(intervalId);
+          }
+        } catch (error) {
+          console.error("Error fetching onboarding plan ID:", error);
+        }
+      };
+
+      // Immediately attempt fetch
+      fetchPlanId();
+
+      // Then poll every 3 seconds until we find the planId
+      intervalId = setInterval(() => {
+        fetchPlanId();
+      }, 3000);
+    }
+
+    // Cleanup the polling when user leaves or toggles
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [examType, showOnboardingModal, userId]);
+
   /**
    * handleOpenPlanEditor(bookId) => Called by OnboardingModal
    * We store that bookId and show the plan editor
    */
   const handleOpenPlanEditor = (bId) => {
     setPlanEditorBookId(bId || null); // store the book ID
-    setShowPlanEditor(true);         // open the plan editor
+    setShowPlanEditor(true); // open the plan editor
   };
-
-  const examType = useSelector((state) => state.exam.examType);
-
 
   /**
    * handleOpenPlayer => called by sidebars
@@ -217,10 +269,10 @@ function Dashboard() {
             onSeeAllCourses={() => setViewMode("home")}
           />
           {examType === "TOEFL" || examType === "RELUX" ? (
-        <TOEFLAdaptiveProcess />
-      ) : (
-        <PanelAdaptiveProcess />
-      )}
+            <TOEFLAdaptiveProcess />
+          ) : (
+            <PanelAdaptiveProcess />
+          )}
         </div>
       </>
     );
@@ -351,8 +403,7 @@ function Dashboard() {
 
         <div style={mainContentStyle}>{mainContent}</div>
       </div>
-
-      {/* Floating "?" button => Start Joyride Tour */}
+{/*
       <button
         style={floatTourButtonStyle}
         onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "#9852e8")}
@@ -364,6 +415,8 @@ function Dashboard() {
       >
         ?
       </button>
+*/}
+
 
       {/* Joyride-based tours */}
       <ToursManager
@@ -386,15 +439,56 @@ function Dashboard() {
 
       {/* Onboarding Modal */}
       {examType === "TOEFL" ? (
-        <TOEFLOnboardingModal
-          open={showOnboardingModal}
-          onClose={() => setShowOnboardingModal(false)}
-          onOpenPlanEditor={(bookId) => {
-            console.log("Open plan editor for TOEFL with", bookId);
-            // If you have a single plan or multiple, do your logic here
-          }}
-          userId={userId}
-        />
+        showOnboardingModal && (
+          // If we're still polling for planId => show a fullscreen loading overlay
+          isCheckingPlanId ? (
+            <div
+              style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                width: "100%",
+                height: "100%",
+                backgroundColor: "#000",
+                color: "#fff",
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                zIndex: 9999,
+              }}
+            >
+              <h2>Loading Onboarding...</h2>
+            </div>
+          ) : onboardingPlanId ? (
+            <PlanFetcher
+              planId={onboardingPlanId}
+              userId={userId}
+              initialActivityContext={null}
+              backendURL={import.meta.env.VITE_BACKEND_URL}
+              fetchUrl="/api/adaptive-plan"
+              onClose={() => setShowOnboardingModal(false)}
+            />
+          ) : (
+            // If we finished checking but planId is still null => show a fallback
+            <div
+              style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                width: "100%",
+                height: "100%",
+                backgroundColor: "#000",
+                color: "#fff",
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                zIndex: 9999,
+              }}
+            >
+              <h2>No Onboarding Plan Found Yet.</h2>
+            </div>
+          )
+        )
       ) : (
         <OnboardingModal
           open={showOnboardingModal}
