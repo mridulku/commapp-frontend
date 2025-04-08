@@ -18,16 +18,17 @@ import PanelTOEFL from "./PanelTOEFL";
 import PanelGeneral from "./PanelGeneral";
 import PlanFetcher from "../5.StudyModal/StudyModal"; // adjust path if needed
 
-// Helper function to check if a stage is done
+// ------------- HELPERS -------------
 function isStageDone(stageValue) {
   if (!stageValue) return false;
   const val = stageValue.toString().toLowerCase();
   return (
-    val.includes("done") || val.includes("complete") || val.includes("pass")
+    val.includes("done") ||
+    val.includes("complete") ||
+    val.includes("pass")
   );
 }
 
-// Compute overall progress for an aggregatorResult object
 function computeOverallProgress(aggregatorResult) {
   const subChIds = Object.keys(aggregatorResult || {});
   if (!subChIds.length) return 0;
@@ -45,13 +46,71 @@ function computeOverallProgress(aggregatorResult) {
     const subChPercent = (doneCount / 5) * 100;
     sumPercent += subChPercent;
   });
-
   // Average across all subchapters
   return sumPercent / subChIds.length;
 }
 
+/**
+ * Calls your Cloud Function to generate/refresh the aggregator doc in Firestore.
+ * Make sure this endpoint is correct (the one that actually creates the aggregator doc).
+ */
+async function generateAggregatorDoc(userId, planId, bookId) {
+  console.log("Generating aggregator doc via Cloud Function...");
+  const response = await fetch(
+    "https://us-central1-comm-app-ff74b.cloudfunctions.net/generateUserProgressAggregator2",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, planId, bookId }),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to generate aggregator: ${response.status}`);
+  }
+  console.log("Aggregator doc generation complete");
+}
+
+/**
+ * Fetches the latest aggregator doc from Firestore for (userId, planId, bookId)
+ * Returns a numeric progress between 0 and 100.
+ */
+async function fetchAggregatorDoc(db, userId, planId, bookId) {
+  if (!db) {
+    console.log("No Firestore instance found => returning 0");
+    return 0;
+  }
+
+  console.log("Querying aggregator_v2 for:", { userId, planId, bookId });
+  const colRef = collection(db, "aggregator_v2");
+  const q = query(
+    colRef,
+    where("userId", "==", userId),
+    where("planId", "==", planId),
+    where("bookId", "==", bookId),
+    orderBy("createdAt", "desc"),
+    limit(1)
+  );
+
+  const snap = await getDocs(q);
+  if (snap.empty) {
+    console.log("No aggregator doc found => returning 0% progress");
+    return 0;
+  }
+
+  // We have at least one document
+  const docSnap = snap.docs[0];
+  const data = docSnap.data() || {};
+  console.log("Aggregator doc found =>", data);
+
+  const aggregatorResult = data.aggregatorResult || {};
+  const overall = computeOverallProgress(aggregatorResult);
+  console.log("Computed aggregator progress =", overall);
+  return overall;
+}
+
+// ------------- MAIN COMPONENT -------------
 export default function PanelC({
-  db, // <-- Make sure you pass the Firestore instance here
+  db, // we pass this in from the parent
   userId = "demoUser123",
   onOpenOnboarding = () => {},
   onSeeAllCourses = () => {},
@@ -88,64 +147,70 @@ export default function PanelC({
     fetchBooks();
   }, [userId]);
 
-  // 2) For each Book => fetch the latest plan, THEN fetch aggregator progress
+  // 2) For each Book => fetch the latest plan => fetch aggregator => generate aggregator => fetch aggregator again
   useEffect(() => {
-    // We define these helpers *inside* the effect so we can reference db, userId, etc.
+    if (!books.length) return;
 
-    async function fetchPlanForBook(bookId) {
+    async function fetchPlanThenAggregator(bookId) {
       setPlansData((prev) => ({
         ...prev,
         [bookId]: { loading: true, error: null, hasPlan: false },
       }));
 
       try {
-        // 2.1) Fetch the plan
+        // (A) Fetch the plan from your API
         const res = await axios.get(
           `${import.meta.env.VITE_BACKEND_URL}/api/adaptive-plans`,
           { params: { userId, bookId } }
         );
         const allPlans = res.data?.plans || [];
         if (!allPlans.length) {
-          // No plan
+          // No plan => store "no plan" in state
           setPlansData((prev) => ({
             ...prev,
             [bookId]: {
               loading: false,
               error: null,
               hasPlan: false,
+              aggregatorProgress: 0,
             },
           }));
           return;
         }
-        // Sort by createdAt desc => pick the first
+
+        // pick most recent plan
         allPlans.sort((a, b) => {
-          const tA = new Date(a.createdAt).getTime();
-          const tB = new Date(b.createdAt).getTime();
-          return tB - tA;
+          return (
+            new Date(b.createdAt).getTime() -
+            new Date(a.createdAt).getTime()
+          );
         });
         const recentPlan = allPlans[0];
 
-        // Summarize day1’s activities (just as in your original code)
+        // Summarize day1’s activities (optional, like your code does)
         let readCount = 0;
         let quizCount = 0;
         let reviseCount = 0;
         let totalTime = 0;
-        if (recentPlan.sessions && recentPlan.sessions.length > 0) {
+        if (recentPlan.sessions?.length > 0) {
           const day1Acts = recentPlan.sessions[0].activities || [];
           day1Acts.forEach((act) => {
             if (act.type === "READ") readCount++;
             else if (act.type === "QUIZ") quizCount++;
             else if (act.type === "REVISE") reviseCount++;
-            if (act.timeNeeded) {
-              totalTime += act.timeNeeded;
-            }
+            if (act.timeNeeded) totalTime += act.timeNeeded;
           });
         }
 
-        // 2.2) Fetch aggregator doc => aggregator_v2
-        const aggregatorProgress = await fetchAggregatorDoc(bookId, recentPlan.id);
+        // (B) Immediately fetch any existing aggregator doc => old aggregator data
+        const oldAggregatorProgress = await fetchAggregatorDoc(
+          db,
+          userId,
+          recentPlan.id,
+          bookId
+        );
 
-        // 2.3) Update state
+        // Update state with the *old* aggregator doc
         setPlansData((prev) => ({
           ...prev,
           [bookId]: {
@@ -157,63 +222,49 @@ export default function PanelC({
             quizCount,
             reviseCount,
             totalTime,
-            // Store aggregator progress here
-            aggregatorProgress,
+            aggregatorProgress: oldAggregatorProgress,
+          },
+        }));
+
+        // (C) Generate a fresh aggregator doc => always get up-to-date data
+        await generateAggregatorDoc(userId, recentPlan.id, bookId);
+
+        // (D) Re-fetch aggregator doc => updated aggregator data
+        const newAggregatorProgress = await fetchAggregatorDoc(
+          db,
+          userId,
+          recentPlan.id,
+          bookId
+        );
+
+        // Update state with the *new* aggregator doc
+        setPlansData((prev) => ({
+          ...prev,
+          [bookId]: {
+            ...prev[bookId],
+            aggregatorProgress: newAggregatorProgress,
           },
         }));
       } catch (err) {
-        console.error("Error fetching plan for book:", bookId, err);
+        console.error("Error fetching plan/aggregator for book:", bookId, err);
         setPlansData((prev) => ({
           ...prev,
           [bookId]: {
             loading: false,
             error: err.message,
             hasPlan: false,
+            aggregatorProgress: 0,
           },
         }));
       }
     }
 
-    // 2.2) Helper that queries aggregator_v2 for the latest aggregator doc
-    async function fetchAggregatorDoc(bookId, planId) {
-      if (!db) return 0; // If no Firestore instance, skip
-
-      try {
-        const colRef = collection(db, "aggregator_v2");
-        console.log("Querying aggregator_v2 for:", { userId, planId, bookId });
-
-        const q = query(
-          colRef,
-          where("userId", "==", userId),
-          where("planId", "==", planId),
-          where("bookId", "==", bookId),
-          orderBy("createdAt", "desc"),
-          limit(1)
-        );
-        const snap = await getDocs(q);
-        if (snap.empty) {
-          console.log("No aggregator doc found for these fields");
-        } else {
-          snap.forEach((d) => console.log("Aggregator doc found =>", d.data()));
-        }
-        const docSnap = snap.docs[0];
-        const data = docSnap.data() || {};
-        const aggregatorResult = data.aggregatorResult || {};
-        return computeOverallProgress(aggregatorResult);
-      } catch (err) {
-        console.error("Error fetching aggregator doc:", err);
-        return 0; // fallback
-      }
-    }
-
-    if (books.length === 0) return;
-
-    // For each book => fetch plan => aggregator
+    // Loop over each book => run the aggregator logic
     books.forEach((b) => {
       if (!b.id) return;
-      fetchPlanForBook(b.id);
+      fetchPlanThenAggregator(b.id);
     });
-  }, [books, db, userId]); // re-run if books change or db/userId change
+  }, [books, db, userId]);
 
   // 3) If user hits "Start Learning" => open Plan dialog
   function handleStartLearning(bookId) {
@@ -234,7 +285,6 @@ export default function PanelC({
           books={books}
           plansData={plansData}
           handleStartLearning={handleStartLearning}
-          // If you have other needed props, pass them here:
           onOpenOnboarding={onOpenOnboarding}
           onSeeAllCourses={onSeeAllCourses}
         />
@@ -248,7 +298,6 @@ export default function PanelC({
         />
       )}
 
-      {/* Full-screen dialog with NO title/actions */}
       <Dialog
         open={showPlanDialog}
         onClose={() => setShowPlanDialog(false)}
@@ -259,7 +308,7 @@ export default function PanelC({
             borderRadius: 0,
             width: "100%",
             height: "100%",
-            backgroundColor: "#000", // optional
+            backgroundColor: "#000",
           },
         }}
       >
@@ -277,6 +326,7 @@ export default function PanelC({
   );
 }
 
+// Basic container styling
 const styles = {
   parentContainer: {
     padding: 20,

@@ -268,7 +268,12 @@ export default function Child2({
       </div>
 
       {/* 2) StatsPanel => includes six tiles: overall progress, daily progress, exam date, daily plan, chapters, sub-chaps */}
-      <StatsPanel plan={plan} colorScheme={colorScheme} />
+      <StatsPanel db={db}                  // <-- pass the Firestore instance
+  userId={userId}
+  plan={plan}
+  planId={selectedPlanId}  // in case you need it
+  bookId={bookId}          // <-- aggregator doc also needs the bookId
+  colorScheme={colorScheme} />
 
       {/* 4) TABS => Daily Plan (0), Progress (1), Timeline (2), AdminPanel (3), Aggregator (4) */}
       <Tabs
