@@ -82,6 +82,8 @@ export default function EditAdaptivePlanModal({
   const [activeStep, setActiveStep] = useState(0);
   const steps = ["Select Chapters", "Schedule & Mastery", "Review & Confirm"];
 
+  
+
   // -------------------------------------------------
   // Step 1: Chapter selection
   // -------------------------------------------------
