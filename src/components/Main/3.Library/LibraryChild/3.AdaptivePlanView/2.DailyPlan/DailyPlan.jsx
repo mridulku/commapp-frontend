@@ -5,8 +5,15 @@ import { useDispatch, useSelector } from "react-redux";
 import { setCurrentIndex } from "../../../../../../store/planSlice";
 import { Box } from "@mui/material";
 
-import { parseCreatedAt, dateOnly, addDays, formatDate } from "./components/dailyPlanUtils";
-import DayDropdownBar from "./components/DayDropdownBar";
+// Updated import paths to match your new structure:
+import {
+  parseCreatedAt,
+  dateOnly,
+  addDays,
+  formatDate,
+} from "./components/dailyPlanUtils";
+
+import StatusBar from "./components/StatusBar";     // <--- Using StatusBar now
 import ActivityList from "./components/ActivityList";
 
 /**
@@ -26,21 +33,21 @@ export default function DailyPlan({
   const dispatch = useDispatch();
   const currentIndex = useSelector((state) => state.plan.currentIndex);
 
-  // Quick check if plan or sessions is missing
   if (!plan?.sessions?.length) {
     return <div>No sessions found in this plan.</div>;
   }
   const sessions = plan.sessions;
 
-  // (A) parse plan.createdAt => baseDate
+  // Parse creation date
   const createdAtDate = parseCreatedAt(plan);
   const today = dateOnly(new Date());
 
   // Build day labels
   const dayLabels = sessions.map((sess) => {
-    const sNum = Number(sess.sessionLabel); // e.g. "1", "2"
+    const sNum = Number(sess.sessionLabel); // e.g. 1,2,...
     const dayDate = addDays(createdAtDate, sNum - 1);
     const dayDateStr = formatDate(dayDate);
+
     if (dayDate.getTime() === today.getTime()) {
       return `Today (${dayDateStr})`;
     }
@@ -49,8 +56,6 @@ export default function DailyPlan({
 
   // Make sure dayDropIdx is within bounds
   useEffect(() => {
-    // Identify the first day date => createdAtDate
-    // last day date => createdAtDate + (sessions.length - 1)
     const firstDayDate = addDays(createdAtDate, 0);
     const lastDayDate = addDays(createdAtDate, sessions.length - 1);
 
@@ -62,7 +67,6 @@ export default function DailyPlan({
       onDaySelect(sessions.length - 1);
       return;
     }
-    // else it's in range
     const daysDiff = (today.getTime() - firstDayDate.getTime()) / (1000 * 60 * 60 * 24);
     const exactIdx = Math.floor(daysDiff);
     if (exactIdx < 0) {
@@ -178,6 +182,14 @@ export default function DailyPlan({
     }
   }
 
+  // ============= (Optional) Calculate Time Spent / Expected for StatusBar =============
+  // Example: totalTimeSpent is sum of all lumps (in seconds) => convert to minutes
+  const totalTimeSpentSec = Object.values(timeMap).reduce((acc, val) => acc + val, 0);
+  const totalTimeSpentMin = Math.round(totalTimeSpentSec / 60);  // e.g. 12
+
+  // Hard-coded example for totalTimeExpected (30m?), or read from persona
+  const totalTimeExpected = 30;
+
   // ============= 3) Render =============
   if (loading) {
     return (
@@ -189,13 +201,21 @@ export default function DailyPlan({
 
   return (
     <Box sx={{ marginTop: "1rem" }}>
-      <DayDropdownBar
+      {/*
+        Now we use our new StatusBar component in place of DayDropdownBar
+        and pass all the relevant props, including timeSpent/timeExpected.
+      */}
+      <StatusBar
         safeIdx={safeIdx}
         dayLabels={dayLabels}
         sessions={sessions}
         activities={activities}
         onDaySelect={onDaySelect}
         colorScheme={colorScheme}
+        totalTimeSpent={totalTimeSpentMin}
+        totalTimeExpected={totalTimeExpected}
+        timeMap={timeMap}
+
       />
 
       <ActivityList
