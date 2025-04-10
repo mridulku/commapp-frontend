@@ -17,7 +17,9 @@ import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 
 import aggregatorLockedOverlay from "./aggregatorLockedOverlay";
 import AggregatorInfoPanel from "./AggregatorInfoPanel";
-import QuizSubmissionDetails from "./QuizSubmissionDetails"; // <-- NEW import
+import QuizSubmissionDetails from "./QuizSubmissionDetails";
+import CompletionSummaryPanel from "./CompletionSummaryPanel"; 
+// ^^^ NEW import, pointing to your separate summary panel file
 
 /**
  * If activity.type includes 'read', treat as stage='reading'; else quiz.
@@ -69,14 +71,13 @@ function parseDateFromTimestamp(ts) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-/**
- * Renders all combined attempts grouped by date => each date is a sub-accordion,
- * inside which we show clickable blocks for Q1, Q2, R1, etc.
+/** 
+ * AttemptsByDate => merges quiz+revision => collapsible 
+ * (unchanged from your existing code)
  */
 function AttemptsByDate({ attempts, onOpenAttempt }) {
   if (!attempts || !attempts.length) return null;
 
-  // group them by day => { "2025-08-16": [ ... ], "2025-08-17": [ ... ] }
   const map = {};
   attempts.forEach((att) => {
     const dayStr = parseDateFromTimestamp(att.timestamp);
@@ -84,7 +85,7 @@ function AttemptsByDate({ attempts, onOpenAttempt }) {
     map[dayStr].push(att);
   });
 
-  const dateKeys = Object.keys(map).sort(); // ascending
+  const dateKeys = Object.keys(map).sort();
 
   return (
     <Box>
@@ -97,7 +98,7 @@ function AttemptsByDate({ attempts, onOpenAttempt }) {
           >
             <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ color: "#fff" }} />}>
               <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                {day} ({arr.length} attempt{arr.length>1?"s":""})
+                {day} ({arr.length} attempt{arr.length>1 ? "s":""})
               </Typography>
             </AccordionSummary>
             <AccordionDetails>
@@ -140,6 +141,7 @@ function AttemptsByDate({ attempts, onOpenAttempt }) {
 
 /** 
  * ConceptQuizTable => for each concept, for each quiz attempt => PASS / FAIL / NT
+ * (unchanged)
  */
 function ConceptQuizTable({ conceptList, quizAttempts }) {
   const sortedAttempts = [...quizAttempts].sort(
@@ -204,13 +206,15 @@ const tdStyle = {
 };
 
 
+// ===========================
+// The main ActivityAccordion
+// ===========================
 export default function ActivityAccordion({
   index,
   activity,
   timeMap,
   subchapterStatusMap,
   onClickActivity,
-  // aggregator modals
   setDebugOpen,
   setDebugTitle,
   setDebugData,
@@ -226,15 +230,13 @@ export default function ActivityAccordion({
   setTimeDetailOpen,
   setTimeDetailTitle,
   setTimeDetailData,
-  // aggregator logs
   timeFetchLogs,
   statusFetchLogs,
 }) {
-  // aggregatorLocked => "locked"?
   const aggregatorLocked = (activity.aggregatorStatus || "").toLowerCase() === "locked";
   const summaryLabel = `Activity #${index + 1} — ID: ${activity.activityId || "?"} (${activity.type})`;
 
-  // subchapter aggregator => we read aggregatorObj + quizStagesData
+  // subchapter aggregator object => aggregator data
   const subChId = activity.subChapterId || "";
   const aggregatorObj = subchapterStatusMap[subChId] || {};
 
@@ -247,10 +249,10 @@ export default function ActivityAccordion({
   // subchapter concepts => aggregatorObj.concepts
   const conceptList = aggregatorObj.concepts || [];
 
-  // Combine attempts => merges + sorts => group by day
+  // merges quiz+revision => attempts-by-date
   const combined = mergeQuizAndRevision(quizAttempts, revisionAttempts);
 
-  // Attempt raw-data modal => now includes the "pretty" quiz submission detail
+  // Attempt raw-data modal
   const [attemptOpen, setAttemptOpen] = useState(false);
   const [attemptRawTitle, setAttemptRawTitle] = useState("");
   const [attemptRawData, setAttemptRawData] = useState(null);
@@ -270,6 +272,7 @@ export default function ActivityAccordion({
 
   return (
     <Box sx={{ position: "relative", mb: 1 }}>
+      {/* aggregatorLocked overlay */}
       {aggregatorLocked && aggregatorLockedOverlay()}
 
       <Accordion
@@ -286,7 +289,7 @@ export default function ActivityAccordion({
         </AccordionSummary>
 
         <AccordionDetails>
-          {/* 1) Plan Doc (Raw) */}
+          {/* (1) Plan Doc (Raw) */}
           <Box sx={{ mb: 2, pl: 1 }}>
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
               Plan Doc (Raw)
@@ -298,7 +301,7 @@ export default function ActivityAccordion({
             </Box>
           </Box>
 
-          {/* 2) Aggregator Info => timeSpent, locked, final status */}
+          {/* (2) Aggregator Info => lumpsSec, aggregatorLocked, final status, etc. */}
           <AggregatorInfoPanel
             activity={activity}
             timeMap={timeMap}
@@ -310,7 +313,7 @@ export default function ActivityAccordion({
             statusFetchLogs={statusFetchLogs}
           />
 
-          {/* 3) Subchapter Concepts */}
+          {/* (3) Subchapter Concepts */}
           <Box sx={{ mt: 2, pl: 1 }}>
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
               Subchapter Concepts
@@ -329,7 +332,7 @@ export default function ActivityAccordion({
             )}
           </Box>
 
-          {/* 4) Concept vs Quiz attempts => pass/fail/NT */}
+          {/* (4) If quiz => concept vs quiz attempts => pass/fail/NT */}
           {(stageKey !== "reading") && quizAttempts.length > 0 && conceptList.length > 0 && (
             <Box sx={{ mt: 2, pl: 1 }}>
               <Typography variant="subtitle2" sx={{ mb: 1 }}>
@@ -339,7 +342,7 @@ export default function ActivityAccordion({
             </Box>
           )}
 
-          {/* 5) Attempts by Date => merges quiz+revision => collapsible */}
+          {/* (5) Attempts by Date => merges quiz+revision => collapsible */}
           {(stageKey !== "reading") && combined.length > 0 && (
             <Box sx={{ mt: 2, pl: 1 }}>
               <Typography variant="subtitle2" sx={{ mb: 1 }}>
@@ -349,7 +352,7 @@ export default function ActivityAccordion({
             </Box>
           )}
 
-          {/* 6) PlanFetcher link */}
+          {/* (6) PlanFetcher link */}
           <Box sx={{ mt: 2 }}>
             <Typography
               variant="body2"
@@ -362,6 +365,17 @@ export default function ActivityAccordion({
               Open PlanFetcher for this Activity
             </Typography>
           </Box>
+
+          {/* (7) Instead of "CompletionSummaryAccordion", 
+                  we simply import and render your "CompletionSummaryPanel." */}
+          <Box sx={{ mt: 2 }}>
+            <CompletionSummaryPanel
+              activity={activity}
+              aggregatorObj={aggregatorObj}
+              conceptList={conceptList}
+              attempts={combined}   // pass the same array with timestamp
+            />
+          </Box>
         </AccordionDetails>
       </Accordion>
 
@@ -371,7 +385,6 @@ export default function ActivityAccordion({
         <DialogContent sx={{ backgroundColor: "#222", color: "#fff" }}>
           {attemptRawData ? (
             <>
-              {/* 1) If it's a quiz, show "QuizSubmissionDetails" above the raw JSON */}
               {attemptRawData.type === "quiz" && attemptRawData.quizSubmission && (
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" sx={{ mb: 1, fontWeight: "bold" }}>
@@ -381,7 +394,6 @@ export default function ActivityAccordion({
                 </Box>
               )}
 
-              {/* 2) Then show the raw JSON */}
               <Typography variant="body2" sx={{ mb: 1, fontWeight: "bold" }}>
                 Raw JSON:
               </Typography>
