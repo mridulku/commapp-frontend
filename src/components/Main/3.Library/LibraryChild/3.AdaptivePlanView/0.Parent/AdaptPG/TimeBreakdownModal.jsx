@@ -91,6 +91,8 @@ function DayDetails({ docs }) {
   if (!docs?.length) {
     return <Typography variant="body2">No details found.</Typography>;
   }
+
+  // group by day => "2025-04-08", etc.
   const grouped = groupByDate(docs);
 
   return (
@@ -105,6 +107,8 @@ function DayDetails({ docs }) {
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
               {day} {'=>'} {dayTotal} seconds
             </Typography>
+
+            {/* For each doc => show details including attemptNumber, quizStage, lumps, etc. */}
             {arr.map((doc, idx) => (
               <Box
                 key={idx}
@@ -119,6 +123,24 @@ function DayDetails({ docs }) {
                 <Typography variant="body2">
                   <strong>totalSeconds:</strong> {doc.totalSeconds}
                 </Typography>
+
+                {/* If it's reading => no attemptNumber/revisionNumber, etc. */}
+                {doc.attemptNumber !== null && (
+                  <Typography variant="body2">
+                    <strong>attemptNumber:</strong> {doc.attemptNumber}
+                  </Typography>
+                )}
+                {doc.revisionNumber !== null && (
+                  <Typography variant="body2">
+                    <strong>revisionNumber:</strong> {doc.revisionNumber}
+                  </Typography>
+                )}
+                {doc.quizStage && (
+                  <Typography variant="body2">
+                    <strong>quizStage:</strong> {doc.quizStage}
+                  </Typography>
+                )}
+
                 {/* lumps if partial intervals */}
                 {doc.lumps?.length > 0 && (
                   <pre style={{ color: "#0f0", fontSize: "0.8rem", marginTop: 4 }}>
