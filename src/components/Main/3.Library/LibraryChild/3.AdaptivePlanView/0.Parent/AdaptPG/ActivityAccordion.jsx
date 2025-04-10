@@ -1,4 +1,3 @@
-// File: ActivityAccordion.jsx
 import React, { useState } from "react";
 import {
   Accordion,
@@ -15,21 +14,16 @@ import {
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 
-// optional overlay
 import aggregatorLockedOverlay from "./aggregatorLockedOverlay"; 
-
-// aggregator info panel => aggregator fields
 import AggregatorInfoPanel from "./AggregatorInfoPanel";
 
 /**
- * Helper to figure out the aggregator "stageKey"
- * e.g. reading => "reading"
- * or quiz => "remember","understand","apply","analyze"
+ * If activity.type includes 'read', we use 'reading', else quizStage => 'remember','understand','apply','analyze'
  */
 function getStageKey(activity) {
   const rawType = (activity.type || "").toLowerCase();
   if (rawType.includes("read")) return "reading";
-  return (activity.quizStage || "").toLowerCase(); // "remember","understand","apply","analyze"
+  return (activity.quizStage || "").toLowerCase();
 }
 
 export default function ActivityAccordion({
@@ -38,7 +32,6 @@ export default function ActivityAccordion({
   timeMap,
   subchapterStatusMap,
   onClickActivity,
-
   // aggregator modals
   setDebugOpen,
   setDebugTitle,
@@ -55,8 +48,7 @@ export default function ActivityAccordion({
   setTimeDetailOpen,
   setTimeDetailTitle,
   setTimeDetailData,
-
-  // aggregator fetch logs
+  // aggregator logs
   timeFetchLogs,
   statusFetchLogs,
 }) {
@@ -64,17 +56,20 @@ export default function ActivityAccordion({
   const aggregatorLocked = (activity.aggregatorStatus || "").toLowerCase() === "locked";
   const summaryLabel = `Activity #${index + 1} — ID: ${activity.activityId || "?"} (${activity.type})`;
 
-  // 2) figure out "stageKey" => read or quiz stage
+  // 2) subchapter aggregator info
   const subChId = activity.subChapterId || "";
-  const stageKey = getStageKey(activity);
-
-  // 3) aggregator data => e.g. "quizStagesData[stageKey]" for quiz attempts
   const aggregatorObj = subchapterStatusMap[subChId] || {};
+
+  // 3) quizStagesData => e.g. aggregatorObj.quizStagesData[ stageKey ].quizAttempts
+  const stageKey = getStageKey(activity);
   const quizStagesData = aggregatorObj.quizStagesData || {};
-  const stageData = quizStagesData[stageKey] || {}; 
+  const stageData = quizStagesData[stageKey] || {};
   const { quizAttempts = [], revisionAttempts = [] } = stageData;
 
-  // 4) A small modal to show the raw attempt data for Q1, Q2, R1, etc.
+  // 3a) concepts => aggregatorObj.concepts (added in your updated /subchapter-status)
+  const conceptList = aggregatorObj.concepts || [];
+
+  // 4) RAW Attempt Modal => Q1, Q2, R1, ...
   const [attemptOpen, setAttemptOpen] = useState(false);
   const [attemptRawTitle, setAttemptRawTitle] = useState("");
   const [attemptRawData, setAttemptRawData] = useState(null);
@@ -90,6 +85,21 @@ export default function ActivityAccordion({
     setAttemptOpen(false);
     setAttemptRawTitle("");
     setAttemptRawData(null);
+  }
+
+  // NEW: For each concept & quiz attempt, check pass/fail
+  // We'll do a small function that finds if this concept is tested in that quizSubmission
+  // Return "PASS","FAIL","NT"
+  function getConceptResult(conceptName, quizAttempt) {
+    if (!quizAttempt || !quizAttempt.quizSubmission) return "NT";
+    const question = quizAttempt.quizSubmission.find(
+      (q) => (q.conceptName || "").toLowerCase() === conceptName.toLowerCase()
+    );
+    if (!question) {
+      return "NT"; // not tested
+    }
+    // question.score => 1 => pass, 0 => fail
+    return question.score && parseFloat(question.score) >= 1 ? "PASS" : "FAIL";
   }
 
   return (
@@ -127,17 +137,44 @@ export default function ActivityAccordion({
             activity={activity}
             timeMap={timeMap}
             subchapterStatusMap={subchapterStatusMap}
-            // aggregator lumps doc-level
             setTimeDetailOpen={setTimeDetailOpen}
             setTimeDetailTitle={setTimeDetailTitle}
             setTimeDetailData={setTimeDetailData}
-
-            // aggregator logs
             timeFetchLogs={timeFetchLogs}
             statusFetchLogs={statusFetchLogs}
           />
 
-          {/* 3) QUIZ + REVISION ATTEMPTS => e.g. Q1, Q2,... R1, R2,... */}
+          {/* 3) Subchapter Concepts => aggregatorObj.concepts */}
+          <Box sx={{ mt: 2, pl: 1 }}>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              Subchapter Concepts
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              Found {conceptList.length} concept(s) for subChId={subChId}.
+            </Typography>
+
+            {conceptList.length > 0 && (
+              <ul style={{ marginLeft: "1.25rem" }}>
+                {conceptList.map((cn) => (
+                  <li key={cn.id} style={{ marginBottom: "0.2rem" }}>
+                    {cn.name || `Concept ${cn.id}`}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Box>
+
+          {/* 4) Concept-based Quiz Attempt Table (Optional) */}
+          {(stageKey !== "reading") && quizAttempts.length > 0 && conceptList.length > 0 && (
+            <Box sx={{ mt: 2, pl: 1 }}>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Concept vs Quiz Attempts
+              </Typography>
+              <ConceptQuizTable conceptList={conceptList} quizAttempts={quizAttempts} />
+            </Box>
+          )}
+
+          {/* 5) QUIZ + REVISION ATTEMPTS => e.g. Q1, Q2,... R1, R2,... */}
           {(stageKey !== "reading") && (quizAttempts.length || revisionAttempts.length) > 0 && (
             <Box sx={{ mt: 2, pl: 1 }}>
               <Typography variant="subtitle2" sx={{ mb: 1 }}>
@@ -222,7 +259,7 @@ export default function ActivityAccordion({
             </Box>
           )}
 
-          {/* 4) PlanFetcher link */}
+          {/* 6) PlanFetcher link */}
           <Box sx={{ mt: 2 }}>
             <Typography
               variant="body2"
@@ -259,3 +296,76 @@ export default function ActivityAccordion({
     </Box>
   );
 }
+
+/** 
+ * Small sub-component => concept-based quiz matrix
+ * For each concept, for each quiz attempt => PASS / FAIL / NT 
+ */
+function ConceptQuizTable({ conceptList, quizAttempts }) {
+  // Sort attempts by attemptNumber ascending
+  const sortedAttempts = [...quizAttempts].sort(
+    (a, b) => (a.attemptNumber || 0) - (b.attemptNumber || 0)
+  );
+
+  // We define a small helper to see if concept was tested and pass/fail
+  function getConceptResult(conceptName, attempt) {
+    if (!attempt?.quizSubmission) return "NT";
+    const foundQ = attempt.quizSubmission.find(
+      (q) => (q.conceptName || "").toLowerCase() === conceptName.toLowerCase()
+    );
+    if (!foundQ) return "NT"; // not tested
+    return foundQ.score && Number(foundQ.score) >= 1 ? "PASS" : "FAIL";
+  }
+
+  return (
+    <Box sx={{ overflowX: "auto", mb: 2 }}>
+      <table style={{ borderCollapse: "collapse", width: "100%" }}>
+        <thead>
+          <tr>
+            <th style={thStyle}>Concept</th>
+            {sortedAttempts.map((att) => (
+              <th key={att.attemptNumber} style={thStyle}>
+                Q{att.attemptNumber}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {conceptList.map((cn) => {
+            return (
+              <tr key={cn.id}>
+                <td style={tdStyle}>{cn.name || `Concept ${cn.id}`}</td>
+                {sortedAttempts.map((att) => {
+                  const res = getConceptResult(cn.name, att); 
+                  // "PASS","FAIL","NT"
+                  let bg = "#555";
+                  if (res === "PASS") bg = "#66bb6a";
+                  else if (res === "FAIL") bg = "#ef5350";
+                  return (
+                    <td key={att.attemptNumber} style={{ ...tdStyle, backgroundColor: bg }}>
+                      {res}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </Box>
+  );
+}
+
+const thStyle = {
+  border: "1px solid #888",
+  padding: "6px 8px",
+  backgroundColor: "#333",
+  color: "#fff",
+  fontWeight: "bold",
+};
+
+const tdStyle = {
+  border: "1px solid #888",
+  padding: "6px 8px",
+  textAlign: "center",
+};
