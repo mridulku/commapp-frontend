@@ -1,32 +1,22 @@
-// File: ReviseView.jsx
 import React, { useEffect, useState, useRef } from "react";
 import { doc, getDoc } from "firebase/firestore";
-import { db } from "../../../../../../firebase"; // Adjust path as needed
+import { db } from "../../../../../../firebase"; // Adjust as needed
 import axios from "axios";
 import { useSelector, useDispatch } from "react-redux";
 
-// GPT logic
 import { generateRevisionContent } from "./RevSupport/RevisionContentGenerator";
-// revise-time actions
 import { fetchReviseTime, incrementReviseTime } from "../../../../../../store/reviseTimeSlice";
-
-// Import your plan slice actions/thunks
 import { setCurrentIndex, fetchPlan } from "../../../../../../store/planSlice";
 
-/** Utility to format mm:ss */
 function formatTime(totalSeconds) {
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-/**
- * Splits an HTML string into ~180-word pages by paragraphs.
- */
 function chunkHtmlByParagraphs(htmlString, chunkSize = 180) {
   let sanitized = htmlString.replace(/\\n/g, "\n");
   sanitized = sanitized.replace(/\r?\n/g, " ");
-
   let paragraphs = sanitized
     .split(/<\/p>/i)
     .map((p) => p.trim())
@@ -64,15 +54,12 @@ function buildRevisionConfigDocId(exam, stage) {
   return `revise${capExam}${capStage}`;
 }
 
-/** Convert GPT-based revisionData into an HTML string we can page-chunk. */
 function createHtmlFromGPTData(revisionData) {
   if (!revisionData) return "";
-
   let html = "";
   if (revisionData.title) {
     html += `<h3>${revisionData.title}</h3>`;
   }
-
   if (Array.isArray(revisionData.concepts)) {
     revisionData.concepts.forEach((cObj) => {
       html += `<h4>${cObj.conceptName}</h4>`;
@@ -88,17 +75,39 @@ function createHtmlFromGPTData(revisionData) {
   return html;
 }
 
+/** Exactly like in HistoryView */
+function computeConceptStatuses(allAtts) {
+  const conceptStatusMap = new Map();
+  const conceptSet = new Set();
+
+  const sorted = [...allAtts].sort((a, b) => a.attemptNumber - b.attemptNumber);
+  sorted.forEach((attempt) => {
+    (attempt.conceptStats || []).forEach((cs) => {
+      conceptSet.add(cs.conceptName);
+      if (!conceptStatusMap.has(cs.conceptName)) {
+        conceptStatusMap.set(cs.conceptName, "NOT_TESTED");
+      }
+      if (cs.passOrFail === "PASS") {
+        conceptStatusMap.set(cs.conceptName, "PASS");
+      } else if (cs.passOrFail === "FAIL") {
+        // only mark FAIL if it's not already PASS
+        if (conceptStatusMap.get(cs.conceptName) !== "PASS") {
+          conceptStatusMap.set(cs.conceptName, "FAIL");
+        }
+      }
+    });
+  });
+
+  return { conceptSet, conceptStatusMap };
+}
+
 /**
  * ReviseView
  * ----------
- * Props:
- *  - userId          (string)
- *  - examId          (default "general")
- *  - quizStage       (e.g. "remember"/"understand"/"apply"/"analyze")
- *  - subChapterId    (string)
- *  - revisionNumber  (number)
- *  - onRevisionDone  (function) => Called when "Take Quiz Now" finishes
- *  - activity        (object with .activityId) => The activity's ID for deferral
+ * 1) Loads aggregator data => "allAttemptsConceptStats"
+ * 2) Shows a small progress bar for mastery
+ * 3) On expand, user sees concept-level statuses in color-coded list
+ * 4) Also does GPT chunked reading, lumps-of-15 time, etc.
  */
 export default function ReviseView({
   userId,
@@ -110,18 +119,16 @@ export default function ReviseView({
   activity,
 }) {
   const { activityId } = activity || {};
-
   const planId = useSelector((state) => state.plan?.planDoc?.id);
   const currentIndex = useSelector((state) => state.plan?.currentIndex);
   const dispatch = useDispatch();
 
-  // docId for usage logs
   const docIdRef = useRef("");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
-  // GPT => chunked pages
+  // GPT pages
   const [revisionHtml, setRevisionHtml] = useState("");
   const [pages, setPages] = useState([]);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
@@ -131,10 +138,16 @@ export default function ReviseView({
   const [localLeftover, setLocalLeftover] = useState(0);
   const [lastSnapMs, setLastSnapMs] = useState(null);
 
-  // 1) On mount => fetch usage + GPT content
+  // aggregator states
+  const [loadingConceptData, setLoadingConceptData] = useState(true);
+  const [masteredCount, setMasteredCount] = useState(0);
+  const [inProgressCount, setInProgressCount] = useState(0);
+  const [notTestedCount, setNotTestedCount] = useState(0);
+  const [conceptStatuses, setConceptStatuses] = useState([]);
+
   useEffect(() => {
     if (!userId || !subChapterId) {
-      console.log("ReviseView: missing userId/subChapterId => skipping generation.");
+      console.log("ReviseView: missing userId/subChapterId => skip aggregator.");
       return;
     }
 
@@ -147,12 +160,19 @@ export default function ReviseView({
     setLoading(true);
     setStatus("Loading revision config...");
     setError("");
-    setServerTime(0);
-    setLocalLeftover(0);
-    setLastSnapMs(null);
     setRevisionHtml("");
     setPages([]);
     setCurrentPageIndex(0);
+
+    setServerTime(0);
+    setLocalLeftover(0);
+    setLastSnapMs(null);
+
+    setLoadingConceptData(true);
+    setMasteredCount(0);
+    setInProgressCount(0);
+    setNotTestedCount(0);
+    setConceptStatuses([]);
 
     async function doFetchUsage() {
       try {
@@ -171,7 +191,6 @@ export default function ReviseView({
     async function doGenerateGPT() {
       try {
         const docIdForConfig = buildRevisionConfigDocId(examId, quizStage);
-        // fetch Firestore doc => "revisionConfigs/docIdForConfig"
         const revRef = doc(db, "revisionConfigs", docIdForConfig);
         const snap = await getDoc(revRef);
         if (!snap.exists()) {
@@ -197,22 +216,58 @@ export default function ReviseView({
           setLoading(false);
           return;
         }
-
-        // Convert GPT data => HTML => chunk
+        // convert GPT => chunk
         const fullHtml = createHtmlFromGPTData(result.revisionData);
         setRevisionHtml(fullHtml);
         setStatus("Revision content generated.");
       } catch (err) {
-        console.error("ReviseView => GPT generation error:", err);
+        console.error("ReviseView => GPT error:", err);
         setError(err.message || "Error generating GPT content");
       } finally {
         setLoading(false);
       }
     }
 
+    async function fetchAggregatorData() {
+      try {
+        if (!planId || !subChapterId) return;
+        setLoadingConceptData(true);
+        const resp = await axios.get("http://localhost:3001/subchapter-status", {
+          params: { userId, planId, subchapterId: subChapterId },
+        });
+        if (resp.data) {
+          const data = resp.data;
+          const stageObj = data.quizStagesData?.[quizStage] || {};
+          const allStats = stageObj.allAttemptsConceptStats || [];
+
+          const { conceptSet, conceptStatusMap } = computeConceptStatuses(allStats);
+          const totalConcepts = conceptSet.size;
+          const passCount = [...conceptStatusMap.values()].filter((v) => v === "PASS").length;
+          const failCount = [...conceptStatusMap.values()].filter((v) => v === "FAIL").length;
+          const notTested = totalConcepts - passCount - failCount;
+
+          setMasteredCount(passCount);
+          setInProgressCount(failCount);
+          setNotTestedCount(notTested);
+
+          const statusesArr = [];
+          conceptSet.forEach((cName) => {
+            const finalStat = conceptStatusMap.get(cName) || "NOT_TESTED";
+            statusesArr.push({ conceptName: cName, status: finalStat });
+          });
+          statusesArr.sort((a, b) => a.conceptName.localeCompare(b.conceptName));
+          setConceptStatuses(statusesArr);
+        }
+      } catch (err) {
+        console.error("Error fetching aggregator subchapter data:", err);
+      } finally {
+        setLoadingConceptData(false);
+      }
+    }
+
     doFetchUsage();
     doGenerateGPT();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetchAggregatorData();
   }, [
     userId,
     subChapterId,
@@ -223,7 +278,7 @@ export default function ReviseView({
     dispatch,
   ]);
 
-  // 2) Once revisionHtml => chunk it
+  // chunk revisionHtml
   useEffect(() => {
     if (!revisionHtml) return;
     const chunked = chunkHtmlByParagraphs(revisionHtml, 180);
@@ -231,7 +286,7 @@ export default function ReviseView({
     setCurrentPageIndex(0);
   }, [revisionHtml]);
 
-  // 3) local second timer => leftover++
+  // local leftover timer
   useEffect(() => {
     const secondTimer = setInterval(() => {
       setLocalLeftover((prev) => prev + 1);
@@ -239,7 +294,7 @@ export default function ReviseView({
     return () => clearInterval(secondTimer);
   }, []);
 
-  // 4) lumps-of-15 => incrementReviseTime
+  // lumps-of-15
   useEffect(() => {
     if (!lastSnapMs) return;
     const heartbeatId = setInterval(async () => {
@@ -281,6 +336,7 @@ export default function ReviseView({
     quizStage,
     revisionNumber,
     serverTime,
+    activityId,
   ]);
 
   const displayedTime = serverTime + localLeftover;
@@ -296,7 +352,6 @@ export default function ReviseView({
     }
   }
 
-  // Mark the revision attempt on the server
   async function submitRevisionAttempt() {
     const payload = {
       userId,
@@ -310,25 +365,18 @@ export default function ReviseView({
     console.log("Revision attempt recorded on server!");
   }
 
-  // "Take Quiz Now"
   async function handleTakeQuizNow() {
     try {
       await submitRevisionAttempt();
-      // Then run existing logic
       onRevisionDone?.();
     } catch (err) {
       console.error("Error submitting revision attempt (Take Quiz Now):", err);
       alert("Failed to record revision attempt.");
     }
   }
-
-  // "Take Quiz Later" => Mark deferred, re-fetch plan, maintain index, proceed
   async function handleTakeQuizLater() {
     try {
-      // Store the old index so we can re-apply it after re-fetch
       const oldIndex = currentIndex;
-
-      // 1) Mark the activity as deferred
       if (activityId) {
         await axios.post("http://localhost:3001/api/markActivityCompletion", {
           userId,
@@ -338,35 +386,16 @@ export default function ReviseView({
         });
         console.log(`Activity '${activityId}' marked deferred!`);
       }
-
-      // 2) Re-fetch the plan
-      //    We assume you have a backendURL & fetchUrl
-      //    Adjust if needed, or pass them as props
       const backendURL = "http://localhost:3001";
       const fetchUrl = "/api/adaptive-plan";
-
-      const fetchAction = await dispatch(
-        fetchPlan({
-          planId,
-          backendURL,
-          fetchUrl,
-        })
-      );
-
+      const fetchAction = await dispatch(fetchPlan({ planId, backendURL, fetchUrl }));
       if (fetchPlan.fulfilled.match(fetchAction)) {
-        // 3) Restore index but increment by 1 => move to next
         dispatch(setCurrentIndex(oldIndex + 1));
       }
-
-      // 4) Then submit revision attempt
       await submitRevisionAttempt();
-
-      // Done. The user is on the next activity.
     } catch (err) {
       console.error("Error in handleTakeQuizLater:", err);
       alert("Failed to record revision attempt and/or mark deferred.");
-
-      // We'll still move forward for now
       dispatch(setCurrentIndex(currentIndex + 1));
     }
   }
@@ -381,9 +410,23 @@ export default function ReviseView({
 
   const currentPageHtml = pages[currentPageIndex] || "";
 
+  /* ================== RENDER ================== */
   return (
     <div style={styles.outerContainer}>
       <div style={styles.card}>
+
+        {/* 
+          Collapsible mastery summary panel in top-right 
+          – pass everything into a subcomponent for clarity
+        */}
+        <MasterySummaryPanel
+          loadingConceptData={loadingConceptData}
+          masteredCount={masteredCount}
+          inProgressCount={inProgressCount}
+          notTestedCount={notTestedCount}
+          conceptStatuses={conceptStatuses}
+        />
+
         {/* Header => "Revision" + clock */}
         <div style={styles.cardHeader}>
           <h2 style={{ margin: 0 }}>Revision</h2>
@@ -437,7 +480,105 @@ export default function ReviseView({
   );
 }
 
-// ----------------------- Styles -----------------------
+/* ========== Collapsible Mastery Panel ========== */
+function MasterySummaryPanel({
+  loadingConceptData,
+  masteredCount,
+  inProgressCount,
+  notTestedCount,
+  conceptStatuses,
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  // total concepts
+  const totalConcepts = masteredCount + inProgressCount + notTestedCount;
+  const progressPct = totalConcepts > 0
+    ? Math.round((masteredCount / totalConcepts) * 100)
+    : 0;
+
+  function toggleExpand() {
+    setExpanded((prev) => !prev);
+  }
+
+  return (
+    <div style={styles.masteryPanel}>
+      {/* If aggregator is loading, show 'Loading...' */}
+      {loadingConceptData ? (
+        <p style={{ fontSize: "0.9rem", margin: 0 }}>Loading concept data...</p>
+      ) : (
+        <>
+          {/* Collapsed view => a progress bar + "X / Y mastered" + toggle arrow */}
+          {!expanded && (
+            <div style={{ fontSize: "0.9rem" }}>
+              <div style={{ marginBottom: 6 }}>
+                <strong>{masteredCount}</strong> / {totalConcepts} mastered
+                &nbsp;({progressPct}%)
+              </div>
+              <ProgressBar pct={progressPct} />
+            </div>
+          )}
+
+          {/* If expanded => show the bullet list */}
+          {expanded && (
+            <>
+              <div style={{ fontSize: "0.85rem", marginBottom: 8 }}>
+                <strong>Mastered:</strong> {masteredCount} &nbsp;|&nbsp;
+                <strong>In Progress:</strong> {inProgressCount} &nbsp;|&nbsp;
+                <strong>Not Tested:</strong> {notTestedCount}
+              </div>
+              <ul style={styles.conceptList}>
+                {conceptStatuses.map((obj) => {
+                  const { conceptName, status } = obj;
+                  let color = "#bbb";
+                  if (status === "PASS") color = "#4caf50"; // green
+                  else if (status === "FAIL") color = "#f44336"; // red
+                  return (
+                    <li key={conceptName} style={{ marginBottom: 4 }}>
+                      <span style={{ color }}>{conceptName}</span>{" "}
+                      <span style={{ color: "#999", fontSize: "0.8rem" }}>
+                        ({status})
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+
+          {/* Expand/collapse button */}
+          <div style={{ textAlign: "right", marginTop: 6 }}>
+            <button onClick={toggleExpand} style={styles.expandBtn}>
+              {expanded ? "▲" : "▼"}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ========== Simple horizontal progress bar ========== */
+function ProgressBar({ pct }) {
+  const containerStyle = {
+    width: "100%",
+    height: "8px",
+    backgroundColor: "#444",
+    borderRadius: "4px",
+    overflow: "hidden",
+  };
+  const fillStyle = {
+    width: `${pct}%`,
+    height: "100%",
+    backgroundColor: "#66bb6a",
+  };
+  return (
+    <div style={containerStyle}>
+      <div style={fillStyle} />
+    </div>
+  );
+}
+
+/* ========== Styles ========== */
 const styles = {
   outerContainer: {
     position: "relative",
@@ -453,6 +594,7 @@ const styles = {
     fontFamily: `'Inter', 'Roboto', sans-serif`,
   },
   card: {
+    position: "relative",
     width: "80%",
     maxWidth: "700px",
     backgroundColor: "#111",
@@ -463,6 +605,31 @@ const styles = {
     boxSizing: "border-box",
     overflow: "hidden",
   },
+
+  /* masteryPanel => top-right corner */
+  masteryPanel: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    backgroundColor: "#222",
+    border: "1px solid #444",
+    borderRadius: 4,
+    padding: "8px 12px",
+    fontSize: "0.9rem",
+    maxWidth: "220px",
+    minHeight: "44px",
+  },
+  expandBtn: {
+    backgroundColor: "#444",
+    color: "#fff",
+    border: "none",
+    borderRadius: 4,
+    padding: "2px 6px",
+    cursor: "pointer",
+    fontSize: "0.8rem",
+    lineHeight: 1,
+  },
+
   cardHeader: {
     background: "#222",
     padding: "12px 16px",
@@ -474,18 +641,18 @@ const styles = {
   clockWrapper: {
     display: "flex",
     alignItems: "center",
-    gap: "6px",
+    gap: 6,
     backgroundColor: "#333",
     color: "#ddd",
     padding: "4px 8px",
-    borderRadius: "4px",
+    borderRadius: 4,
   },
   clockIcon: {
     fontSize: "1rem",
   },
   cardBody: {
     flex: 1,
-    padding: "16px",
+    padding: 16,
     overflowY: "auto",
   },
   pageContent: {
@@ -499,14 +666,21 @@ const styles = {
   navButtons: {
     display: "flex",
     justifyContent: "flex-end",
-    gap: "8px",
+    gap: 8,
   },
   button: {
     backgroundColor: "#444",
     color: "#fff",
     border: "none",
     padding: "8px 12px",
-    borderRadius: "4px",
+    borderRadius: 4,
     cursor: "pointer",
+  },
+
+  conceptList: {
+    margin: 0,
+    paddingLeft: 16,
+    maxHeight: "120px",
+    overflowY: "auto",
   },
 };

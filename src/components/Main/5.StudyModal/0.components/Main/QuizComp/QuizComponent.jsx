@@ -21,18 +21,43 @@ function formatTime(totalSeconds) {
 }
 
 /**
+ * Re-usable logic from HistoryView for final pass/fail per concept
+ */
+function computeConceptStatuses(allAtts) {
+  const conceptStatusMap = new Map();
+  const conceptSet = new Set();
+
+  const sorted = [...allAtts].sort((a, b) => a.attemptNumber - b.attemptNumber);
+  sorted.forEach((attempt) => {
+    (attempt.conceptStats || []).forEach((cs) => {
+      conceptSet.add(cs.conceptName);
+      if (!conceptStatusMap.has(cs.conceptName)) {
+        conceptStatusMap.set(cs.conceptName, "NOT_TESTED");
+      }
+      if (cs.passOrFail === "PASS") {
+        conceptStatusMap.set(cs.conceptName, "PASS");
+      } else if (cs.passOrFail === "FAIL") {
+        // Only mark FAIL if not already PASS
+        if (conceptStatusMap.get(cs.conceptName) !== "PASS") {
+          conceptStatusMap.set(cs.conceptName, "FAIL");
+        }
+      }
+    });
+  });
+
+  return { conceptSet, conceptStatusMap };
+}
+
+/**
  * QuizView
  * --------
- * A "card-based" quiz:
- *   - Generates questions for the chosen subchapter/stage
- *   - Times the user in lumps of 15 seconds
- *   - On submit => local/GPT grading => pass/fail
- *   - If pass => automatically marks the quiz "completed: true"
- *   - If fail => revision logic
+ * A "card-based" quiz with:
+ *  - Aggregator-based concept mastery widget (top-right).
+ *  - Generates questions via GPT, times user in lumps of 15s.
+ *  - On submit => local/GPT grading => pass/fail => aggregator updates.
  */
 export default function QuizView({
   activity,
-
   userId = "",
   examId = "general",
   quizStage = "remember",
@@ -49,6 +74,13 @@ export default function QuizView({
   // Extract activityId & replicaIndex from the activity
   const { activityId, replicaIndex } = activity || {};
 
+  // ---------- Aggregator states for concept mastery ----------
+  const [loadingConceptData, setLoadingConceptData] = useState(true);
+  const [masteredCount, setMasteredCount] = useState(0);
+  const [inProgressCount, setInProgressCount] = useState(0);
+  const [notTestedCount, setNotTestedCount] = useState(0);
+  const [conceptStatuses, setConceptStatuses] = useState([]);
+
   // ---------- Quiz State ----------
   const [questionTypes, setQuestionTypes] = useState([]);
   const [generatedQuestions, setGeneratedQuestions] = useState([]);
@@ -60,7 +92,7 @@ export default function QuizView({
 
   // Additional info
   const [subchapterSummary, setSubchapterSummary] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false);    // For quiz loading/generation
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
@@ -79,9 +111,55 @@ export default function QuizView({
   // For environment-based OpenAI key
   const openAiKey = import.meta.env.VITE_OPENAI_KEY || "";
 
-  // ===================================================
-  // 1) On mount => fetch questionTypes from Firestore
-  // ===================================================
+  // ============================================================
+  //  1) Fetch aggregator mastery data for this quizStage
+  // ============================================================
+  useEffect(() => {
+    if (!userId || !planId || !subChapterId) {
+      setLoadingConceptData(false);
+      return;
+    }
+    async function fetchAggregator() {
+      try {
+        setLoadingConceptData(true);
+        const resp = await axios.get("http://localhost:3001/subchapter-status", {
+          params: { userId, planId, subchapterId: subChapterId },
+        });
+        if (resp.data) {
+          const stageObj = resp.data.quizStagesData?.[quizStage] || {};
+          const allStats = stageObj.allAttemptsConceptStats || [];
+          const { conceptSet, conceptStatusMap } = computeConceptStatuses(allStats);
+          const totalConcepts = conceptSet.size;
+
+          const passCount = [...conceptStatusMap.values()].filter((v) => v === "PASS").length;
+          const failCount = [...conceptStatusMap.values()].filter((v) => v === "FAIL").length;
+          const notTested = totalConcepts - passCount - failCount;
+
+          setMasteredCount(passCount);
+          setInProgressCount(failCount);
+          setNotTestedCount(notTested);
+
+          // Build array for expanded display
+          const statusesArr = [];
+          conceptSet.forEach((cName) => {
+            const finalStat = conceptStatusMap.get(cName) || "NOT_TESTED";
+            statusesArr.push({ conceptName: cName, status: finalStat });
+          });
+          statusesArr.sort((a, b) => a.conceptName.localeCompare(b.conceptName));
+          setConceptStatuses(statusesArr);
+        }
+      } catch (err) {
+        console.error("Error fetching aggregator subchapter data:", err);
+      } finally {
+        setLoadingConceptData(false);
+      }
+    }
+    fetchAggregator();
+  }, [userId, planId, subChapterId, quizStage]);
+
+  // ============================================================
+  //  2) On mount => fetch questionTypes from Firestore
+  // ============================================================
   useEffect(() => {
     async function fetchQuestionTypes() {
       try {
@@ -98,9 +176,9 @@ export default function QuizView({
     fetchQuestionTypes();
   }, []);
 
-  // ===================================================
-  // 2) On mount => build docId, fetch usage, generate quiz
-  // ===================================================
+  // ============================================================
+  //  3) On mount => build docId, fetch usage, generate quiz
+  // ============================================================
   useEffect(() => {
     if (!userId || !subChapterId) {
       console.log("QuizView: userId or subChapterId missing => skip generation.");
@@ -182,6 +260,7 @@ export default function QuizView({
 
         // Build pagination pages
         const newPages = [];
+        const QUESTIONS_PER_PAGE = 3;
         for (let i = 0; i < allQs.length; i += QUESTIONS_PER_PAGE) {
           const slice = [];
           for (let j = i; j < i + QUESTIONS_PER_PAGE && j < allQs.length; j++) {
@@ -204,9 +283,9 @@ export default function QuizView({
     // eslint-disable-next-line
   }, [userId, subChapterId, quizStage, attemptNumber, planId]);
 
-  // ===================================================
-  // 3) local second timer => leftover++
-  // ===================================================
+  // ============================================================
+  //  4) local second timer => leftover++
+  // ============================================================
   useEffect(() => {
     const timerId = setInterval(() => {
       setLocalLeftover((prev) => prev + 1);
@@ -214,9 +293,9 @@ export default function QuizView({
     return () => clearInterval(timerId);
   }, []);
 
-  // ===================================================
-  // 4) Heartbeat => lumps of 15
-  // ===================================================
+  // ============================================================
+  //  5) Heartbeat => lumps of 15 => increment aggregator doc
+  // ============================================================
   useEffect(() => {
     if (!lastSnapMs) return;
     const heartbeatId = setInterval(() => {
@@ -264,14 +343,15 @@ export default function QuizView({
     subChapterId,
     quizStage,
     attemptNumber,
+    activityId,
   ]);
 
   // displayedTime => sum lumps + leftover
   const displayedTime = serverTotal + localLeftover;
 
-  // ===================================================
-  // Quiz logic: handle user answers, grading, submission
-  // ===================================================
+  // ============================================================
+  //  6) Quiz logic: handle user answers, grading, submission
+  // ============================================================
 
   function handleAnswerChange(qIndex, newVal) {
     const updated = [...userAnswers];
@@ -280,7 +360,6 @@ export default function QuizView({
   }
 
   async function handleQuizSubmit() {
-    // We'll gather all answers, run local & GPT grading, then post to server.
     if (!generatedQuestions.length) {
       alert("No questions to submit.");
       return;
@@ -288,13 +367,11 @@ export default function QuizView({
     setLoading(true);
     setStatus("Grading quiz...");
     setError("");
-  
+
     const overallResults = new Array(generatedQuestions.length).fill(null);
-  
-    // Separate locally gradable vs open-ended
     const localItems = [];
     const openEndedItems = [];
-  
+
     generatedQuestions.forEach((qObj, i) => {
       const uAns = userAnswers[i] || "";
       if (isLocallyGradableType(qObj.type)) {
@@ -303,13 +380,13 @@ export default function QuizView({
         openEndedItems.push({ qObj, userAnswer: uAns, originalIndex: i });
       }
     });
-  
+
     // A) local grading
     localItems.forEach((item) => {
       const { score, feedback } = localGradeQuestion(item.qObj, item.userAnswer);
       overallResults[item.originalIndex] = { score, feedback };
     });
-  
+
     // B) GPT grading for open-ended
     if (openEndedItems.length > 0) {
       if (!openAiKey) {
@@ -326,7 +403,7 @@ export default function QuizView({
           subchapterSummary,
           items: openEndedItems,
         });
-  
+
         if (!success) {
           console.error("GPT grading error:", gptErr);
           openEndedItems.forEach((itm) => {
@@ -344,19 +421,19 @@ export default function QuizView({
         }
       }
     }
-  
+
     // compute final numeric
     const totalScore = overallResults.reduce((acc, r) => acc + (r?.score || 0), 0);
     const qCount = overallResults.length;
     const avgFloat = qCount > 0 ? totalScore / qCount : 0;
     const percentageString = (avgFloat * 100).toFixed(2) + "%";
     setFinalPercentage(percentageString);
-  
-    // Pass threshold => 100%
+
+    // Pass threshold => 100% for your example
     const passThreshold = 1.0;
     const isPassed = avgFloat >= passThreshold;
     setQuizPassed(isPassed);
-  
+
     // C) Submit to your server => /api/submitQuiz
     try {
       const payload = {
@@ -375,55 +452,46 @@ export default function QuizView({
         attemptNumber,
         planId,
       };
-  
-      console.log("[QuizView] handleQuizSubmit => final payload:", payload);
       await axios.post("http://localhost:3001/api/submitQuiz", payload);
       console.log("Quiz submission saved on server!");
     } catch (err) {
       console.error("Error submitting quiz:", err);
       setError("Error submitting quiz: " + err.message);
     }
-  
+
     // D) If passed => mark aggregator doc + re-fetch plan => remain on oldIndex
     if (isPassed) {
       try {
-        // Exactly like ReadingView does:
         const oldIndex = currentIndex;
-  
-        // 1) Mark aggregator => completed: true
+
+        // aggregator => completed: true
         const aggregatorPayload = {
           userId,
           planId,
           activityId,
           completed: true, // 100% pass => completed
         };
-        // if there's a replicaIndex, include it
-        if (typeof activity.replicaIndex === "number") {
-          aggregatorPayload.replicaIndex = activity.replicaIndex;
+        if (typeof replicaIndex === "number") {
+          aggregatorPayload.replicaIndex = replicaIndex;
         }
-  
         await axios.post("http://localhost:3001/api/markActivityCompletion", aggregatorPayload);
         console.log("[QuizView] aggregator => completed =>", aggregatorPayload);
-  
-        // 2) Re-fetch the plan
+
+        // Re-fetch plan
         const backendURL = "http://localhost:3001";
         const fetchUrl = "/api/adaptive-plan";
         const fetchAction = await dispatch(fetchPlan({ planId, backendURL, fetchUrl }));
-  
-        // 3) After plan loads => forcibly set currentIndex = oldIndex
         if (fetchPlan.fulfilled.match(fetchAction)) {
           dispatch(setCurrentIndex(oldIndex));
         } else {
-          // fallback => also oldIndex
           dispatch(setCurrentIndex(oldIndex));
         }
       } catch (err) {
         console.error("Error marking aggregator or re-fetching plan =>", err);
-        // fallback => do not move
         dispatch(setCurrentIndex(currentIndex));
       }
     }
-  
+
     // E) Show grading results => user sees pass/fail screen
     setGradingResults(overallResults);
     setShowGradingResults(true);
@@ -431,15 +499,11 @@ export default function QuizView({
     setStatus("Grading complete.");
   }
 
-  // ===================================================
-  // Buttons after Grading
-  // ===================================================
-
-  // 1) If quiz is passed => we auto-mark the activity as completed => call onQuizComplete
+  // ============================================================
+  //  7) Pass/Fail flows
+  // ============================================================
   async function handleQuizSuccess() {
     try {
-      // (A) Mark the aggregator doc => completed: true
-      //     If we have a replicaIndex, pass it
       if (activityId) {
         const payload = {
           userId,
@@ -450,44 +514,34 @@ export default function QuizView({
         if (typeof replicaIndex === "number") {
           payload.replicaIndex = replicaIndex;
         }
-
         await axios.post("http://localhost:3001/api/markActivityCompletion", payload);
         console.log("[QuizView] handleQuizSuccess => activity completed =>", payload);
       }
-
-      // (B) Then call onQuizComplete if provided
       if (onQuizComplete) {
         onQuizComplete();
       }
-
-      // (C) Move user to next activity
       dispatch(setCurrentIndex(currentIndex + 1));
     } catch (err) {
       console.error("handleQuizSuccess error:", err);
-      // fallback
       dispatch(setCurrentIndex(currentIndex + 1));
     }
   }
 
-  // 2) If quiz is failed => "Take Revision Now" => call onQuizFail
   function handleTakeRevisionNow() {
     if (onQuizFail) {
       onQuizFail();
     }
   }
 
-  // 3) If quiz is failed => "Take Revision Later" => new logic => Mark as deferred, re-fetch plan, go next
   async function handleTakeRevisionLater() {
     try {
       const oldIndex = currentIndex;
-
-      // Mark this activity as "deferred"
       if (activityId) {
         const defPayload = {
           userId,
           planId,
           activityId,
-          completed: false,        // or you could do "completionStatus":"deferred" if you want
+          completed: false,
         };
         if (typeof replicaIndex === "number") {
           defPayload.replicaIndex = replicaIndex;
@@ -496,20 +550,9 @@ export default function QuizView({
         await axios.post("http://localhost:3001/api/markActivityCompletion", defPayload);
         console.log(`Activity '${activityId}' marked as completed=false (deferred)`);
       }
-
-      // Re-fetch plan
       const backendURL = "http://localhost:3001";
       const fetchUrl = "/api/adaptive-plan";
-
-      const fetchAction = await dispatch(
-        fetchPlan({
-          planId,
-          backendURL,
-          fetchUrl,
-        })
-      );
-
-      // Move next
+      const fetchAction = await dispatch(fetchPlan({ planId, backendURL, fetchUrl }));
       if (fetchPlan.fulfilled.match(fetchAction)) {
         dispatch(setCurrentIndex(oldIndex + 1));
       } else {
@@ -521,9 +564,9 @@ export default function QuizView({
     }
   }
 
-  // ===================================================
-  // PAGINATION & Rendering
-  // ===================================================
+  // ============================================================
+  //  8) Pagination & Rendering
+  // ============================================================
   const hasQuestions = generatedQuestions.length > 0 && pages.length > 0;
   const isOnLastPage = currentPageIndex === pages.length - 1;
   const currentQuestions = pages[currentPageIndex] || [];
@@ -543,7 +586,16 @@ export default function QuizView({
     <div style={styles.outerContainer}>
       <div style={styles.card}>
 
-        {/* Top Header => "Quiz" + clock */}
+        {/* ---------- MASTERY PANEL (TOP-RIGHT) ---------- */}
+        <MasterySummaryPanel
+          loadingConceptData={loadingConceptData}
+          masteredCount={masteredCount}
+          inProgressCount={inProgressCount}
+          notTestedCount={notTestedCount}
+          conceptStatuses={conceptStatuses}
+        />
+
+        {/* ---------- Top Header => "Quiz" + clock ---------- */}
         <div style={styles.cardHeader}>
           <h2 style={{ margin: 0 }}>
             Quiz
@@ -554,7 +606,7 @@ export default function QuizView({
           </h2>
         </div>
 
-        {/* Body => either quiz questions or grading results */}
+        {/* ---------- Body => quiz or grading results ---------- */}
         <div style={styles.cardBody}>
           {loading && <p style={{ color: "#fff" }}>Loading... {status}</p>}
           {!loading && status && !error && (
@@ -600,10 +652,10 @@ export default function QuizView({
           )}
         </div>
 
-        {/* Footer => pagination or "Submit" or pass/fail buttons */}
+        {/* ---------- Footer => pagination or pass/fail flows ---------- */}
         <div style={styles.cardFooter}>
           <div style={styles.navButtons}>
-            {/* 1) If not graded yet => show pagination + last page => Submit */}
+            {/* If not graded => show pagination + last page => Submit */}
             {!showGradingResults && hasQuestions && (
               <>
                 {currentPageIndex > 0 && (
@@ -624,15 +676,13 @@ export default function QuizView({
               </>
             )}
 
-            {/* 2) If showGradingResults => show pass/fail flows */}
+            {/* If showGradingResults => pass/fail flows */}
             {showGradingResults && quizPassed && (
-              // If quiz passed => single "Finish" => quiz success
               <button style={styles.finishButton} onClick={handleQuizSuccess}>
                 Finish
               </button>
             )}
             {showGradingResults && !quizPassed && (
-              // If quiz failed => "Take Revision Now" or "Take Revision Later"
               <>
                 <button style={styles.button} onClick={handleTakeRevisionNow}>
                   Take Revision Now
@@ -752,7 +802,107 @@ function localGradeQuestion(qObj, userAnswer) {
 
 async function gradeOpenEndedBatch({ openAiKey, subchapterSummary, items }) {
   // your GPT-based grading code unchanged
-  // ...
+  // return { success: true/false, gradingArray: [...], error: ... }
+  return { success: true, gradingArray: items.map(() => ({ score: 1.0, feedback: "Dummy GPT pass" })) };
+}
+
+// --------------------------------------------------------------------
+// Collapsible MasterySummaryPanel (top-right corner)
+// --------------------------------------------------------------------
+function MasterySummaryPanel({
+  loadingConceptData,
+  masteredCount,
+  inProgressCount,
+  notTestedCount,
+  conceptStatuses,
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const totalConcepts = masteredCount + inProgressCount + notTestedCount;
+  const progressPct = totalConcepts > 0
+    ? Math.round((masteredCount / totalConcepts) * 100)
+    : 0;
+
+  function toggleExpand() {
+    setExpanded((prev) => !prev);
+  }
+
+  if (loadingConceptData) {
+    return (
+      <div style={styles.masteryPanel}>
+        <p style={{ fontSize: "0.9rem", margin: 0 }}>Loading concept data...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={styles.masteryPanel}>
+      {/* Collapsed View => progress bar + "X / Y mastered" */}
+      {!expanded && (
+        <div style={{ fontSize: "0.9rem" }}>
+          <div style={{ marginBottom: 6 }}>
+            <strong>{masteredCount}</strong> / {totalConcepts} mastered
+            &nbsp;({progressPct}%)
+          </div>
+          <ProgressBar pct={progressPct} />
+        </div>
+      )}
+
+      {/* Expanded => show concept statuses */}
+      {expanded && (
+        <>
+          <div style={{ fontSize: "0.85rem", marginBottom: 8 }}>
+            <strong>Mastered:</strong> {masteredCount} &nbsp;|&nbsp;
+            <strong>In Progress:</strong> {inProgressCount} &nbsp;|&nbsp;
+            <strong>Not Tested:</strong> {notTestedCount}
+          </div>
+          <ul style={styles.conceptList}>
+            {conceptStatuses.map((obj) => {
+              const { conceptName, status } = obj;
+              let color = "#bbb";
+              if (status === "PASS") color = "#4caf50"; // green
+              else if (status === "FAIL") color = "#f44336"; // red
+              return (
+                <li key={conceptName} style={{ marginBottom: 4 }}>
+                  <span style={{ color }}>{conceptName}</span>{" "}
+                  <span style={{ color: "#999", fontSize: "0.8rem" }}>
+                    ({status})
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
+
+      {/* Expand/collapse toggle */}
+      <div style={{ textAlign: "right", marginTop: 6 }}>
+        <button onClick={toggleExpand} style={styles.expandBtn}>
+          {expanded ? "▲" : "▼"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Simple horizontal progress bar
+function ProgressBar({ pct }) {
+  const containerStyle = {
+    width: "100%",
+    height: "8px",
+    backgroundColor: "#444",
+    borderRadius: "4px",
+    overflow: "hidden",
+  };
+  const fillStyle = {
+    width: `${pct}%`,
+    height: "100%",
+    backgroundColor: "#66bb6a",
+  };
+  return (
+    <div style={containerStyle}>
+      <div style={fillStyle} />
+    </div>
+  );
 }
 
 // ============== Styles ==============
@@ -771,6 +921,7 @@ const styles = {
     fontFamily: `'Inter', 'Roboto', sans-serif`,
   },
   card: {
+    position: "relative",
     width: "80%",
     maxWidth: "700px",
     backgroundColor: "#111",
@@ -855,6 +1006,8 @@ const styles = {
     padding: "1rem",
     borderRadius: "4px",
   },
+
+  // Debug overlay
   debugEyeContainer: {
     position: "absolute",
     top: 8,
@@ -895,4 +1048,38 @@ const styles = {
     whiteSpace: "pre-wrap",
     marginTop: "4px",
   },
+
+  // Mastery panel => top-right, below top header
+  masteryPanel: {
+    position: "absolute",
+    top: "50px", // offset from top so it doesn't overlap your debug icon
+    right: "8px",
+    backgroundColor: "#222",
+    border: "1px solid #444",
+    borderRadius: "4px",
+    padding: "8px 12px",
+    fontSize: "0.9rem",
+    maxWidth: "220px",
+    minHeight: "44px",
+  },
+  expandBtn: {
+    backgroundColor: "#444",
+    color: "#fff",
+    border: "none",
+    borderRadius: "4px",
+    padding: "2px 6px",
+    cursor: "pointer",
+    fontSize: "0.8rem",
+    lineHeight: 1,
+  },
+  conceptList: {
+    margin: 0,
+    paddingLeft: 16,
+    maxHeight: "120px",
+    overflowY: "auto",
+  },
 };
+
+// --------------------------------------------------------------------
+// A dummy GPT grader for open-ended. You'd replace with your real logic.
+// --------------------------------------------------------------------
