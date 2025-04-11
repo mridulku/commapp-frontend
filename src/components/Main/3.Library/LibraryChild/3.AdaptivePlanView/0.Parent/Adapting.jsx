@@ -2,6 +2,9 @@ import React, { useState } from "react";
 import axios from "axios";
 import { Box, Typography, Button, TextField } from "@mui/material";
 
+/**
+ * If value looks like a Firestore timestamp object, return a formatted string; else null.
+ */
 function tryFormatTimestamp(val) {
   if (!val) return null;
   if (typeof val === "object") {
@@ -13,6 +16,9 @@ function tryFormatTimestamp(val) {
   return null;
 }
 
+/**
+ * Recursively displays plan fields in collapsible <details> blocks
+ */
 function CollapsibleField({ fieldKey, value, depth = 0 }) {
   const asTimestamp = tryFormatTimestamp(value);
   if (asTimestamp) {
@@ -25,6 +31,7 @@ function CollapsibleField({ fieldKey, value, depth = 0 }) {
     );
   }
 
+  // If array => <details> with each item recursively
   if (Array.isArray(value)) {
     return (
       <Box sx={{ ml: depth * 2 }}>
@@ -49,6 +56,7 @@ function CollapsibleField({ fieldKey, value, depth = 0 }) {
     );
   }
 
+  // If object => <details> with sub-fields
   if (value && typeof value === "object") {
     const keys = Object.keys(value);
     if (keys.length === 0) {
@@ -83,6 +91,7 @@ function CollapsibleField({ fieldKey, value, depth = 0 }) {
     );
   }
 
+  // Otherwise, primitive => simple line
   return (
     <Box sx={{ ml: depth * 2 }}>
       <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
@@ -94,19 +103,15 @@ function CollapsibleField({ fieldKey, value, depth = 0 }) {
 
 /**
  * Adapting component:
- * - Receives { userId, plan, planId, ... } props
- * - Renders the plan doc in a collapsible manner
- * - Has a text field to specify session indexes (comma separated)
- * - On click, calls `POST /api/markPlanAsAdapted` with { planId, userId, sessionIndexes }
+ *  - Expects { userId, planId, plan }
+ *  - Renders the plan doc in collapsible form
+ *  - Requires a single session index in the text field
+ *  - Calls POST /api/markPlanAsAdapted with { planId, userId, sessionIndex }
  */
-export default function Adapting({
-  userId,
-  plan,
-  planId
-}) {
-  const [copyLoading, setCopyLoading] = useState(false);
-  const [copyError, setCopyError] = useState("");
-  const [copySuccess, setCopySuccess] = useState("");
+export default function Adapting({ userId, plan, planId }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [sessionInput, setSessionInput] = useState("");
 
   if (!plan) {
@@ -119,39 +124,38 @@ export default function Adapting({
 
   const topKeys = Object.keys(plan);
 
-  async function handleCopyPlan() {
+  /**
+   * On click => parse one session index => POST to server
+   */
+  async function handleAdaptSingleSession() {
     try {
-      setCopyLoading(true);
-      setCopyError("");
-      setCopySuccess("");
+      setLoading(true);
+      setError("");
+      setSuccess("");
 
-      // If user typed something like "0,2,4", parse it into an array of numbers [0,2,4]
-      let sessionIndexes = [];
-      if (sessionInput.trim().length > 0) {
-        sessionIndexes = sessionInput
-          .split(",")
-          .map(str => str.trim())
-          .map(Number)
-          .filter(n => !isNaN(n));
+      // Must parse exactly one numeric index
+      const indexNum = parseInt(sessionInput.trim(), 10);
+      if (isNaN(indexNum)) {
+        setError("Please enter a valid numeric session index (e.g. 0, 1, 2...)");
+        return;
       }
 
+      // Build request body
       const bodyPayload = {
         planId,
-        userId
+        userId,
+        sessionIndex: indexNum,
       };
-      // If the array is non-empty, attach it
-      if (sessionIndexes.length > 0) {
-        bodyPayload.sessionIndexes = sessionIndexes;
-      }
 
+      // Call your updated route that expects a single sessionIndex
       const res = await axios.post("http://localhost:3001/api/markPlanAsAdapted", bodyPayload);
 
-      setCopySuccess("Plan doc successfully adapted!");
+      setSuccess("Plan doc adapted for sessionIndex=" + indexNum);
     } catch (err) {
-      console.error("Error copying plan doc =>", err);
-      setCopyError(err?.response?.data?.error || err.message || "Unknown error");
+      console.error("Error adapting plan doc =>", err);
+      setError(err?.response?.data?.error || err.message || "Unknown error");
     } finally {
-      setCopyLoading(false);
+      setLoading(false);
     }
   }
 
@@ -166,43 +170,43 @@ export default function Adapting({
         <strong>userId:</strong> {String(userId)}
       </Typography>
 
+      {/* Render plan doc in collapsible blocks */}
       {topKeys.map((key) => (
         <CollapsibleField key={key} fieldKey={key} value={plan[key]} />
       ))}
 
-      {/* Input for session indexes */}
+      {/* Single session index input */}
       <Box sx={{ mt: 3 }}>
         <Typography variant="body2" sx={{ mb: 1 }}>
-          Enter session indexes (comma-separated), or leave blank for all:
+          Enter single session index (e.g. 0,1,2...) :
         </Typography>
         <TextField
           variant="outlined"
           size="small"
           value={sessionInput}
           onChange={(e) => setSessionInput(e.target.value)}
-          placeholder="e.g. 0,1,2"
-          sx={{ mb: 2, backgroundColor: "#fff", color: "#000", width: "250px" }}
+          placeholder="0"
+          sx={{ mb: 2, backgroundColor: "#fff", color: "#000", width: "200px" }}
         />
 
-        {/* Button to mark plan as adapted */}
         <div>
           <Button
             variant="contained"
-            onClick={handleCopyPlan}
-            disabled={copyLoading}
+            onClick={handleAdaptSingleSession}
+            disabled={loading}
           >
-            {copyLoading ? "Marking..." : "Mark Plan as Adapted"}
+            {loading ? "Adapting..." : "Adapt Single Session"}
           </Button>
         </div>
 
-        {copyError && (
+        {error && (
           <Typography variant="body2" sx={{ mt: 1, color: "red" }}>
-            Error: {copyError}
+            Error: {error}
           </Typography>
         )}
-        {copySuccess && (
+        {success && (
           <Typography variant="body2" sx={{ mt: 1, color: "lime" }}>
-            {copySuccess}
+            {success}
           </Typography>
         )}
       </Box>
