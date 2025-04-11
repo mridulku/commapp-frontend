@@ -1,10 +1,8 @@
-// File: ReadingView.jsx
 import React, { useEffect, useState, useRef } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import axios from "axios";
 import { fetchReadingTime, incrementReadingTime } from "../../../../../../store/readingSlice";
-import { setCurrentIndex, fetchPlan } from "../../../../../../store/planSlice"; // <- Import fetchPlan
-// ^ Make sure you actually have fetchPlan from planSlice or wherever your plan is fetched
+import { setCurrentIndex, fetchPlan } from "../../../../../../store/planSlice";
 
 // Utility: format mm:ss
 function formatTime(totalSeconds) {
@@ -57,7 +55,7 @@ function chunkHtmlByParagraphs(htmlString, chunkSize = 180) {
  * ReadingView
  * -----------
  * Props:
- *  - activity (object with .activityId, .subChapterId, etc.)
+ *  - activity (object with .activityId, .subChapterId, possibly .replicaIndex, etc.)
  *  - onNeedsRefreshStatus (optional callback) => notify parent that
  *    we need to re-fetch subchapter status if something changed
  */
@@ -202,7 +200,7 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
     }
   }
 
-  // 5) When user finishes reading => record usage, mark as complete, re-fetch plan, preserve index+1
+  // 5) When user finishes reading => record usage, mark as completed, re-fetch plan, preserve index+1
   async function handleFinishReading() {
     const readingEndTime = new Date();
 
@@ -210,7 +208,7 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
       // Save old index, so we can reapply it after re-fetch
       const oldIndex = currentIndex;
 
-      // 1) Make the POST call to record reading usage
+      // (A) Make the POST call to record reading usage
       await axios.post("http://localhost:3001/api/submitReading", {
         userId,
         activityId,
@@ -221,21 +219,26 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
         timestamp: new Date().toISOString(),
       });
 
-      // 2) Mark the activity's completionStatus => "complete"
-      await axios.post("http://localhost:3001/api/markActivityCompletion", {
+      // (B) Mark the activity "completed: true" in markActivityCompletion
+      //     If this activity has a .replicaIndex, we'll include it
+      const payload = {
         userId,
         planId,
         activityId,
-        completionStatus: "complete",
-      });
+        completed: true, // instead of completionStatus: "complete"
+      };
+      // If replicaIndex is present, pass it
+      if (typeof activity.replicaIndex === "number") {
+        payload.replicaIndex = activity.replicaIndex;
+      }
 
-      // 3) Optionally re-fetch subchapter status (like you had), but let's also re-fetch plan
-      //    if it might change anything else. We'll do both:
+      await axios.post("http://localhost:3001/api/markActivityCompletion", payload);
+
+      // (C) Optionally re-fetch subchapter status, then re-fetch plan
       if (typeof onNeedsRefreshStatus === "function") {
         onNeedsRefreshStatus();
       }
 
-      // 4) Re-fetch the plan from backend
       const backendURL = "http://localhost:3001";
       const fetchUrl = "/api/adaptive-plan";
 
@@ -247,7 +250,7 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
         })
       );
 
-      // 5) If re-fetch is successful => restore (oldIndex + 1)
+      // (D) If re-fetch is successful => restore (oldIndex + 1)
       if (fetchPlan.fulfilled.match(fetchAction)) {
         dispatch(setCurrentIndex(oldIndex + 1));
       } else {
@@ -256,9 +259,7 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
       }
     } catch (err) {
       console.error("Error submitting reading data:", err);
-
       // If there's an error, you might still want to move on or handle differently
-      // We'll do the same fallback:
       dispatch(setCurrentIndex(currentIndex + 1));
     }
   }

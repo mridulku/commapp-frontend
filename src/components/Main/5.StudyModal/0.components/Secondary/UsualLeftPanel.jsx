@@ -18,16 +18,8 @@ import {
 import MenuIcon from "@mui/icons-material/Menu";
 import LockIcon from "@mui/icons-material/Lock";
 
-//
-// Helpers
-//
+// ============= Helpers =============
 
-/**
- * getStageNumberAndLabel(act)
- * - If act.type = "read" => "Stage 1: Reading"
- * - If quizStage = "remember"/"understand"/"apply"/"analyze" => "Stage X: Label"
- *   Otherwise fallback => "Quiz"
- */
 function getStageNumberAndLabel(act) {
   const lowerType = (act.type || "").toLowerCase();
   if (lowerType === "read") {
@@ -45,16 +37,10 @@ function getStageNumberAndLabel(act) {
   if (!number) {
     return "Quiz"; // fallback if unknown
   }
-
   const label = sKey.charAt(0).toUpperCase() + sKey.slice(1);
   return `Stage ${number}: ${label}`;
 }
 
-/**
- * getActivityStyle(isSelected)
- * - If selected => highlight red
- * - else => dark gray
- */
 function getActivityStyle(isSelected) {
   if (isSelected) {
     return {
@@ -68,10 +54,6 @@ function getActivityStyle(isSelected) {
   };
 }
 
-/**
- * aggregatorTaskPill(taskLabel)
- * - Renders aggregatorTask (e.g. "QUIZ1"|"REVISION2") as a styled orange pill
- */
 function aggregatorTaskPill(taskLabel) {
   return (
     <Box
@@ -90,11 +72,6 @@ function aggregatorTaskPill(taskLabel) {
   );
 }
 
-/**
- * aggregatorLockedOverlay()
- * - Semi-transparent box with a lock icon,
- *   pointerEvents="none" so user can still click underlying item
- */
 function aggregatorLockedOverlay() {
   return (
     <Box
@@ -117,9 +94,6 @@ function aggregatorLockedOverlay() {
   );
 }
 
-/**
- * TimePill => small "5m" bubble
- */
 function TimePill({ minutes = 0 }) {
   return (
     <Box
@@ -141,7 +115,7 @@ function TimePill({ minutes = 0 }) {
 
 /**
  * completionStatusPill
- * - Renders small pill for "deferred" or "complete"
+ *  - Renders a pill for "complete" or "deferred"
  */
 function completionStatusPill(status) {
   if (!status) return null;
@@ -175,10 +149,6 @@ function completionStatusPill(status) {
   );
 }
 
-/**
- * TruncateTooltip
- * => truncated text with tooltip
- */
 function TruncateTooltip({ text, sx }) {
   return (
     <Tooltip title={text} arrow>
@@ -199,10 +169,7 @@ function TruncateTooltip({ text, sx }) {
   );
 }
 
-/**
- * ActivityList
- * -------------
- */
+// ============= ActivityList =============
 function ActivityList({ activities, currentIndex, onSelectAct }) {
   return (
     <List dense sx={{ p: 0 }}>
@@ -210,23 +177,34 @@ function ActivityList({ activities, currentIndex, onSelectAct }) {
         const isSelected = act.flatIndex === currentIndex;
         const { bgColor, textColor } = getActivityStyle(isSelected);
 
-        // Stage label
+        // (1) Stage label
         const stageLabel = getStageNumberAndLabel(act);
 
-        // Basic info
+        // (2) Basic info
         const chapterName = act.chapterName || "No Chapter";
         const subChapterName = act.subChapterName || "No Subchapter";
         const minutes = act.timeNeeded || 0;
 
-        // aggregator fields
+        // aggregator
         const aggregatorTask = act.aggregatorTask || "";
         const aggregatorStatus = (act.aggregatorStatus || "").toLowerCase();
 
-        const lowerType = (act.type || "").toLowerCase();
+        // completion => use 'act.completed' or fallback 'act.completionStatus'
+        // if act.completed===true => finalStatus='complete'
+        // else if act.completionStatus=== 'deferred' => finalStatus='deferred'
+        let finalStatus = "";
+        if (act.completed === true) {
+          finalStatus = "complete";
+        } else if (
+          (act.completionStatus || "").toLowerCase() === "deferred"
+        ) {
+          finalStatus = "deferred";
+        }
+        const completionStatusNode = completionStatusPill(finalStatus);
 
         // aggregatorTask => skip if reading
         let aggregatorTaskNode = null;
-        if (lowerType !== "read" && aggregatorTask) {
+        if ((act.type || "").toLowerCase() !== "read" && aggregatorTask) {
           aggregatorTaskNode = aggregatorTaskPill(aggregatorTask);
         }
 
@@ -235,9 +213,6 @@ function ActivityList({ activities, currentIndex, onSelectAct }) {
         if (aggregatorStatus === "locked") {
           lockedOverlay = aggregatorLockedOverlay();
         }
-
-        // completionStatus => pill
-        const completionStatusNode = completionStatusPill(act.completionStatus);
 
         return (
           <Box
@@ -283,7 +258,7 @@ function ActivityList({ activities, currentIndex, onSelectAct }) {
               {/* aggregatorTask => pill */}
               {aggregatorTaskNode && <Box sx={{ mt: 0.5 }}>{aggregatorTaskNode}</Box>}
 
-              {/* completionStatus => pill */}
+              {/* completion => pill */}
               {completionStatusNode && <Box sx={{ mt: 0.5 }}>{completionStatusNode}</Box>}
 
               {/* Time pill */}
@@ -299,7 +274,7 @@ function ActivityList({ activities, currentIndex, onSelectAct }) {
   );
 }
 
-/** The main LeftPanel component */
+// ============= Main LeftPanel =============
 export default function LeftPanel({
   isCollapsed = false,
   onToggleCollapse = () => {},
@@ -340,28 +315,26 @@ export default function LeftPanel({
     setSelectedDayIndex(val);
   }
 
-  // Render a small progress bar for "Today's Progress" based on
-  // # of deferred/complete vs. total
   function renderDayStats(session) {
     const { activities = [] } = session;
     const total = activities.length;
     let doneCount = 0;
     activities.forEach((act) => {
-      const cs = (act.completionStatus || "").toLowerCase();
-      if (cs === "deferred" || cs === "complete") {
+      // if .completed===true or completionStatus='deferred' => count as done
+      if (act.completed === true) {
+        doneCount++;
+      } else if ((act.completionStatus || "").toLowerCase() === "deferred") {
         doneCount++;
       }
     });
 
     const progressPct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
 
-    // We'll show a small bar + text
     return (
       <Box sx={{ color: "#fff", mb: 2, ml: 1 }}>
         <Typography variant="body2" sx={{ fontSize: "0.75rem", mb: 0.5 }}>
           <strong>Today's Progress</strong>
         </Typography>
-        {/* progress bar container */}
         <Box
           sx={{
             position: "relative",
