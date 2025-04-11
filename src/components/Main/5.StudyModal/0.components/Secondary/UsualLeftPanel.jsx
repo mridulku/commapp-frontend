@@ -193,13 +193,19 @@ function ActivityList({ activities, currentIndex, onSelectAct }) {
         // if act.completed===true => finalStatus='complete'
         // else if act.completionStatus=== 'deferred' => finalStatus='deferred'
         let finalStatus = "";
-        if (act.completed === true) {
-          finalStatus = "complete";
-        } else if (
-          (act.completionStatus || "").toLowerCase() === "deferred"
-        ) {
-          finalStatus = "deferred";
-        }
+
+// 1) If we have the new 'completed' boolean
+if (act.completed === true) {
+  finalStatus = "complete";
+} else if (act.completed === false) {
+  finalStatus = "deferred";
+
+// 2) Else fallback to old 'completionStatus' property if it says "deferred"
+} else if ((act.completionStatus || "").toLowerCase() === "deferred") {
+  finalStatus = "deferred";
+
+// 3) Otherwise, finalStatus remains ""
+}
         const completionStatusNode = completionStatusPill(finalStatus);
 
         // aggregatorTask => skip if reading

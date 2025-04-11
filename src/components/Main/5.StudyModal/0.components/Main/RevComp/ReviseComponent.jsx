@@ -334,7 +334,7 @@ export default function ReviseView({
           userId,
           planId,
           activityId,
-          completionStatus: "deferred",
+          completed: false,
         });
         console.log(`Activity '${activityId}' marked deferred!`);
       }

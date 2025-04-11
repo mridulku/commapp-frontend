@@ -487,7 +487,7 @@ export default function QuizView({
           userId,
           planId,
           activityId,
-          completionStatus: "deferred",        // or you could do "completionStatus":"deferred" if you want
+          completed: false,        // or you could do "completionStatus":"deferred" if you want
         };
         if (typeof replicaIndex === "number") {
           defPayload.replicaIndex = replicaIndex;
