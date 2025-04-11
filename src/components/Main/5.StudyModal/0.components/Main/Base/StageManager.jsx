@@ -1,5 +1,4 @@
 // File: StageManager.jsx
-
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { useSelector } from "react-redux";
@@ -29,14 +28,14 @@ function getStageNumber(stageKey) {
   }
 }
 
-/** Convert aggregator’s "status" => a small label for WIP, etc. */
+/** Convert aggregator’s "status" => short label => "LOCKED","DONE","WIP","" */
 function getStatusShortLabel(item) {
   if (!item) return "";
   // aggregator => item.status => "done"/"in-progress"/"not-started"
   if (item.locked) return "LOCKED";
-  if (item.status === "done") return "DONE";
-  if (item.status === "in-progress") return "WIP";
-  return ""; // for "not-started" or anything else
+  if ((item.status || "").toLowerCase() === "done") return "DONE";
+  if ((item.status || "").toLowerCase() === "in-progress") return "WIP";
+  return "";
 }
 
 /** For a tooltip, we can return the aggregator status as a string. */
@@ -55,6 +54,17 @@ function capitalize(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
+/** 
+ * StageManager
+ * ------------
+ * Renders a row of "reading" + quiz stages => each is color-coded:
+ *   - LOCKED => red pill
+ *   - DONE => green pill
+ *   - WIP => yellow pill
+ *   - Otherwise => dark pill
+ * 
+ * The currently active stage has a white border for emphasis.
+ */
 export default function StageManager({ examId, activity, userId }) {
   // ----------------- Basic Activity Data -----------------
   const subChapterId = activity?.subChapterId || "";
@@ -63,9 +73,8 @@ export default function StageManager({ examId, activity, userId }) {
   const completionStatus = (activity?.completionStatus || "").toLowerCase();
 
   // The stage that the user arrived on from left panel
-  const selectedStage = (activityType === "quiz")
-    ? possibleQuizStage || "remember"
-    : "reading";
+  const selectedStage =
+    activityType === "quiz" ? possibleQuizStage || "remember" : "reading";
 
   // ----------------- Global Redux Data -----------------
   const planId = useSelector((state) => state.plan.planDoc?.id);
@@ -285,22 +294,7 @@ export default function StageManager({ examId, activity, userId }) {
   }
 
   // ========== If activity is deferred/complete => short-circuit ==========
-  if (completionStatus === "deferred") {
-    return (
-      <div style={styles.messageBox}>
-        <h2>This activity has been deferred.</h2>
-        <p style={{ marginTop: 8 }}>You can proceed to the next activity.</p>
-      </div>
-    );
-  }
-  if (completionStatus === "complete") {
-    return (
-      <div style={styles.messageBox}>
-        <h2>This activity is complete.</h2>
-        <p style={{ marginTop: 8 }}>You can proceed to the next activity.</p>
-      </div>
-    );
-  }
+  
 
   // --------------- Normal UI ---------------
   if (taskInfoLoading) {
@@ -315,7 +309,7 @@ export default function StageManager({ examId, activity, userId }) {
 
   return (
     <div style={styles.container}>
-      {/* 1) Our pill row => reading + quiz stages (remember, understand, etc.) */}
+      {/* 1) Our pill row => reading + quiz stages */}
       <div style={styles.stageRow}>
         {renderStagePill("reading")}
         {QUIZ_STAGES.map((st) => renderStagePill(st))}
@@ -334,10 +328,11 @@ export default function StageManager({ examId, activity, userId }) {
     </div>
   );
 
-  // Renders the pill for a given stageKey => "reading"/"remember"/"understand"/"apply"/"analyze"
+  /** Renders the pill for a given stageKey => "reading"/"remember"/"understand"/"apply"/"analyze" */
   function renderStagePill(stageKey) {
     // aggregator => find item => locked/done/in-progress
-    const labelForTaskInfo = (stageKey === "reading" ? "Reading" : capitalize(stageKey));
+    const labelForTaskInfo =
+      stageKey === "reading" ? "Reading" : capitalize(stageKey);
     const item = taskInfo.find(
       (t) => (t.stageLabel || "").toLowerCase() === labelForTaskInfo.toLowerCase()
     );
@@ -348,32 +343,22 @@ export default function StageManager({ examId, activity, userId }) {
     // numeric stage => reading=1, remember=2...
     const stageNum = getStageNumber(stageKey);
     // is this the current user-chosen stage from left panel?
-    const isSelectedStage = (stageKey === selectedStage);
+    const isSelectedStage = stageKey === selectedStage;
+    // is this the active tab (the one we're currently viewing in the UI)
+    const isCurrentTab = stageKey === activeTab;
 
-    // highlight if it's the active tab
-    const isCurrentTab = (stageKey === activeTab);
-
-    // The pill can only be "clicked" if it's the selectedStage from left panel
+    // The pill can only be "clicked" if it's the selectedStage from the left panel
     // AND aggregator says not locked
-    const canClick = (isSelectedStage && !locked);
+    const canClick = isSelectedStage && !locked;
 
-    // Build the dynamic style
-    let pillStyle = { ...styles.stagePill };
-    if (isCurrentTab) {
-      pillStyle = { ...pillStyle, ...styles.stagePillCurrent };
-    } else if (!canClick) {
-      pillStyle = { ...pillStyle, ...styles.stagePillDisabled };
-    }
+    // Build the dynamic style => color-coded by shortLabel, highlight if current tab
+    const pillStyle = getDynamicPillStyle(shortLabel, isCurrentTab, canClick);
 
-    // If we have a short status label => show it in the smaller sub-box
-    // e.g. WIP, LOCKED, DONE
-    let statusBox = null;
+    // Show a small "status label" in the pill if shortLabel is non-empty
+    // (E.g. WIP, DONE, LOCKED)
+    let statusEl = null;
     if (shortLabel) {
-      statusBox = (
-        <div style={styles.statusBox}>
-          {shortLabel}
-        </div>
-      );
+      statusEl = <div style={styles.statusBox}>{shortLabel}</div>;
     }
 
     return (
@@ -393,13 +378,12 @@ export default function StageManager({ examId, activity, userId }) {
         {/* The numeric prefix => e.g. "1" then name => "Reading" */}
         <div style={styles.stageNumber}>{stageNum}</div>
         <div style={styles.stageLabel}>{labelForTaskInfo}</div>
-        {statusBox}
+        {statusEl}
       </div>
     );
   }
 
-  /** 
-   * We only show the tab content if aggregator says it's not locked
+  /** We only show the tab content if aggregator says it's not locked
    * and if it's the left-panel's chosen stage.
    */
   function isTabAllowedAndUnlocked(tabKey) {
@@ -407,7 +391,6 @@ export default function StageManager({ examId, activity, userId }) {
     if (isTabLocked(tabKey)) return false;
     return true;
   }
-
   function isTabLocked(tabKey) {
     const labelForTaskInfo =
       tabKey === "reading" ? "Reading" : capitalize(tabKey);
@@ -492,7 +475,7 @@ export default function StageManager({ examId, activity, userId }) {
   }
 }
 
-// ========== parseScoreForRatio ==========
+/** parse string => numeric ratio */
 function parseScoreForRatio(scoreString) {
   if (!scoreString) return NaN;
   const trimmed = scoreString.trim();
@@ -511,7 +494,7 @@ function parseScoreForRatio(scoreString) {
   return NaN;
 }
 
-// ========== buildConceptStats ==========
+/** buildConceptStats => merges quizSubmission with conceptArr => pass/fail per concept */
 function buildConceptStats(quizSubmission, conceptArr) {
   const countMap = {};
   quizSubmission.forEach((q) => {
@@ -548,7 +531,58 @@ function buildConceptStats(quizSubmission, conceptArr) {
   return statsArray;
 }
 
-// ========== Styles ==========
+/** 
+ * Returns the dynamic style object for a stage pill, 
+ * color-coding based on aggregator short label:
+ *   - LOCKED => redish
+ *   - DONE => greenish
+ *   - WIP => yellowish
+ *   - default => dark pill
+ * 
+ * Additionally, if it's the current tab => add a white border 
+ * so the user knows it's active.
+ */
+function getDynamicPillStyle(shortLabel, isCurrentTab, canClick) {
+  // start with base
+  let pillStyle = { ...styles.stagePill };
+
+  // color-coded backgrounds
+  switch (shortLabel) {
+    case "LOCKED":
+      pillStyle.backgroundColor = "#c62828"; // deep red
+      pillStyle.color = "#fff";
+      break;
+    case "DONE":
+      pillStyle.backgroundColor = "#2e7d32"; // green
+      pillStyle.color = "#fff";
+      break;
+    case "WIP":
+      pillStyle.backgroundColor = "#f9a825"; // yellow
+      pillStyle.color = "#000";
+      break;
+    default:
+      // "not-started" => just dark
+      pillStyle.backgroundColor = "#222";
+      pillStyle.color = "#ccc";
+      break;
+  }
+
+  // If aggregator says locked or user can't click => partial fade
+  if (!canClick) {
+    pillStyle.opacity = 0.5;
+    pillStyle.cursor = "default";
+  }
+
+  // If it's the current tab => highlight with white border
+  if (isCurrentTab) {
+    pillStyle.border = "2px solid #fff";
+    pillStyle.margin = "-2px";
+  }
+
+  return pillStyle;
+}
+
+/** Basic styles for the layout */
 const styles = {
   container: {
     width: "100%",
@@ -560,7 +594,6 @@ const styles = {
     boxSizing: "border-box",
     fontFamily: "'Inter', sans-serif",
   },
-  // The row for the "pills"
   stageRow: {
     display: "flex",
     flexDirection: "row",
@@ -569,7 +602,6 @@ const styles = {
     padding: "8px",
     alignItems: "center",
   },
-  // Each pill
   stagePill: {
     position: "relative",
     display: "inline-flex",
@@ -577,21 +609,12 @@ const styles = {
     gap: "6px",
     padding: "6px 12px",
     borderRadius: "16px",
-    backgroundColor: "#222",
+    // We'll override backgroundColor in getDynamicPillStyle
+    // We'll also override border if isCurrentTab
     color: "#ccc",
     cursor: "pointer",
     userSelect: "none",
-  },
-  // Currently selected tab => highlight
-  stagePillCurrent: {
-    backgroundColor: "#444",
-    color: "#fff",
-    fontWeight: "bold",
-  },
-  // If aggregator says locked or the user has a different stage => fade
-  stagePillDisabled: {
-    opacity: 0.5,
-    cursor: "default",
+    border: "1px solid #333",
   },
   stageNumber: {
     backgroundColor: "#333",
@@ -603,19 +626,16 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    // Could do a stronger style if you want
   },
   stageLabel: {
     fontSize: "0.85rem",
-    // add any other styling
   },
   statusBox: {
-    backgroundColor: "#444",
+    backgroundColor: "rgba(255,255,255,0.15)",
     color: "#fff",
     fontSize: "0.65rem",
     borderRadius: "4px",
     padding: "2px 4px",
-    // e.g. "WIP" or "DONE" or "LOCKED"
   },
 
   mainContent: {

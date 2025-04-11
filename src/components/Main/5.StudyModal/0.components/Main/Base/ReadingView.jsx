@@ -16,7 +16,7 @@ function formatTime(totalSeconds) {
  * Splits an HTML string into ~180-word pages by paragraphs.
  */
 function chunkHtmlByParagraphs(htmlString, chunkSize = 180) {
-  let sanitized = htmlString.replace(/\\n/g, "\n"); 
+  let sanitized = htmlString.replace(/\\n/g, "\n");
   sanitized = sanitized.replace(/\r?\n/g, " ");
 
   let paragraphs = sanitized
@@ -64,9 +64,13 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
     return <div style={styles.outerContainer}>No activity provided.</div>;
   }
 
-  // Extract essential fields from activity
-  const { subChapterId, activityId } = activity;
+  // Extract essential fields
+  const { subChapterId, activityId, completionStatus = "" } = activity;
+  const normalizedStatus = completionStatus.toLowerCase();
+  const isAlreadyCompleteOrDeferred =
+    normalizedStatus === "complete" || normalizedStatus === "deferred";
 
+  // Redux: userId, planId, currentIndex
   const userId = useSelector((state) => state.auth?.userId || "demoUser");
   const planId = useSelector((state) => state.plan?.planDoc?.id);
   const currentIndex = useSelector((state) => state.plan?.currentIndex);
@@ -89,7 +93,7 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
   // 1) On subChapter change => fetch subchapter + usage
   useEffect(() => {
     if (prevSubChapterId.current && prevSubChapterId.current !== subChapterId) {
-      // If needed, handle leftover lumps or cleanup here
+      // If needed, handle leftover lumps or cleanup
     }
     prevSubChapterId.current = subChapterId;
 
@@ -220,18 +224,16 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
       });
 
       // (B) Mark the activity "completed: true" in markActivityCompletion
-      //     If this activity has a .replicaIndex, we'll include it
       const payload = {
         userId,
         planId,
         activityId,
-        completed: true, // instead of completionStatus: "complete"
+        completed: true,
       };
       // If replicaIndex is present, pass it
       if (typeof activity.replicaIndex === "number") {
         payload.replicaIndex = activity.replicaIndex;
       }
-
       await axios.post("http://localhost:3001/api/markActivityCompletion", payload);
 
       // (C) Optionally re-fetch subchapter status, then re-fetch plan
@@ -241,7 +243,6 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
 
       const backendURL = "http://localhost:3001";
       const fetchUrl = "/api/adaptive-plan";
-
       const fetchAction = await dispatch(
         fetchPlan({
           planId,
@@ -254,12 +255,10 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
       if (fetchPlan.fulfilled.match(fetchAction)) {
         dispatch(setCurrentIndex(oldIndex + 1));
       } else {
-        // If re-fetch fails, fallback => just move next anyway
         dispatch(setCurrentIndex(oldIndex + 1));
       }
     } catch (err) {
       console.error("Error submitting reading data:", err);
-      // If there's an error, you might still want to move on or handle differently
       dispatch(setCurrentIndex(currentIndex + 1));
     }
   }
@@ -313,16 +312,28 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
                 Next
               </button>
             )}
+
             {currentPageIndex === pages.length - 1 && (
-              <button style={styles.finishButton} onClick={handleFinishReading}>
-                Finish Reading
+              <button
+                style={{
+                  ...styles.finishButton,
+                  // If already complete or deferred, disable the button
+                  opacity: isAlreadyCompleteOrDeferred ? 0.6 : 1,
+                  cursor: isAlreadyCompleteOrDeferred ? "not-allowed" : "pointer",
+                }}
+                onClick={isAlreadyCompleteOrDeferred ? undefined : handleFinishReading}
+                disabled={isAlreadyCompleteOrDeferred}
+              >
+                {isAlreadyCompleteOrDeferred
+                  ? "Reading Already Complete"
+                  : "Finish Reading"}
               </button>
             )}
           </div>
         </div>
       </div>
 
-      {/** Debug Info */}
+      {/* Debug Info */}
       <div
         style={styles.debugEyeContainer}
         onMouseEnter={() => setShowDebug(true)}
@@ -342,6 +353,7 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
                   currentPageIndex,
                   totalPages: pages.length,
                   readingStartTime: readingStartRef.current,
+                  completionStatus,
                 },
                 null,
                 2
@@ -455,7 +467,7 @@ const styles = {
     color: "#fff",
     fontSize: "0.8rem",
     cursor: "pointer",
-    border: "1px solid #555",
+    border: "1px solid",
     textTransform: "uppercase",
   },
   debugOverlay: {
