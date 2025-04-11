@@ -14,6 +14,7 @@ import { doc, getDoc } from "firebase/firestore";
 import StatsPanel from "../1.StatsPanel/StatsPanel";
 import DailyPlan from "../2.DailyPlan/DailyPlan";
 import AdaptPG from "./AdaptPG/AdaptPG";
+import Adapting from "./Adapting"
 import ProgressView from "../3.ProgressView/ProgressView";
 import AdminPanel from "../4.AdminPanel/AdminPanel";
 import TimelinePanel from "./TimelinePanel";
@@ -293,6 +294,7 @@ export default function Child2({
         <Tab label="Timeline" />
         <Tab label="Admin Panel" />
         <Tab label="AdaptPG" />
+        <Tab label="Adapting" />
         <Tab label="Aggregator" />
       </Tabs>
 
@@ -398,7 +400,23 @@ export default function Child2({
         onOpenPlanFetcher={handleOpenPlanFetcher}
         />
       );
-      }  else {
+      }  else if (activeTab === 5) {
+        // Admin Panel
+        return (
+          <Adapting
+          userId={userId}
+          plan={plan}
+          planId={selectedPlanId}
+          colorScheme={colorScheme}
+          dayDropIdx={dayDropIdx}
+          onDaySelect={handleDaySelect}
+          expandedChapters={expandedChapters}
+          onToggleChapter={toggleChapter}
+          onOpenPlanFetcher={handleOpenPlanFetcher}
+          />
+        );
+        } 
+      else {
       // NEW aggregator tab
       return (
         <AggregatorPanel
