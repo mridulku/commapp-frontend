@@ -18,7 +18,7 @@ function formatTime(totalSeconds) {
 function chunkHtmlByParagraphs(htmlString, chunkSize = 180) {
   let sanitized = htmlString.replace(/\\n/g, "\n");
   sanitized = sanitized.replace(/\r?\n/g, " ");
-
+  
   let paragraphs = sanitized
     .split(/<\/p>/i)
     .map((p) => p.trim())
@@ -55,20 +55,16 @@ function chunkHtmlByParagraphs(htmlString, chunkSize = 180) {
  * ReadingView
  * -----------
  * Props:
- *  - activity (object with .activityId, .subChapterId, possibly .replicaIndex, etc.)
- *  - onNeedsRefreshStatus (optional callback) => notify parent that
- *    we need to re-fetch subchapter status if something changed
+ *  - activity (object with .activityId, .subChapterId, .completed (bool), etc.)
+ *  - onNeedsRefreshStatus (optional callback) => notify parent we need to re-fetch subchapter status
  */
 export default function ReadingView({ activity, onNeedsRefreshStatus }) {
   if (!activity) {
     return <div style={styles.outerContainer}>No activity provided.</div>;
   }
 
-  // Extract essential fields
-  const { subChapterId, activityId, completionStatus = "" } = activity;
-  const normalizedStatus = completionStatus.toLowerCase();
-  const isAlreadyCompleteOrDeferred =
-    normalizedStatus === "complete" || normalizedStatus === "deferred";
+  const { subChapterId, activityId, completed } = activity;
+  const isComplete = completed === true; // single source of truth
 
   // Redux: userId, planId, currentIndex
   const userId = useSelector((state) => state.auth?.userId || "demoUser");
@@ -87,8 +83,14 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
   // We'll track a reading start time so we can log it upon finishing
   const readingStartRef = useRef(null);
 
+  // Show/hide debug overlay
   const [showDebug, setShowDebug] = useState(false);
   const prevSubChapterId = useRef(null);
+
+  // Time breakdown from aggregator
+  const [timeDetails, setTimeDetails] = useState([]);
+  // Overlay for day-by-day breakdown
+  const [showTimeDetailsOverlay, setShowTimeDetailsOverlay] = useState(false);
 
   // 1) On subChapter change => fetch subchapter + usage
   useEffect(() => {
@@ -146,17 +148,20 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
     setCurrentPageIndex(0);
   }, [subChapter]);
 
-  // 3) local second-by-second => leftoverSec++
+  // 3) local second-by-second => leftoverSec++, skip if done
   useEffect(() => {
+    if (isComplete) return; // stop counting if activity is already complete
     const timerId = setInterval(() => {
       setLeftoverSec((prev) => prev + 1);
     }, 1000);
     return () => clearInterval(timerId);
-  }, []);
+  }, [isComplete]);
 
-  // 4) lumps-of-15 => post lumps to the server
+  // 4) lumps-of-15 => post lumps to the server, skip if done
   useEffect(() => {
     if (!lastSnapMs) return;
+    if (isComplete) return; // do not submit lumps if done
+
     const heartbeatId = setInterval(async () => {
       if (leftoverSec >= 15) {
         const lumps = Math.floor(leftoverSec / 15);
@@ -172,13 +177,10 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
             })
           );
           if (incrementReadingTime.fulfilled.match(resultAction)) {
-            console.log("Increment reading time success:", resultAction.payload);
-          } else {
-            console.error("Increment reading time failed:", resultAction);
-          }
-          if (incrementReadingTime.fulfilled.match(resultAction)) {
             const newTotal = resultAction.payload || serverTime + totalToPost;
             setServerTime(newTotal);
+          } else {
+            console.error("Increment reading time failed:", resultAction);
           }
           const remainder = leftoverSec % 15;
           setLeftoverSec(remainder);
@@ -188,9 +190,40 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
     }, 1000);
 
     return () => clearInterval(heartbeatId);
-  }, [leftoverSec, lastSnapMs, dispatch, userId, planId, subChapterId, serverTime]);
+  }, [
+    leftoverSec,
+    lastSnapMs,
+    dispatch,
+    userId,
+    planId,
+    subChapterId,
+    serverTime,
+    isComplete,
+    activityId,
+  ]);
 
-  const displayedTime = serverTime + leftoverSec;
+  // 5) If we want day-by-day breakdown, fetch from getActivityTime
+  useEffect(() => {
+    if (!activityId) return;
+    async function fetchTimeDetails() {
+      try {
+        const resp = await axios.get("http://localhost:3001/api/getActivityTime", {
+          params: { activityId, type: "read" },
+        });
+        if (resp.data && resp.data.details) {
+          setTimeDetails(resp.data.details);
+        }
+      } catch (err) {
+        console.error("fetchTimeDetails error:", err);
+      }
+    }
+    fetchTimeDetails();
+  }, [activityId]);
+
+  // Decide what time to display
+  const displayedTime = isComplete
+    ? serverTime // once complete, show aggregator total
+    : serverTime + leftoverSec;
 
   function handleNextPage() {
     if (currentPageIndex < pages.length - 1) {
@@ -204,15 +237,13 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
     }
   }
 
-  // 5) When user finishes reading => record usage, mark as completed, re-fetch plan, preserve index+1
+  // 6) Finish reading => mark completed: true, re-fetch plan, move index
   async function handleFinishReading() {
     const readingEndTime = new Date();
-
     try {
-      // Save old index, so we can reapply it after re-fetch
       const oldIndex = currentIndex;
 
-      // (A) Make the POST call to record reading usage
+      // (A) Make a call to record reading usage
       await axios.post("http://localhost:3001/api/submitReading", {
         userId,
         activityId,
@@ -223,14 +254,14 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
         timestamp: new Date().toISOString(),
       });
 
-      // (B) Mark the activity "completed: true" in markActivityCompletion
+      // (B) Mark the activity as completed in the DB
       const payload = {
         userId,
         planId,
         activityId,
-        completed: true,
+        completed: true, // <= This is the key
       };
-      // If replicaIndex is present, pass it
+      // If there's a replicaIndex, pass it
       if (typeof activity.replicaIndex === "number") {
         payload.replicaIndex = activity.replicaIndex;
       }
@@ -251,7 +282,7 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
         })
       );
 
-      // (D) If re-fetch is successful => restore (oldIndex + 1)
+      // (D) set next index
       if (fetchPlan.fulfilled.match(fetchAction)) {
         dispatch(setCurrentIndex(oldIndex + 1));
       } else {
@@ -289,6 +320,16 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
             <span style={styles.clockWrapper}>
               <span style={styles.clockIcon}>🕒</span>
               {formatTime(displayedTime)}
+
+              {/* Show day-by-day breakdown only if completed */}
+              {isComplete && (
+                <span
+                  style={styles.infoIcon}
+                  onClick={() => setShowTimeDetailsOverlay(!showTimeDetailsOverlay)}
+                >
+                  i
+                </span>
+              )}
             </span>
           </h2>
         </div>
@@ -317,21 +358,37 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
               <button
                 style={{
                   ...styles.finishButton,
-                  // If already complete or deferred, disable the button
-                  opacity: isAlreadyCompleteOrDeferred ? 0.6 : 1,
-                  cursor: isAlreadyCompleteOrDeferred ? "not-allowed" : "pointer",
+                  opacity: isComplete ? 0.6 : 1,
+                  cursor: isComplete ? "not-allowed" : "pointer",
                 }}
-                onClick={isAlreadyCompleteOrDeferred ? undefined : handleFinishReading}
-                disabled={isAlreadyCompleteOrDeferred}
+                onClick={isComplete ? undefined : handleFinishReading}
+                disabled={isComplete}
               >
-                {isAlreadyCompleteOrDeferred
-                  ? "Reading Already Complete"
-                  : "Finish Reading"}
+                {isComplete ? "Reading Already Complete" : "Finish Reading"}
               </button>
             )}
           </div>
         </div>
       </div>
+
+      {/* Time Details Overlay */}
+      {showTimeDetailsOverlay && (
+        <div style={styles.timeDetailsOverlay}>
+          <h4 style={{ marginTop: 0 }}>Reading Time Breakdown by Day</h4>
+          {timeDetails && timeDetails.length > 0 ? (
+            <ul style={{ paddingLeft: "1.25rem", marginTop: "0.5rem" }}>
+              {timeDetails.map((item, idx) => (
+                <li key={idx} style={{ marginBottom: "0.4rem" }}>
+                  <strong>{item.dateStr || "No date"}</strong>:{" "}
+                  {item.totalSeconds} sec
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>No day-by-day data found.</p>
+          )}
+        </div>
+      )}
 
       {/* Debug Info */}
       <div
@@ -352,8 +409,7 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
                   leftoverSec,
                   currentPageIndex,
                   totalPages: pages.length,
-                  readingStartTime: readingStartRef.current,
-                  completionStatus,
+                  completed,
                 },
                 null,
                 2
@@ -416,6 +472,20 @@ const styles = {
   clockIcon: {
     fontSize: "1rem",
   },
+  infoIcon: {
+    backgroundColor: "#444",
+    color: "#fff",
+    fontWeight: "bold",
+    borderRadius: "50%",
+    width: "20px",
+    height: "20px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: "pointer",
+    fontSize: "0.8rem",
+    marginLeft: "4px",
+  },
   cardBody: {
     flex: 1,
     padding: "16px",
@@ -450,6 +520,18 @@ const styles = {
     borderRadius: "4px",
     cursor: "pointer",
     fontWeight: "bold",
+  },
+  timeDetailsOverlay: {
+    position: "absolute",
+    top: "64px",
+    left: "50%",
+    transform: "translateX(-50%)",
+    backgroundColor: "#222",
+    border: "1px solid #444",
+    borderRadius: "4px",
+    padding: "12px",
+    zIndex: 10000,
+    maxWidth: "300px",
   },
   debugEyeContainer: {
     position: "absolute",
