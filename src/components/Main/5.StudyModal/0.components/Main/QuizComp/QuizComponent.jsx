@@ -288,13 +288,13 @@ export default function QuizView({
     setLoading(true);
     setStatus("Grading quiz...");
     setError("");
-
+  
     const overallResults = new Array(generatedQuestions.length).fill(null);
-
+  
     // Separate locally gradable vs open-ended
     const localItems = [];
     const openEndedItems = [];
-
+  
     generatedQuestions.forEach((qObj, i) => {
       const uAns = userAnswers[i] || "";
       if (isLocallyGradableType(qObj.type)) {
@@ -303,13 +303,13 @@ export default function QuizView({
         openEndedItems.push({ qObj, userAnswer: uAns, originalIndex: i });
       }
     });
-
+  
     // A) local grading
     localItems.forEach((item) => {
       const { score, feedback } = localGradeQuestion(item.qObj, item.userAnswer);
       overallResults[item.originalIndex] = { score, feedback };
     });
-
+  
     // B) GPT grading for open-ended
     if (openEndedItems.length > 0) {
       if (!openAiKey) {
@@ -326,7 +326,7 @@ export default function QuizView({
           subchapterSummary,
           items: openEndedItems,
         });
-
+  
         if (!success) {
           console.error("GPT grading error:", gptErr);
           openEndedItems.forEach((itm) => {
@@ -344,17 +344,19 @@ export default function QuizView({
         }
       }
     }
-
+  
     // compute final numeric
     const totalScore = overallResults.reduce((acc, r) => acc + (r?.score || 0), 0);
     const qCount = overallResults.length;
     const avgFloat = qCount > 0 ? totalScore / qCount : 0;
     const percentageString = (avgFloat * 100).toFixed(2) + "%";
     setFinalPercentage(percentageString);
-    const passThreshold = 1; // e.g. 60% is pass
+  
+    // Pass threshold => 100%
+    const passThreshold = 1.0;
     const isPassed = avgFloat >= passThreshold;
     setQuizPassed(isPassed);
-
+  
     // C) Submit to your server => /api/submitQuiz
     try {
       const payload = {
@@ -373,7 +375,7 @@ export default function QuizView({
         attemptNumber,
         planId,
       };
-
+  
       console.log("[QuizView] handleQuizSubmit => final payload:", payload);
       await axios.post("http://localhost:3001/api/submitQuiz", payload);
       console.log("Quiz submission saved on server!");
@@ -381,7 +383,48 @@ export default function QuizView({
       console.error("Error submitting quiz:", err);
       setError("Error submitting quiz: " + err.message);
     }
-
+  
+    // D) If passed => mark aggregator doc + re-fetch plan => remain on oldIndex
+    if (isPassed) {
+      try {
+        // Exactly like ReadingView does:
+        const oldIndex = currentIndex;
+  
+        // 1) Mark aggregator => completed: true
+        const aggregatorPayload = {
+          userId,
+          planId,
+          activityId,
+          completed: true, // 100% pass => completed
+        };
+        // if there's a replicaIndex, include it
+        if (typeof activity.replicaIndex === "number") {
+          aggregatorPayload.replicaIndex = activity.replicaIndex;
+        }
+  
+        await axios.post("http://localhost:3001/api/markActivityCompletion", aggregatorPayload);
+        console.log("[QuizView] aggregator => completed =>", aggregatorPayload);
+  
+        // 2) Re-fetch the plan
+        const backendURL = "http://localhost:3001";
+        const fetchUrl = "/api/adaptive-plan";
+        const fetchAction = await dispatch(fetchPlan({ planId, backendURL, fetchUrl }));
+  
+        // 3) After plan loads => forcibly set currentIndex = oldIndex
+        if (fetchPlan.fulfilled.match(fetchAction)) {
+          dispatch(setCurrentIndex(oldIndex));
+        } else {
+          // fallback => also oldIndex
+          dispatch(setCurrentIndex(oldIndex));
+        }
+      } catch (err) {
+        console.error("Error marking aggregator or re-fetching plan =>", err);
+        // fallback => do not move
+        dispatch(setCurrentIndex(currentIndex));
+      }
+    }
+  
+    // E) Show grading results => user sees pass/fail screen
     setGradingResults(overallResults);
     setShowGradingResults(true);
     setLoading(false);
