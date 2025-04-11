@@ -11,6 +11,50 @@ import HistoryView from "./HistoryView";
 
 const QUIZ_STAGES = ["remember", "understand", "apply", "analyze"];
 
+/** Maps "reading"/"remember"/"understand"/"apply"/"analyze" => numeric stage # */
+function getStageNumber(stageKey) {
+  switch ((stageKey || "").toLowerCase()) {
+    case "reading":
+      return 1;
+    case "remember":
+      return 2;
+    case "understand":
+      return 3;
+    case "apply":
+      return 4;
+    case "analyze":
+      return 5;
+    default:
+      return 0;
+  }
+}
+
+/** Convert aggregator’s "status" => a small label for WIP, etc. */
+function getStatusShortLabel(item) {
+  if (!item) return "";
+  // aggregator => item.status => "done"/"in-progress"/"not-started"
+  if (item.locked) return "LOCKED";
+  if (item.status === "done") return "DONE";
+  if (item.status === "in-progress") return "WIP";
+  return ""; // for "not-started" or anything else
+}
+
+/** For a tooltip, we can return the aggregator status as a string. */
+function getStatusTooltip(item) {
+  if (!item) return "No data";
+  if (item.locked) return "Locked";
+  const s = (item.status || "").toLowerCase();
+  if (s === "done") return "Done";
+  if (s === "in-progress") return "In Progress";
+  return "Not Started";
+}
+
+/** Capitalize helper */
+function capitalize(str) {
+  if (!str) return "";
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
 export default function StageManager({ examId, activity, userId }) {
   // ----------------- Basic Activity Data -----------------
   const subChapterId = activity?.subChapterId || "";
@@ -18,64 +62,45 @@ export default function StageManager({ examId, activity, userId }) {
   const possibleQuizStage = (activity?.quizStage || "").toLowerCase();
   const completionStatus = (activity?.completionStatus || "").toLowerCase();
 
+  // The stage that the user arrived on from left panel
+  const selectedStage = (activityType === "quiz")
+    ? possibleQuizStage || "remember"
+    : "reading";
+
   // ----------------- Global Redux Data -----------------
   const planId = useSelector((state) => state.plan.planDoc?.id);
   const effectiveExamId = examId || "general";
 
   // ----------------- Tab & subView States -----------------
-  const [activeTab, setActiveTab] = useState("reading");
+  // We'll keep `activeTab` but default to the stage from the left-panel activity
+  const [activeTab, setActiveTab] = useState(selectedStage);
   const [subView, setSubView] = useState("activity");
 
-  // ----------------- Refresh Key for Status Re-Fetch -----------------
+  // Whenever `activity` changes => reset tab & subView
+  useEffect(() => {
+    if (QUIZ_STAGES.includes(selectedStage)) {
+      setActiveTab(selectedStage);
+    } else {
+      setActiveTab("reading");
+    }
+    setSubView("activity");
+  }, [activity, selectedStage]);
+
+  // ----------------- Refresh Key for aggregator re-fetch -----------------
   const [refreshKey, setRefreshKey] = useState(0);
   function handleNeedsRefreshStatus() {
     setRefreshKey((prev) => prev + 1);
   }
 
-  // Whenever activity changes => default tab
-  useEffect(() => {
-    let newTab = "reading";
-    if (QUIZ_STAGES.includes(possibleQuizStage)) {
-      newTab = possibleQuizStage;
-    } else if (activityType === "quiz") {
-      newTab = "remember";
-    }
-    setActiveTab(newTab);
-  }, [activity, possibleQuizStage, activityType]);
-
-  // Whenever activity changes => reset subView to "activity"
-  useEffect(() => {
-    setSubView("activity");
-  }, [activity]);
-
-  // ----------------- Quiz & Status Data -----------------
-  const [quizAttempts, setQuizAttempts] = useState([]);
-  const [revisionAttempts, setRevisionAttempts] = useState([]);
-  const [subchapterConcepts, setSubchapterConcepts] = useState([]);
-  const [mode, setMode] = useState("LOADING");
-  const [lastQuizAttempt, setLastQuizAttempt] = useState(null);
-  const [latestConceptStats, setLatestConceptStats] = useState(null);
-  const [allAttemptsConceptStats, setAllAttemptsConceptStats] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  // Pass thresholds
-  const stagePassRatios = {
-    remember: 1,
-    understand: 1,
-    apply: 1,
-    analyze: 1,
-  };
-
-  // ----------------- subchapter-status for Lock Info -----------------
+  // ----------------- aggregator => subchapter-status => for locked/done info -----------------
   const [taskInfo, setTaskInfo] = useState([]);
   const [taskInfoLoading, setTaskInfoLoading] = useState(false);
   const [taskInfoError, setTaskInfoError] = useState("");
 
-  // Re-fetch /subchapter-status whenever userId/planId/subChapterId/refreshKey changes
   useEffect(() => {
     if (!userId || !planId || !subChapterId) {
       setTaskInfo([]);
+      setTaskInfoLoading(false);
       return;
     }
     async function fetchSubchapterStatus() {
@@ -91,7 +116,7 @@ export default function StageManager({ examId, activity, userId }) {
         });
         setTaskInfo(res.data.taskInfo || []);
       } catch (err) {
-        console.error("StageManager => /subchapter-status error:", err);
+        console.error("[StageManager] subchapter-status error:", err);
         setTaskInfoError(err.message || "Error loading subchapter status");
         setTaskInfo([]);
       } finally {
@@ -101,11 +126,25 @@ export default function StageManager({ examId, activity, userId }) {
     fetchSubchapterStatus();
   }, [userId, planId, subChapterId, refreshKey]);
 
-  // If user selects quiz tab => fetch quiz data
+  // ----------------- Quiz & Status Data (for the active quiz stage) -----------------
+  const [quizAttempts, setQuizAttempts] = useState([]);
+  const [revisionAttempts, setRevisionAttempts] = useState([]);
+  const [subchapterConcepts, setSubchapterConcepts] = useState([]);
+  const [mode, setMode] = useState("LOADING");
+  const [lastQuizAttempt, setLastQuizAttempt] = useState(null);
+  const [latestConceptStats, setLatestConceptStats] = useState(null);
+  const [allAttemptsConceptStats, setAllAttemptsConceptStats] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  // If activeTab is a quiz stage => fetch quiz data
   useEffect(() => {
     if (!subChapterId || !userId) return;
-    if (!QUIZ_STAGES.includes(activeTab)) {
-      // If not a quiz tab
+
+    if (QUIZ_STAGES.includes(activeTab)) {
+      fetchQuizData(activeTab);
+    } else {
+      // Not a quiz => clear data
       setMode("LOADING");
       setQuizAttempts([]);
       setRevisionAttempts([]);
@@ -113,10 +152,7 @@ export default function StageManager({ examId, activity, userId }) {
       setAllAttemptsConceptStats([]);
       setLastQuizAttempt(null);
       setLatestConceptStats(null);
-      return;
     }
-    // else => quiz tab => fetch data
-    fetchQuizData(activeTab);
   }, [activeTab, subChapterId, userId]);
 
   async function fetchQuizData(currentStage) {
@@ -160,14 +196,21 @@ export default function StageManager({ examId, activity, userId }) {
       // Build concept stats => for "History" view
       buildAllAttemptsConceptStats(quizArr, conceptArr);
     } catch (err) {
-      console.error("StageManager => fetchQuizData error:", err);
+      console.error("[StageManager] fetchQuizData error:", err);
       setError(err.message || "Error fetching quiz data");
     } finally {
       setLoading(false);
     }
   }
 
-  // Decide the quiz mode
+  // Decide quiz mode
+  const stagePassRatios = {
+    remember: 1,
+    understand: 1,
+    apply: 1,
+    analyze: 1,
+  };
+
   function computeMode(quizArr, revArr, conceptArr, quizStage) {
     if (!quizArr.length) {
       setMode("NO_QUIZ_YET");
@@ -198,7 +241,7 @@ export default function StageManager({ examId, activity, userId }) {
       }
     }
 
-    // Build concept stats for the latest attempt
+    // Build concept stats for latest attempt
     if (latestQuiz?.quizSubmission && conceptArr.length > 0) {
       const stats = buildConceptStats(latestQuiz.quizSubmission, conceptArr);
       setLatestConceptStats(stats);
@@ -207,7 +250,7 @@ export default function StageManager({ examId, activity, userId }) {
     }
   }
 
-  // Build concept stats for all attempts => used in "History"
+  // Build concept stats => used in "History" view
   function buildAllAttemptsConceptStats(quizArr, conceptArr) {
     if (!quizArr.length || !conceptArr.length) {
       setAllAttemptsConceptStats([]);
@@ -224,7 +267,7 @@ export default function StageManager({ examId, activity, userId }) {
     setAllAttemptsConceptStats(mapped);
   }
 
-  // If a quiz or revision finishes, re-fetch
+  // If a quiz or revision finishes => re-fetch
   function handleQuizComplete() {
     if (QUIZ_STAGES.includes(activeTab)) {
       fetchQuizData(activeTab);
@@ -241,8 +284,7 @@ export default function StageManager({ examId, activity, userId }) {
     }
   }
 
-  // ========== SHORT-CIRCUIT for DEFERRED / COMPLETE ==========
-  // If activity is "deferred" or "complete", just show a message and skip normal content.
+  // ========== If activity is deferred/complete => short-circuit ==========
   if (completionStatus === "deferred") {
     return (
       <div style={styles.messageBox}>
@@ -260,7 +302,7 @@ export default function StageManager({ examId, activity, userId }) {
     );
   }
 
-  // --------------- Render the normal UI if not deferred/complete ---------------
+  // --------------- Normal UI ---------------
   if (taskInfoLoading) {
     return <div style={{ color: "#fff" }}>Loading stage statuses...</div>;
   }
@@ -273,26 +315,99 @@ export default function StageManager({ examId, activity, userId }) {
 
   return (
     <div style={styles.container}>
-      {/* 1) Tabs */}
-      <div style={styles.tabRow}>
-        {renderStageTab("reading", "Reading")}
-        {QUIZ_STAGES.map((st) => renderStageTab(st, capitalize(st)))}
+      {/* 1) Our pill row => reading + quiz stages (remember, understand, etc.) */}
+      <div style={styles.stageRow}>
+        {renderStagePill("reading")}
+        {QUIZ_STAGES.map((st) => renderStagePill(st))}
       </div>
 
-      {/* 2) Main content area */}
+      {/* 2) The main content => locked if aggregator says locked or if not the user's chosen stage */}
       <div style={styles.mainContent}>
-        {isTabLocked(activeTab) ? (
-          <div style={{ fontSize: "1.1rem", color: "#f00" }}>
-            This stage is currently locked.
-          </div>
-        ) : (
+        {isTabAllowedAndUnlocked(activeTab) ? (
           renderTabContent(activeTab)
+        ) : (
+          <div style={{ fontSize: "1.1rem", color: "#f00" }}>
+            This stage is not currently accessible.
+          </div>
         )}
       </div>
     </div>
   );
 
-  // ---------- Helper: isTabLocked ----------
+  // Renders the pill for a given stageKey => "reading"/"remember"/"understand"/"apply"/"analyze"
+  function renderStagePill(stageKey) {
+    // aggregator => find item => locked/done/in-progress
+    const labelForTaskInfo = (stageKey === "reading" ? "Reading" : capitalize(stageKey));
+    const item = taskInfo.find(
+      (t) => (t.stageLabel || "").toLowerCase() === labelForTaskInfo.toLowerCase()
+    );
+    const locked = item?.locked || false;
+    const shortLabel = getStatusShortLabel(item); // "LOCKED","DONE","WIP",""
+    const tooltipStr = getStatusTooltip(item);
+
+    // numeric stage => reading=1, remember=2...
+    const stageNum = getStageNumber(stageKey);
+    // is this the current user-chosen stage from left panel?
+    const isSelectedStage = (stageKey === selectedStage);
+
+    // highlight if it's the active tab
+    const isCurrentTab = (stageKey === activeTab);
+
+    // The pill can only be "clicked" if it's the selectedStage from left panel
+    // AND aggregator says not locked
+    const canClick = (isSelectedStage && !locked);
+
+    // Build the dynamic style
+    let pillStyle = { ...styles.stagePill };
+    if (isCurrentTab) {
+      pillStyle = { ...pillStyle, ...styles.stagePillCurrent };
+    } else if (!canClick) {
+      pillStyle = { ...pillStyle, ...styles.stagePillDisabled };
+    }
+
+    // If we have a short status label => show it in the smaller sub-box
+    // e.g. WIP, LOCKED, DONE
+    let statusBox = null;
+    if (shortLabel) {
+      statusBox = (
+        <div style={styles.statusBox}>
+          {shortLabel}
+        </div>
+      );
+    }
+
+    return (
+      <div
+        key={stageKey}
+        style={pillStyle}
+        title={tooltipStr}
+        onClick={() => {
+          if (canClick) {
+            setActiveTab(stageKey);
+            if (QUIZ_STAGES.includes(stageKey)) {
+              setSubView("activity");
+            }
+          }
+        }}
+      >
+        {/* The numeric prefix => e.g. "1" then name => "Reading" */}
+        <div style={styles.stageNumber}>{stageNum}</div>
+        <div style={styles.stageLabel}>{labelForTaskInfo}</div>
+        {statusBox}
+      </div>
+    );
+  }
+
+  /** 
+   * We only show the tab content if aggregator says it's not locked
+   * and if it's the left-panel's chosen stage.
+   */
+  function isTabAllowedAndUnlocked(tabKey) {
+    if (tabKey !== selectedStage) return false;
+    if (isTabLocked(tabKey)) return false;
+    return true;
+  }
+
   function isTabLocked(tabKey) {
     const labelForTaskInfo =
       tabKey === "reading" ? "Reading" : capitalize(tabKey);
@@ -302,30 +417,9 @@ export default function StageManager({ examId, activity, userId }) {
     return item?.locked === true;
   }
 
-  // ---------- Helper: renderStageTab ----------
-  function renderStageTab(tabKey, tabLabel) {
-    const isCurrent = activeTab === tabKey;
-    const locked = isTabLocked(tabKey);
-    return (
-      <button
-        key={tabKey}
-        style={isCurrent ? styles.tabButtonActive : styles.tabButton}
-        onClick={() => {
-          setActiveTab(tabKey);
-          if (QUIZ_STAGES.includes(tabKey)) {
-            setSubView("activity");
-          }
-        }}
-      >
-        {tabLabel}
-        {locked && <span style={{ marginLeft: 6 }}>🔒</span>}
-      </button>
-    );
-  }
-
-  // ---------- Helper: renderTabContent ----------
+  // Actual content for reading or quiz
   function renderTabContent(tabKey) {
-    // 1) Reading stage
+    // (1) Reading
     if (tabKey === "reading") {
       return (
         <ReadingView
@@ -335,7 +429,7 @@ export default function StageManager({ examId, activity, userId }) {
       );
     }
 
-    // 2) One of the quiz stages
+    // (2) Quiz stage
     if (QUIZ_STAGES.includes(tabKey)) {
       if (loading) {
         return <div style={{ color: "#fff" }}>Loading quiz data...</div>;
@@ -345,12 +439,10 @@ export default function StageManager({ examId, activity, userId }) {
       }
       return (
         <div style={styles.quizContainer}>
-          {/* Sub-buttons for "Activity" or "History" */}
+          {/* Sub-buttons => "Activity" / "History" */}
           <div style={styles.subButtonRow}>
             <button
-              style={
-                subView === "activity" ? styles.subBtnActive : styles.subBtn
-              }
+              style={subView === "activity" ? styles.subBtnActive : styles.subBtn}
               onClick={() => setSubView("activity")}
             >
               Activity
@@ -388,19 +480,19 @@ export default function StageManager({ examId, activity, userId }) {
               lastQuizAttempt={lastQuizAttempt}
               latestConceptStats={latestConceptStats}
               allAttemptsConceptStats={allAttemptsConceptStats}
-              passRatio={stagePassRatios[tabKey] || 0.6}
+              passRatio={stagePassRatios[tabKey] || 1}
             />
           )}
         </div>
       );
     }
 
-    // 3) Fallback if unknown tab
+    // (3) fallback
     return <div style={{ color: "#fff" }}>Unknown stage: {tabKey}</div>;
   }
 }
 
-// ---------- parseScoreForRatio ----------
+// ========== parseScoreForRatio ==========
 function parseScoreForRatio(scoreString) {
   if (!scoreString) return NaN;
   const trimmed = scoreString.trim();
@@ -419,7 +511,7 @@ function parseScoreForRatio(scoreString) {
   return NaN;
 }
 
-// ---------- buildConceptStats ----------
+// ========== buildConceptStats ==========
 function buildConceptStats(quizSubmission, conceptArr) {
   const countMap = {};
   quizSubmission.forEach((q) => {
@@ -456,13 +548,7 @@ function buildConceptStats(quizSubmission, conceptArr) {
   return statsArray;
 }
 
-// ---------- capitalize ----------
-function capitalize(str) {
-  if (!str) return "";
-  return str.charAt(0).toUpperCase() + str.slice(1);
-}
-
-// ---------- Styles ----------
+// ========== Styles ==========
 const styles = {
   container: {
     width: "100%",
@@ -474,34 +560,64 @@ const styles = {
     boxSizing: "border-box",
     fontFamily: "'Inter', sans-serif",
   },
-  tabRow: {
+  // The row for the "pills"
+  stageRow: {
     display: "flex",
     flexDirection: "row",
     gap: "8px",
     backgroundColor: "#111",
     padding: "8px",
+    alignItems: "center",
   },
-  tabButton: {
+  // Each pill
+  stagePill: {
+    position: "relative",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "6px",
+    padding: "6px 12px",
+    borderRadius: "16px",
     backgroundColor: "#222",
     color: "#ccc",
-    border: "none",
-    borderRadius: "4px",
-    padding: "6px 12px",
     cursor: "pointer",
-    fontWeight: 500,
-    display: "flex",
-    alignItems: "center",
+    userSelect: "none",
   },
-  tabButtonActive: {
+  // Currently selected tab => highlight
+  stagePillCurrent: {
     backgroundColor: "#444",
     color: "#fff",
-    borderRadius: "4px",
-    padding: "6px 12px",
-    cursor: "pointer",
     fontWeight: "bold",
+  },
+  // If aggregator says locked or the user has a different stage => fade
+  stagePillDisabled: {
+    opacity: 0.5,
+    cursor: "default",
+  },
+  stageNumber: {
+    backgroundColor: "#333",
+    color: "#fff",
+    fontSize: "0.8rem",
+    width: "20px",
+    height: "20px",
+    borderRadius: "50%",
     display: "flex",
     alignItems: "center",
+    justifyContent: "center",
+    // Could do a stronger style if you want
   },
+  stageLabel: {
+    fontSize: "0.85rem",
+    // add any other styling
+  },
+  statusBox: {
+    backgroundColor: "#444",
+    color: "#fff",
+    fontSize: "0.65rem",
+    borderRadius: "4px",
+    padding: "2px 4px",
+    // e.g. "WIP" or "DONE" or "LOCKED"
+  },
+
   mainContent: {
     flex: 1,
     overflowY: "auto",
