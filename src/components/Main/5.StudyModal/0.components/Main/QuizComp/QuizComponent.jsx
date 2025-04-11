@@ -1,4 +1,3 @@
-// File: QuizView.jsx
 import React, { useEffect, useState, useRef } from "react";
 import { doc, getDoc, collection, getDocs } from "firebase/firestore";
 import { db } from "../../../../../../firebase"; // Adjust path if needed
@@ -24,14 +23,12 @@ function formatTime(totalSeconds) {
 /**
  * QuizView
  * --------
- * A "card-based" quiz that:
- *   - Shows a top bar "Quiz" + a timer
- *   - Paginates questions in sets of (e.g.) 3 per page
- *   - Submits them all at once on the final page
- *   - Then displays pass/fail summary
- *   - If pass => "Finish" moves user to next item + calls onQuizComplete
- *   - If fail => "Take Revision Now" calls onQuizFail, or "Take Revision Later" defers + re-fetches plan
- *   - 15-second lumps time tracking in background
+ * A "card-based" quiz:
+ *   - Generates questions for the chosen subchapter/stage
+ *   - Times the user in lumps of 15 seconds
+ *   - On submit => local/GPT grading => pass/fail
+ *   - If pass => automatically marks the quiz "completed: true"
+ *   - If fail => revision logic
  */
 export default function QuizView({
   activity,
@@ -49,8 +46,8 @@ export default function QuizView({
   const dispatch = useDispatch();
   const [showDebug, setShowDebug] = useState(false);
 
-  // Extract activityId from props.activity
-  const { activityId } = activity || {};
+  // Extract activityId & replicaIndex from the activity
+  const { activityId, replicaIndex } = activity || {};
 
   // ---------- Quiz State ----------
   const [questionTypes, setQuestionTypes] = useState([]);
@@ -354,11 +351,11 @@ export default function QuizView({
     const avgFloat = qCount > 0 ? totalScore / qCount : 0;
     const percentageString = (avgFloat * 100).toFixed(2) + "%";
     setFinalPercentage(percentageString);
-    const passThreshold = 0.6; // e.g. 60% is pass
+    const passThreshold = 1; // e.g. 60% is pass
     const isPassed = avgFloat >= passThreshold;
     setQuizPassed(isPassed);
 
-    // C) Submit to your server
+    // C) Submit to your server => /api/submitQuiz
     try {
       const payload = {
         userId,
@@ -395,16 +392,37 @@ export default function QuizView({
   // Buttons after Grading
   // ===================================================
 
-  // 1) If quiz is passed => "Finish" => call onQuizComplete + next item
-  function handleQuizSuccess() {
+  // 1) If quiz is passed => we auto-mark the activity as completed => call onQuizComplete
+  async function handleQuizSuccess() {
     try {
+      // (A) Mark the aggregator doc => completed: true
+      //     If we have a replicaIndex, pass it
+      if (activityId) {
+        const payload = {
+          userId,
+          planId,
+          activityId,
+          completed: true,
+        };
+        if (typeof replicaIndex === "number") {
+          payload.replicaIndex = replicaIndex;
+        }
+
+        await axios.post("http://localhost:3001/api/markActivityCompletion", payload);
+        console.log("[QuizView] handleQuizSuccess => activity completed =>", payload);
+      }
+
+      // (B) Then call onQuizComplete if provided
       if (onQuizComplete) {
         onQuizComplete();
       }
-      // Also move user to next activity
+
+      // (C) Move user to next activity
       dispatch(setCurrentIndex(currentIndex + 1));
     } catch (err) {
       console.error("handleQuizSuccess error:", err);
+      // fallback
+      dispatch(setCurrentIndex(currentIndex + 1));
     }
   }
 
@@ -420,18 +438,23 @@ export default function QuizView({
     try {
       const oldIndex = currentIndex;
 
-      // 1) Mark this activity as deferred, if we have an activityId
+      // Mark this activity as "deferred"
       if (activityId) {
-        await axios.post("http://localhost:3001/api/markActivityCompletion", {
+        const defPayload = {
           userId,
           planId,
           activityId,
-          completionStatus: "deferred",
-        });
-        console.log(`Activity '${activityId}' marked deferred!`);
+          completionStatus: "deferred",        // or you could do "completionStatus":"deferred" if you want
+        };
+        if (typeof replicaIndex === "number") {
+          defPayload.replicaIndex = replicaIndex;
+        }
+
+        await axios.post("http://localhost:3001/api/markActivityCompletion", defPayload);
+        console.log(`Activity '${activityId}' marked as completed=false (deferred)`);
       }
 
-      // 2) Re-fetch the plan from your backend
+      // Re-fetch plan
       const backendURL = "http://localhost:3001";
       const fetchUrl = "/api/adaptive-plan";
 
@@ -443,16 +466,14 @@ export default function QuizView({
         })
       );
 
-      // 3) If that re-fetch succeeded => move to next item
+      // Move next
       if (fetchPlan.fulfilled.match(fetchAction)) {
         dispatch(setCurrentIndex(oldIndex + 1));
       } else {
-        // fallback
         dispatch(setCurrentIndex(oldIndex + 1));
       }
     } catch (err) {
       console.error("Error in handleTakeRevisionLater:", err);
-      // fallback
       dispatch(setCurrentIndex(currentIndex + 1));
     }
   }
@@ -568,12 +589,11 @@ export default function QuizView({
               </button>
             )}
             {showGradingResults && !quizPassed && (
-              // If quiz failed => two buttons => "Take Revision Now" or "Take Revision Later"
+              // If quiz failed => "Take Revision Now" or "Take Revision Later"
               <>
                 <button style={styles.button} onClick={handleTakeRevisionNow}>
                   Take Revision Now
                 </button>
-                {/* UPDATED => handleTakeRevisionLater now defers the activity + re-fetches plan */}
                 <button style={styles.button} onClick={handleTakeRevisionLater}>
                   Take Revision Later
                 </button>
@@ -621,7 +641,7 @@ export default function QuizView({
 }
 
 // --------------------------------------------------------------------
-// Local vs GPT grading (unchanged from your code)
+// Local vs GPT grading
 // --------------------------------------------------------------------
 function isLocallyGradableType(qType) {
   switch (qType) {
@@ -687,11 +707,8 @@ function localGradeQuestion(qObj, userAnswer) {
   return { score, feedback };
 }
 
-/**
- * gradeOpenEndedBatch => calls GPT to grade open-ended Qs in batch
- * (unchanged from your code)
- */
 async function gradeOpenEndedBatch({ openAiKey, subchapterSummary, items }) {
+  // your GPT-based grading code unchanged
   // ...
 }
 
