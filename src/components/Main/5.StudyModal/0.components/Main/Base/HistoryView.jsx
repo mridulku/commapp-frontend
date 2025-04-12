@@ -8,27 +8,23 @@ import {
   AccordionDetails,
   Paper,
   Divider,
+  LinearProgress,
+  Tabs,
+  Tab,
+  Chip
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 
 /**************************************************************
- * 1) Merges aggregator quiz+revision => sorted by timestamp
+ * merges quiz+revision => sorted
  **************************************************************/
 function mergeQuizAndRevision(quizArr, revArr) {
   const combined = [];
   quizArr.forEach((q) => {
-    combined.push({
-      ...q,
-      type: "quiz",
-      attemptNumber: q.attemptNumber || 1,
-    });
+    combined.push({ ...q, type: "quiz", attemptNumber: q.attemptNumber || 1 });
   });
   revArr.forEach((r) => {
-    combined.push({
-      ...r,
-      type: "revision",
-      revisionNumber: r.revisionNumber || 1,
-    });
+    combined.push({ ...r, type: "revision", revisionNumber: r.revisionNumber || 1 });
   });
   combined.sort((a, b) => toMillis(a.timestamp) - toMillis(b.timestamp));
   return combined;
@@ -47,56 +43,104 @@ function formatDate(ts) {
 }
 
 /**************************************************************
- * 2) Build a lumps map => attemptNumber => { [dateStr]: totalSeconds }
- *    from the "details" array returned by getActivityTime
+ * lumps => attemptNumber => { dateStr => totalSeconds }
  **************************************************************/
 function buildUsageMap(details) {
-  // details: [ { docId, dateStr, totalSeconds, attemptNumber, revisionNumber, ... }, ...]
-  // We want: usageByAttempt[ attemptNumber or revisionNumber ] = { dateStr => totalSec }
   const usageByAttempt = {};
-
   details.forEach((doc) => {
     const isQuizTime = doc.collection === "quizTimeSubActivity";
-    const isRevTime = doc.collection === "reviseTimeSubActivity";
-
-    // For quiz lumps => doc.attemptNumber
-    // For revision lumps => doc.revisionNumber
     const attNum = isQuizTime ? doc.attemptNumber : doc.revisionNumber;
-    if (!attNum) return; // skip if missing
-
+    if (!attNum) return;
     const dStr = doc.dateStr || "UnknownDate";
-    if (!usageByAttempt[attNum]) {
-      usageByAttempt[attNum] = {};
-    }
-    if (!usageByAttempt[attNum][dStr]) {
-      usageByAttempt[attNum][dStr] = 0;
-    }
+    if (!usageByAttempt[attNum]) usageByAttempt[attNum] = {};
+    if (!usageByAttempt[attNum][dStr]) usageByAttempt[attNum][dStr] = 0;
     usageByAttempt[attNum][dStr] += doc.totalSeconds || 0;
   });
-
   return usageByAttempt;
 }
 
 /**************************************************************
- * 3) Concept vs Quiz Attempts 
- *    If no quiz => concepts => NOT_TESTED
- *    Else => Q1, Q2 columns
+ * Concepts Panel => 
+ *   Collapsed => progress bar
+ *   Expanded => old table => Concept vs Quiz
  **************************************************************/
-function ConceptTable({ aggregatorObj, stageKey }) {
+function ConceptsPanel({ aggregatorObj, stageKey }) {
   const stageData = aggregatorObj.quizStagesData?.[stageKey] || {};
-  const quizAttempts = stageData.quizAttempts || [];
   const allAttemptsConceptStats = stageData.allAttemptsConceptStats || [];
+  const quizAttempts = stageData.quizAttempts || [];
   const concepts = aggregatorObj.concepts || [];
 
-  if (!concepts.length) {
-    return null;
-  }
+  const totalConcepts = concepts.length;
+  if (!totalConcepts) return null;
 
-  // If no quiz attempts => show concept => NOT_TESTED
-  if (!quizAttempts.length) {
+  const conceptPassMap = buildConceptPassMap(allAttemptsConceptStats);
+  const passedCount = concepts.filter((c) => conceptPassMap[c.name]?.passed).length;
+  const percent = totalConcepts > 0 ? (passedCount / totalConcepts) * 100 : 0;
+
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Accordion
+        expanded={expanded}
+        onChange={() => setExpanded(!expanded)}
+        sx={{ backgroundColor: "#222", color: "#fff" }}
+      >
+        <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ color: "#fff" }} />}>
+          <Box sx={{ width: "100%" }}>
+            <Typography variant="body2" sx={{ fontWeight: "bold", mb: 0.5 }}>
+              Concepts
+            </Typography>
+            <LinearProgress
+              variant="determinate"
+              value={percent}
+              sx={{ height: 6, borderRadius: 2, backgroundColor: "#333" }}
+            />
+            <Typography variant="body2" sx={{ mt: 0.5 }}>
+              {passedCount}/{totalConcepts} mastered
+            </Typography>
+          </Box>
+        </AccordionSummary>
+
+        <AccordionDetails sx={{ backgroundColor: "#333" }}>
+          <ConceptTable
+            concepts={concepts}
+            quizAttempts={quizAttempts}
+            allAttemptsConceptStats={allAttemptsConceptStats}
+          />
+        </AccordionDetails>
+      </Accordion>
+    </Box>
+  );
+}
+
+function buildConceptPassMap(allAttemptsConceptStats) {
+  const map = {};
+  allAttemptsConceptStats.forEach((att) => {
+    const label = `Q${att.attemptNumber}`;
+    att.conceptStats?.forEach((cs) => {
+      const cName = cs.conceptName;
+      if (!map[cName]) {
+        map[cName] = { tested: false, passed: false, attemptLabels: [] };
+      }
+      map[cName].tested = true;
+      if (cs.passOrFail === "PASS") {
+        map[cName].passed = true;
+        map[cName].attemptLabels.push(label);
+      }
+    });
+  });
+  return map;
+}
+
+/**************************************************************
+ * The old table => “Concept vs Quiz Attempts”
+ **************************************************************/
+function ConceptTable({ concepts, quizAttempts, allAttemptsConceptStats }) {
+  if (!quizAttempts?.length) {
     return (
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h6" sx={{ mb: 1 }}>
+      <Box sx={{ p: 1 }}>
+        <Typography variant="body2" sx={{ fontWeight: "bold", mb: 1 }}>
           Concept vs Quiz Attempts
         </Typography>
         <table style={tableStyle}>
@@ -119,28 +163,24 @@ function ConceptTable({ aggregatorObj, stageKey }) {
     );
   }
 
-  // Otherwise => build Q1, Q2 columns from allAttemptsConceptStats
   const attemptNumbers = quizAttempts
-    .map((qa) => qa.attemptNumber)
-    .filter((x) => x != null)
+    .map((q) => q.attemptNumber)
+    .filter((n) => n != null)
     .sort((a, b) => a - b);
 
-  // Map => conceptName => { attemptNumber => PASS/FAIL/NOT_TESTED }
   const conceptStatusMap = {};
-  allAttemptsConceptStats.forEach((att) => {
-    const n = att.attemptNumber;
-    (att.conceptStats || []).forEach((cs) => {
-      const cName = cs.conceptName || "??";
-      if (!conceptStatusMap[cName]) {
-        conceptStatusMap[cName] = {};
-      }
+  allAttemptsConceptStats.forEach((attempt) => {
+    const n = attempt.attemptNumber;
+    attempt.conceptStats?.forEach((cs) => {
+      const cName = cs.conceptName;
+      if (!conceptStatusMap[cName]) conceptStatusMap[cName] = {};
       conceptStatusMap[cName][n] = cs.passOrFail || "NOT_TESTED";
     });
   });
 
   return (
-    <Box sx={{ mb: 3 }}>
-      <Typography variant="h6" sx={{ mb: 1 }}>
+    <Box sx={{ p: 1 }}>
+      <Typography variant="body2" sx={{ fontWeight: "bold", mb: 1 }}>
         Concept vs Quiz Attempts
       </Typography>
       <table style={tableStyle}>
@@ -162,13 +202,13 @@ function ConceptTable({ aggregatorObj, stageKey }) {
               <tr key={c.id || cName}>
                 <td style={tdStyle}>{cName}</td>
                 {attemptNumbers.map((n) => {
-                  const status = rowMap[n] || "NOT_TESTED";
+                  const st = rowMap[n] || "NOT_TESTED";
                   let bg = "#666";
-                  if (status === "PASS") bg = "#66bb6a";
-                  else if (status === "FAIL") bg = "#ef5350";
+                  if (st === "PASS") bg = "#66bb6a";
+                  else if (st === "FAIL") bg = "#ef5350";
                   return (
                     <td key={n} style={{ ...tdStyle, backgroundColor: bg }}>
-                      {status}
+                      {st}
                     </td>
                   );
                 })}
@@ -180,7 +220,6 @@ function ConceptTable({ aggregatorObj, stageKey }) {
     </Box>
   );
 }
-
 const tableStyle = {
   borderCollapse: "collapse",
   width: "100%",
@@ -200,227 +239,272 @@ const tdStyle = {
 };
 
 /**************************************************************
- * 4) AttemptsByDate => merges aggregator attempts => day-by-day 
- *    + lumps => usage. 
+ * AttemptsTabs => row of Q1(R1) => below => AttemptDetail
  **************************************************************/
-function AttemptsByDate({ quizAttempts, revisionAttempts, usageByAttempt }) {
-  // usageByAttempt: { attemptNumber => { dateStr => totalSec } }, 
-  // including revisionNumber => dayStr => totalSec
-
+function AttemptsTabs({ quizAttempts, revisionAttempts, usageByAttempt }) {
   const combined = mergeQuizAndRevision(quizAttempts, revisionAttempts);
   if (!combined.length) {
-    return null;
+    return <Typography variant="body2">No attempts found.</Typography>;
   }
-
-  // group attempts by date
-  const mapByDate = {};
-  combined.forEach((att) => {
-    const dStr = formatDate(att.timestamp);
-    if (!mapByDate[dStr]) mapByDate[dStr] = [];
-    mapByDate[dStr].push(att);
+  // build array => { label: "Q1 (Apr 11)", isQuiz, ... }
+  const attemptsArray = combined.map((att) => {
+    const isQuiz = att.type === "quiz";
+    const prefix = isQuiz ? "Q" : "R";
+    const num = att.attemptNumber || att.revisionNumber || 1;
+    const dateStr = formatDate(att.timestamp);
+    return {
+      ...att,
+      isQuiz,
+      label: `${prefix}${num} (${dateStr})`,
+    };
   });
-  const dateKeys = Object.keys(mapByDate).sort(
-    (a, b) => new Date(a).getTime() - new Date(b).getTime()
-  );
+
+  const [tabIndex, setTabIndex] = useState(0);
+  const handleChange = (evt, val) => setTabIndex(val);
+
+  const selectedAttempt = attemptsArray[tabIndex] || null;
 
   return (
-    <Box sx={{ mt: 3 }}>
-      <Typography variant="h6" sx={{ mb: 1 }}>
-        Attempts By Date
-      </Typography>
+    <Box sx={{ mt: 2 }}>
+      <Tabs
+        value={tabIndex}
+        onChange={handleChange}
+        variant="scrollable"
+        scrollButtons="auto"
+        textColor="inherit"
+        TabIndicatorProps={{ style: { backgroundColor: "#fff" } }}
+        sx={{ minHeight: "32px" }}
+      >
+        {attemptsArray.map((a, i) => (
+          <Tab
+            key={i}
+            label={a.label}
+            sx={{
+              minHeight: "32px",
+              color: "#ccc",
+              "&.Mui-selected": { color: "#fff", fontWeight: "bold" },
+            }}
+          />
+        ))}
+      </Tabs>
 
-      {dateKeys.map((day) => {
-        const dayAttempts = mapByDate[day];
-        return (
-          <Box key={day} sx={{ mb: 3 }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: "bold", mb: 1 }}>
-              {day} ({dayAttempts.length} attempt{dayAttempts.length > 1 ? "s" : ""})
-            </Typography>
-            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
-              {dayAttempts.map((att, idx) => {
-                const prefix = att.type === "quiz" ? "Q" : "R";
-                const num = att.attemptNumber || att.revisionNumber || 1;
-                const label = `${prefix}${num}`;
+      {selectedAttempt && (
+        <AttemptDetail
+          attempt={selectedAttempt}
+          usageMap={usageByAttempt[getAttemptNum(selectedAttempt)] || {}}
+        />
+      )}
+    </Box>
+  );
+}
+function getAttemptNum(a) {
+  return a.type === "quiz" ? a.attemptNumber : a.revisionNumber;
+}
 
-                // usage for this attempt => usageByAttempt[num]
-                // But be mindful: if it's a quiz attempt, attemptNumber = n
-                // If it's a revision, revisionNumber = n. We'll use the same usageByAttempt for both, 
-                // since our lumps parse function merges them by doc.attemptNumber or doc.revisionNumber.
-                return (
-                  <AttemptTile
-                    key={idx}
-                    label={label}
-                    attempt={att}
-                    usageMap={usageByAttempt[num] || {}}
-                  />
-                );
-              })}
-            </Box>
-          </Box>
-        );
-      })}
+/**************************************************************
+ * AttemptDetail => 
+ *   - If revision => show “(Revision Attempt)”
+ *   - If quiz => show pills: Score, Time Usage, “X / Y correct”
+ *   - Then each question is collapsed => question header, concept, pass/fail
+ *       => expand => 4 options highlight
+ **************************************************************/
+function AttemptDetail({ attempt, usageMap }) {
+  if (attempt.type !== "quiz") {
+    // Just show revision => usage
+    return (
+      <Box sx={{ mt: 2, p: 2, backgroundColor: "#222", borderRadius: 2 }}>
+        <Typography variant="body2" sx={{ fontWeight: "bold", mb: 1 }}>
+          (Revision Attempt)
+        </Typography>
+        <TimeUsage usageMap={usageMap} />
+      </Box>
+    );
+  }
+
+  // It's a quiz => show advanced info
+  const quizSubmission = attempt.quizSubmission || [];
+  const totalQuestions = quizSubmission.length;
+  const correctCount = quizSubmission.filter(
+    (q) => q.score && parseFloat(q.score) >= 1
+  ).length;
+
+  // parse attempt.score => might be “33%” or “2/3” or numeric
+  const scoreStr = attempt.score || "N/A";
+
+  return (
+    <Box sx={{ mt: 2, p: 2, backgroundColor: "#222", borderRadius: 2 }}>
+      {/* Pills row => Score, time usage, correct/total */}
+      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 2 }}>
+        <Chip
+          label={`Score: ${scoreStr}`}
+          sx={{ backgroundColor: "#333", color: "#fff", fontWeight: "bold" }}
+        />
+        <TimeUsagePill usageMap={usageMap} />
+        <Chip
+          label={`Correct: ${correctCount}/${totalQuestions}`}
+          sx={{ backgroundColor: "#333", color: "#fff", fontWeight: "bold" }}
+        />
+      </Box>
+
+      {/* Then each question => collapsed state => question + pass/fail */}
+      {quizSubmission.map((q, idx) => (
+        <QuestionAccordion key={idx} q={q} index={idx} />
+      ))}
     </Box>
   );
 }
 
 /**************************************************************
- * 5) AttemptTile => Q1, R1 => expand => question details + day-wise usage
+ * TimeUsage => if usageMap empty => “Time usage: 0 seconds”
+ *             else => list day/time
  **************************************************************/
-function AttemptTile({ label, attempt, usageMap }) {
-  const [expanded, setExpanded] = useState(false);
-  const isQuiz = attempt.type === "quiz";
-  const handleToggle = () => {
-    if (isQuiz) setExpanded(!expanded);
-  };
-
+function TimeUsage({ usageMap }) {
+  const entries = Object.entries(usageMap).sort((a,b) => new Date(a[0]) - new Date(b[0]));
   return (
-    <Paper
-      sx={{
-        p: 1,
-        backgroundColor: "#444",
-        color: "#fff",
-        border: "1px solid #666",
-        borderRadius: 2,
-        width: "200px",
-      }}
-    >
-      {/* Header => label + expand icon if quiz */}
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          cursor: isQuiz ? "pointer" : "default",
-        }}
-        onClick={handleToggle}
-      >
-        <Typography variant="body2" sx={{ fontWeight: "bold" }}>
-          {label}
-        </Typography>
-        {isQuiz && (
-          <ExpandMoreIcon
-            sx={{
-              transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
-              transition: "transform 0.2s ease",
-            }}
-          />
-        )}
-      </Box>
-
-      {/* If revision => just show a note */}
-      {!isQuiz && (
-        <Typography variant="body2" sx={{ mt: 1 }}>
-          (Revision Attempt)
-        </Typography>
-      )}
-
-      {/* If quiz => small line about score */}
-      {isQuiz && (
-        <Typography variant="body2" sx={{ mt: 1 }}>
-          Score: {attempt.score || "(no score)"}
-        </Typography>
-      )}
-
-      {/* day-wise usage => usageMap => { dateStr: totalSec, ... } */}
-      {Object.keys(usageMap).length > 0 && (
-        <Box sx={{ mt: 1 }}>
-          <Divider sx={{ mb: 1, borderColor: "#666" }} />
-          <Typography variant="body2" sx={{ fontWeight: "bold" }}>
-            Day-wise Usage:
+    <Box sx={{ mb: 2 }}>
+      <Typography variant="body2" sx={{ fontWeight: "bold", mb: 0.5 }}>
+        Time usage:
+      </Typography>
+      {entries.length === 0 ? (
+        <Typography variant="body2">0 seconds</Typography>
+      ) : (
+        entries.map(([dStr, secs], i) => (
+          <Typography variant="body2" key={i}>
+            {dStr}: {secs} sec
           </Typography>
-          {Object.entries(usageMap)
-            .sort((a, b) => new Date(a[0]) - new Date(b[0]))
-            .map(([dStr, secs], idx) => (
-              <Typography variant="body2" key={idx}>
-                {dStr}: {secs} sec
-              </Typography>
-            ))}
-        </Box>
+        ))
       )}
-
-      {/* If isQuiz and expanded => show question details */}
-      {isQuiz && expanded && attempt.quizSubmission && (
-        <Box sx={{ mt: 1 }}>
-          <Divider sx={{ mb: 1, borderColor: "#666" }} />
-          {attempt.quizSubmission.map((q, i) => {
-            // parse userAnswer
-            const userAnswerIdx = parseInt(q.userAnswer, 10);
-            const correctIdx = q.correctIndex;
-            const userAnswer = q.options?.[userAnswerIdx] || "(none)";
-            const correctAnswer = q.options?.[correctIdx] || "(none)";
-            const isCorrect = q.score && parseFloat(q.score) >= 1;
-
-            return (
-              <Box
-                key={i}
-                sx={{
-                  mb: 1,
-                  backgroundColor: "#333",
-                  p: 1,
-                  borderRadius: 1,
-                }}
-              >
-                <Typography variant="body2" sx={{ fontWeight: "bold" }}>
-                  Q{i + 1}: {q.question || "Untitled question"}
-                </Typography>
-                <Typography variant="body2">
-                  <strong>Your Answer:</strong> {userAnswer}
-                </Typography>
-                <Typography variant="body2">
-                  <strong>Correct Answer:</strong> {correctAnswer}
-                </Typography>
-                <Typography
-                  variant="body2"
-                  sx={{ color: isCorrect ? "green" : "red", fontWeight: "bold" }}
-                >
-                  {isCorrect ? "PASS" : "FAIL"}
-                </Typography>
-                {q.feedback && (
-                  <Typography variant="body2" sx={{ fontStyle: "italic" }}>
-                    {q.feedback}
-                  </Typography>
-                )}
-              </Box>
-            );
-          })}
-        </Box>
-      )}
-    </Paper>
+    </Box>
   );
 }
 
 /**************************************************************
- * 6) MAIN HistoryView => fetch aggregator + getActivityTime 
- *    merges lumps => usage
+ * TimeUsagePill => same data, but as a single “pill” if you prefer
+ **************************************************************/
+function TimeUsagePill({ usageMap }) {
+  // sum total
+  let totalSec = 0;
+  Object.values(usageMap).forEach((val) => { totalSec += val; });
+  return (
+    <Chip
+      label={`Time: ${totalSec || 0}s`}
+      sx={{ backgroundColor: "#333", color: "#fff", fontWeight: "bold" }}
+    />
+  );
+}
+
+/**************************************************************
+ * QuestionAccordion => collapsed => Q# + pass/fail + concept
+ *                     expanded => show all 4 options, highlight
+ **************************************************************/
+function QuestionAccordion({ q, index }) {
+  const [expanded, setExpanded] = useState(false);
+  const userAnswerIdx = parseInt(q.userAnswer, 10);
+  const correctIdx = q.correctIndex;
+  const isCorrect = q.score && parseFloat(q.score) >= 1;
+
+  return (
+    <Box
+      sx={{
+        mb: 2,
+        backgroundColor: "#333",
+        borderRadius: 1,
+        overflow: "hidden",
+      }}
+    >
+      {/* Header row => Q# + pass/fail + concept */}
+      <Box
+        onClick={() => setExpanded(!expanded)}
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          p: 1,
+          cursor: "pointer",
+        }}
+      >
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <Typography variant="body2" sx={{ fontWeight: "bold" }}>
+            Q{index + 1}: {q.question || "Untitled question"}
+          </Typography>
+          <Typography
+            variant="body2"
+            sx={{ color: isCorrect ? "green" : "red", fontWeight: "bold" }}
+          >
+            {isCorrect ? "PASS" : "FAIL"}
+          </Typography>
+        </Box>
+        <Typography variant="body2" sx={{ color: "#bbb", fontSize: "0.85rem", mt: 0.5 }}>
+          Concept: {q.conceptName || "N/A"}
+        </Typography>
+      </Box>
+
+      {/* If expanded => show options */}
+      {expanded && (
+        <Box sx={{ p: 1, backgroundColor: "#222" }}>
+          {/* All 4 options => highlight user vs correct */}
+          {q.options?.map((opt, i) => {
+            let bg = "#444";
+            if (i === correctIdx && i === userAnswerIdx) {
+              bg = "#66bb6a"; 
+            } else if (i === correctIdx) {
+              bg = "#2e7d32";
+            } else if (i === userAnswerIdx) {
+              bg = "#ef5350";
+            }
+            return (
+              <Box
+                key={i}
+                sx={{
+                  p: 1,
+                  backgroundColor: bg,
+                  borderRadius: 1,
+                  mb: 1,
+                }}
+              >
+                <Typography variant="body2">{opt}</Typography>
+              </Box>
+            );
+          })}
+          {q.feedback && (
+            <Typography variant="body2" sx={{ fontStyle: "italic" }}>
+              {q.feedback}
+            </Typography>
+          )}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+/**************************************************************
+ * Main => aggregator + lumps => 
+ *   (A) ConceptsPanel
+ *   (B) AttemptsTabs
  **************************************************************/
 export default function HistoryView({
   userId,
   planId,
   subChapterId,
-  activityId,     // needed for getActivityTime
+  activityId,
   stageKey = "remember",
-  activityType = "quiz", // "read" or "quiz" if you need that param
+  activityType = "quiz",
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [aggregatorObj, setAggregatorObj] = useState(null);
-
-  // lumps from getActivityTime => { totalTime, details: [ { dateStr, attemptNumber, revisionNumber, totalSeconds, ...} ] }
   const [timeData, setTimeData] = useState(null);
-  const [timeError, setTimeError] = useState("");
 
   useEffect(() => {
     if (!userId || !planId || !subChapterId || !activityId) return;
 
     let cancel = false;
 
-    async function fetchAll() {
+    async function doFetch() {
       try {
         setLoading(true);
         setError("");
-        setTimeError("");
 
-        // (1) aggregator => subchapter-status
+        // aggregator
         const aggRes = await axios.get("http://localhost:3001/subchapter-status", {
           params: { userId, planId, subchapterId: subChapterId },
         });
@@ -428,37 +512,35 @@ export default function HistoryView({
           setAggregatorObj(aggRes.data);
         }
 
-        // (2) getActivityTime => lumps
+        // lumps => getActivityTime
         const timeRes = await axios.get("http://localhost:3001/api/getActivityTime", {
           params: { activityId, type: activityType },
         });
         if (!cancel) {
-          setTimeData(timeRes.data); 
-          // => { totalTime, details: [...] }
+          setTimeData(timeRes.data);
         }
 
       } catch (err) {
         if (!cancel) {
-          setError(err.message || "Error fetching aggregator/time");
+          setError(err.message || "Error fetching aggregator/time lumps");
           setAggregatorObj(null);
         }
       } finally {
         if (!cancel) setLoading(false);
       }
     }
+    doFetch();
 
-    fetchAll();
     return () => {
       cancel = true;
     };
   }, [userId, planId, subChapterId, activityId, activityType]);
 
-  // minimal checks
   if (!userId || !planId || !subChapterId || !activityId) {
     return (
-      <Box sx={{ p: 2, backgroundColor: "#000", color: "red" }}>
+      <Box sx={{ p: 2, color: "red", backgroundColor: "#000" }}>
         <Typography variant="body2">
-          **HistoryView**: Missing userId, planId, subChapterId, or activityId.
+          Missing userId, planId, subChapterId, or activityId.
         </Typography>
       </Box>
     );
@@ -466,7 +548,7 @@ export default function HistoryView({
   if (loading) {
     return (
       <Box sx={{ p: 2, color: "#fff" }}>
-        <Typography variant="body2">Loading aggregator + time lumps...</Typography>
+        <Typography variant="body2">Loading data...</Typography>
       </Box>
     );
   }
@@ -480,17 +562,17 @@ export default function HistoryView({
   if (!aggregatorObj) {
     return (
       <Box sx={{ p: 2, color: "#fff" }}>
-        <Typography variant="body2">No aggregator data found.</Typography>
+        <Typography variant="body2">No aggregator data found</Typography>
       </Box>
     );
   }
 
-  // (A) aggregator => quizAttempts, revisionAttempts
+  // aggregator => attempts
   const stageData = aggregatorObj.quizStagesData?.[stageKey] || {};
   const quizAttempts = stageData.quizAttempts || [];
   const revisionAttempts = stageData.revisionAttempts || [];
 
-  // (B) lumps => build usageByAttempt => { attemptNumber => { dateStr => totalSec } }
+  // lumps => usage
   let usageByAttempt = {};
   if (timeData?.details) {
     usageByAttempt = buildUsageMap(timeData.details);
@@ -498,15 +580,11 @@ export default function HistoryView({
 
   return (
     <Box sx={{ p: 2, backgroundColor: "#000", color: "#fff" }}>
-      <Typography variant="h5" sx={{ fontWeight: "bold", mb: 2 }}>
-        History View — Stage: {stageKey}
-      </Typography>
+      {/* (A) Concepts => collapsed => progress, expanded => table */}
+      <ConceptsPanel aggregatorObj={aggregatorObj} stageKey={stageKey} />
 
-      {/* (1) Concept Table */}
-      <ConceptTable aggregatorObj={aggregatorObj} stageKey={stageKey} />
-
-      {/* (2) Attempts By Date => merges aggregator attempts => plus lumps usage */}
-      <AttemptsByDate
+      {/* (B) Attempts => row of tabs => below => detail */}
+      <AttemptsTabs
         quizAttempts={quizAttempts}
         revisionAttempts={revisionAttempts}
         usageByAttempt={usageByAttempt}
