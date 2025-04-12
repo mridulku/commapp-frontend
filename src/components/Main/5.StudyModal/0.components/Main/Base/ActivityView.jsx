@@ -1,5 +1,8 @@
 // File: ActivityView.jsx
 import React from "react";
+import { useSelector, useDispatch } from "react-redux";
+import { setCurrentIndex } from "../../../../../../store/planSlice";
+
 import QuizComponent from "../QuizComp/QuizComponent";
 import ReviseComponent from "../RevComp/ReviseComponent";
 
@@ -29,12 +32,15 @@ export default function ActivityView({
   onQuizFail,
   onRevisionDone,
 }) {
+  const dispatch = useDispatch();
+  const currentIndex = useSelector((state) => state.plan?.currentIndex ?? 0);
+
   return (
     <div style={styles.container}>
       {/* 1) No quiz => show first quiz attempt */}
       {mode === "NO_QUIZ_YET" && (
         <QuizComponent
-           activity={activity}
+          activity={activity}
           userId={userId}
           planId={planId}
           quizStage={quizStage}
@@ -49,14 +55,23 @@ export default function ActivityView({
       {/* 2) Quiz completed => success */}
       {mode === "QUIZ_COMPLETED" && (
         <div style={{ color: "lightgreen", marginBottom: "1rem" }}>
-          <p>Congratulations! You passed the <b>{quizStage}</b> stage.</p>
+          <p>
+            Congratulations! You passed the <b>{quizStage}</b> stage.
+          </p>
+          {/* NEW: "Go to Next Activity" button */}
+          <button
+            style={styles.nextButton}
+            onClick={() => dispatch(setCurrentIndex(currentIndex + 1))}
+          >
+            Go to Next Activity
+          </button>
         </div>
       )}
 
       {/* 3) If need revision => show ReviseComponent */}
       {mode === "NEED_REVISION" && lastQuizAttempt && (
         <ReviseComponent
-        activity={activity}
+          activity={activity}
           userId={userId}
           planId={planId}
           quizStage={quizStage}
@@ -70,7 +85,7 @@ export default function ActivityView({
       {/* 4) If revision done => user can retake quiz */}
       {mode === "CAN_TAKE_NEXT_QUIZ" && lastQuizAttempt && (
         <QuizComponent
-        activity={activity}
+          activity={activity}
           userId={userId}
           planId={planId}
           quizStage={quizStage}
@@ -88,5 +103,14 @@ export default function ActivityView({
 const styles = {
   container: {
     padding: "16px",
+  },
+  nextButton: {
+    backgroundColor: "#444",
+    color: "#fff",
+    border: "none",
+    padding: "8px 16px",
+    borderRadius: "4px",
+    cursor: "pointer",
+    marginTop: "8px",
   },
 };

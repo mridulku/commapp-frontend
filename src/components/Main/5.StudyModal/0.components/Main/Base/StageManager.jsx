@@ -457,6 +457,10 @@ export default function StageManager({ examId, activity, userId }) {
 
           {subView === "history" && (
             <HistoryView
+              activityId={activity.activityId}
+              subChapterId={subChapterId}
+              planId={planId}
+              userId={userId}
               quizStage={tabKey}
               quizAttempts={quizAttempts}
               revisionAttempts={revisionAttempts}
