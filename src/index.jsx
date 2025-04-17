@@ -6,16 +6,35 @@ import reportWebVitals from './reportWebVitals';
 
 import { Provider } from 'react-redux';
 import { store } from './store/store';
-// import PlanFetcher from './src/components/DetailedBookViewer/PlanFetcher'; // Only if needed here
+
+/* -------------  add these four imports ------------- */
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { auth, db } from './firebase';          // adjust path if yours differs
+/* --------------------------------------------------- */
+
+/* -------------  one‑time listener ------------------ */
+onAuthStateChanged(auth, async (fbUser) => {
+  if (!fbUser) return;
+
+  const ref  = doc(db, 'users', fbUser.uid);
+  const snap = await getDoc(ref);
+  const have = snap.exists() ? snap.data().examType : null;
+  const want = sessionStorage.getItem('pendingExam');   // "UPSC", "CAT", …
+
+  if (!have && want) {
+    await setDoc(ref, { examType: want }, { merge: true });
+  }
+
+  sessionStorage.removeItem('pendingExam');
+});
+/* --------------------------------------------------- */
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    {/* Wrap your entire app in the Redux Provider */}
     <Provider store={store}>
       <App />
-      {/* If you want PlanFetcher directly here instead of inside App, uncomment below: */}
-      {/* <PlanFetcher /> */}
     </Provider>
   </React.StrictMode>
 );

@@ -1,275 +1,159 @@
+// ────────────────────────────────────────────────────────────────
 // File: src/components/ProfilePanel.jsx
-
+// Reads examType from Redux instead of /api/user
+// ────────────────────────────────────────────────────────────────
 import React, { useEffect, useState } from "react";
-import axios from "axios";
+import { useSelector }             from "react-redux";
+import axios                       from "axios";
 
-import EmailIcon from "@mui/icons-material/Email";
-import EventIcon from "@mui/icons-material/Event";      // calendar icon
-import TimelapseIcon from "@mui/icons-material/Timelapse"; // total time
-import WhatshotIcon from "@mui/icons-material/Whatshot";    // streak
+import EmailIcon     from "@mui/icons-material/Email";
+import EventIcon     from "@mui/icons-material/Event";
+import TimelapseIcon from "@mui/icons-material/Timelapse";
+import WhatshotIcon  from "@mui/icons-material/Whatshot";
+import SchoolIcon    from "@mui/icons-material/School";   // exam row
 
 export default function ProfilePanel({ userId }) {
-  // userDoc from /api/user
-  const [userEmail, setUserEmail] = useState("unknown@example.com");
+  /* ─── Redux: examType (always up‑to‑date across app) ─── */
+  const examType = useSelector((state) => state.exam.examType);
+
+  /* ─── ① basic user doc (email, joined) ─── */
+  const [userEmail,  setUserEmail ] = useState("unknown@example.com");
   const [joinedDate, setJoinedDate] = useState(null);
 
-  // From /api/daily-time-all
-  const [totalTimeSec, setTotalTimeSec] = useState(0);
+  /* ─── ② usage stats ─── */
+  const [totalTimeSec,  setTotalTimeSec ] = useState(0);
   const [currentStreak, setCurrentStreak] = useState(0);
 
-  // On mount => fetch user doc
+  /* ─── fetch /api/user – we still need e‑mail + join date ─── */
   useEffect(() => {
     if (!userId) return;
 
-    async function fetchUserDoc() {
+    (async () => {
       try {
-        // e.g. GET /api/user?userId=xxx
-        const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/user`, {
-          params: { userId },
-        });
+        const res = await axios.get(
+          `${import.meta.env.VITE_BACKEND_URL}/api/user`,
+          { params: { userId } }
+        );
         if (res.data?.success && res.data.user) {
           const { username, createdAt } = res.data.user;
           setUserEmail(username || "no-email@example.com");
 
-          // Parse joined date
           if (createdAt) {
-            // E.g. "2025-04-08T11:45:18.000Z"
             const d = new Date(createdAt);
-            if (!isNaN(d.valueOf())) {
-              setJoinedDate(d);
-            }
+            if (!isNaN(d)) setJoinedDate(d);
           }
-        } else {
-          console.warn("No user doc found or success=false.");
         }
       } catch (err) {
-        console.error("Error fetching user doc:", err);
+        console.error("ProfilePanel /api/user:", err);
       }
-    }
-
-    fetchUserDoc();
+    })();
   }, [userId]);
 
-  // Then fetch all daily usage
+  /* ─── fetch /api/daily-time-all – unchanged ─── */
   useEffect(() => {
     if (!userId) return;
 
-    async function fetchAllDailyTimes() {
+    (async () => {
       try {
-        // e.g. GET /api/daily-time-all?userId=xxx
-        const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/daily-time-all`, {
-          params: { userId },
-        });
-        if (res.data && res.data.success) {
-          const records = res.data.records || [];
-          // sum total
-          let totalSec = 0;
-          const dateMap = new Map();
-          records.forEach((r) => {
-            totalSec += (r.sumSeconds || 0);
-            dateMap.set(r.dateStr, r.sumSeconds || 0);
-          });
-          setTotalTimeSec(totalSec);
+        const res = await axios.get(
+          `${import.meta.env.VITE_BACKEND_URL}/api/daily-time-all`,
+          { params: { userId } }
+        );
+        if (!res.data?.success) return;
 
-          // compute streak
-          const streakDays = computeStreak(dateMap);
-          setCurrentStreak(streakDays);
-        } else {
-          console.warn("No data from daily-time-all endpoint");
-        }
+        const records = res.data.records || [];
+        const dateMap = new Map();
+        let tot = 0;
+
+        records.forEach((r) => {
+          tot += r.sumSeconds || 0;
+          dateMap.set(r.dateStr, r.sumSeconds || 0);
+        });
+
+        setTotalTimeSec(tot);
+        setCurrentStreak(computeStreak(dateMap));
       } catch (err) {
-        console.error("Error fetching daily-time-all:", err);
+        console.error("ProfilePanel /api/daily-time-all:", err);
       }
-    }
-    fetchAllDailyTimes();
+    })();
   }, [userId]);
 
-  // Compute consecutive-day streak going backward from today
+  /* ─── helpers ─── */
   function computeStreak(dateMap) {
-    let streakCount = 0;
-    const today = new Date();
+    let streak = 0;
+    const d = new Date();
     while (true) {
-      const dateStr = formatDate(today);
-      const usage = dateMap.get(dateStr) || 0;
-      if (usage > 0) {
-        streakCount++;
-        today.setDate(today.getDate() - 1);
-      } else {
-        break;
-      }
+      const key = fmt(d);
+      const used = dateMap.get(key) || 0;
+      if (used > 0) {
+        streak += 1;
+        d.setDate(d.getDate() - 1);
+      } else break;
     }
-    return streakCount;
+    return streak;
   }
+  const fmt   = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const fmtUI = (d) => d.toLocaleDateString(undefined,{ year:"numeric", month:"short", day:"numeric" });
+  const fmtT  = (s) => (s>=3600?`${Math.floor(s/3600)}h `:"") + `${Math.floor((s%3600)/60)}m`;
 
-  function formatDate(d) {
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  }
-
-  function formatDateNice(d) {
-    // e.g. "Apr 8, 2025"
-    return d.toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  }
-
-  // Convert totalTimeSec => "Xh Ym"
-  function formatTotalTime(sec) {
-    const hours = Math.floor(sec / 3600);
-    const mins = Math.floor((sec % 3600) / 60);
-    if (hours > 0) return `${hours}h ${mins}m`;
-    return `${mins}m`;
-  }
-
-  const totalTimeStr = formatTotalTime(totalTimeSec);
-
-  // The avatar text => uppercase first letter of email
+  /* ─── render ─── */
   const avatarChar = userEmail?.[0]?.toUpperCase() || "U";
 
   return (
     <div style={styles.container}>
       <h2 style={styles.header}>My Profile</h2>
 
-      {/* Profile top area: email + joined date */}
+      {/* profile block */}
       <div style={styles.profileCard}>
-        <div style={styles.avatarSection}>
-          <div style={styles.avatarCircle}>{avatarChar}</div>
+        <div style={styles.avatarRow}>
+          <div style={styles.avatar}>{avatarChar}</div>
           <div>
-            {/* Email row */}
-            <p style={styles.userEmail}>
-              <EmailIcon sx={{ fontSize: 16, verticalAlign: "middle", mr: 1 }} />
-              {userEmail}
-            </p>
-
-            {/* Joined row (only if joinedDate is available) */}
+            <p style={styles.line}><EmailIcon sx={iconSX}/> {userEmail}</p>
             {joinedDate && (
-              <p style={styles.joinedDate}>
-                <EventIcon sx={{ fontSize: 16, verticalAlign: "middle", mr: 1 }} />
-                Joined on {formatDateNice(joinedDate)}
-              </p>
+              <p style={styles.line}><EventIcon sx={iconSX}/> Joined on {fmtUI(joinedDate)}</p>
+            )}
+            {examType && (
+              <p style={styles.line}><SchoolIcon sx={iconSX}/> Exam — {examType}</p>
             )}
           </div>
         </div>
       </div>
 
-      {/* Stats: total time + streak, in vertical column */}
-      <div style={styles.statsColumn}>
-        {/* Total Time Studied */}
-        <div style={{ ...styles.statCard, backgroundColor: "#4DD0E1" }}>
-          <div style={styles.statIconWrap}>
-            <TimelapseIcon sx={{ fontSize: 30 }} />
-          </div>
-          <div style={styles.statTextWrap}>
-            <p style={styles.statLabel}>Total Time Studied</p>
-            <p style={styles.statValue}>{totalTimeStr}</p>
-          </div>
-        </div>
-
-        {/* Current Streak */}
-        <div style={{ ...styles.statCard, backgroundColor: "#FFB74D" }}>
-          <div style={styles.statIconWrap}>
-            <WhatshotIcon sx={{ fontSize: 30 }} />
-          </div>
-          <div style={styles.statTextWrap}>
-            <p style={styles.statLabel}>Current Streak</p>
-            <p style={styles.statValue}>{currentStreak} days</p>
-          </div>
-        </div>
+      {/* stats */}
+      <div style={styles.statsCol}>
+        <StatCard bg="#4DD0E1" Icon={TimelapseIcon} label="Total Time Studied" value={fmtT(totalTimeSec)} />
+        <StatCard bg="#FFB74D" Icon={WhatshotIcon}  label="Current Streak"     value={`${currentStreak} day${currentStreak===1?"":"s"}`} />
       </div>
     </div>
   );
 }
 
-// Inline styles
+/* ─── small reusable card ─── */
+function StatCard({ bg, Icon, label, value }) {
+  return (
+    <div style={{ ...styles.statCard, backgroundColor: bg }}>
+      <div style={styles.statIconWrap}><Icon sx={{ fontSize: 30 }} /></div>
+      <div><p style={styles.statLabel}>{label}</p><p style={styles.statValue}>{value}</p></div>
+    </div>
+  );
+}
+
+/* ─── styling ─── */
+const iconSX = { fontSize: 16, verticalAlign: "middle", marginRight: 6 };
+
 const styles = {
-  container: {
-    width: "100%",
-    maxWidth: "720px",
-    margin: "0 auto",
-    color: "#fff",
-    fontFamily: "'Open Sans', sans-serif",
-  },
-  header: {
-    marginBottom: 16,
-    borderBottom: "1px solid #555",
-    paddingBottom: 8,
-  },
-  profileCard: {
-    backgroundColor: "rgba(255,255,255,0.1)",
-    borderRadius: 8,
-    padding: "16px",
-    marginBottom: 16,
-  },
-  avatarSection: {
-    display: "flex",
-    alignItems: "center",
-    gap: 16,
-  },
-  avatarCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: "50%",
-    backgroundColor: "#888",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    color: "#fff",
-    fontSize: "1.2rem",
-    fontWeight: "bold",
-  },
-  userEmail: {
-    margin: 0,
-    fontSize: "0.95rem",
-    opacity: 0.9,
-    display: "flex",
-    alignItems: "center",
-    gap: 4,
-  },
-  joinedDate: {
-    margin: 0,
-    marginTop: 6,
-    fontSize: "0.85rem",
-    opacity: 0.8,
-    display: "flex",
-    alignItems: "center",
-  },
-  statsColumn: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "16px",
-  },
-  statCard: {
-    borderRadius: 8,
-    padding: "12px",
-    color: "#000",
-    display: "flex",
-    alignItems: "center",
-    gap: "12px",
-  },
-  statIconWrap: {
-    backgroundColor: "rgba(255,255,255,0.3)",
-    borderRadius: "50%",
-    width: 48,
-    height: 48,
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  statTextWrap: {
-    display: "flex",
-    flexDirection: "column",
-  },
-  statLabel: {
-    margin: 0,
-    fontSize: "0.8rem",
-  },
-  statValue: {
-    margin: 0,
-    fontSize: "1.2rem",
-    fontWeight: "bold",
-  },
+  container:  { width:"100%", maxWidth:720, margin:"0 auto", color:"#fff" },
+  header:     { marginBottom:16, borderBottom:"1px solid #555", paddingBottom:8 },
+  profileCard:{ background:"rgba(255,255,255,0.1)", borderRadius:8, padding:16, marginBottom:16 },
+  avatarRow:  { display:"flex", alignItems:"center", gap:16 },
+  avatar:     { width:60, height:60, borderRadius:"50%", background:"#888",
+                display:"flex", justifyContent:"center", alignItems:"center",
+                fontSize:"1.2rem", fontWeight:"bold" },
+  line:       { margin:0, fontSize:"0.9rem", opacity:0.85, display:"flex", alignItems:"center" },
+  statsCol:   { display:"flex", flexDirection:"column", gap:16 },
+  statCard:   { borderRadius:8, padding:12, color:"#000", display:"flex", alignItems:"center", gap:12 },
+  statIconWrap:{ background:"rgba(255,255,255,0.3)", borderRadius:"50%", width:48, height:48,
+                 display:"flex", justifyContent:"center", alignItems:"center" },
+  statLabel:  { margin:0, fontSize:"0.8rem" },
+  statValue:  { margin:0, fontSize:"1.25rem", fontWeight:"bold" },
 };

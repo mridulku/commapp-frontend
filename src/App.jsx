@@ -1,5 +1,11 @@
 // frontend/src/App.jsx
 import React, { useEffect } from "react";
+
+import { useDispatch } from "react-redux";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "./firebase";                    // ← adjust if path differs
+import { fetchExamType, clearExamType } from "./store/examSlice";
+
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 
 import "slick-carousel/slick/slick.css";
@@ -10,6 +16,19 @@ import { loadUsetifulScript, setUsetifulTags } from "usetiful-sdk";
 
 // NEW: Landing Page (public)
 import LandingPage from "./components/Main/0.PreLogin/0.LandingPage";
+
+import TOEFLLandingPage from "./components/Main/0.PreLogin/LandingPages/TOEFL";
+import CBSELandingPage from "./components/Main/0.PreLogin/LandingPages/CBSE";
+import CATLandingPage from "./components/Main/0.PreLogin/LandingPages/CAT";
+import FRMLandingPage from "./components/Main/0.PreLogin/LandingPages/FRM";
+import GATELandingPage from "./components/Main/0.PreLogin/LandingPages/GATE";
+import GRELandingPage from "./components/Main/0.PreLogin/LandingPages/GRE";
+import JEEADVANCEDLandingPage from "./components/Main/0.PreLogin/LandingPages/JEEADVANCED";
+import NEETUGLandingPage from "./components/Main/0.PreLogin/LandingPages/NEETUG";
+import SATLandingPage from "./components/Main/0.PreLogin/LandingPages/SAT";
+import UPSCLandingPage from "./components/Main/0.PreLogin/LandingPages/UPSC";
+
+
 
 import PromptManager from "./components/yBrainstorming/diagrams/Pilot|AddToDB|Coding/PilotComponents/PromptMgmtDeprecated/PromptManager";
 import PromptInput from "./components/yBrainstorming/diagrams/Pilot|AddToDB|Coding/PilotComponents/PromptMgmtDeprecated/PromptInput";
@@ -82,6 +101,20 @@ function App() {
       // lastName: "Doe",
  //   });
  // }, []);
+
+const dispatch = useDispatch();                // ← ADD
+
+
+ useEffect(() => {
+  const unsub = onAuthStateChanged(auth, (user) => {
+    if (user) {
+      dispatch(fetchExamType(user.uid));   // pulls `/users/{uid}.examType`
+    } else {
+      dispatch(clearExamType());           // reset to null on sign‑out
+    }
+  });
+  return () => unsub();                    // tidy up on unmount
+}, [dispatch]);
 
   return (
     <Router>
@@ -411,6 +444,96 @@ function App() {
             </PrivateRoute>
           }
         />
+
+        <Route
+          path="/toefl"
+          element={
+            
+              <TOEFLLandingPage />
+            
+          }
+        />
+
+<Route
+          path="/cat"
+          element={
+            
+              <CATLandingPage />
+            
+          }
+        />
+
+
+<Route
+          path="/cbse"
+          element={
+            
+              <CBSELandingPage />
+            
+          }
+        />
+
+<Route
+          path="/frm"
+          element={
+            
+              <FRMLandingPage />
+            
+          }
+        />
+
+<Route
+          path="/gate"
+          element={
+            
+              <GATELandingPage />
+            
+          }
+        />
+
+
+<Route
+          path="/jeeadvanced"
+          element={
+            
+              <JEEADVANCEDLandingPage />
+            
+          }
+        />
+
+
+<Route
+          path="/neetug"
+          element={
+            
+              <NEETUGLandingPage />
+            
+          }
+        />
+
+
+<Route
+          path="/sat"
+          element={
+            
+              <SATLandingPage />
+            
+          }
+        />
+
+
+<Route
+          path="/upsc"
+          element={
+            
+              <UPSCLandingPage />
+            
+          }
+        />
+
+
+
+
         
       </Routes>
       
