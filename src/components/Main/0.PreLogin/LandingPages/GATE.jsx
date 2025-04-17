@@ -62,18 +62,18 @@ import googleIcon           from "../logo.png";            // small “G” logo
 /*---------------------------------------------------------------------------
   0. slug → canonical exam name
   -------------------------------------------------------------------------*/
-const slugToType = {
-  cbse:        "CBSE",
-  jeeadvanced: "JEE Adv",
-  neet:        "NEET",
-  sat:         "SAT",
-  gate:        "GATE",
-  cat:         "CAT",
-  gre:         "GRE",
-  toefl:       "TOEFL",
-  upsc:        "UPSC",
-  frm:         "FRM",
-};
+  const slugToType = {
+    cbse:        "CBSE",
+    jeeadvanced: "JEEADVANCED",
+    neet:        "NEET",
+    sat:         "SAT",
+    gate:        "GATE",
+    cat:         "CAT",
+    gre:         "GRE",
+    toefl:       "TOEFL",
+    upsc:        "UPSC",
+    frm:         "FRM",
+  };
 
 /*---------------------------------------------------------------------------
   1. THEME

@@ -175,50 +175,68 @@ function Dashboard() {
   const [onboardingPlanId, setOnboardingPlanId] = useState(null);
   const [isCheckingPlanId, setIsCheckingPlanId] = useState(false);
 
-  useEffect(() => {
-    let intervalId;
-    // Only do this if user is TOEFL, is logged in, and we want to show onboarding
-    if (examType === "TOEFL" && showOnboardingModal && userId) {
-      setIsCheckingPlanId(true);
+  /* ---------- replace the old polling effect with this ---------- */
+useEffect(() => {
+  /** 1.  Which exams rely on a *pre‑generated* onboarding plan
+   *      (i.e. the planId is written into users/{uid}.onboardingBook)?
+   *      Add / remove slugs here as you roll‑out new exams.
+   */
+  const PREGENERATED_EXAMS = [
+    "TOEFL",
+    "CBSE",
+    "JEEADVANCED",
+    "NEET",
+    "SAT",
+    "GATE",
+    "CAT",
+    "GRE",
+    "UPSC",
+    "FRM",
+    // "RELUX"   // ← keep if you have that special test exam
+  ];
 
-      // A small function to fetch the user's doc from your backend
-      const fetchPlanId = async () => {
-        try {
-          // Adjust this endpoint to match your actual API route
-          const res = await axios.get(
-            `${import.meta.env.VITE_BACKEND_URL}/userDoc`,
-            { params: { userId } }
-          );
-          // Suppose the structure is { success: true, userDoc: { onboardingBook: { planId: ... } } }
-          if (
-            res.data?.success &&
-            res.data.userDoc?.onboardingBook?.planId
-          ) {
-            setOnboardingPlanId(res.data.userDoc.onboardingBook.planId);
+  let intervalId;
 
-            // Once we have it, no need to keep polling
-            setIsCheckingPlanId(false);
-            if (intervalId) clearInterval(intervalId);
-          }
-        } catch (error) {
-          console.error("Error fetching onboarding plan ID:", error);
+  /** 2.  Start polling only if:
+   *      • the user’s exam is in the “pre‑generated” list
+   *      • onboarding UI is currently open
+   *      • we have a logged‑in userId
+   */
+  const needsPolling =
+    PREGENERATED_EXAMS.includes(examType) &&
+    showOnboardingModal &&
+    userId;
+
+  if (needsPolling) {
+    setIsCheckingPlanId(true);
+
+    const fetchPlanId = async () => {
+      try {
+        const res = await axios.get(
+          `${import.meta.env.VITE_BACKEND_URL}/userDoc`,
+          { params: { userId } }
+        );
+
+        const planId = res.data?.userDoc?.onboardingBook?.planId;
+        if (res.data?.success && planId) {
+          setOnboardingPlanId(planId);
+          setIsCheckingPlanId(false);
+          clearInterval(intervalId);            // stop polling
         }
-      };
-
-      // Immediately attempt fetch
-      fetchPlanId();
-
-      // Then poll every 3 seconds until we find the planId
-      intervalId = setInterval(() => {
-        fetchPlanId();
-      }, 3000);
-    }
-
-    // Cleanup the polling when user leaves or toggles
-    return () => {
-      if (intervalId) clearInterval(intervalId);
+      } catch (err) {
+        console.error("Error fetching onboarding planId:", err);
+      }
     };
-  }, [examType, showOnboardingModal, userId]);
+
+    fetchPlanId();                              // initial attempt
+    intervalId = setInterval(fetchPlanId, 3000); // → every 3 s
+  }
+
+  /** 3.  Clean‑up the interval when component unmounts
+   *      or when any dependency (examType / modal state / userId) changes.
+   */
+  return () => clearInterval(intervalId);
+}, [examType, showOnboardingModal, userId]);
 
   /**
    * handleOpenPlanEditor(bookId) => Called by OnboardingModal
@@ -278,11 +296,13 @@ function Dashboard() {
           <ProfilePanel
             userId={userId}
           />
-          {examType === "TOEFL" || examType === "RELUX" ? (
-            <TOEFLAdaptiveProcess />
-          ) : (
-            <PanelAdaptiveProcess />
-          )}
+          {/* 
+  {examType === "TOEFL" || examType === "RELUX" ? (
+    <TOEFLAdaptiveProcess />
+  ) : (
+    <PanelAdaptiveProcess />
+  )}
+*/}
         </div>
       </>
     );
@@ -448,66 +468,47 @@ function Dashboard() {
       />
 
       {/* Onboarding Modal */}
-      {examType === "TOEFL" ? (
-        showOnboardingModal && (
-          // If we're still polling for planId => show a fullscreen loading overlay
-          isCheckingPlanId ? (
-            <div
-              style={{
-                position: "fixed",
-                top: 0,
-                left: 0,
-                width: "100%",
-                height: "100%",
-                backgroundColor: "#000",
-                color: "#fff",
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                zIndex: 9999,
-              }}
-            >
-              <h2>Loading Onboarding...</h2>
-            </div>
-          ) : onboardingPlanId ? (
-            <PlanFetcher
-              planId={onboardingPlanId}
-              userId={userId}
-              initialActivityContext={null}
-              backendURL={import.meta.env.VITE_BACKEND_URL}
-              fetchUrl="/api/adaptive-plan"
-              onClose={() => setShowOnboardingModal(false)}
-            />
-          ) : (
-            // If we finished checking but planId is still null => show a fallback
-            <div
-              style={{
-                position: "fixed",
-                top: 0,
-                left: 0,
-                width: "100%",
-                height: "100%",
-                backgroundColor: "#000",
-                color: "#fff",
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                zIndex: 9999,
-              }}
-            >
-              <h2>No Onboarding Plan Found Yet.</h2>
-            </div>
-          )
-        )
-      ) : (
-        <OnboardingModal
-          open={showOnboardingModal}
-          onClose={() => setShowOnboardingModal(false)}
-          onOpenPlanEditor={(bookId) => {
-            console.log("Open plan editor for normal flow with", bookId);
-          }}
-        />
-      )}
+      {/* ‑‑‑ Onboarding modal chooser  ---------------------------------- */}
+{["TOEFL","CBSE","JEEADVANCED","NEET","SAT","GATE","CAT","GRE","UPSC","FRM"].includes(examType) ? (
+  showOnboardingModal && (
+    isCheckingPlanId ? (
+      /* 1. full‑screen loader while we poll */
+      <div style={{
+        position:"fixed",top:0,left:0,width:"100%",height:"100%",
+        background:"#000",color:"#fff",display:"flex",
+        alignItems:"center",justifyContent:"center",zIndex:9999
+      }}>
+        <h2>Loading Onboarding…</h2>
+      </div>
+    ) : onboardingPlanId ? (
+      /* 2. we found the planId ⇒ show PlanFetcher */
+      <PlanFetcher
+        planId={onboardingPlanId}
+        userId={userId}
+        initialActivityContext={null}
+        backendURL={import.meta.env.VITE_BACKEND_URL}
+        fetchUrl="/api/adaptive-plan"
+        onClose={() => setShowOnboardingModal(false)}
+      />
+    ) : (
+      /* 3. polling finished but no planId */
+      <div style={{
+        position:"fixed",top:0,left:0,width:"100%",height:"100%",
+        background:"#000",color:"#fff",display:"flex",
+        alignItems:"center",justifyContent:"center",zIndex:9999
+      }}>
+        <h2>No Onboarding Plan Found Yet.</h2>
+      </div>
+    )
+  )
+) : (
+  /* fallback: generic upload‑first onboarding */
+  <OnboardingModal
+    open={showOnboardingModal}
+    onClose={() => setShowOnboardingModal(false)}
+    onOpenPlanEditor={(bookId) => console.log("Open plan editor", bookId)}
+  />
+)}
 
       {/* Plan Editor Modal (separate from onboarding) */}
       <EditAdaptivePlanModal

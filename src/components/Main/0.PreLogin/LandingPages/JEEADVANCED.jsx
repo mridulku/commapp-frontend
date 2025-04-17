@@ -64,7 +64,7 @@ import googleIcon           from "../logo.png";            // small “G” logo
   -------------------------------------------------------------------------*/
 const slugToType = {
   cbse:        "CBSE",
-  jeeadvanced: "JEE Adv",
+  jeeadvanced: "JEEADVANCED",
   neet:        "NEET",
   sat:         "SAT",
   gate:        "GATE",

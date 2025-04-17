@@ -1,5 +1,5 @@
 /********************************************************************
- *  LandingRouter.jsx  (static, no backend)
+ *  LandingRouter.jsx  (static, no backend) – updated “Select Exam” flow
  ********************************************************************/
 import React, { useState } from "react";
 import { useParams, Link } from "react-router-dom";
@@ -9,7 +9,6 @@ import {
   Grid, Card, CardActionArea, Dialog, DialogContent,
   Stack, IconButton, Paper
 } from "@mui/material";
-import MenuIcon from "@mui/icons-material/Menu";
 import CloseIcon from "@mui/icons-material/Close";
 import EmojiObjectsIcon from "@mui/icons-material/EmojiObjects";
 import TimelineIcon from "@mui/icons-material/Timeline";
@@ -42,25 +41,31 @@ const theme = createTheme({
 // 2. STATIC DATA
 ////////////////////////////////////////////////////////////////////////////////
 const EXAMS = [
-  { slug: "cbse",  name: "CBSE" },
-  { slug: "jeeadvanced",   name: "JEE Adv" },
-  { slug: "neet",  name: "NEET" },
-  { slug: "sat",   name: "SAT" },
-  { slug: "gate",  name: "GATE" },
-  { slug: "cat",   name: "CAT" },
-  { slug: "gre",   name: "GRE" },
-  { slug: "toefl", name: "TOEFL" },
-  { slug: "upsc",  name: "UPSC" },
-  { slug: "frm",   name: "FRM" }
+  { slug: "cbse",         name: "CBSE" },
+  { slug: "jeeadvanced",  name: "JEE Adv" },
+  { slug: "neet",         name: "NEET" },
+  { slug: "sat",          name: "SAT" },
+  { slug: "gate",         name: "GATE" },
+  { slug: "cat",          name: "CAT" },
+  { slug: "gre",          name: "GRE" },
+  { slug: "toefl",        name: "TOEFL" },
+  { slug: "upsc",         name: "UPSC" },
+  { slug: "frm",          name: "FRM" }
 ];
 
 ////////////////////////////////////////////////////////////////////////////////
-// 3. AUTH MODAL – one step only (no exam picker)
+// 3. EXAM‑PICKER MODAL
 ////////////////////////////////////////////////////////////////////////////////
-function AuthDialog({ open, onClose }) {
+function ExamDialog({ open, onClose }) {
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogContent sx={{ bgcolor: "background.paper", p: 4, position: "relative" }}>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogContent
+        sx={{
+          bgcolor: "background.paper",
+          p: 4,
+          position: "relative"
+        }}
+      >
         <IconButton
           onClick={onClose}
           sx={{ position: "absolute", top: 8, right: 8, color: "primary.main" }}
@@ -69,31 +74,31 @@ function AuthDialog({ open, onClose }) {
         </IconButton>
 
         <Typography variant="h6" sx={{ color: "primary.main", mb: 3 }}>
-          Start your adaptive journey
+          Select an Exam
         </Typography>
 
-        <Stack spacing={2}>
-          {/* static Google‑style button */}
-          <Button
-            variant="outlined"
-            fullWidth
-            sx={{ display: "flex", alignItems: "center", justifyContent: "center" }}
-          >
-            <img
-              src="https://developers.google.com/identity/images/g-logo.png"
-              alt=""
-              width="20"
-              height="20"
-              style={{ marginRight: 8 }}
-            />
-            Start Adaptive Learning
-          </Button>
-
-          {/* placeholder for email sign‑up */}
-          <Button variant="contained" fullWidth>
-            Continue with Email
-          </Button>
-        </Stack>
+        <Grid container spacing={2}>
+          {EXAMS.map((ex) => (
+            <Grid item xs={6} sm={4} key={ex.slug}>
+              <Button
+                fullWidth
+                variant="outlined"
+                component={Link}
+                to={`/${ex.slug}`}
+                onClick={onClose}
+                sx={{
+                  height: 60,
+                  fontWeight: 600,
+                  borderColor: "primary.main",
+                  color: "primary.main",
+                  "&:hover": { borderColor: "secondary.main", color: "secondary.main" }
+                }}
+              >
+                {ex.name}
+              </Button>
+            </Grid>
+          ))}
+        </Grid>
       </DialogContent>
     </Dialog>
   );
@@ -102,7 +107,7 @@ function AuthDialog({ open, onClose }) {
 ////////////////////////////////////////////////////////////////////////////////
 // 4. HERO (shared)
 ////////////////////////////////////////////////////////////////////////////////
-function Hero({ title, subtitle, onOpenAuth }) {
+function Hero({ title, subtitle, onOpenDialog }) {
   return (
     <Box
       sx={{
@@ -145,23 +150,19 @@ function Hero({ title, subtitle, onOpenAuth }) {
         <Typography variant="h2" sx={{ color: "primary.main", mb: 3 }}>
           {title}
         </Typography>
-        <Typography variant="h6" sx={{ color: "text.secondary", maxWidth: 720, mb: 5, lineHeight: 1.6 }}>
+        <Typography
+          variant="h6"
+          sx={{ color: "text.secondary", maxWidth: 720, mb: 5, lineHeight: 1.6 }}
+        >
           {subtitle}
         </Typography>
         <Button
           variant="outlined"
           size="large"
-          sx={{ display: "flex", alignItems: "center", px: 3 }}
-          onClick={onOpenAuth}
+          sx={{ px: 4, fontWeight: 600 }}
+          onClick={onOpenDialog}
         >
-          <img
-            src="https://developers.google.com/identity/images/g-logo.png"
-            alt=""
-            width="22"
-            height="22"
-            style={{ marginRight: 10 }}
-          />
-          Start Adaptive Learning
+          Select Exam
         </Button>
       </Container>
     </Box>
@@ -263,10 +264,10 @@ function Journey() {
 
 function Stats() {
   const stats = [
-    { label: "Learners Served", value: "8 500+" },
-    { label: "Avg. Score Boost", value: "14 %" },
-    { label: "Time Saved", value: "60 %" },
-    { label: "Satisfaction", value: "97 %" }
+    { label: "Learners Served", value: "8 500+" },
+    { label: "Avg. Score Boost", value: "14 %" },
+    { label: "Time Saved", value: "60 %" },
+    { label: "Satisfaction", value: "97 %" }
   ];
 
   return (
@@ -356,13 +357,13 @@ function Footer() {
 ////////////////////////////////////////////////////////////////////////////////
 // 8. LANDING VARIANTS
 ////////////////////////////////////////////////////////////////////////////////
-function GenericLanding({ onOpenAuth }) {
+function GenericLanding({ onOpenDialog }) {
   return (
     <>
       <Hero
         title="Adaptive Learning for Every Major Exam"
         subtitle="Pinpoint your knowledge gaps and boost your scores with AI‑driven, adaptive study paths."
-        onOpenAuth={onOpenAuth}
+        onOpenDialog={onOpenDialog}
       />
       <ExamsGrid />
       <Features />
@@ -373,13 +374,13 @@ function GenericLanding({ onOpenAuth }) {
   );
 }
 
-function ExamLanding({ examName, onOpenAuth }) {
+function ExamLanding({ examName, onOpenDialog }) {
   return (
     <>
       <Hero
         title={`Master ${examName} with Adaptive AI`}
         subtitle={`Stop wasting hours on what you already know—our engine pin‑points exactly what matters for ${examName}.`}
-        onOpenAuth={onOpenAuth}
+        onOpenDialog={onOpenDialog}
       />
       <Features />
       <Journey />
@@ -393,12 +394,12 @@ function ExamLanding({ examName, onOpenAuth }) {
 // 9. MAIN ROUTER COMPONENT
 ////////////////////////////////////////////////////////////////////////////////
 export default function LandingRouter() {
-  const { examSlug } = useParams();  // undefined on "/"
+  const { examSlug } = useParams(); // undefined on "/"
   const examMeta = EXAMS.find((e) => e.slug === examSlug);
 
-  const [openAuth, setOpenAuth] = useState(false);
-  const handleOpenAuth = () => setOpenAuth(true);
-  const handleCloseAuth = () => setOpenAuth(false);
+  const [openDialog, setOpenDialog] = useState(false);
+  const handleOpenDialog = () => setOpenDialog(true);
+  const handleCloseDialog = () => setOpenDialog(false);
 
   return (
     <ThemeProvider theme={theme}>
@@ -417,8 +418,8 @@ export default function LandingRouter() {
           </Typography>
 
           <Stack direction="row" spacing={2}>
-            <Button variant="outlined" color="primary" onClick={handleOpenAuth}>
-              Start Free
+            <Button variant="outlined" color="primary" onClick={handleOpenDialog}>
+              Select Exam
             </Button>
           </Stack>
         </Toolbar>
@@ -426,12 +427,12 @@ export default function LandingRouter() {
 
       {/* Landing variant */}
       {examMeta ? (
-        <ExamLanding examName={examMeta.name} onOpenAuth={handleOpenAuth} />
+        <ExamLanding examName={examMeta.name} onOpenDialog={handleOpenDialog} />
       ) : (
-        <GenericLanding onOpenAuth={handleOpenAuth} />
+        <GenericLanding onOpenDialog={handleOpenDialog} />
       )}
 
-      <AuthDialog open={openAuth} onClose={handleCloseAuth} />
+      <ExamDialog open={openDialog} onClose={handleCloseDialog} />
     </ThemeProvider>
   );
 }

@@ -132,8 +132,7 @@ export default function UserProfileAnalytics({ colorScheme = {} }) {
           </div>
 
           {/* Child components */}
-          <UserHistory userId={userId} colorScheme={colorScheme} />
-
+{/* <UserHistory userId={userId} colorScheme={colorScheme} /> */}
          
 
 
