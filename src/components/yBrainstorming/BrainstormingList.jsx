@@ -57,6 +57,8 @@ import StageManagerPlayground from './diagrams/Pilot|AddToDB|Coding/PilotCompone
 import Explainer from './diagrams/Pilot|AddToDB|Coding/PilotComponents/Explainer';
 
 
+import BookUploader from './BookUploader';
+
 
 
 
@@ -114,6 +116,7 @@ const diagramComponents = {
   TOEFLActivitySimulator,
   StageManagerPlayground,
   Explainer,
+  BookUploader
 };
 
 // Sample static data representing past brainstorming sessions.
@@ -121,168 +124,168 @@ const diagramComponents = {
 const sampleBrainstormings = [
   {
     id: 1,
-    title: 'USER: Outreach Pitch',
+    title: 'Junk: USER: Outreach Pitch',
     timestamp: new Date('2025-03-20T10:00:00Z'),
     diagramComponent: 'UserOutreachPitch',
     isImportant: false
   },
   {
     id: 2,
-    title: 'USER: Channels',
+    title: 'Junk: USER: Channels',
     timestamp: new Date('2025-03-18T15:30:00Z'),
     diagramComponent: 'UserOutreachTree',
     isImportant: false
   },
   {
     id: 3,
-    title: 'PersonalProd: GeneralTodoDashboard',
+    title: 'Junk: PersonalProd: GeneralTodoDashboard',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'GeneralTodoDashboard',
     isImportant: true
   },
   {
     id: 4,
-    title: 'PRODUCT: Flow',
+    title: 'Junk: PRODUCT: Flow',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'ProductFlowDiagram',
     isImportant: false
   },
   {
     id: 5,
-    title: 'PITCH: Dashboard',
+    title: 'Junk: PITCH: Dashboard',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'PitchingDashboard',
     isImportant: false
   },
   {
     id: 6,
-    title: 'USER: Interview',
+    title: 'Junk: USER: Interview',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'UserInterviewFeedback',
     isImportant: false
   },
   {
     id: 7,
-    title: 'PersonalProd: Notes',
+    title: 'Junk: PersonalProd: Notes',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'Notes',
     isImportant: false
   },
   {
     id: 8,
-    title: 'PITCH: Monetization',
+    title: 'Junk: PITCH: Monetization',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'MonetizationBrainstorming',
     isImportant: true
   },
   {
     id: 9,
-    title: 'USER: Growth Loops',
+    title: 'Junk: USER: Growth Loops',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'UserGrowthStrategy',
     isImportant: false
   },
   {
     id: 10,
-    title: 'PRODUCT: AnalyticsDashboard',
+    title: 'Junk: PRODUCT: AnalyticsDashboard',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'AnalyticsDashboard',
     isImportant: false
   },
   {
     id: 11,
-    title: 'USER: Personas',
+    title: 'Junk: USER: Personas',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'UserPersonas',
     isImportant: false
   },
   {
     id: 12,
-    title: 'PersonalProd: TimeLogger',
+    title: 'Junk: PersonalProd: TimeLogger',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'TimeLogger',
     isImportant: false
   },
   {
     id: 13,
-    title: 'TECH: AdaptivePlanFlow',
+    title: '3. Documentation: AdaptivePlanFlow',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'FlowGeneratePlan',
     isImportant: false
   },
   {
     id: 14,
-    title: 'TECH: FlowChild2',
+    title: '3. Documentation: FlowChild2',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'FlowChild2',
     isImportant: false
   },
   {
     id: 15,
-    title: 'TECH: FlowReduxPlan',
+    title: '3. Documentation: FlowReduxPlan',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'FlowReduxPlan',
     isImportant: false
   },
   {
     id: 16,
-    title: 'TECH: FlowDashboard',
+    title: '3. Documentation: FlowDashboard',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'FlowDashboard',
     isImportant: false
   },
   {
     id: 17,
-    title: 'FlowSwimLanes: FlowHomeComponentsNodes',
+    title: '3. Documentation: FlowHomeComponentsNodes',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'HomeComponentsNodes',
     isImportant: false
   },
   {
     id: 18,
-    title: 'FlowSwimLanes: FlowMaterialDashboard',
+    title: '3. Documentation: FlowMaterialDashboard',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'FlowMaterialDashboard',
     isImportant: false
   },
   {
     id: 19,
-    title: 'FlowSwimLanes: FlowPreLogin',
+    title: '3. Documentation: FlowPreLogin',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'FlowPreLogin',
     isImportant: false
   },
   {
     id: 20,
-    title: 'FlowSwimLanes: FlowUpload',
+    title: '3. Documentation: FlowUpload',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'FlowUpload',
     isImportant: false
   },
   {
     id: 21,
-    title: 'TECH: FlowProfile',
+    title: '3. Documentation: FlowProfile',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'FlowProfile',
     isImportant: false
   },
   {
     id: 22,
-    title: 'FlowSwimLanes: FlowContentPipeline',
+    title: '3. Documentation: FlowContentPipeline',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'FlowContentPipeline',
     isImportant: false
   },
   {
     id: 23,
-    title: 'FlowSwimLanes: FlowAPIRoutes',
+    title: '3. Documentation: FlowAPIRoutes',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'FlowAPIRoutes',
     isImportant: false
   },
   {
     id: 24,
-    title: 'AdminPanel: ExamConfigCreator',
+    title: '1. AdminPanel: Adaptive: ExamConfigCreator',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'ExamConfigCreator',
     isImportant: false
@@ -296,177 +299,184 @@ const sampleBrainstormings = [
   },
   {
     id: 26,
-    title: 'FlowSwimLanes: FlowQuizRevisePipeline',
+    title: '3. Documentation: FlowQuizRevisePipeline',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'FlowQuizRevisePipeline',
     isImportant: false
   },
   {
     id: 27,
-    title: 'PilotComponents: PromptManager',
+    title: '1. AdminPanel: Quiz: PromptManager',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'PromptManager',
     isImportant: false
   },
   {
     id: 28,
-    title: 'PilotComponents: PromptInput',
+    title: '1. AdminPanel: Quiz: PromptInput',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'PromptInput',
     isImportant: false
   },
   {
     id: 29,
-    title: 'AdminPanel: ManualBookCreator',
+    title: '1. AdminPanel: Ingestion: ManualBookCreator',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'ManualBookCreator',
     isImportant: false
   },
   {
     id: 30,
-    title: 'AdminPanel: QuestionTypesCreator',
+    title: '1. AdminPanel: Quiz: QuestionTypesCreator',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'QuestionTypesCreator',
     isImportant: false
   },
   {
     id: 31,
-    title: 'PilotComponents: QuestionTypePlayground',
+    title: '1. AdminPanel: Quiz: QuestionTypePlayground',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'QuestionTypePlayground',
     isImportant: false
   },
   {
     id: 32,
-    title: 'FlowSwimLanes: FlowQuizLatest',
+    title: '3. Documentation: FlowQuizLatest',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'FlowQuizLatest',
     isImportant: true
   },
   {
     id: 33,
-    title: 'FlowSwimLanes: FlowQuizReact',
+    title: '3. Documentation: FlowQuizReact',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'FlowQuizReact',
     isImportant: false
   },
   {
     id: 34,
-    title: 'AdminPanel: QuizConfigCreator',
+    title: '1. AdminPanel: Quiz: QuizConfigCreator',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'QuizConfigCreator',
     isImportant: false
   },
   {
     id: 35,
-    title: 'AdminPanel: CSVBookUploader',
+    title: '1. AdminPanel: Ingestion: CSVBookUploader',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'CSVBookUploader',
     isImportant: false
   },
   {
     id: 36,
-    title: 'FlowSwimLanes: FlowHolyGrailDataFlow',
+    title: '3. Documentation: FlowHolyGrailDataFlow',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'FlowHolyGrailDataFlow',
     isImportant: false
   },
   {
     id: 37,
-    title: 'AdminPanel: FileExplorer',
+    title: '1. AdminPanel: Coding: FileExplorer',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'FileExplorer',
     isImportant: false
   },
   {
     id: 38,
-    title: 'AdminPanel: FirebaseCollectionsViewer',
+    title: '1. AdminPanel: Coding: FirebaseCollectionsViewer',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'FirebaseCollectionsViewer',
     isImportant: false
   },
   {
     id: 39,
-    title: 'PilotComponents: AdaptivePlanLoader',
+    title: '1. AdminPanel: Adaptive: AdaptivePlanLoader',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'AdaptivePlanLoader',
     isImportant: false
   },
   {
     id: 40,
-    title: 'PilotComponents: AdaptivePlanConceptLoader',
+    title: '1. AdminPanel: Adaptive: AdaptivePlanConceptLoader',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'AdaptivePlanConceptLoader',
     isImportant: false
   },
   {
     id: 41,
-    title: 'PilotComponents: UploadQuestionPaper',
+    title: '1. AdminPanel: Ingestion: UploadQuestionPaper',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'UploadQuestionPaper',
     isImportant: false
   },
   {
     id: 42,
-    title: 'PilotComponents: UploadExamGuidelines',
+    title: '1. AdminPanel: Ingestion: UploadExamGuidelines',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'UploadExamGuidelines',
     isImportant: false
   },
   {
     id: 43,
-    title: 'PilotComponents: Parent',
+    title: 'Junk: 2. PilotComponents: Parent',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'Parent',
     isImportant: false
   },
   {
     id: 44,
-    title: 'AdminPanel: QuickDeleteUserData',
+    title: '1. AdminPanel: Coding: QuickDeleteUserData',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'QuickDeleteUserData',
     isImportant: false
   },
   {
     id: 44,
-    title: 'PilotComponents: TOEFLOnboardingTest',
+    title: 'Junk: 2. PilotComponents: TOEFLOnboardingTest',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'TOEFLOnboardingTest',
     isImportant: false
   },
   {
     id: 45,
-    title: 'PilotComponents: TOEFLOnboardingProcessing',
+    title: 'Junk: 2. PilotComponents: TOEFLOnboardingProcessing',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'TOEFLOnboardingProcessing',
     isImportant: false
   },
   {
     id: 46,
-    title: 'PilotComponents: TOEFLOnboardingView',
+    title: 'Junk: 2. PilotComponents: TOEFLOnboardingView',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'TOEFLOnboardingView',
     isImportant: false
   },
   {
     id: 47,
-    title: 'PilotComponents: TOEFLActivitySimulator',
+    title: 'Junk: 2. PilotComponents: TOEFLActivitySimulator',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'TOEFLActivitySimulator',
     isImportant: false
   },
   {
     id: 48,
-    title: 'PilotComponents: StageManagerPlayground',
+    title: 'Junk: 2. PilotComponents: StageManagerPlayground',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'StageManagerPlayground',
     isImportant: false
   },
   {
     id: 49,
-    title: 'PilotComponents: Explainer',
+    title: 'Junk: 2. PilotComponents: Explainer',
     timestamp: new Date('2025-03-19T15:30:00Z'),
     diagramComponent: 'Explainer',
+    isImportant: false
+  },
+  {
+    id: 50,
+    title: 'New: BookUploader',
+    timestamp: new Date('2025-03-19T15:30:00Z'),
+    diagramComponent: 'BookUploader',
     isImportant: false
   },
 
