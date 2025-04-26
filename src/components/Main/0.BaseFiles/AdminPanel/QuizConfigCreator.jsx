@@ -1,6 +1,6 @@
 // File: QuizConfigCreator.jsx
 import React, { useState } from "react";
-import { db } from "../../../../../firebase"; // adjust path if needed
+import { db } from "../../../../firebase"; // adjust path if needed
 import { doc, setDoc } from "firebase/firestore";
 
 export default function QuizConfigCreator() {

@@ -23,8 +23,10 @@ import {
 } from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import UserHistory from "./UserHistory";
-import BookExplorer from "./BookExplorer";
-import SliceUploader from "./SliceUploader";
+import BookExplorer from "../0.BaseFiles/BookExplorer";
+import SliceUploader from "../0.BaseFiles/AdminPanel/SliceUploader";
+
+import SliceViewer from "../0.BaseFiles/AdminPanel/SliceViewer";
 
 /* -------------------------------------------------- auth stuff (unchanged) */
 export default function UserProfileAnalytics({ colorScheme = {} }) {
@@ -259,6 +261,7 @@ export default function UserProfileAnalytics({ colorScheme = {} }) {
         <ExamGuidelinesViewer/>
         <BookExplorer userId = {userId} />
         <SliceUploader />
+        <SliceViewer userId = {userId} />
 
 
     </Box>

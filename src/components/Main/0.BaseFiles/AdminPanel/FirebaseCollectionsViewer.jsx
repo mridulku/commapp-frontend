@@ -8,7 +8,7 @@ import {
   orderBy,
   limit,
 } from "firebase/firestore";
-import { db } from "../../../../../firebase"; // Adjust path as needed
+import { db } from "../../../../firebase"; // Adjust path as needed
 
 export default function FirebaseCollectionsViewer() {
   // 1) All your collections

@@ -7,6 +7,7 @@ function UnifiedSidebar({
   // Possibly still pass in any other props you need:
   viewMode,
   setViewMode,
+  isAdmin,
 }) {
   // 1) Start collapsed by default
   const [collapsed, setCollapsed] = useState(true);
@@ -122,6 +123,17 @@ function UnifiedSidebar({
         >
           {collapsed ? "👤" : <>👤 Profile</>}
         </button>
+
+             {/* Admin — show a wrench icon when collapsed */}
+                  {isAdmin && (
+        <button
+          style={toggleButtonStyle(viewMode === "admin")}
+          onClick={() => switchMode("admin")}
+          title="Admin"
+        >
+          {collapsed ? "🛠️" : <>🛠️ Admin</>}
+        </button>
+      )}
       </div>
 
       {/* 

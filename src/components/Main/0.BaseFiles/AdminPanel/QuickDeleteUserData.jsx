@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { db } from "../../../../../firebase"; // Adjust the path as needed
+import { db } from "../../../../firebase"; // Adjust the path as needed
 import {
   doc,
   deleteDoc,

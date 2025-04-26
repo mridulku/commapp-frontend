@@ -15,7 +15,7 @@ import {
   uploadBytesResumable,
   getDownloadURL,
 } from "firebase/storage";
-import { storage, auth } from "../../../../../../firebase"; // adjust path as needed
+import { storage, auth } from "../../../../firebase"; // adjust path as needed
 
 /**
  * UploadExamGuidelines

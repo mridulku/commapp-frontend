@@ -4,7 +4,11 @@ import { useSelector, useDispatch } from "react-redux";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../../firebase"; // Adjust path as needed
 
+import AdminPanel from "./AdminPanel";    
 
+const ADMIN_UIDS = [
+  "acbhbtiODoPPcks2CP6Z",   // ← example
+];
 
 // ADD THIS IMPORT if you haven't already:
 import axios from "axios";
@@ -66,6 +70,8 @@ function Dashboard() {
     getBookProgressInfo,
     fetchAllData,
   } = useBooksViewer();
+
+  const isAdmin = ADMIN_UIDS.includes(userId);
 
   // 1) Controls whether onboarding is shown
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
@@ -372,6 +378,8 @@ useEffect(() => {
         </>
       );
     }
+  } else if (viewMode === "admin"  && isAdmin) {
+    mainContent = <AdminPanel userId={userId}/>;
   } else if (viewMode === "home") {
     // Show some home panel content or MaterialsDashboard
     mainContent = (
@@ -408,6 +416,7 @@ useEffect(() => {
       {/* Left Sidebar + Main Content */}
       <div style={innerContentWrapper}>
         <UnifiedSidebar
+          isAdmin={isAdmin}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={handleToggleSidebar}
           themeColors={themeColors}

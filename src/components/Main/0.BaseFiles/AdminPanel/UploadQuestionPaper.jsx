@@ -15,7 +15,7 @@ import {
   uploadBytesResumable,
   getDownloadURL,
 } from "firebase/storage";
-import { storage, auth } from "../../../../../../firebase";
+import { storage, auth } from "../../../../firebase";
 
 export default function UploadQuestionPaper({ userId, onComplete }) {
   // State for PDF selection and exam name
