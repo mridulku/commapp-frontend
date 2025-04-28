@@ -1,432 +1,268 @@
-// File: Child2.jsx (AdaptivePlanContainer)
-
+/* ────────────────────────────────────────────────────────────────
+   File:  src/components/3.AdaptivePlanView/0.Parent/Child2.jsx
+   v4 – hides admin tabs for non-admins                (2025-04-28)
+───────────────────────────────────────────────────────────────── */
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import {
-  Dialog,
-  DialogContent,
-  Tabs,
-  Tab,
-  Button,
+  Dialog, DialogContent,
+  Tabs, Tab,
 } from "@mui/material";
 import { doc, getDoc } from "firebase/firestore";
 
-import StatsPanel from "../1.StatsPanel/StatsPanel";
-import DailyPlan from "../2.DailyPlan/DailyPlan";
-import AdaptPG from "./AdaptPG/AdaptPG";
-import Adapting from "./Adapting"
-import ProgressView from "../3.ProgressView/ProgressView";
-import AdminPanel from "../4.AdminPanel/AdminPanel";
-import TimelinePanel from "./TimelinePanel";
+/* sub-panels ---------------------------------------------------- */
+import StatsPanel     from "../1.StatsPanel/StatsPanel";
+import DailyPlan      from "../2.DailyPlan/DailyPlan";
+import ProgressView   from "../3.ProgressView/ProgressView";
+import AdminPanel     from "../4.AdminPanel/AdminPanel";
+import TimelinePanel  from "./TimelinePanel";
+import AdaptPG        from "./AdaptPG/AdaptPG";
+import Adapting       from "./Adapting";
+import AggregatorPanel from "./AggregatorPanel";
+import DailyOverviewDemo from "./DailyOverviewDemo";
 
-// NEW aggregator panel
-import AggregatorPanel from "./AggregatorPanel"; 
 
+/* modal player -------------------------------------------------- */
 import PlanFetcher from "../../../../5.StudyModal/StudyModal";
-import { db } from "../../../../../../firebase"; // Firestore import
 
+/* firebase instance -------------------------------------------- */
+import { db } from "../../../../../../firebase";
+
+/* ----------------------------------------------------------------
+   AdaptivePlanContainer
+----------------------------------------------------------------- */
 export default function Child2({
-  userId = null,
-  bookId = "",
-  planIds = [],
+  userId,
+  bookId,
+  planId   = "",
+  isAdmin  = false,            // 🔸 NEW PROP
   colorScheme = {},
 }) {
-  // ---------- container styling ----------
+  /* styling */
   const containerStyle = {
-    backgroundColor: colorScheme.panelBg || "#0D0D0D",
-    color: colorScheme.textColor || "#FFD700",
+    backgroundColor: colorScheme.panelBg  || "#0D0D0D",
+    color:           colorScheme.textColor|| "#FFD700",
     padding: "1rem",
     minHeight: "100vh",
     boxSizing: "border-box",
   };
 
-  // We'll hold plan info + the fetched Firestore book name
-  const [localPlanIds, setLocalPlanIds] = useState(planIds);
-  const [selectedPlanId, setSelectedPlanId] = useState("");
+  /* local state */
   const [plan, setPlan] = useState(null);
-
-  // Book name from Firestore
-  const [dbBookName, setDbBookName] = useState("Untitled Book");
-
-  // For tab control
   const [activeTab, setActiveTab] = useState(0);
+  const [dayIdx, setDayIdx] = useState(0);
+  const [expanded, setExpanded] = useState([]);
 
-  // For day selection (session index)
-  const [dayDropIdx, setDayDropIdx] = useState(0);
+  /* PlanFetcher dialog */
+  const [showDlg, setShowDlg]   = useState(false);
+  const [dlgPlan, setDlgPlan]   = useState("");
+  const [dlgAct,  setDlgAct]    = useState(null);
 
-  // For expand/collapse chapters
-  const [expandedChapters, setExpandedChapters] = useState([]);
-
-  // PlanFetcher dialog
-  const [showPlanDialog, setShowPlanDialog] = useState(false);
-  const [dialogPlanId, setDialogPlanId] = useState("");
-  const [dialogInitialActivity, setDialogInitialActivity] = useState(null);
-
-  // ============ 1) Re-sync localPlanIds from props
-  useEffect(() => {
-    setLocalPlanIds(planIds);
-  }, [planIds]);
-
-  // ============ 2) If user/book changes => fetch plan IDs + book name
-  useEffect(() => {
-    if (!userId || !bookId) {
-      setLocalPlanIds([]);
-      setSelectedPlanId("");
-      setPlan(null);
-      setDbBookName("Untitled Book");
-      return;
-    }
-
-    // fetch plan IDs
-    async function fetchPlansForBook() {
-      try {
-        const url = `${import.meta.env.VITE_BACKEND_URL}/api/adaptive-plan-id`;
-        const res = await axios.get(url, { params: { userId, bookId } });
-        if (res.data && res.data.planIds) {
-          setLocalPlanIds(res.data.planIds);
-        } else {
-          setLocalPlanIds([]);
-        }
-      } catch (error) {
-        setLocalPlanIds([]);
-      }
-    }
-
-    // fetch the bookName from Firestore => books_demo/{bookId} => field: "name"
-    async function fetchBookName() {
-      try {
-        const docRef = doc(db, "books_demo", bookId);
-        const snap = await getDoc(docRef);
-        if (snap.exists()) {
-          const data = snap.data();
-          setDbBookName(data?.name || "Unnamed Book");
-        } else {
-          setDbBookName("Unnamed Book");
-        }
-      } catch (err) {
-        console.error("Failed to fetch book name:", err);
-        setDbBookName("Unnamed Book");
-      }
-    }
-
-    fetchPlansForBook();
-    fetchBookName();
-  }, [userId, bookId]);
-
-  // ============ 3) On localPlanIds => pick first or reset
-  useEffect(() => {
-    if (localPlanIds.length > 0) {
-      setSelectedPlanId(localPlanIds[0]);
-    } else {
-      setSelectedPlanId("");
-      setPlan(null);
-    }
-  }, [localPlanIds]);
-
-  // ============ 4) Fetch plan doc once we have selectedPlanId
-  useEffect(() => {
-    if (!selectedPlanId) {
-      setPlan(null);
-      return;
-    }
-    async function fetchPlanDoc() {
-      try {
+  /* fetch plan once planId changes */
+  useEffect(()=>{
+    if(!planId){ setPlan(null); return; }
+    (async()=>{
+      try{
         const res = await axios.get(
           `${import.meta.env.VITE_BACKEND_URL}/api/adaptive-plan`,
-          { params: { planId: selectedPlanId } }
+          { params:{ planId } }
         );
-        if (res.data && res.data.planDoc) {
-          setPlan(res.data.planDoc);
-        } else {
-          setPlan(null);
-        }
-      } catch (err) {
-        setPlan(null);
-      }
-    }
-    fetchPlanDoc();
-  }, [selectedPlanId]);
+        setPlan(res.data?.planDoc || null);
+      }catch(e){ setPlan(null); }
+    })();
+  },[planId]);
 
-  // ============ 5) If plan changes => reset tab/day, etc.
-  useEffect(() => {
-    setActiveTab(0);
-    setDayDropIdx(0);
-    setExpandedChapters([]);
-  }, [plan]);
+  /* reset view when plan changes */
+  useEffect(()=>{
+    setActiveTab(0); setDayIdx(0); setExpanded([]);
+  },[plan]);
 
-  // ---------- Handlers ----------
-  function handleChangeTab(e, newVal) {
-    setActiveTab(newVal);
-  }
+  /* open PlanFetcher */
+  const openFetcher = (pid, act=null)=>{
+    setDlgPlan(pid);
+    setDlgAct(act ? {
+      subChapterId: act.subChapterId,
+      type:         act.type,
+      stage:        act.quizStage || null,
+    } : null);
+    setShowDlg(true);
+  };
 
-  function handleDaySelect(newIdx) {
-    setDayDropIdx(newIdx);
-  }
+  /* ────────────────────────────────────────────────────────────────
+     Tab configuration (only 1 array → easier to filter & render)
+  ──────────────────────────────────────────────────────────────── */
+  const TAB_CONF = [
+    { label:"Daily Plan",           comp: renderDaily },
+    { label:"Timeline",    comp: renderTimeline },
+      { label:"Daily Overview",      comp: () =>
+              <DailyOverviewDemo userId={userId}
+                                 plan={plan}
+                                 planId={planId}
+                                 colorScheme={colorScheme}/> },
 
-  function toggleChapter(chapterKey) {
-    setExpandedChapters((prev) =>
-      prev.includes(chapterKey)
-        ? prev.filter((k) => k !== chapterKey)
-        : [...prev, chapterKey]
-    );
-  }
+    { label:"Progress",   admin:true, comp: renderProgress },
+    { label:"Admin",      admin:true, comp: renderAdmin },
+    { label:"AdaptPG",    admin:true, comp: renderAdaptPG },
+    { label:"Adapting",   admin:true, comp: renderAdapting },
+    { label:"Aggregator", admin:true, comp: renderAggregator },
+  ];
 
-  // PlanFetcher => "Resume Learning" or activity clicks
-  function handleOpenPlanFetcher(planId, activity) {
-    setDialogPlanId(planId);
-    if (activity) {
-      setDialogInitialActivity({
-        subChapterId: activity.subChapterId,
-        type: activity.type,
-        stage: activity.quizStage || null,
-      });
-    } else {
-      setDialogInitialActivity(null);
-    }
-    setShowPlanDialog(true);
-  }
+  /* filter for current user */
+  const VISIBLE_TABS = TAB_CONF.filter(cfg => !cfg.admin || isAdmin);
 
-  // ---------- Render
-  if (localPlanIds.length === 0 && !plan) {
-    return (
-      <div style={containerStyle}>
-        <h2 style={{ color: colorScheme.heading || "#FFD700", margin: 0 }}>
-          No Plans Found
-        </h2>
-        <p>No plan IDs found for user/book.</p>
-      </div>
-    );
-  }
-
+  /* ────────────────────────────────────────────────────────────────
+     RENDER
+  ──────────────────────────────────────────────────────────────── */
   return (
     <div style={containerStyle}>
-      {/* ROW => Book Title + "Resume Learning" + "Select Plan" dropdown in one row */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          flexWrap: "wrap",
-          justifyContent: "flex-start",
-          gap: "1rem",
-          marginBottom: "1rem",
-        }}
-      >
-        {/* Book Title */}
-        <h2
-          style={{
-            fontWeight: "bold",
-            fontSize: "1.4rem",
-            margin: 0,
-            color: colorScheme.heading || "#FFD700",
-          }}
-        >
-          {dbBookName}
-        </h2>
+      {/* Stats header (includes RESUME button & pen icon) */}
+      <StatsPanel
+        db={db}
+        userId={userId}
+        bookId={bookId}
+        planId={planId}
+        colorScheme={colorScheme}
+        onResume={() => openFetcher(planId)}
+      />
 
-        {/* "Resume Learning" button => next to the book name */}
-        <Button
-          variant="contained"
-          onClick={() => handleOpenPlanFetcher(selectedPlanId, null)}
-          sx={{
-            backgroundColor: colorScheme.heading || "#FFD700",
-            color: "#000",
-            fontWeight: "bold",
-            borderRadius: "4px",
-            "&:hover": {
-              backgroundColor: "#e5c100",
-            },
-          }}
-          disabled={!selectedPlanId}
-        >
-          Resume Learning
-        </Button>
-
-        {/* If multiple plans => show plan dropdown on the far right */}
-        {localPlanIds.length > 1 && (
-          <div style={{ display: "flex", alignItems: "center" }}>
-            <label style={{ marginRight: 6, color: "#fff" }}>
-              Select Plan:
-            </label>
-            <select
-              style={{
-                marginLeft: 4,
-                backgroundColor: "#222",
-                color: "#fff",
-                border: "1px solid #555",
-                borderRadius: "4px",
-                padding: "2px 6px",
-              }}
-              value={selectedPlanId}
-              onChange={(e) => setSelectedPlanId(e.target.value)}
-            >
-              {localPlanIds.map((pid) => (
-                <option key={pid} value={pid}>
-                  {pid}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-      </div>
-
-      {/* 2) StatsPanel => includes six tiles: overall progress, daily progress, exam date, daily plan, chapters, sub-chaps */}
-      <StatsPanel db={db}                  // <-- pass the Firestore instance
-  userId={userId}
-  plan={plan}
-  planId={selectedPlanId}  // in case you need it
-  bookId={bookId}          // <-- aggregator doc also needs the bookId
-  colorScheme={colorScheme} />
-
-      {/* 4) TABS => Daily Plan (0), Progress (1), Timeline (2), AdminPanel (3), Aggregator (4) */}
+      {/* tab strip */}
       <Tabs
         value={activeTab}
-        onChange={handleChangeTab}
+        onChange={(e,v)=>setActiveTab(v)}
         textColor="inherit"
         TabIndicatorProps={{
-          style: {
-            backgroundColor: colorScheme.heading || "#FFD700",
-          },
+          style:{ backgroundColor: colorScheme.heading || "#FFD700" }
         }}
-        sx={{ marginBottom: "1rem" }}
+        sx={{ mb:1 }}
       >
-        <Tab label="Daily Plan" />
-        <Tab label="Progress" />
-        <Tab label="Timeline" />
-        <Tab label="Admin Panel" />
-        <Tab label="AdaptPG" />
-        <Tab label="Adapting" />
-        <Tab label="Aggregator" />
+        {VISIBLE_TABS.map((cfg,idx)=>(
+          <Tab
+            key={cfg.label}
+            label={cfg.admin ? `${cfg.label} 🛠` : cfg.label}
+          />
+        ))}
       </Tabs>
 
-      {!selectedPlanId ? (
-        <div>No Plan ID selected.</div>
-      ) : !plan ? (
-        <div>Loading plan data...</div>
-      ) : (
-        renderTabContent()
-      )}
+      {/* tab body */}
+      { planId && plan
+        ? VISIBLE_TABS[activeTab].comp()
+        : <div>{!planId ? "No plan selected." : "Loading plan…"}</div>
+      }
 
-      {/* PlanFetcher dialog */}
-      <Dialog
-        open={showPlanDialog}
-        onClose={() => setShowPlanDialog(false)}
-        fullScreen
-      >
-        <DialogContent
-          sx={{
-            flex: 1,
-            overflowY: "auto",
-            p: 0,
-            backgroundColor: "#000",
-          }}
-        >
-          {dialogPlanId ? (
+      {/* modal player */}
+      <Dialog open={showDlg} onClose={()=>setShowDlg(false)} fullScreen>
+        <DialogContent sx={{ p:0, bgcolor:"#000" }}>
+          {dlgPlan ? (
             <PlanFetcher
-              planId={dialogPlanId}
-              initialActivityContext={dialogInitialActivity}
+              planId={dlgPlan}
+              initialActivityContext={dlgAct}
               userId={userId}
-              onClose={() => setShowPlanDialog(false)}
+              onClose={()=>setShowDlg(false)}
             />
-          ) : (
-            <p style={{ margin: "1rem" }}>No planId found. Cannot load plan.</p>
-          )}
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>
   );
 
-  function renderTabContent() {
-    if (activeTab === 0) {
-      // Daily Plan
-      return (
-        <DailyPlan
-          userId={userId}
-          plan={plan}
-          planId={selectedPlanId}
-          colorScheme={colorScheme}
-          dayDropIdx={dayDropIdx}
-          onDaySelect={handleDaySelect}
-          expandedChapters={expandedChapters}
-          onToggleChapter={toggleChapter}
-          onOpenPlanFetcher={handleOpenPlanFetcher}
-        />
-      );
-    } else if (activeTab === 1) {
-      // Progress
-      return (
-        <ProgressView
-          db={db}
-          userId={userId}
-          planId={selectedPlanId}
-          bookId={bookId}
-          colorScheme={colorScheme}
-        />
-      );
-    } else if (activeTab === 2) {
-      // Timeline
-      return (
-        <TimelinePanel
-          db={db}
-          userId={userId}
-          planId={selectedPlanId}
-          bookId={bookId}
-          colorScheme={colorScheme}
-        />
-      );
-    } else if (activeTab === 3) {
-      // Admin Panel
-      return (
-        <AdminPanel
-          db={db}
-          plan={plan}
-          planId={selectedPlanId}
-          bookId={bookId}
-          userId={userId}
-          colorScheme={colorScheme}
-        />
-      );
-    } else if (activeTab === 4) {
-      // Admin Panel
-      return (
-        <AdaptPG
+  /* ─── per-tab render helpers ──────────────────────────────── */
+  function renderDaily(){
+    return (
+      <DailyPlan
         userId={userId}
         plan={plan}
-        planId={selectedPlanId}
+        planId={planId}
         colorScheme={colorScheme}
-        dayDropIdx={dayDropIdx}
-        onDaySelect={handleDaySelect}
-        expandedChapters={expandedChapters}
+        dayDropIdx={dayIdx}
+        onDaySelect={setDayIdx}
+        expandedChapters={expanded}
         onToggleChapter={toggleChapter}
-        onOpenPlanFetcher={handleOpenPlanFetcher}
-        />
-      );
-      }  else if (activeTab === 5) {
-        // Admin Panel
-        return (
-          <Adapting
-          userId={userId}
-          plan={plan}
-          planId={selectedPlanId}
-          colorScheme={colorScheme}
-          dayDropIdx={dayDropIdx}
-          onDaySelect={handleDaySelect}
-          expandedChapters={expandedChapters}
-          onToggleChapter={toggleChapter}
-          onOpenPlanFetcher={handleOpenPlanFetcher}
-          />
-        );
-        } 
-      else {
-      // NEW aggregator tab
-      return (
-        <AggregatorPanel
-          db={db}
-          userId={userId}
-          planId={selectedPlanId}
-          bookId={bookId}
-          colorScheme={colorScheme}
-        />
-      );
-    }
+        onOpenPlanFetcher={openFetcher}
+      />
+    );
+  }
+  function renderProgress(){
+    return (
+      <ProgressView
+        db={db}
+        userId={userId}
+        planId={planId}
+        bookId={bookId}
+        colorScheme={colorScheme}
+      />
+    );
+  }
+  function renderTimeline(){
+    return (
+      <TimelinePanel
+        db={db}
+        userId={userId}
+        planId={planId}
+        bookId={bookId}
+        colorScheme={colorScheme}
+      />
+    );
+  }
+  function renderAdmin(){
+    return (
+      <AdminPanel
+        db={db}
+        plan={plan}
+        planId={planId}
+        bookId={bookId}
+        userId={userId}
+        colorScheme={colorScheme}
+      />
+    );
+  }
+  function renderAdaptPG(){
+    return (
+      <AdaptPG
+        userId={userId}
+        plan={plan}
+        planId={planId}
+        colorScheme={colorScheme}
+        dayDropIdx={dayIdx}
+        onDaySelect={setDayIdx}
+        expandedChapters={expanded}
+        onToggleChapter={toggleChapter}
+        onOpenPlanFetcher={openFetcher}
+      />
+    );
+  }
+  function renderAdapting(){
+    return (
+      <Adapting
+        userId={userId}
+        plan={plan}
+        planId={planId}
+        colorScheme={colorScheme}
+        dayDropIdx={dayIdx}
+        onDaySelect={setDayIdx}
+        expandedChapters={expanded}
+        onToggleChapter={toggleChapter}
+        onOpenPlanFetcher={openFetcher}
+      />
+    );
+  }
+  function renderAggregator(){
+    return (
+      <AggregatorPanel
+        db={db}
+        userId={userId}
+        planId={planId}
+        bookId={bookId}
+        colorScheme={colorScheme}
+      />
+    );
+  }
+
+  /* expand / collapse helper */
+  function toggleChapter(chKey){
+    setExpanded(prev =>
+      prev.includes(chKey)
+        ? prev.filter(k=>k!==chKey)
+        : [...prev, chKey]
+    );
   }
 }

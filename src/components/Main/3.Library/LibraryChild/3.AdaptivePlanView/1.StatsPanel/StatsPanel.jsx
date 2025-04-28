@@ -1,325 +1,263 @@
-import React, { useState, useEffect } from "react";
-import { LinearProgress } from "@mui/material";
+/* ──────────────────────────────────────────────────────────────
+   File:  StatsPanel.jsx   (v3 – compact header, no mini-tiles)
+──────────────────────────────────────────────────────────────── */
 
-// Firestore
+import React, { useEffect, useState } from "react";
 import {
-  collection,
+  Box,
+  Typography,
+  Chip,
+  LinearProgress,
+  Button,
+  Tooltip,
+} from "@mui/material";
+
+import {
   doc,
   getDoc,
-  getDocs,
+  collection,
   query,
   where,
   orderBy,
   limit,
+  getDocs,
 } from "firebase/firestore";
 
-/** ------------------------
- *  HELPER FUNCTIONS
- * ------------------------ */
-function isStageDone(stageValue) {
-  if (!stageValue) return false;
-  const val = stageValue.toString().toLowerCase();
-  return val.includes("done") || val.includes("complete") || val.includes("pass");
+/* floating “create / edit” pen */
+import ChildStats from "../../2.CreateNewPlan/CreatePlanButton";
+
+/* ------------------------------------------------------------ */
+/* 1.  tiny helper pools for *dummy* meta until real data hooks */
+const SUBJECTS = [
+  "Kinematics",
+  "Electrostatics",
+  "Cell Bio",
+  "Genetics",
+  "Optics",
+  "Mechanics",
+  "Organic Chem",
+  "Thermo",
+  "Geometry",
+  "Probability",
+];
+const GOALS = [
+  { key: "fresh", label: "Start fresh", emoji: "🆕" },
+  { key: "brush", label: "Quick brush-up", emoji: "✨" },
+  { key: "diag", label: "Diagnose me", emoji: "❓" },
+];
+const ACCENTS = ["#BB86FC", "#F48FB1", "#80DEEA", "#AED581", "#FFB74D"];
+
+const hash = (s) => {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (h << 5) - h + s.charCodeAt(i);
+    h |= 0;
+  }
+  return Math.abs(h);
+};
+const rand = (seed) => {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+};
+
+/* produce *stable* pseudo-random adornments for a planId */
+function buildDummyMeta(planId) {
+  const h = hash(planId);
+  const accent = ACCENTS[h % ACCENTS.length];
+  const goal = GOALS[h % GOALS.length];
+
+  const topics = SUBJECTS
+    .slice()
+    .sort((a, b) => hash(a + planId) - hash(b + planId))
+    .slice(0, 3 + Math.floor(rand(h + 3) * 3)); // 3-5 topics
+
+  return {
+    planName: `${topics[0].split(" ")[0]} Mastery Plan`,
+    goal,
+    accent,
+    topics,
+  };
 }
 
-function computeOverallProgress(aggregatorResult) {
-  const subChIds = Object.keys(aggregatorResult || {});
-  if (!subChIds.length) return 0;
+/* ------------------------------------------------------------ */
+/* 2.  progress helpers (aggregator doc)                         */
+const doneLike = (v = "") =>
+  ["done", "complete", "pass"].some((w) => v.toLowerCase().includes(w));
 
-  let sumPercent = 0;
-  subChIds.forEach((subChId) => {
-    const row = aggregatorResult[subChId] || {};
-    let doneCount = 0;
-    if (isStageDone(row.reading)) doneCount++;
-    if (isStageDone(row.remember)) doneCount++;
-    if (isStageDone(row.understand)) doneCount++;
-    if (isStageDone(row.apply)) doneCount++;
-    if (isStageDone(row.analyze)) doneCount++;
-    sumPercent += (doneCount / 5) * 100;
+const overallPct = (obj = {}) => {
+  const keys = Object.keys(obj);
+  if (!keys.length) return 0;
+  let sum = 0;
+  keys.forEach((id) => {
+    const r = obj[id] || {};
+    let d = 0;
+    if (doneLike(r.reading)) d++;
+    if (doneLike(r.remember)) d++;
+    if (doneLike(r.understand)) d++;
+    if (doneLike(r.apply)) d++;
+    if (doneLike(r.analyze)) d++;
+    sum += (d / 5) * 100;
   });
-  return sumPercent / subChIds.length;
-}
+  return Math.round(sum / keys.length);
+};
 
-/** Calls your Cloud Function to generate or refresh the aggregator doc. */
-async function generateAggregatorDoc(userId, planId, bookId) {
-  console.log("Generating aggregator doc via Cloud Function...");
-  const response = await fetch(
+async function buildAggregator(uid, pid, bid) {
+  await fetch(
     "https://us-central1-comm-app-ff74b.cloudfunctions.net/generateUserProgressAggregator2",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, planId, bookId }),
+      body: JSON.stringify({ userId: uid, planId: pid, bookId: bid }),
     }
   );
-  if (!response.ok) {
-    throw new Error(`Failed to generate aggregator: ${response.status}`);
-  }
-  console.log("Aggregator doc generation complete");
 }
-
-/** Reads the latest aggregator doc (userId/planId/bookId) => returns 0–100 progress. */
-async function fetchAggregatorDoc(db, userId, planId, bookId) {
-  if (!db) {
-    console.log("No Firestore instance => returning 0 progress");
-    return 0;
-  }
-  console.log("Querying aggregator_v2 for:", { userId, planId, bookId });
-
-  const colRef = collection(db, "aggregator_v2");
+async function fetchAggregator(db, uid, pid, bid) {
+  if (!db) return 0;
   const q = query(
-    colRef,
-    where("userId", "==", userId),
-    where("planId", "==", planId),
-    where("bookId", "==", bookId),
+    collection(db, "aggregator_v2"),
+    where("userId", "==", uid),
+    where("planId", "==", pid),
+    where("bookId", "==", bid),
     orderBy("createdAt", "desc"),
     limit(1)
   );
-
   const snap = await getDocs(q);
-  if (snap.empty) {
-    console.log("No aggregator doc => 0% progress");
-    return 0;
-  }
-
-  const docSnap = snap.docs[0];
-  const data = docSnap.data() || {};
-  const aggregatorResult = data.aggregatorResult || {};
-  const progress = computeOverallProgress(aggregatorResult);
-  console.log("Aggregator doc found => progress:", progress);
-  return progress;
+  if (snap.empty) return 0;
+  const data = snap.docs[0].data() || {};
+  return overallPct(data.aggregatorResult || {});
 }
 
-/** ------------------------
- *  MAIN COMPONENT
- * ------------------------ */
+/* ------------------------------------------------------------ */
+/* 3.  MAIN COMPONENT                                            */
 export default function StatsPanel({
   db,
   userId,
-  planId,
   bookId,
+  planId,
+  onResume = () => {},
   colorScheme = {},
 }) {
-  // =========== State ===========
-  const [overallProgress, setOverallProgress] = useState(0);
-  const [dailyPlanTime, setDailyPlanTime] = useState("N/A");
-  const [examDate, setExamDate] = useState("N/A");
-  const [chaptersCount, setChaptersCount] = useState(0);
+  const meta = planId ? buildDummyMeta(planId) : null;
 
-  // =========== 1) Approach B: aggregator doc fetch => generate => fetch again ===========
+  /* live progress % ------------------------------------------- */
+  const [progress, setProgress] = useState(0);
   useEffect(() => {
-    if (!db || !userId || !planId || !bookId) {
-      console.log("StatsPanel: missing props => skip aggregator fetch");
-      return;
-    }
+    if (!db || !userId || !bookId || !planId) return;
+    (async () => {
+      const cached = await fetchAggregator(db, userId, planId, bookId);
+      await buildAggregator(userId, planId, bookId);
+      const fresh = await fetchAggregator(db, userId, planId, bookId);
+      setProgress(fresh || cached || 0);
+    })();
+  }, [db, userId, bookId, planId]);
 
-    async function refreshAggregator() {
-      try {
-        // A) Fetch old aggregator doc
-        const oldProgress = await fetchAggregatorDoc(db, userId, planId, bookId);
-        setOverallProgress(oldProgress);
-
-        // B) Generate fresh aggregator doc
-        await generateAggregatorDoc(userId, planId, bookId);
-
-        // C) Fetch updated aggregator doc
-        const newProgress = await fetchAggregatorDoc(db, userId, planId, bookId);
-        setOverallProgress(newProgress);
-      } catch (err) {
-        console.error("StatsPanel aggregator error:", err);
-      }
-    }
-
-    refreshAggregator();
-  }, [db, userId, planId, bookId]);
-
-  // =========== 2) Fetch dailyReadingTimeUsed + targetDate from adaptive_demo/{planId} ===========
-  useEffect(() => {
-    if (!db || !planId) {
-      return;
-    }
-
-    async function fetchAdaptiveDoc() {
-      try {
-        const docRef = doc(db, "adaptive_demo", planId);
-        const docSnap = await getDoc(docRef);
-        if (!docSnap.exists()) {
-          console.log("No adaptive_demo doc => dailyPlanTime=N/A, examDate=N/A");
-          setDailyPlanTime("N/A");
-          setExamDate("N/A");
-          return;
-        }
-
-        const data = docSnap.data() || {};
-        const dailyTime = data.dailyReadingTimeUsed; // might be number or undefined
-        const tDate = data.targetDate;               // might be string/date or undefined
-
-        // dailyTime => if not found, "N/A"
-        if (typeof dailyTime === "number") {
-          setDailyPlanTime(`${dailyTime} min`);
-        } else {
-          setDailyPlanTime("N/A");
-        }
-
-        // examDate => if not found, "N/A"
-        if (tDate) {
-          setExamDate(tDate);
-        } else {
-          setExamDate("N/A");
-        }
-      } catch (err) {
-        console.error("Error fetching adaptive_demo doc:", err);
-        setDailyPlanTime("N/A");
-        setExamDate("N/A");
-      }
-    }
-
-    fetchAdaptiveDoc();
-  }, [db, planId]);
-
-  // =========== 3) Fetch # of chapters from chapters_demo (where bookId==?) ===========
-  useEffect(() => {
-    if (!db || !bookId) {
-      return;
-    }
-
-    async function fetchChapters() {
-      try {
-        console.log("Fetching chapters for bookId:", bookId);
-        const chaptersRef = collection(db, "chapters_demo");
-        const q = query(chaptersRef, where("bookId", "==", bookId));
-        const snap = await getDocs(q);
-
-        // # of docs in snap => # of chapters
-        const count = snap.size;
-        console.log("Chapters found =>", count);
-        setChaptersCount(count);
-      } catch (err) {
-        console.error("Failed to fetch chapters:", err);
-        setChaptersCount(0);
-      }
-    }
-
-    fetchChapters();
-  }, [db, bookId]);
-
-  // =========== RENDER ===========
-  return (
-    <div style={{ marginBottom: "1rem" }}>
-      <div
-        style={{
-          display: "flex",
-          gap: "0.5rem",
-          width: "100%",
-          justifyContent: "space-between",
-          marginBottom: "1rem",
-          flexWrap: "wrap",
-        }}
-      >
-        {/* 1) Overall Progress tile */}
-        <OverallProgressTile
-          title="Overall Progress"
-          progressValue={overallProgress}
-          colorScheme={colorScheme}
-        />
-
-        {/* 2) Exam Date => from adaptive_demo => targetDate */}
-        <IconCard
-          icon="📅"
-          label="Exam Date"
-          value={examDate}
-          color={colorScheme.heading || "#FFD700"}
-        />
-
-        {/* 3) Daily Plan => from adaptive_demo => dailyReadingTimeUsed */}
-        <IconCard
-          icon="⏱"
-          label="Daily Plan"
-          value={dailyPlanTime}
-          color={colorScheme.heading || "#FFD700"}
-        />
-
-        {/* 4) Chapters => from chapters_demo */}
-        <IconCard
-          icon="📖"
-          label="Chapters"
-          value={chaptersCount}
-          color={colorScheme.heading || "#FFD700"}
-        />
-      </div>
-    </div>
-  );
-}
-
-/** A tile that shows a title, a linear progress bar, and numeric % below it. */
-function OverallProgressTile({ title, progressValue, colorScheme }) {
-  const barColor = colorScheme.heading || "#FFD700";
-
-  const tileStyle = {
-    backgroundColor: "#2F2F2F",
-    borderRadius: "8px",
-    padding: "0.6rem",
-    flex: 1,
-    minWidth: 130,
-    maxWidth: 9999,
-    textAlign: "center",
-  };
+  /* ------------------------------------------------------------ */
+  /* RENDER                                                       */
+  if (!meta)
+    return (
+      <Box sx={{ color: "#888", mb: 2, mt: 1 }}>No plan selected.</Box>
+    );
 
   return (
-    <div style={tileStyle}>
-      <div style={{ fontWeight: "bold", marginBottom: 6 }}>{title}</div>
-
-      <LinearProgress
-        variant="determinate"
-        value={progressValue}
+    <Box sx={{ mb: 3 }}>
+      {/* ╭────────────────────────── header bar ───────────────────╮ */}
+      <Box
         sx={{
-          height: 10,
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 1,
+          alignItems: "center",
+          p: 1.5,
+          bgcolor: "#1c1c1c",
           borderRadius: 2,
-          backgroundColor: "rgba(255,255,255,0.2)",
-          "& .MuiLinearProgress-bar": {
-            backgroundColor: barColor,
-          },
-        }}
-      />
-
-      <div
-        style={{
-          marginTop: "4px",
-          fontWeight: "bold",
-          color: barColor,
+          border: `1px solid ${meta.accent}40`,
         }}
       >
-        {progressValue.toFixed(1)}%
-      </div>
-    </div>
-  );
-}
+        {/* plan name */}
+        <Typography
+          sx={{ fontWeight: 700, color: meta.accent, mr: 0.5 }}
+          noWrap
+        >
+          {meta.planName}
+        </Typography>
 
-/** Reusable icon-based card for exam date, daily plan, chapters, etc. */
-function IconCard({ icon, label, value, color }) {
-  return (
-    <div
-      style={{
-        flex: 1,
-        minWidth: 130,
-        maxWidth: 9999,
-        backgroundColor: "#2F2F2F",
-        borderRadius: "8px",
-        padding: "0.6rem",
-        textAlign: "center",
-      }}
-    >
-      <div style={{ fontSize: "1.4rem", marginBottom: 4 }}>{icon}</div>
-      <div
-        style={{
-          textTransform: "uppercase",
-          fontSize: "0.7rem",
-          opacity: 0.8,
-          marginBottom: "4px",
-        }}
-      >
-        {label}
-      </div>
-      <div style={{ fontWeight: "bold", color }}>{value}</div>
-    </div>
+        {/* % badge */}
+        <Chip
+          label={`${progress}%`}
+          size="small"
+          sx={{
+            bgcolor: meta.accent,
+            color: "#000",
+            fontWeight: 700,
+            height: 22,
+          }}
+        />
+
+        {/* topics: 2 visible + “…+n” chip */}
+        {meta.topics.slice(0, 2).map((t) => (
+          <Chip
+            key={t}
+            label={t}
+            size="small"
+            sx={{ bgcolor: "#333", color: "#fff", height: 22 }}
+          />
+        ))}
+        {meta.topics.length > 2 && (
+          <Tooltip title={meta.topics.slice(2).join(", ")}>
+            <Chip
+              label={`+${meta.topics.length - 2} more`}
+              size="small"
+              sx={{
+                bgcolor: "#444",
+                color: "#ccc",
+                height: 22,
+                cursor: "default",
+              }}
+            />
+          </Tooltip>
+        )}
+
+        {/* goal chip */}
+        <Chip
+          label={`${meta.goal.emoji} ${meta.goal.label}`}
+          size="small"
+          sx={{
+            bgcolor: "#2b2b2b",
+            color: "#fff",
+            border: `1px solid ${meta.accent}`,
+            ml: "auto",
+            height: 22,
+          }}
+        />
+
+        {/* resume btn */}
+        <Button
+          variant="contained"
+          size="small"
+          sx={{
+            bgcolor: meta.accent,
+            color: "#000",
+            fontWeight: 700,
+            ml: 1,
+            "&:hover": { bgcolor: meta.accent },
+          }}
+          onClick={() => onResume(planId)}
+        >
+          Resume
+        </Button>
+
+        {/* pen icon (create / edit) */}
+        <ChildStats
+          userId={userId}
+          bookId={bookId}
+          colorScheme={colorScheme}
+          backendURL={import.meta.env.VITE_BACKEND_URL}
+          sx={{ ml: 0.5 }}
+        />
+      </Box>
+
+      {/* linear progress bar under header */}
+      
+    </Box>
   );
 }
