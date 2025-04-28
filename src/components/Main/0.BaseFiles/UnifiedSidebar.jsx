@@ -126,13 +126,34 @@ function UnifiedSidebar({
 
              {/* Admin — show a wrench icon when collapsed */}
                   {isAdmin && (
-        <button
-          style={toggleButtonStyle(viewMode === "admin")}
-          onClick={() => switchMode("admin")}
-          title="Admin"
-        >
-          {collapsed ? "🛠️" : <>🛠️ Admin</>}
-        </button>
+        <>
+          <button
+            style={toggleButtonStyle(viewMode === "admin")}
+            onClick={() => switchMode("admin")}
+            title="Admin"
+          >
+            {collapsed ? "🛠️" : <>🛠️ Admin</>}
+          </button>
+
+          <button
+            style={toggleButtonStyle(viewMode === "newHome")}
+            onClick={() => switchMode("newHome")}
+            title="NewHome"
+          >
+            {collapsed ? "📡" : <>📡 NewHome</>}
+          </button>
+
+          <button
+            style={toggleButtonStyle(viewMode === "newHome2")}
+            onClick={() => switchMode("newHome2")}
+            title="NewHome2"
+          >
+            {collapsed ? "📡" : <>📡 NewHome</>}
+          </button>
+
+
+
+        </>
       )}
       </div>
 

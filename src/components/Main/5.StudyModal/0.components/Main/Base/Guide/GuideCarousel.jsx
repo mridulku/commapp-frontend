@@ -1,4 +1,4 @@
-// File: src/components/DetailedBookViewer/TOEFLOnboardingCarousel.jsx
+// File: src/components/DetailedBookViewer/OnboardingCarousel.jsx
 import React, { useState, useRef } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import Slider from "react-slick";
@@ -7,32 +7,61 @@ import {
   Typography,
   Button,
   useMediaQuery,
-  useTheme
+  useTheme,
 } from "@mui/material";
 import { CheckCircle } from "@mui/icons-material";
 import axios from "axios";
 
-import { fetchPlan, setCurrentIndex } from "../../../../../../../store/planSlice"; 
-// ^ Make sure your actual import paths match your project
+import {
+  fetchPlan,
+  setCurrentIndex,
+} from "../../../../../../../store/planSlice"; // ← adjust path if needed
 
-export default function GuideCarousel({ onFinish }) {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const sliderRef = useRef(null);
-  const [currentSlide, setCurrentSlide] = useState(0);
+export default function OnboardingCarousel({ onFinish }) {
+  /* ———————————————————————————————————— hooks / redux ———————————————————————————————————— */
+  const theme       = useTheme();
+  const isMobile    = useMediaQuery(theme.breakpoints.down("sm"));
+  const sliderRef   = useRef(null);
+  const dispatch    = useDispatch();
 
-  // Grab whatever you need from Redux (similar to ReadingView)
-  const dispatch = useDispatch();
-  const userId = useSelector((state) => state.auth?.userId);
-  const planId = useSelector((state) => state.plan?.planDoc?.id);
-  const currentIndex = useSelector((state) => state.plan?.currentIndex);
+  const userId        = useSelector((s) => s.auth?.userId);
+  const planId        = useSelector((s) => s.plan?.planDoc?.id);
+  const currentIndex  = useSelector((s) => s.plan?.currentIndex);
+  const examTypeRaw   = useSelector((s) => s.exam?.examType);       // <-- NEW
+  const examType      = (examTypeRaw || "").toUpperCase();          // e.g. "NEET" | "TOEFL" | ""
 
-  // Use a hypothetical ID for the “guide” activity
-  // If you actually have a real activity in your plan for the guide,
-  // replace this with the correct ID from your data.
-  const guideActivityId = "GUIDE_ACTIVITY_ID";
+  /* ———————————————————————————————————— content helpers ———————————————————————————————————— */
+  const isNEET = examType === "NEET";
 
-  // React-slick slider settings
+  // Slide-1 (welcome) content
+  const welcomeHeading = isNEET
+    ? "Hey! Welcome to Your NEET Journey"
+    : `Hey! Welcome to Your ${examType || "Exam"} Journey`;
+
+  const welcomeBullets = isNEET
+    ? [
+        "• We’ll prep Physics, Chemistry, & Biology 🔬",
+        "• No big test first. Just quick questions 🤗",
+        "• Let’s set up your exam details in a jiffy ⏱️",
+      ]
+    : [
+        "• This exam’s onboarding is still being prepared 🛠️",
+        "• Stay tuned for customised guidance 🤗",
+        "• We’ll add the details soon ⏱️",
+      ];
+
+  // Slide-2 (what we’ll ask) content
+  const askBullets = isNEET
+    ? [
+        "• Areas you want to focus on the most 🎯",
+        "• A quick sense of your current skill ⚙️",
+      ]
+    : [
+        "• Areas you want to focus on the most 🎯",
+        "• A quick sense of your current skill ⚙️",
+      ];
+
+  /* ———————————————————————————————————— slider settings ———————————————————————————————————— */
   const settings = {
     infinite: false,
     speed: 500,
@@ -40,57 +69,17 @@ export default function GuideCarousel({ onFinish }) {
     slidesToScroll: 1,
     arrows: false,
     dots: true,
-    beforeChange: (oldIndex, newIndex) => setCurrentSlide(newIndex),
+    beforeChange: (_, next) => setCurrentSlide(next),
   };
 
-  // Go to next/previous slides
+  const [currentSlide, setCurrentSlide] = useState(0);
   const goNext = () => sliderRef.current?.slickNext();
   const goPrev = () => sliderRef.current?.slickPrev();
 
-  // Theme colors
-  const accentPurple = "#9b59b6";
-  const accentPurpleHover = "#8e44ad";
+  /* ———————————————————————————————————— colours / styles ———————————————————————————————————— */
+  const accentPurple       = "#9b59b6";
+  const accentPurpleHover  = "#8e44ad";
 
-  // When user clicks "Finish" on the last slide
-  async function handleFinishGuide() {
-    const oldIndex = currentIndex;
-
-    try {
-      // 1) Mark the “guide activity” as complete (optional; remove if no such activity)
-      await axios.post("http://localhost:3001/api/markActivityCompletion", {
-        userId,
-        planId,
-        activityId: guideActivityId,
-        completionStatus: "complete",
-      });
-
-      // 2) Re-fetch the plan from the backend
-      const backendURL = "http://localhost:3001"; 
-      const fetchUrl = "/api/adaptive-plan";
-
-      const fetchAction = await dispatch(
-        fetchPlan({ planId, backendURL, fetchUrl })
-      );
-
-      // 3) If success => increment index. If failure => still increment
-      if (fetchPlan.fulfilled.match(fetchAction)) {
-        dispatch(setCurrentIndex(oldIndex + 1));
-      } else {
-        dispatch(setCurrentIndex(oldIndex + 1));
-      }
-    } catch (err) {
-      console.error("Error finishing guide activity:", err);
-      // Even if there's an error, fallback to increment anyway
-      dispatch(setCurrentIndex(oldIndex + 1));
-    }
-
-    // 4) If you still want to run the old `onFinish` callback, do so here:
-    if (typeof onFinish === "function") {
-      onFinish();
-    }
-  }
-
-  // Shared styling
   const slideStyle = {
     display: "flex",
     flexDirection: "column",
@@ -149,6 +138,37 @@ export default function GuideCarousel({ onFinish }) {
     marginBottom: "1rem",
   };
 
+  /* ———————————————————————————————————— handlers ———————————————————————————————————— */
+  async function handleFinishGuide() {
+    const oldIndex = currentIndex;
+
+    try {
+      /* mark activity & refresh plan … unchanged … */
+      await axios.post("http://localhost:3001/api/markActivityCompletion", {
+        userId,
+        planId,
+        activityId: "GUIDE_ACTIVITY_ID",
+        completionStatus: "complete",
+      });
+
+      const fetchAction = await dispatch(
+        fetchPlan({
+          planId,
+          backendURL: "http://localhost:3001",
+          fetchUrl: "/api/adaptive-plan",
+        })
+      );
+
+      dispatch(setCurrentIndex(oldIndex + 1)); // always increment
+    } catch (err) {
+      console.error("Error finishing guide activity:", err);
+      dispatch(setCurrentIndex(oldIndex + 1));
+    }
+
+    typeof onFinish === "function" && onFinish();
+  }
+
+  /* ———————————————————————————————————— render ———————————————————————————————————— */
   return (
     <Box
       sx={{
@@ -159,88 +179,88 @@ export default function GuideCarousel({ onFinish }) {
       }}
     >
       <Slider ref={sliderRef} {...settings}>
-        
-        {/* Slide 1 */}
+        {/* ───── Slide 1 ───── */}
         <Box sx={slideStyle}>
           <Box sx={cardStyle}>
             <Box sx={iconContainerStyle}>
               <CheckCircle sx={{ fontSize: 40, color: accentPurple }} />
             </Box>
+
             <Typography variant="h4" sx={headingStyle}>
-              Hey! Welcome to Your TOEFL Journey
+              {welcomeHeading}
             </Typography>
-            <Typography variant="body1" sx={{ marginBottom: "1.5rem", color: "#ccc" }}>
-              {/* Keep it short & bullet-like, with an emoji or two */}
-              <div>• We’ll prep Reading, Listening, Speaking, & Writing ✍️</div>
-              <div>• No big test first. Just quick questions 🤗</div>
-              <div>• Let’s set up your exam details in a jiffy ⏱️</div>
+
+            <Typography
+              variant="body1"
+              sx={{ marginBottom: "1.5rem", color: "#ccc" }}
+            >
+              {welcomeBullets.map((txt) => (
+                <div key={txt}>{txt}</div>
+              ))}
             </Typography>
+
             <Box sx={buttonRowStyle}>
-              <Box /> {/* Empty box to align Next on the right */}
-              <Button
-                variant="contained"
-                sx={primaryButtonStyle}
-                onClick={goNext}
-              >
+              <Box /> {/* spacer */}
+              <Button variant="contained" sx={primaryButtonStyle} onClick={goNext}>
                 Next
               </Button>
             </Box>
           </Box>
         </Box>
 
-        {/* Slide 2 */}
+        {/* ───── Slide 2 ───── */}
         <Box sx={slideStyle}>
           <Box sx={cardStyle}>
             <Box sx={iconContainerStyle}>
               <CheckCircle sx={{ fontSize: 40, color: accentPurple }} />
             </Box>
+
             <Typography variant="h4" sx={headingStyle}>
               What We'll Ask You
             </Typography>
-            <Typography variant="body1" sx={{ marginBottom: "1.5rem", color: "#ccc" }}>
-              <div>• Your TOEFL exam date 🗓️</div>
-              <div>• Areas you want to focus on the most 🎯</div>
-              <div>• A quick sense of your current skill ⚙️</div>
+
+            <Typography
+              variant="body1"
+              sx={{ marginBottom: "1.5rem", color: "#ccc" }}
+            >
+              {askBullets.map((txt) => (
+                <div key={txt}>{txt}</div>
+              ))}
             </Typography>
+
             <Box sx={buttonRowStyle}>
-              <Button
-                variant="outlined"
-                sx={backButtonStyle}
-                onClick={goPrev}
-              >
+              <Button variant="outlined" sx={backButtonStyle} onClick={goPrev}>
                 Back
               </Button>
-              <Button
-                variant="contained"
-                sx={primaryButtonStyle}
-                onClick={goNext}
-              >
+              <Button variant="contained" sx={primaryButtonStyle} onClick={goNext}>
                 Next
               </Button>
             </Box>
           </Box>
         </Box>
 
-        {/* Slide 3 (Last Slide) */}
+        {/* ───── Slide 3 (unchanged) ───── */}
         <Box sx={slideStyle}>
           <Box sx={cardStyle}>
             <Box sx={iconContainerStyle}>
               <CheckCircle sx={{ fontSize: 40, color: accentPurple }} />
             </Box>
+
             <Typography variant="h4" sx={headingStyle}>
               Ready for Lift-Off?
             </Typography>
-            <Typography variant="body1" sx={{ marginBottom: "1.5rem", color: "#ccc" }}>
+
+            <Typography
+              variant="body1"
+              sx={{ marginBottom: "1.5rem", color: "#ccc" }}
+            >
               <div>• Daily tasks & quizzes adapt to you 🚀</div>
               <div>• No stress: short practice sessions 🧘‍♂️</div>
               <div>• Let’s finalize your plan & start improving!</div>
             </Typography>
+
             <Box sx={buttonRowStyle}>
-              <Button
-                variant="outlined"
-                sx={backButtonStyle}
-                onClick={goPrev}
-              >
+              <Button variant="outlined" sx={backButtonStyle} onClick={goPrev}>
                 Back
               </Button>
               <Button
@@ -253,7 +273,6 @@ export default function GuideCarousel({ onFinish }) {
             </Box>
           </Box>
         </Box>
-
       </Slider>
     </Box>
   );

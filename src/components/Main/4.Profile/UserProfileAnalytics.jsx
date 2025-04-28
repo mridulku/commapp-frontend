@@ -6,9 +6,9 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth } from "../../../firebase";
 import { signOut } from "firebase/auth";
-import ConceptMappingView from "./ConceptMappingView";
-import ExamPaperBrowser from "./ExamPaperBrowser";
-import ExamGuidelinesViewer from "./ExamGuidelinesViewer";
+import ConceptMappingView from "../0.BaseFiles/NewHome/ConceptMappingView";
+import ExamPaperBrowser from "../0.BaseFiles/NewHome/ExamPaperBrowser";
+import ExamGuidelinesViewer from "../0.BaseFiles/NewHome/ExamGuidelinesViewer";
 
 
 import {
@@ -256,12 +256,8 @@ export default function UserProfileAnalytics({ colorScheme = {} }) {
           </SectionPaper>
         </>
       )}
-        <ConceptMappingView/>
-        <ExamPaperBrowser/>
-        <ExamGuidelinesViewer/>
-        <BookExplorer userId = {userId} />
-        <SliceUploader />
-        <SliceViewer userId = {userId} />
+       
+        
 
 
     </Box>

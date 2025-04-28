@@ -1,467 +1,419 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
+import { useSelector } from "react-redux";
 import axios from "axios";
-import { doc, getDoc } from "firebase/firestore";
-import { db } from "../../../../../../../firebase";
-import { useSelector, useDispatch } from "react-redux";
-// Adjust the import path to your actual planSlice or wherever setCurrentIndex is exported from
-import { setCurrentIndex } from "../../../../../../../store/planSlice";
-
 import {
+  Box,
+  Button,
+  CircularProgress,
+  Typography,
+  Alert,
+  Grid,
+  Checkbox,
+  ListItem,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Collapse,
+  List,
+  TextField,
+  Tooltip,
+  IconButton,
   RadioGroup,
-  FormControlLabel,
   Radio,
-  Slider,
-  Divider,
+  FormControlLabel,
+  FormControl,
+  FormLabel,
 } from "@mui/material";
+import ExpandLess from "@mui/icons-material/ExpandLess";
+import ExpandMore from "@mui/icons-material/ExpandMore";
+import InfoIcon from "@mui/icons-material/Info";
+import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
+import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
 
-export default function GuideOnboarding({ userId }) {
-  // ----------------------
-  // Redux
-  // ----------------------
-  const dispatch = useDispatch();
-  // If your store shape is different, adjust here. This is just an example:
-  const currentIndex = useSelector((state) => state.plan?.currentIndex ?? 0);
+/* ---------- helpers ---------- */
+const stringify = (x) => (typeof x === "string" ? x : JSON.stringify(x));
 
-  // We have 2 steps: 0 => Form, 1 => Success
-  const [currentStep, setCurrentStep] = useState(0);
-
-  // Books
-  const [toeflBooks, setToeflBooks] = useState([]);
-  useEffect(() => {
-    if (!userId) return;
-    async function fetchUserDoc() {
-      try {
-        const userRef = doc(db, "users", userId);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-          const userData = userSnap.data();
-          if (Array.isArray(userData.clonedToeflBooks)) {
-            setToeflBooks(userData.clonedToeflBooks);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to fetch user doc:", err);
-      }
+function sortByNumericPrefix(arr) {
+  return arr.slice().sort((a, b) => {
+        const getNum = (str) => {
+          const m = str?.match(/^(\d+)\.?/);
+          return m ? parseInt(m[1], 10) : 999999;
+        };
+        const numA = getNum(a.title);
+        const numB = getNum(b.title);
+        return numA === numB
+          ? a.title.localeCompare(b.title)
+          : numA - numB;
+      });
     }
-    fetchUserDoc();
-  }, [userId]);
 
-  // Form inputs
-  const [examTimeframe, setExamTimeframe] = useState("1_month");
-  const [dailyReadingTime, setDailyReadingTime] = useState(30);
+/* ---------- component ---------- */
+export default function GuideOnboarding() {
+  /* Redux */
+  const userId   = useSelector((s) => s.auth?.userId);
+  const examType = useSelector((s) => s.exam?.examType);
 
-  // Hard-coded
-  const currentKnowledge = "none";
-  const goalLevel = "advanced";
+  /* bookId lookup -------------------------------------------------- */
+  const [bookId, setBookId]     = useState(null);
+  const [bookErr, setBookErr]   = useState(null);
+  const [loadingBook, setLB]    = useState(false);
 
-  // Plan creation endpoint & results
-  const planCreationEndpoint =
-    "https://generateadaptiveplan2-zfztjkkvva-uc.a.run.app";
-  const [planCreationResults, setPlanCreationResults] = useState([]);
-  const [isCreatingPlans, setIsCreatingPlans] = useState(false);
-  const [serverError, setServerError] = useState(null);
+  useEffect(() => {
+    if (!userId || !examType) return;
 
-  // Once done, mark user as onboarded
-  const [isMarkingOnboarded, setIsMarkingOnboarded] = useState(false);
+    (async () => {
+      setLB(true); setBookErr(null);
+      try {
+        const { doc, getDoc } = await import("firebase/firestore");
+        const firebase = await import("../../../../../../../firebase");
+        const snap = await getDoc(
+          doc(firebase.db, "users", userId)
+        );
 
-  // For computing target date
-  const TIMEFRAME_OFFSETS = {
-    "1_week": 7,
-    "2_weeks": 14,
-    "1_month": 30,
-    "2_months": 60,
-    "6_months": 180,
-    not_sure: 60,
+        if (!snap.exists()) throw new Error("User doc not found");
+
+        const fieldMap = {
+          NEET:  "clonedNeetBook",
+          TOEFL: "clonedToeflBooks",
+          // add others as needed…
+        };
+
+        const entry = snap.data()[fieldMap[examType.toUpperCase()]];
+        const id =
+          Array.isArray(entry) ? entry?.[0]?.newBookId : entry?.newBookId;
+        if (!id) throw new Error("newBookId missing");
+        setBookId(id);
+      } catch (e) {
+        setBookErr(stringify(e.message || e));
+      } finally {
+        setLB(false);
+      }
+    })();
+  }, [userId, examType]);
+
+  /* chapter list --------------------------------------------------- */
+  const backendURL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
+  const [chapters, setChapters]       = useState([]);
+  const [chapErr,  setChapErr]        = useState(null);
+  const [loadingCh, setLoadingCh]     = useState(false);
+
+  useEffect(() => {
+    if (!userId || !bookId) return;
+
+    (async () => {
+      setLoadingCh(true); setChapErr(null);
+      try {
+        const res = await axios.get(`${backendURL}/api/process-book-data`, {
+          params: { userId, bookId },
+        });
+        const list = res.data?.chapters ?? [];
+        const cooked = sortByNumericPrefix(
+          list.map((c) => ({
+            id: c.id,
+            title: c.name,
+            expanded: false,
+            selected: true,
+            subchapters: sortByNumericPrefix(
+              (c.subchapters || []).map((s) => ({
+                id: s.id,
+                title: s.name,
+              }))
+            ),
+          }))
+        );
+        setChapters(cooked);
+      } catch (e) {
+        setChapErr(stringify(e.message || e));
+      } finally {
+        setLoadingCh(false);
+      }
+    })();
+  }, [userId, bookId, backendURL]);
+
+  /* selection handlers --------------------------------------------- */
+  const toggleChapter = (idx) => {
+    setChapters((prev) =>
+      prev.map((c, i) =>
+        i === idx
+          ? {
+              ...c,
+              selected: !c.selected,
+            }
+          : c
+      )
+    );
   };
+  const toggleAccord = (idx) =>
+    setChapters((prev) =>
+      prev.map((c, i) => (i === idx ? { ...c, expanded: !c.expanded } : c))
+    );
 
-  // Main navigation
-  async function handleNext() {
-    // Step 0 => Step 1: first create the plans
-    if (currentStep === 0) {
-      await createPlans();
-      setCurrentStep(1);
+  /* plan-selection fields ------------------------------------------ */
+  const [targetDate,       setTargetDate]       = useState("");
+  const [dailyReadingTime, setDailyReadingTime] = useState(30);
+  const [masteryLevel,     setMasteryLevel]     = useState("mastery");
+
+  /* generation ------------------------------------------------------ */
+  const [creating, setCreating]   = useState(false);
+  const [success,  setSuccess]    = useState(false);
+  const [genErr,   setGenErr]     = useState(null);
+
+  const PLAN_ENDPOINT =
+    "https://generateadaptiveplan2-zfztjkkvva-uc.a.run.app";
+
+  function buildBody() {
+    /* selected chapters */
+    const sel = chapters.filter((c) => c.selected);
+    const selectedChapterIds =
+      sel.length === chapters.length ? null : sel.map((c) => c.id);
+
+    /* quiz / revise time from masteryLevel */
+    const quizRevMap = {
+      mastery:   5,
+      revision:  3,
+      glance:    1,
+    };
+    const qr = quizRevMap[masteryLevel] ?? 1;
+
+    return {
+      userId,
+      bookId,
+      targetDate,
+      dailyReadingTime,
+      planType: masteryLevel,
+      quizTime: qr,
+      reviseTime: qr,
+      ...(selectedChapterIds ? { selectedChapters: selectedChapterIds } : {}),
+    };
+  }
+
+  async function handleGenerate() {
+    if (!bookId) return;
+    /* basic validation */
+    if (!chapters.some((c) => c.selected)) {
+      setGenErr("Please keep at least one chapter selected.");
       return;
     }
-    // Step 1 => done => mark user onboarded + increment activity index
-    if (currentStep === 1) {
-      await markUserOnboarded();
-      // Once onboarding is done, we increment the activity index by 1
-      dispatch(setCurrentIndex(currentIndex + 1));
 
-      console.log("Onboarding complete. Possibly navigate to /app");
-    }
-  }
-
-  function handleBack() {
-    // Only let the user go back from step 1 => step 0, if desired
-    if (currentStep === 1) {
-      setCurrentStep(0);
-    }
-  }
-
-  // Creates the plans for each of the user's TOEFL books
-  async function createPlans() {
-    setIsCreatingPlans(true);
-    setServerError(null);
-    setPlanCreationResults([]);
+    setCreating(true); setSuccess(false); setGenErr(null);
     try {
-      // Calculate a targetDate based on timeframe
-      const offset = TIMEFRAME_OFFSETS[examTimeframe] || 30;
-      const date = new Date();
-      date.setDate(date.getDate() + offset);
-      const targetDate = date.toISOString().substring(0, 10);
-
-      // Basic body for each plan
-      const planType = `${currentKnowledge}-${goalLevel}`;
-      const quizTime = 3;
-      const reviseTime = 3;
-
-      const promises = toeflBooks.map(async (bookObj) => {
-        const response = await axios.post(planCreationEndpoint, {
-          userId,
-          targetDate,
-          dailyReadingTime,
-          planType,
-          quizTime,
-          reviseTime,
-          bookId: bookObj.newBookId,
-        });
-        return {
-          planId: response.data.planId,
-          planDoc: response.data.planDoc,
-        };
+      await axios.post(PLAN_ENDPOINT, buildBody(), {
+        headers: { "Content-Type": "application/json" },
       });
-
-      const results = await Promise.all(promises);
-      setPlanCreationResults(results);
-      console.log("Plan creation succeeded:", results);
-    } catch (err) {
-      console.error("Error creating TOEFL plans:", err);
-      setServerError(err.message || "Failed to create TOEFL plans.");
+      setSuccess(true);
+    } catch (e) {
+      const msg =
+        e.response?.data?.error || e.response?.data?.message || e.message;
+      setGenErr(stringify(msg));
     } finally {
-      setIsCreatingPlans(false);
+      setCreating(false);
     }
   }
 
-  // Mark user onboarded
-  async function markUserOnboarded() {
-    if (!userId) return;
-    try {
-      setIsMarkingOnboarded(true);
-      await axios.post(
-        `${import.meta.env.VITE_BACKEND_URL}/api/learner-personas/onboard`,
-        { userId }
-      );
-      console.log("User marked as onboarded (TOEFL):", userId);
-    } catch (err) {
-      console.error("Error marking user onboarded:", err);
-      alert("Failed to mark you onboarded. Check console/logs.");
-    } finally {
-      setIsMarkingOnboarded(false);
-    }
-  }
+  /* ---------------------------------- UI ---------------------------------- */
+  const purple = "#B39DDB";
 
-  // Toggling plan IDs (debugging info)
-  const [showPlanIds, setShowPlanIds] = useState(false);
-
-  // --------------------------------
-  // Render
-  // --------------------------------
   return (
-    <div style={styles.pageWrapper}>
-      <div style={styles.mainContainer}>
-        {renderStepContent()}
+    <Box
+      sx={{
+        maxWidth: 760,
+        mx: "auto",
+        mt: 5,
+        p: 3,
+        bgcolor: "rgba(255,255,255,0.04)",
+        borderRadius: 2,
+        color: "#fff",
+      }}
+    >
+      <Typography variant="h5" sx={{ fontWeight: "bold", mb: 2 }}>
+        {examType ? `${examType} Plan Setup` : "Loading…"}
+      </Typography>
 
-        <div style={styles.btnContainer}>
-          {/* We only show Back if we’re on step 1 */}
-          {currentStep === 1 && (
-            <button
-              onClick={handleBack}
-              style={styles.secondaryButton}
-              disabled={isCreatingPlans || isMarkingOnboarded}
-            >
-              Back
-            </button>
-          )}
+      {/* book & chapter loaders / errors */}
+      {(loadingBook || loadingCh) && <CircularProgress sx={{ color: purple }} />}
+      {bookErr && <Alert severity="error" sx={{ mb: 2 }}>{bookErr}</Alert>}
+      {chapErr && <Alert severity="error" sx={{ mb: 2 }}>{chapErr}</Alert>}
 
-          <button
-            onClick={handleNext}
-            style={styles.primaryButton}
-            disabled={isCreatingPlans || isMarkingOnboarded}
-          >
-            {renderNextButtonLabel()}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+      {/* CHAPTER SELECTION */}
+      {chapters.length > 0 && (
+        <Box sx={{ mb: 3 }}>
+          <Typography sx={{ fontWeight: "bold", mb: 1 }}>
+            Chapters
+          </Typography>
+          {chapters.map((c, idx) => (
+            <Box key={c.id} sx={{ mb: 1 }}>
+              <ListItem disablePadding sx={{ bgcolor: "#333", borderRadius: 1 }}>
+                <ListItemButton onClick={() => toggleAccord(idx)}>
+                  <ListItemIcon sx={{ minWidth: 40 }}>
+                    <Checkbox
+                      checked={c.selected}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleChapter(idx);
+                      }}
+                      sx={{
+                        color: purple,
+                        "&.Mui-checked": { color: "#D1C4E9" },
+                      }}
+                    />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={
+                      <Typography sx={{ color: "#fff", fontWeight: 500 }}>
+                        {c.title}
+                      </Typography>
+                    }
+                  />
+                  {c.expanded ? (
+                    <ExpandLess sx={{ color: "#fff" }} />
+                  ) : (
+                    <ExpandMore sx={{ color: "#fff" }} />
+                  )}
+                </ListItemButton>
+              </ListItem>
+              <Collapse in={c.expanded} unmountOnExit timeout="auto">
+                <List disablePadding>
+                  {c.subchapters.map((s) => (
+                    <ListItem key={s.id} sx={{ pl: 6, bgcolor: "#444" }}>
+                      <ListItemIcon sx={{ minWidth: 30 }}>
+                        <Typography sx={{ color: purple, fontWeight: "bold" }}>
+                          •
+                        </Typography>
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={<Typography sx={{ color: "#fff" }}>{s.title}</Typography>}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              </Collapse>
+            </Box>
+          ))}
+        </Box>
+      )}
 
-  function renderNextButtonLabel() {
-    if (currentStep === 0) {
-      return isCreatingPlans ? "Creating..." : "Next";
-    }
-    if (currentStep === 1) {
-      return isMarkingOnboarded ? "Marking..." : "Next";
-    }
-    return "Next";
-  }
-
-  // STEP CONTENT
-  function renderStepContent() {
-    if (currentStep === 0) {
-      // Step 0 => configuration form
-      return (
-        <div style={styles.contentContainer}>
-          <h2 style={{ marginBottom: "1rem", color: "#fff" }}>
-            Configure Your TOEFL Plan
-          </h2>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "1rem",
-              backgroundColor: "rgba(255,255,255,0.1)",
-              padding: "1rem",
-              borderRadius: "8px",
+      {/* PLAN-SELECTION FIELDS */}
+      <Grid container spacing={3}>
+        {/* target date */}
+        <Grid item xs={12} sm={6}>
+          <Box display="flex" alignItems="center" gap={1}>
+            <Typography sx={{ fontWeight: "bold" }}>
+              <CalendarMonthIcon
+                sx={{ fontSize: "1rem", verticalAlign: "middle", color: purple }}
+              />{" "}
+              Target Date
+            </Typography>
+            <Tooltip title="We’ll check if the plan fits this date.">
+              <IconButton size="small" sx={{ color: purple }}>
+                <InfoIcon fontSize="inherit" />
+              </IconButton>
+            </Tooltip>
+          </Box>
+          <TextField
+            type="date"
+            fullWidth
+            value={targetDate}
+            onChange={(e) => setTargetDate(e.target.value)}
+            size="small"
+            sx={{
+              "& .MuiOutlinedInput-root": { color: "#fff", bgcolor: "#333" },
+              "& .MuiOutlinedInput-notchedOutline": { borderColor: purple },
             }}
-          >
-            <div>
-              <p style={{ color: "#fff", margin: "0 0 4px" }}>
-                How soon do you plan to take your TOEFL exam?
-              </p>
-              <RadioGroup
-                name="exam-timeframe"
-                value={examTimeframe}
-                onChange={(e) => setExamTimeframe(e.target.value)}
-              >
-                <FormControlLabel
-                  value="1_week"
-                  control={<Radio sx={{ color: "#fff" }} />}
-                  label="In 1 Week"
-                  sx={{ color: "#fff" }}
-                />
-                <FormControlLabel
-                  value="2_weeks"
-                  control={<Radio sx={{ color: "#fff" }} />}
-                  label="In 2 Weeks"
-                  sx={{ color: "#fff" }}
-                />
-                <FormControlLabel
-                  value="1_month"
-                  control={<Radio sx={{ color: "#fff" }} />}
-                  label="In 1 Month"
-                  sx={{ color: "#fff" }}
-                />
-                <FormControlLabel
-                  value="2_months"
-                  control={<Radio sx={{ color: "#fff" }} />}
-                  label="In 2 Months"
-                  sx={{ color: "#fff" }}
-                />
-                <FormControlLabel
-                  value="6_months"
-                  control={<Radio sx={{ color: "#fff" }} />}
-                  label="In 6 Months"
-                  sx={{ color: "#fff" }}
-                />
-                <FormControlLabel
-                  value="not_sure"
-                  control={<Radio sx={{ color: "#fff" }} />}
-                  label="Not sure yet"
-                  sx={{ color: "#fff" }}
-                />
-              </RadioGroup>
-            </div>
+          />
+        </Grid>
 
-            <Divider style={{ backgroundColor: "#bbb" }} />
+        {/* daily reading */}
+        <Grid item xs={12} sm={6}>
+          <Box display="flex" alignItems="center" gap={1}>
+            <Typography sx={{ fontWeight: "bold" }}>
+              <AccessTimeIcon
+                sx={{ fontSize: "1rem", verticalAlign: "middle", color: purple }}
+              />{" "}
+              Daily Reading (min)
+            </Typography>
+            <Tooltip title="Minutes per day you can dedicate">
+              <IconButton size="small" sx={{ color: purple }}>
+                <InfoIcon fontSize="inherit" />
+              </IconButton>
+            </Tooltip>
+          </Box>
+          <TextField
+            type="number"
+            fullWidth
+            value={dailyReadingTime}
+            onChange={(e) => setDailyReadingTime(Number(e.target.value))}
+            size="small"
+            sx={{
+              "& .MuiOutlinedInput-root": { color: "#fff", bgcolor: "#333" },
+              "& .MuiOutlinedInput-notchedOutline": { borderColor: purple },
+            }}
+          />
+        </Grid>
 
-            <div>
-              <p style={{ color: "#fff", margin: "0 0 4px" }}>
-                How many minutes do you plan to study each day?
-              </p>
-              <Slider
-                value={dailyReadingTime}
-                onChange={(e, val) => setDailyReadingTime(val)}
-                step={5}
-                min={5}
-                max={120}
-                valueLabelDisplay="auto"
-                sx={{ color: "#fff" }}
-              />
-              <p style={{ color: "#ccc" }}>{dailyReadingTime} minutes/day</p>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // Step 1 => success/confirmation
-    return (
-      <div style={styles.contentContainer}>
-        {serverError ? (
-          <>
-            <h2 style={{ color: "#fff" }}>Oops!</h2>
-            <p style={{ color: "red" }}>Something went wrong: {serverError}</p>
-            <p style={{ color: "#ccc", marginBottom: "1rem" }}>
-              Please try again or contact support.
-            </p>
-          </>
-        ) : (
-          <>
-            {/* Big icon or infographic placeholder */}
-            <div style={styles.infographicWrapper}>
-              <div style={styles.bigIconPlaceholder}>✓</div>
-              <h3 style={{ color: "#fff", marginTop: "1rem" }}>
-                Your Plan Is Ready!
-              </h3>
-            </div>
-
-            <div style={styles.summaryContainer}>
-              <p style={{ color: "#fff", fontWeight: "bold", marginBottom: 8 }}>
-                Exam Timeframe:
-              </p>
-              <p style={{ color: "#ccc", marginBottom: 16 }}>
-                {formatExamTimeframe(examTimeframe)}
-              </p>
-
-              <p style={{ color: "#fff", fontWeight: "bold", marginBottom: 8 }}>
-                Daily Study Time:
-              </p>
-              <p style={{ color: "#ccc", marginBottom: 16 }}>
-                {dailyReadingTime} minutes/day
-              </p>
-
-              <p style={{ color: "#ccc", marginBottom: "1rem" }}>
-                We’ve created a personalized TOEFL plan for you. Next, we’ll
-                guide you on how to use the platform to start learning!
-              </p>
-            </div>
-          </>
-        )}
-
-        {/* Toggle for plan IDs (debug info) */}
-        {planCreationResults && planCreationResults.length > 0 && (
-          <div style={styles.debugInfoContainer}>
-            <button
-              style={styles.infoButton}
-              onClick={() => setShowPlanIds(!showPlanIds)}
+        {/* mastery level */}
+        <Grid item xs={12}>
+          <Box display="flex" alignItems="center" gap={1}>
+            <Typography sx={{ fontWeight: "bold" }}>
+              <AssignmentTurnedInIcon
+                sx={{ fontSize: "1rem", verticalAlign: "middle", color: purple }}
+              />{" "}
+              Mastery Level
+            </Typography>
+          </Box>
+          <FormControl sx={{ mt: 1 }}>
+            <FormLabel sx={{ color: "#fff" }}>
+              Choose Level
+            </FormLabel>
+            <RadioGroup
+              row
+              value={masteryLevel}
+              onChange={(e) => setMasteryLevel(e.target.value)}
             >
-              {showPlanIds ? "Hide Plan IDs" : "Show Plan IDs"}
-            </button>
-            {showPlanIds && (
-              <ul style={{ color: "#ccc", marginTop: 8 }}>
-                {planCreationResults.map((res, index) => (
-                  <li key={index}>
-                    Plan ID: {res.planId}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  }
+              {["mastery", "revision", "glance"].map((lvl) => (
+                <FormControlLabel
+                  key={lvl}
+                  value={lvl}
+                  control={
+                    <Radio
+                      sx={{
+                        color: purple,
+                        "&.Mui-checked": { color: purple },
+                      }}
+                    />
+                  }
+                  label={lvl.charAt(0).toUpperCase() + lvl.slice(1)}
+                  sx={{ color: "#fff" }}
+                />
+              ))}
+            </RadioGroup>
+          </FormControl>
+        </Grid>
+      </Grid>
 
-  function formatExamTimeframe(value) {
-    switch (value) {
-      case "1_week":
-        return "1 Week";
-      case "2_weeks":
-        return "2 Weeks";
-      case "1_month":
-        return "1 Month";
-      case "2_months":
-        return "2 Months";
-      case "6_months":
-        return "6 Months";
-      case "not_sure":
-        return "Not sure yet";
-      default:
-        return "1 Month (default)";
-    }
-  }
+      {/* generate button */}
+      <Box sx={{ mt: 3, textAlign: "center" }}>
+        <Button
+          variant="contained"
+          disabled={creating || !bookId || loadingBook || loadingCh}
+          onClick={handleGenerate}
+          sx={{ bgcolor: purple, "&:hover": { bgcolor: "#D1C4E9" } }}
+        >
+          {creating ? "Generating…" : "Generate Plan"}
+        </Button>
+      </Box>
+
+      {/* result toasts */}
+      {success && (
+        <Alert severity="success" sx={{ mt: 2 }}>
+          🎉 Plan created successfully!
+        </Alert>
+      )}
+      {genErr && (
+        <Alert severity="error" sx={{ mt: 2 }}>
+          {genErr}
+        </Alert>
+      )}
+    </Box>
+  );
 }
-
-// ------------------------------------------------
-// Styles
-// ------------------------------------------------
-const styles = {
-  pageWrapper: {
-    width: "100%",
-    minHeight: "100vh",
-    backgroundColor: "#000",
-    color: "#fff",
-  },
-  mainContainer: {
-    maxWidth: "600px",
-    margin: "0 auto",
-    padding: "2rem 1rem",
-  },
-  contentContainer: {
-    marginTop: "1rem",
-  },
-  btnContainer: {
-    marginTop: "1.5rem",
-    display: "flex",
-    justifyContent: "space-between",
-  },
-  primaryButton: {
-    backgroundColor: "#9b59b6",
-    border: "none",
-    color: "#fff",
-    padding: "0.5rem 1.25rem",
-    borderRadius: "6px",
-    cursor: "pointer",
-    fontSize: "1rem",
-    fontWeight: "bold",
-  },
-  secondaryButton: {
-    backgroundColor: "transparent",
-    border: "2px solid #9b59b6",
-    color: "#fff",
-    padding: "0.5rem 1.25rem",
-    borderRadius: "6px",
-    cursor: "pointer",
-    fontSize: "1rem",
-    fontWeight: "bold",
-  },
-  infographicWrapper: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    marginBottom: 24,
-  },
-  bigIconPlaceholder: {
-    fontSize: 50,
-    lineHeight: "60px",
-    width: 60,
-    height: 60,
-    borderRadius: "50%",
-    backgroundColor: "#9b59b6",
-    color: "#fff",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  summaryContainer: {
-    backgroundColor: "rgba(255,255,255,0.1)",
-    padding: "1rem",
-    borderRadius: "8px",
-  },
-  debugInfoContainer: {
-    marginTop: "1.5rem",
-    backgroundColor: "rgba(255,255,255,0.1)",
-    padding: "1rem",
-    borderRadius: "8px",
-  },
-  infoButton: {
-    backgroundColor: "#2980b9",
-    border: "none",
-    color: "#fff",
-    padding: "0.25rem 0.75rem",
-    borderRadius: "6px",
-    cursor: "pointer",
-    fontSize: "0.9rem",
-  },
-};

@@ -5,6 +5,9 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../../firebase"; // Adjust path as needed
 
 import AdminPanel from "./AdminPanel";    
+import NewHome from "./NewHome";    
+import NewHome2 from "./NewHome2";    
+
 
 const ADMIN_UIDS = [
   "acbhbtiODoPPcks2CP6Z",   // ← example
@@ -380,7 +383,64 @@ useEffect(() => {
     }
   } else if (viewMode === "admin"  && isAdmin) {
     mainContent = <AdminPanel userId={userId}/>;
-  } else if (viewMode === "home") {
+  } else if (viewMode === "newHome") {
+    mainContent = (
+      <NewHome
+      onOpenOnboarding={() => setShowOnboardingModal(true)}
+      isCollapsed={isSidebarCollapsed}
+      userId={userId}
+      onToggleCollapse={handleToggleSidebar}
+      themeColors={themeColors}
+      viewMode={viewMode}
+      setViewMode={setViewMode}
+      categories={categories}
+      selectedCategory={selectedCategory}
+      onCategoryChange={handleCategoryChange}
+      booksData={displayedBooksData}
+      expandedBookName={expandedBookName}
+      toggleBookExpansion={toggleBookExpansion}
+      expandedChapters={expandedChapters}
+      toggleChapterExpansion={toggleChapterExpansion}
+      handleBookClick={handleBookClick}
+      handleChapterClick={handleChapterClick}
+      handleSubChapterClick={handleSubChapterClick}
+      selectedSubChapter={selectedSubChapter}
+      homePlanId={homePlanId}
+      planIds={planIds}
+      onHomeSelect={(act) => setSelectedHomeActivity(act)}
+      onOpenPlayer={handleOpenPlayer}
+      />
+    );
+  } else if (viewMode === "newHome2") {
+    mainContent = (
+      <NewHome2
+        onOpenOnboarding={() => setShowOnboardingModal(true)}
+        isCollapsed={isSidebarCollapsed}
+        userId={userId}
+        onToggleCollapse={handleToggleSidebar}
+        themeColors={themeColors}
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+        categories={categories}
+        selectedCategory={selectedCategory}
+        onCategoryChange={handleCategoryChange}
+        booksData={displayedBooksData}
+        expandedBookName={expandedBookName}
+        toggleBookExpansion={toggleBookExpansion}
+        expandedChapters={expandedChapters}
+        toggleChapterExpansion={toggleChapterExpansion}
+        handleBookClick={handleBookClick}
+        handleChapterClick={handleChapterClick}
+        handleSubChapterClick={handleSubChapterClick}
+        selectedSubChapter={selectedSubChapter}
+        homePlanId={homePlanId}
+        planIds={planIds}
+        onHomeSelect={(act) => setSelectedHomeActivity(act)}
+        onOpenPlayer={handleOpenPlayer}
+        />
+      );
+    }
+   else if (viewMode === "home") {
     // Show some home panel content or MaterialsDashboard
     mainContent = (
       <MaterialsDashboard
