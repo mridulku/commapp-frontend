@@ -92,13 +92,15 @@ export default function Child2({
      Tab configuration (only 1 array → easier to filter & render)
   ──────────────────────────────────────────────────────────────── */
   const TAB_CONF = [
-    { label:"Daily Plan",           comp: renderDaily },
-    { label:"Timeline",    comp: renderTimeline },
-      { label:"Daily Overview",      comp: () =>
-              <DailyOverviewDemo userId={userId}
-                                 plan={plan}
-                                 planId={planId}
-                                 colorScheme={colorScheme}/> },
+    { label:"Daily Overview",      comp: () =>
+      <DailyOverviewDemo userId={userId}
+                         plan={plan}
+                         planId={planId}
+                         colorScheme={colorScheme}/> },
+                         { label:"Timeline",    comp: renderTimeline },
+    { label:"Daily Plan",    admin:true,        comp: renderDaily },
+   
+     
 
     { label:"Progress",   admin:true, comp: renderProgress },
     { label:"Admin",      admin:true, comp: renderAdmin },

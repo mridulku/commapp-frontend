@@ -1,221 +1,328 @@
 /* ────────────────────────────────────────────────────────────────
    File:  src/components/3.AdaptivePlanView/0.Parent/DailyOverviewDemo.jsx
-   v5 –   numbered sub-chapters, fixed white text, unified icons,
-          stage-specific colour + icon, concepts & time lines
-          (2025-04-28)
+   v10 – tab selector (History / Today / Future)
+   ----------------------------------------------------------------
+   • relies solely on @mui/material (no new deps)
+   • plug-and-play: drop in, import stays identical
 ───────────────────────────────────────────────────────────────── */
-import React, { useMemo } from "react";
+
+import React, { useMemo, useState } from "react";
 import {
   Box, Typography, LinearProgress,
+  Tabs, Tab,
   Accordion, AccordionSummary, AccordionDetails, Tooltip
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 
-/* ─── constant iconography (same glyph everywhere) ────────────── */
-const ICON_BOOK    = "📚";   // always for Subject / Book
-const ICON_UNIT    = "📂";   // unit / domain level
-const ICON_CHAPTER = "📄";   // chapter number line
+/* ───── fixed glyphs ─────────────────────────────────────────── */
+const ICON_BOOK    = "📚";
+const ICON_UNIT    = "📂";
+const ICON_CHAPTER = "📄";
+const ICON_CLOCK   = "⏱";
+const ICON_CROSS   = "❌";
+const ICON_ARROW   = "↗";
 
+/* ───── stage → colour / icon map ────────────────────────────── */
 const STAGE_META = {
-  Read    : { color:"#BB86FC", icon:"📖" },
-  Remember: { color:"#80DEEA", icon:"🧠" },
-  Apply   : { color:"#AED581", icon:"🔧" },
-  Analyse : { color:"#F48FB1", icon:"🔬" },
+  Read      : { color:"#BB86FC", icon:"📖" },
+  Remember  : { color:"#80DEEA", icon:"🧠" },
+  Understand: { color:"#FFD54F", icon:"🤔" },
+  Apply     : { color:"#AED581", icon:"🔧" },
+  Analyse   : { color:"#F48FB1", icon:"🔬" },
 };
 
-/* ─── tiny deterministic helpers so dummy data is stable ─────── */
-const rand = seed => {
-  const x = Math.sin(seed) * 10000;
-  return x - Math.floor(x);
-};
-const pick = (arr, seed) => arr[Math.floor(rand(seed) * arr.length)];
+/* deterministic helper so demo is stable on each reload */
+const rand = s => { const x = Math.sin(s)*10000; return x - Math.floor(x); };
 
-/* dummy names (place-holders only) */
-const UNITS     = ["Mechanics","Electrostatics","Optics",
-                   "Thermodynamics","Organic"];
-const CHAPTERS  = ["Kinematics","Work & Energy","Circuits",
-                   "Cell Biology","Alkanes"];
-const SUBCHAPS  = ["Vectors","Graphs","Forces","Field lines",
-                   "Reflection","Entropy","Isomers"];
+/* ───── demo-data constants ──────────────────────────────────── */
+const UNIT            = "Electrostatics";
+const CHAPTER_LABEL   = "1. Kinematics";
+const SUB_BASE        = ["Vectors","Graphs","Forces","Field Lines","Energy"];
+const CONCEPTS        = ["Displacement","Velocity","Acceleration",
+                         "Projectile","Relative Motion"];
+const STAGE_ORDER     = ["Read","Remember","Understand","Apply","Analyse"];
 
-/* build a single dummy “day” object */
+/* makes one day with 5 tasks – seed gives repeatability */
 function buildDay(seed, label){
-  const tasks=[];
-  for(let i=0;i<12;i++){
-    const s = seed*100 + i;
+  const tasks = STAGE_ORDER.map((stage, idx) => {
+    const s    = seed*100 + idx;
+    const meta = STAGE_META[stage];
 
-    /* pick stage first so we can colour the card */
-    const stage     = Object.keys(STAGE_META)[i % 4];
-    const stageMeta = STAGE_META[stage];
+    const subLabel = `1.${idx+1} ${SUB_BASE[idx % SUB_BASE.length]}`;
 
-    /* generate consistent numbering */
-    const chapIdx = (i % CHAPTERS.length) + 1;         // 1-based
-    const subIdx  = ((i*3) % SUBCHAPS.length) + 1;     // 1-based
+    /* base progress -------------------------------------------------- */
+    const totalC = stage==="Read" ? 0 : 5;
+    const doneC  = stage==="Read" ? 0 : Math.floor(rand(s+5)*totalC);
+    const pct    = stage==="Read" ? 0 : Math.round(doneC / totalC * 100);
 
-    const chapterName    = `${chapIdx}. ${CHAPTERS[chapIdx-1]}`;
-    const subchapterName = `${chapIdx}.${subIdx} ${SUBCHAPS[subIdx-1]}`;
+    /* special “Yesterday” demo statuses ----------------------------- */
+    let status = "normal";
+    if (label==="Yesterday"){
+      if (stage==="Read" || stage==="Remember")              status = "done";
+      else if (stage==="Understand" || stage==="Apply")      status = "partial";
+      else if (stage==="Analyse")                            status = "none";
+    }
 
-    const conceptsTotal  = 4 + (i % 3);                // 4-6 concepts
-    const conceptsDone   = Math.min(conceptsTotal,
-                                    Math.floor(rand(s+5)*conceptsTotal));
+    /* override for visual clarity ----------------------------------- */
+    const finalDoneC = status==="done"   ? totalC :
+                       status==="none"   ? 0      : doneC;
+    const finalPct   = status==="done"   ? 100    :
+                       status==="none"   ? 0      : pct;
 
-    tasks.push({
-      id        : `D${seed}-${i}`,
-      stage,
-      stageMeta,
-      subject   : { name:"Physics", icon:ICON_BOOK },  // single book icon
-      unit      : { name:pick(UNITS,   s+2), icon:ICON_UNIT },
-      chapter   : { name:chapterName,    icon:ICON_CHAPTER },
-      subchap   : subchapterName,
-      pct       : Math.round(conceptsDone / conceptsTotal * 100),
-      mins      : 5 + (i % 5)*5,                       // 5-25 min
-      done      : conceptsDone,
-      total     : conceptsTotal,
-    });
-  }
+    const totalMin   = 10;
+    const spentMin   = status==="done" ? totalMin :
+                       status==="none" ? 0        :
+                       2 + (idx % 4) * 2;   // 2-8 min junk time
+
+    return {
+      id:`${seed}-${idx}`,
+      stage, meta, status,
+      subch:subLabel,
+
+      subject : { name:"Physics", icon:ICON_BOOK },
+      unit    : { name:UNIT,      icon:ICON_UNIT },
+      chapter : { name:CHAPTER_LABEL, icon:ICON_CHAPTER },
+
+      pct:finalPct,
+      doneC:finalDoneC,
+      totalC,
+      spentMin,
+      totalMin,
+      conceptList: CONCEPTS.map((c,i)=>({ name:c, ok:i<finalDoneC }))
+    };
+  });
+
   return { label, tasks };
 }
 
-const DAYS_DATA = [
+/* ───── build the three buckets ───────────────────────────────── */
+const historyDays = [
   buildDay(1,"Yesterday"),
-  buildDay(2,"Today"),
-  buildDay(3,"Tomorrow"),
+  buildDay(11,"2 days ago"),
+  buildDay(12,"3 days ago"),
 ];
 
-/* ────────────────────────────────────────────────────────────────
-   MAIN EXPORT –  simply render three accordions
-───────────────────────────────────────────────────────────────── */
-export default function DailyOverviewDemo(){
-  const days = useMemo(()=>DAYS_DATA,[]);   // compute once only
+const todayDays   = [
+  buildDay(2,"Today"),
+];
 
+const futureDays  = [
+  buildDay(3,"Tomorrow"),
+  buildDay(13,"+2 days"),
+  buildDay(14,"+3 days"),
+];
+
+/* =====================================================================
+   MAIN EXPORT
+===================================================================== */
+export default function DailyOverviewDemo(){
+
+  const TAB_LIST = ["History","Today","Future"];
+  const [tabIdx,setTabIdx] = useState(1);        // 0-hist, 1-today, 2-future
+
+  const currentDays = useMemo(()=>{
+    if      (tabIdx===0) return historyDays;
+    else if (tabIdx===2) return futureDays;
+    return todayDays;
+  },[tabIdx]);
+
+  /* ─── UI ─────────────────────────────────────────────────────── */
   return (
     <Box sx={{ color:"#fff" }}>
-      {days.map(day=>(
-        <Accordion
-          key={day.label}
-          defaultExpanded={day.label==="Today"}
-          sx={{
-            bgcolor:"#1a1a1a",
-            border:"1px solid #444",
-            mb:2,
-            "&:before":{ display:"none" }
-          }}
-        >
-          {/* ---------- Accordion Summary ---------- */}
-          <AccordionSummary
-            expandIcon={<ExpandMoreIcon sx={{ color:"#fff" }}/>}
-            sx={{ color:"#fff" }}
-          >
-            <Typography sx={{ fontWeight:700, mr:1 }}>{day.label}</Typography>
-            <Typography sx={{ opacity:.7, fontSize:13 }}>
-              {day.tasks.length} tasks
-            </Typography>
-          </AccordionSummary>
 
-          {/* ---------- Accordion Body (Card Masonry) ---------- */}
-          <AccordionDetails>
-            <Box
-              sx={{
-                display:"grid",
-                gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",
-                gap:1.5,
-              }}
-            >
-              {day.tasks.map(t=>(
-                <Box
-                  key={t.id}
-                  sx={{
-                    display:"flex",
-                    flexDirection:"column",
-                    height:200,
-                    p:1.2,
-                    bgcolor:"#000",
-                    border:`2px solid ${t.stageMeta.color}`,
-                    borderRadius:2,
-                    transition:"transform .15s",
-                    "&:hover":{ transform:"translateY(-3px)" }
-                  }}
-                >
-                  {/* sub-chapter header */}
-                  <Tooltip title={t.subchap}>
-                    <Typography
-                      sx={{
-                        fontWeight:700,
-                        color:t.stageMeta.color,
-                        fontSize:".88rem",
-                        whiteSpace:"nowrap",
-                        overflow:"hidden",
-                        textOverflow:"ellipsis",
-                        mb:.6,
-                      }}
-                    >
-                      {t.subchap}
-                    </Typography>
-                  </Tooltip>
+      {/* tab selector */}
+      <Tabs
+        value={tabIdx}
+        onChange={(e,v)=>setTabIdx(v)}
+        textColor="inherit"
+        TabIndicatorProps={{ style:{ background:"#BB86FC" } }}
+        sx={{ mb:2 }}
+      >
+        {TAB_LIST.map(label=>(
+          <Tab key={label} label={label.toUpperCase()}/>
+        ))}
+      </Tabs>
 
-                  {/* Stage row (icon + label) */}
-                  <MetaStage
-                    icon={t.stageMeta.icon}
-                    label={t.stage}
-                    color={t.stageMeta.color}
-                  />
-
-                  {/* Subject / Unit / Chapter rows */}
-                  <MetaLine icon={t.subject.icon} label={t.subject.name}/>
-                  <MetaLine icon={t.unit.icon}    label={t.unit.name}/>
-                  <MetaLine icon={t.chapter.icon} label={t.chapter.name}/>
-
-                  {/* Spacer pushes progress section to bottom */}
-                  <Box sx={{ flex:1 }}/>
-
-                  {/* Progress & concepts */}
-                  <LinearProgress
-                    variant="determinate"
-                    value={t.pct}
-                    sx={{
-                      height:6,
-                      borderRadius:2,
-                      bgcolor:"#333",
-                      "& .MuiLinearProgress-bar":{ bgcolor:t.stageMeta.color }
-                    }}
-                  />
-                  <Typography
-                    sx={{
-                      fontSize:11,
-                      mt:.4,
-                      display:"flex",
-                      justifyContent:"space-between",
-                      color:"#fff"
-                    }}
-                  >
-                    <span>{t.pct}% · {t.done}/{t.total}</span>
-                    <span>⏱ {t.mins} m</span>
-                  </Typography>
-                </Box>
-              ))}
-            </Box>
-          </AccordionDetails>
-        </Accordion>
+      {/* day accordions (re-using previous component code) */}
+      {currentDays.map(day=>(
+        <DayAccordion key={day.label} day={day}/>
       ))}
     </Box>
   );
 }
 
-/* ─── tiny sub-components for cleaner JSX ─────────────────────── */
-function MetaLine({ icon, label }){
+/* =====================================================================
+   Day accordion – identical card grid inside
+===================================================================== */
+function DayAccordion({ day }){
   return (
-    <Box sx={{ display:"flex", alignItems:"center", mb:.3 }}>
-      <Box sx={{ width:18, textAlign:"center", mr:.6 }}>{icon}</Box>
-      <Typography sx={{ fontSize:12, color:"#fff" }}>{label}</Typography>
+    <Accordion
+      defaultExpanded={day.label==="Today"}
+      sx={{
+        bgcolor:"#1a1a1a",
+        border:"1px solid #444",
+        mb:2,
+        "&:before":{ display:"none" }
+      }}
+    >
+      <AccordionSummary
+        expandIcon={<ExpandMoreIcon sx={{ color:"#fff" }}/>}
+        sx={{ color:"#fff" }}
+      >
+        <Typography sx={{ fontWeight:700, mr:1 }}>{day.label}</Typography>
+        <Typography sx={{ opacity:.7, fontSize:13 }}>
+          {day.tasks.length} tasks
+        </Typography>
+      </AccordionSummary>
+
+      <AccordionDetails>
+        <Box
+          sx={{
+            display:"grid",
+            gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",
+            gap:1.5,
+          }}
+        >
+          {day.tasks.map(t=>(
+            <TaskCard key={t.id} task={t}/>
+          ))}
+        </Box>
+      </AccordionDetails>
+    </Accordion>
+  );
+}
+
+/* =====================================================================
+   Task card (unchanged layout – no badge icon)
+===================================================================== */
+function TaskCard({ task:t }){
+  /* colour presets */
+  let bg="#000", border=t.meta.color,
+      statusLabel=null, subLabel=null;
+
+  switch(t.status){
+    case "done":
+      bg="rgba(76,175,80,.15)";  border="#4CAF50";
+      statusLabel="Completed";                   break;
+    case "partial":
+      bg="rgba(255,152,0,.15)";  border="#FF9800";
+      statusLabel="Partially done";
+      subLabel="Deferred to next day";           break;
+    case "none":
+      bg="rgba(244,67,54,.15)";  border="#F44336";
+      statusLabel="Not started";
+      subLabel="Deferred to next day";           break;
+    default: /* normal cards */
+  }
+
+  return (
+    <Box
+      sx={{
+        display:"flex", flexDirection:"column",
+        height:225, p:1.2,
+        bgcolor:bg,
+        border:`2px solid ${border}`,
+        borderRadius:2,
+        transition:"transform .15s",
+        "&:hover":{ transform:"translateY(-3px)" }
+      }}
+    >
+      {/* sub-chapter header */}
+      <Tooltip title={t.subch}>
+        <Typography
+          sx={{
+            fontWeight:700, fontSize:".88rem",
+            color:t.meta.color,
+            whiteSpace:"nowrap", overflow:"hidden",
+            textOverflow:"ellipsis", mb:.6,
+          }}
+        >
+          {t.subch}
+        </Typography>
+      </Tooltip>
+
+      {/* status labels */}
+      {statusLabel && (
+        <Typography sx={{ fontSize:11, fontWeight:700, color:border }}>
+          {statusLabel}
+        </Typography>
+      )}
+      {subLabel && (
+        <Typography sx={{ fontSize:10, mb:.4, color:"#ccc" }}>
+          {subLabel}
+        </Typography>
+      )}
+
+      {/* stage row */}
+      <Row icon={t.meta.icon} label={t.stage} bold color={t.meta.color}/>
+
+      {/* hierarchy rows */}
+      <Row icon={ICON_BOOK}    label="Physics"/>
+      <Row icon={ICON_UNIT}    label={UNIT}/>
+      <Row icon={ICON_CHAPTER} label={CHAPTER_LABEL}/>
+
+      {/* time row */}
+      <Row icon={ICON_CLOCK} label={`${t.spentMin}/${t.totalMin} min`}/>
+
+      <Box sx={{ flex:1 }}/>
+
+      {/* progress + concepts unless Read */}
+      {t.stage!=="Read" && (
+        <>
+          <LinearProgress
+            variant="determinate"
+            value={t.pct}
+            sx={{
+              height:6, borderRadius:2,
+              bgcolor:"#333",
+              "& .MuiLinearProgress-bar":{ bgcolor:t.meta.color }
+            }}
+          />
+          <Box
+            sx={{
+              mt:.4, fontSize:11,
+              display:"flex", justifyContent:"space-between", color:"#fff"
+            }}
+          >
+            <span>{t.pct}%</span>
+            <Tooltip
+              title={
+                <Box sx={{ fontSize:12 }}>
+                  {t.conceptList.map(c=>(
+                    <Box key={c.name}>
+                      {c.ok?"✅":"❌"} {c.name}
+                    </Box>
+                  ))}
+                </Box>
+              }
+              arrow
+            >
+              <span style={{ cursor:"help", textDecoration:"underline" }}>
+                {t.doneC}/{t.totalC} concepts
+              </span>
+            </Tooltip>
+          </Box>
+        </>
+      )}
     </Box>
   );
 }
 
-function MetaStage({ icon,label,color }){
+/* helper row */
+function Row({ icon, label, bold=false, color="#fff" }){
   return (
-    <Box sx={{ display:"flex", alignItems:"center", mb:.5 }}>
+    <Box sx={{ display:"flex", alignItems:"center", mb:.3 }}>
       <Box sx={{ width:18, textAlign:"center", mr:.6 }}>{icon}</Box>
-      <Typography sx={{ fontSize:12, fontWeight:700, color }}>{label}</Typography>
+      <Typography
+        sx={{
+          fontSize:12,
+          fontWeight:bold?700:400,
+          color,
+          whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"
+        }}
+      >
+        {label}
+      </Typography>
     </Box>
   );
 }
