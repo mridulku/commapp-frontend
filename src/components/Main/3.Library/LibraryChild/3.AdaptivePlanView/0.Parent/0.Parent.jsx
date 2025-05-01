@@ -17,6 +17,11 @@ import ProgressView   from "../3.ProgressView/ProgressView";
 import AdminPanel     from "../4.AdminPanel/AdminPanel";
 import TimelinePanel  from "./TimelinePanel";
 import AdaptPG        from "./AdaptPG/AdaptPG";
+import AdaptPG2        from "./AdaptPG2/AdaptPG2";
+
+import AdaptPlayground        from "./AdaptPlayground";
+
+
 import Adapting       from "./Adapting";
 import AggregatorPanel from "./AggregatorPanel";
 import DailyOverviewDemo from "./DailyOverviewDemo";
@@ -99,6 +104,11 @@ export default function Child2({
                          colorScheme={colorScheme}/> },
                          { label:"Timeline",    comp: renderTimeline },
     { label:"Daily Plan",    admin:true,        comp: renderDaily },
+    { label:"AdaptPG2",     comp: renderAdaptPG2 },
+
+
+    { label:"AdaptPlayground",     comp: renderAdaptPlayground },
+
    
      
 
@@ -220,6 +230,36 @@ export default function Child2({
   function renderAdaptPG(){
     return (
       <AdaptPG
+        userId={userId}
+        plan={plan}
+        planId={planId}
+        colorScheme={colorScheme}
+        dayDropIdx={dayIdx}
+        onDaySelect={setDayIdx}
+        expandedChapters={expanded}
+        onToggleChapter={toggleChapter}
+        onOpenPlanFetcher={openFetcher}
+      />
+    );
+  }
+  function renderAdaptPG2(){
+    return (
+      <AdaptPG2
+        userId={userId}
+        plan={plan}
+        planId={planId}
+        colorScheme={colorScheme}
+        dayDropIdx={dayIdx}
+        onDaySelect={setDayIdx}
+        expandedChapters={expanded}
+        onToggleChapter={toggleChapter}
+        onOpenPlanFetcher={openFetcher}
+      />
+    );
+  }
+  function renderAdaptPlayground(){
+    return (
+      <AdaptPlayground
         userId={userId}
         plan={plan}
         planId={planId}

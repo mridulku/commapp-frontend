@@ -1,6 +1,6 @@
 /* ────────────────────────────────────────────────────────────────
    File:  src/components/3.AdaptivePlanView/0.Parent/DailyOverviewDemo.jsx
-   v10 – tab selector (History / Today / Future)
+   v11 – history-tab summary widget
    ----------------------------------------------------------------
    • relies solely on @mui/material (no new deps)
    • plug-and-play: drop in, import stays identical
@@ -143,9 +143,13 @@ export default function DailyOverviewDemo(){
         ))}
       </Tabs>
 
-      {/* day accordions (re-using previous component code) */}
+      {/* day accordions */}
       {currentDays.map(day=>(
-        <DayAccordion key={day.label} day={day}/>
+        <DayAccordion
+          key={day.label}
+          day={day}
+          showSummary={tabIdx===0}   /* show widget only in History */
+        />
       ))}
     </Box>
   );
@@ -153,8 +157,9 @@ export default function DailyOverviewDemo(){
 
 /* =====================================================================
    Day accordion – identical card grid inside
+   now optionally prepends a summary widget
 ===================================================================== */
-function DayAccordion({ day }){
+function DayAccordion({ day, showSummary }){
   return (
     <Accordion
       defaultExpanded={day.label==="Today"}
@@ -176,6 +181,10 @@ function DayAccordion({ day }){
       </AccordionSummary>
 
       <AccordionDetails>
+        {/* summary widget (history tab only) */}
+        {showSummary && <SummaryWidget tasks={day.tasks}/>}
+
+        {/* task grid */}
         <Box
           sx={{
             display:"grid",
@@ -189,6 +198,49 @@ function DayAccordion({ day }){
         </Box>
       </AccordionDetails>
     </Accordion>
+  );
+}
+
+/* =====================================================================
+   Summary widget (new)
+   – non-interactive, purely informational
+===================================================================== */
+function SummaryWidget({ tasks }){
+  /* crunch numbers */
+  const total       = tasks.length;
+  const completed   = tasks.filter(t=>t.status==="done").length;
+  const partial     = tasks.filter(t=>t.status==="partial").length;
+  const notStarted  = tasks.filter(t=>t.status==="none").length;
+  const spentMin    = tasks.reduce((s,t)=>s + (t.spentMin||0),0);
+
+  return (
+    <Box
+      sx={{
+        mb:2, p:1.5,
+        bgcolor:"#262626",
+        color:  "#fff",  
+        border:"1px solid #555",
+        borderRadius:2,
+        display:"flex",
+        flexWrap:"wrap",
+        gap:2,
+      }}
+    >
+      <SummaryItem label="Total tasks"  value={total}/>
+      <SummaryItem label="Completed"    value={completed}/>
+      <SummaryItem label="Partially done" value={partial}/>
+      <SummaryItem label="Not started"  value={notStarted}/>
+      <SummaryItem label="Time spent"   value={`${spentMin} min`}/>
+    </Box>
+  );
+}
+
+function SummaryItem({ label, value }){
+  return (
+    <Box sx={{ minWidth:110 }}>
+      <Typography sx={{ fontSize:12, opacity:.7 }}>{label}</Typography>
+      <Typography sx={{ fontSize:16, fontWeight:700 }}>{value}</Typography>
+    </Box>
   );
 }
 
