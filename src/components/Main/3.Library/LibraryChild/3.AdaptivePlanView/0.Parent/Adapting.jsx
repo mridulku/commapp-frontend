@@ -1,215 +1,226 @@
+/* ────────────────────────────────────────────────────────────────
+   File:  src/components/Adapting.jsx          (full component)
+───────────────────────────────────────────────────────────────── */
 import React, { useState } from "react";
 import axios from "axios";
-import { Box, Typography, Button, TextField } from "@mui/material";
+import {
+  Box, Typography, Button, TextField,
+  Accordion, AccordionSummary, AccordionDetails,
+  Tooltip, Divider
+} from "@mui/material";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 
-/**
- * If value looks like a Firestore timestamp object, return a formatted string; else null.
- */
-function tryFormatTimestamp(val) {
-  if (!val) return null;
-  if (typeof val === "object") {
-    const maybeSec = val.seconds ?? val._seconds;
-    if (typeof maybeSec === "number") {
-      return new Date(maybeSec * 1000).toLocaleString();
-    }
-  }
-  return null;
-}
+/* helper – Firestore TS → readable string */
+const fmtTS = (v) => {
+  if (!v || typeof v !== "object") return "—";
+  const s = v.seconds ?? v._seconds;
+  return typeof s === "number"
+    ? new Date(s * 1000).toLocaleString()
+    : "—";
+};
 
-/**
- * Recursively displays plan fields in collapsible <details> blocks
- */
-function CollapsibleField({ fieldKey, value, depth = 0 }) {
-  const asTimestamp = tryFormatTimestamp(value);
-  if (asTimestamp) {
-    return (
-      <Box sx={{ ml: depth * 2 }}>
-        <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
-          <strong>{fieldKey}:</strong> {asTimestamp}
-        </Typography>
-      </Box>
-    );
-  }
+/* tiny colour pill */
+const Badge = ({ text, bg, fg = "#000" }) => (
+  <Box
+    component="span"
+    sx={{
+      fontSize: 11, fontWeight: 700,
+      px: 0.8, py: 0.15, borderRadius: 1,
+      bgcolor: bg, color: fg, ml: .5
+    }}
+  >
+    {text}
+  </Box>
+);
 
-  // If array => <details> with each item recursively
-  if (Array.isArray(value)) {
-    return (
-      <Box sx={{ ml: depth * 2 }}>
-        <details>
-          <summary>
-            <Typography variant="body2" component="span">
-              <strong>{fieldKey}:</strong> [Array, length {value.length}]
-            </Typography>
-          </summary>
-          <Box sx={{ mt: 1, ml: 2 }}>
-            {value.map((item, idx) => (
-              <CollapsibleField
-                key={idx}
-                fieldKey={`[${idx}]`}
-                value={item}
-                depth={depth + 1}
-              />
-            ))}
-          </Box>
-        </details>
-      </Box>
-    );
-  }
+/* ╭───────────────────────────────────────────────╮
+   │ ActivityRow – one row + collapsible JSON view │
+   ╰───────────────────────────────────────────────╯ */
+function ActivityRow({ a }) {
+  let badge   = "✗", clr="#E57373", badgeTip="Pending";
+  if (a.completed)     { badge="✓"; clr="#4CAF50"; badgeTip="Done"; }
+  else if (a.deferred) { badge="↩"; clr="#FFB300"; badgeTip="Deferred (copy made)"; }
 
-  // If object => <details> with sub-fields
-  if (value && typeof value === "object") {
-    const keys = Object.keys(value);
-    if (keys.length === 0) {
-      return (
-        <Box sx={{ ml: depth * 2 }}>
-          <Typography variant="body2">
-            <strong>{fieldKey}:</strong> {{}} (empty object)
+  return (
+    <details style={{ marginBottom: 6 }}>
+      {/* summary === the existing compact row */}
+      <summary style={{ listStyle:"none" }}>
+        <Box
+          sx={{
+            display:"grid",
+            gridTemplateColumns:"25px 110px 1fr 60px 70px",
+            gap: 1,
+            alignItems:"center",
+            fontSize:13,
+            cursor:"pointer",
+            userSelect:"none"
+          }}
+        >
+          <Tooltip title={badgeTip}>
+            <span style={{ color: clr }}>{badge}</span>
+          </Tooltip>
+
+          <Typography sx={{ fontWeight:500 }}>
+            {a.type==="READ" ? "READ" : `Q-${(a.quizStage||"").toUpperCase()}`}
+          </Typography>
+
+          <Typography
+            sx={{ whiteSpace:"nowrap", overflow:"hidden",
+                  textOverflow:"ellipsis", opacity:.85 }}
+            title={a.subChapterName || a.subChapterId}
+          >
+            {a.subChapterName || a.subChapterId}
+          </Typography>
+
+          <Typography>{a.timeNeeded || 0}&nbsp;min</Typography>
+
+          <Typography sx={{ fontSize:11, opacity:.6 }}>
+            {a.replicaIndex ? `rep ${a.replicaIndex}` : ""}
           </Typography>
         </Box>
-      );
-    }
-    return (
-      <Box sx={{ ml: depth * 2 }}>
-        <details>
-          <summary>
-            <Typography variant="body2" component="span">
-              <strong>{fieldKey}:</strong> {"{object}"}
-            </Typography>
-          </summary>
-          <Box sx={{ mt: 1, ml: 2 }}>
-            {keys.map((k) => (
-              <CollapsibleField
-                key={k}
-                fieldKey={k}
-                value={value[k]}
-                depth={depth + 1}
-              />
-            ))}
-          </Box>
-        </details>
-      </Box>
-    );
-  }
+      </summary>
 
-  // Otherwise, primitive => simple line
+      {/* expanded content == raw JSON */}
+      <Box
+        sx={{
+          bgcolor:"#161616",
+          border:"1px solid #333",
+          borderRadius:1,
+          mt: .5, p: 1,
+          fontSize:11, lineHeight:1.4,
+          overflowX:"auto"
+        }}
+      >
+        <pre style={{ margin:0, whiteSpace:"pre-wrap" }}>
+{JSON.stringify(a, null, 2)}
+        </pre>
+      </Box>
+    </details>
+  );
+}
+
+/* ╭─────────────────────────────────────────╮
+   │ PlanViewer – accordion per session       │
+   ╰─────────────────────────────────────────╯ */
+function PlanViewer({ plan }) {
+  if (!plan?.sessions?.length) return null;
+  const limit = plan.dailyReadingTimeUsed || 30;
+
   return (
-    <Box sx={{ ml: depth * 2 }}>
-      <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
-        <strong>{fieldKey}:</strong> {String(value)}
-      </Typography>
+    <Box sx={{ mt: 1 }}>
+      {plan.sessions.map((ses, idx) => {
+        const spent = ses.activities.reduce((s,a)=>s+(a.timeNeeded||0),0);
+        const done  = ses.activities.filter(a=>a.completed).length;
+        const def   = ses.activities.filter(a=>a.deferred).length;
+
+        return (
+          <Accordion
+            key={idx}
+            defaultExpanded={idx===0}
+            sx={{ bgcolor:"#1a1a1a", color:"#fff", mb:1 }}
+          >
+            <AccordionSummary
+              expandIcon={<ExpandMoreIcon sx={{ color:"#fff" }}/>}
+            >
+              <Typography sx={{ flex:1 }}>
+                Day&nbsp;{ses.sessionLabel}&nbsp;–&nbsp;
+                {ses.activities.length} tasks&nbsp;|&nbsp;
+                {spent}/{limit} min
+                {ses.locked && <Badge text="LOCKED" bg="#616161" fg="#fff"/>}
+              </Typography>
+              {ses.locked && (
+                <Typography sx={{ fontSize:12, mr:1 }}>
+                  ✓{done}&nbsp;↩{def}&nbsp;✗{ses.activities.length-done-def}
+                </Typography>
+              )}
+            </AccordionSummary>
+
+            <AccordionDetails>
+              {ses.activities.map(a => (
+                <ActivityRow key={a.activityId+(a.replicaIndex||0)} a={a}/>
+              ))}
+            </AccordionDetails>
+          </Accordion>
+        );
+      })}
     </Box>
   );
 }
 
-/**
- * Adapting component:
- *  - Expects { userId, planId, plan }
- *  - Renders the plan doc in collapsible form
- *  - Requires a single session index in the text field
- *  - Calls POST /api/markPlanAsAdapted with { planId, userId, sessionIndex }
- */
+/* ╭─────────────────────────────────────────╮
+   │ MAIN COMPONENT                          │
+   ╰─────────────────────────────────────────╯ */
 export default function Adapting({ userId, plan, planId }) {
+  const [todayISO, setTodayISO] = useState(
+    new Date().toISOString().slice(0,10)
+  );
+  const [outPlan, setOutPlan] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [sessionInput, setSessionInput] = useState("");
+  const [error,   setError]   = useState("");
 
-  if (!plan) {
-    return (
-      <Typography variant="body1" sx={{ color: "#fff", mt: 2 }}>
-        No plan object provided.
-      </Typography>
-    );
-  }
-
-  const topKeys = Object.keys(plan);
-
-  /**
-   * On click => parse one session index => POST to server
-   */
-  async function handleAdaptSingleSession() {
+  /* POST → /api/rebalancePlan */
+  const handleRun = async () => {
+    setError(""); setOutPlan(null); setLoading(true);
     try {
-      setLoading(true);
-      setError("");
-      setSuccess("");
-
-      // Must parse exactly one numeric index
-      const indexNum = parseInt(sessionInput.trim(), 10);
-      if (isNaN(indexNum)) {
-        setError("Please enter a valid numeric session index (e.g. 0, 1, 2...)");
-        return;
-      }
-
-      // Build request body
-      const bodyPayload = {
-        planId,
-        userId,
-        sessionIndex: indexNum,
-      };
-
-      // Call your updated route that expects a single sessionIndex
-      const res = await axios.post("http://localhost:3001/api/markPlanAsAdapted", bodyPayload);
-
-      setSuccess("Plan doc adapted for sessionIndex=" + indexNum);
-    } catch (err) {
-      console.error("Error adapting plan doc =>", err);
-      setError(err?.response?.data?.error || err.message || "Unknown error");
+      const { data } = await axios.post(
+        "http://localhost:3001/api/rebalancePlan",
+        { planId, userId, todayISO }
+      );
+      if (!data?.plan) throw new Error("Server did not return {plan}");
+      setOutPlan(data.plan);
+    } catch (e) {
+      console.error("rebalancePlan error", e);
+      setError(e?.response?.data?.error || e.message || "unknown error");
     } finally {
       setLoading(false);
     }
+  };
+
+  /* ---------------- render ---------------- */
+  if (!plan) {
+    return <Typography sx={{ color:"#fff", mt:2 }}>No plan loaded.</Typography>;
   }
 
   return (
-    <Box sx={{ color: "#fff", mt: 2 }}>
-      <Typography variant="h6" sx={{ mb: 2 }}>
-        Adapting View (Raw Plan)
+    <Box sx={{ color:"#fff", mt:2 }}>
+      <Typography variant="h6" sx={{ mb:2 }}>
+        Adaptive Plan – Admin Inspector
       </Typography>
 
-      <Typography variant="body2" sx={{ mb: 2 }}>
-        <strong>planId:</strong> {String(planId)} <br />
-        <strong>userId:</strong> {String(userId)}
+      <Typography variant="body2" sx={{ mb:2 }}>
+        <strong>planId:</strong> {planId}<br/>
+        <strong>userId:</strong> {userId}<br/>
+        <strong>created:</strong> {fmtTS(plan.createdAt || plan.planCreationDate)}
       </Typography>
 
-      {/* Render plan doc in collapsible blocks */}
-      {topKeys.map((key) => (
-        <CollapsibleField key={key} fieldKey={key} value={plan[key]} />
-      ))}
-
-      {/* Single session index input */}
-      <Box sx={{ mt: 3 }}>
-        <Typography variant="body2" sx={{ mb: 1 }}>
-          Enter single session index (e.g. 0,1,2...) :
-        </Typography>
+      <Box sx={{ display:"flex", gap:2, mb:2, flexWrap:"wrap" }}>
         <TextField
-          variant="outlined"
+          label="Today"
+          type="date"
           size="small"
-          value={sessionInput}
-          onChange={(e) => setSessionInput(e.target.value)}
-          placeholder="0"
-          sx={{ mb: 2, backgroundColor: "#fff", color: "#000", width: "200px" }}
+          value={todayISO}
+          onChange={e=>setTodayISO(e.target.value)}
+          sx={{ input:{ color:"#fff" } }}
         />
-
-        <div>
-          <Button
-            variant="contained"
-            onClick={handleAdaptSingleSession}
-            disabled={loading}
-          >
-            {loading ? "Adapting..." : "Adapt Single Session"}
-          </Button>
-        </div>
-
-        {error && (
-          <Typography variant="body2" sx={{ mt: 1, color: "red" }}>
-            Error: {error}
-          </Typography>
-        )}
-        {success && (
-          <Typography variant="body2" sx={{ mt: 1, color: "lime" }}>
-            {success}
-          </Typography>
-        )}
+        <Button variant="contained" disabled={loading} onClick={handleRun}>
+          {loading ? "Re-balancing…" : "Run re-balance"}
+        </Button>
+        {error && <Typography sx={{ color:"salmon" }}>{error}</Typography>}
       </Box>
+
+      {/* original */}
+      <Divider sx={{ mb:2, bgcolor:"#555" }}/>
+      <Typography variant="subtitle1">Current plan</Typography>
+      <PlanViewer plan={plan}/>
+
+      {/* result */}
+      {outPlan && (
+        <>
+          <Divider sx={{ my:3, bgcolor:"#555" }}/>
+          <Typography variant="subtitle1">Result after re-balance</Typography>
+          <PlanViewer plan={outPlan}/>
+        </>
+      )}
     </Box>
   );
 }
