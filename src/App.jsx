@@ -503,7 +503,7 @@ const dispatch = useDispatch();                // ← ADD
 
 
 <Route
-          path="/neetug"
+          path="/neet"
           element={
             
               <NEETUGLandingPage />

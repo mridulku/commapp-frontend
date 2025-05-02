@@ -76,6 +76,14 @@ export default function AdaptPG2({ userId, plan, planId, onOpenPlanFetcher }) {
       statLogs.push({ field: "subchapterStatus", subchapterId: sid, usedApi: "/subchapter-status", requestPayload: req, responsePayload: data });
     }
     setCache(c => ({ ...c, [meta.idx]: { acts, timeMap, subMap, timeLogs, statLogs } }));
+
+     const dateISO = meta.date.toISOString().slice(0, 10);      // "YYYY-MM-DD"
+ setCache(c => ({
+   ...c,
+   [meta.idx]: { dateISO, acts, timeMap, subMap, timeLogs, statLogs }
+ }));
+
+
   }, [dayCache, userId, planId]);
 
   const handleAcc = meta => async (_e, open) => { setExp(open ? meta.idx : null); if (open) await fetchDay(meta); };
@@ -111,6 +119,7 @@ export default function AdaptPG2({ userId, plan, planId, onOpenPlanFetcher }) {
       bookName={bookName}                 /* NEW */
       activities={cached.acts}
       timeMap={cached.timeMap}
+      sessionDateISO={cached.dateISO}        /* ← NEW */
       subchapterStatusMap={cached.subMap}
       dispatch={dispatch}
       setCurrentIndex={setCurrentIndex}

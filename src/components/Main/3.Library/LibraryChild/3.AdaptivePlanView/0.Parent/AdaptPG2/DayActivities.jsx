@@ -1,4 +1,4 @@
-// File: DayActivities.jsx  (dual-view, with “Completed” fix – FINAL)
+// File: DayActivities.jsx  (dual-view, attempt buckets + new status logic) 2025-05-01
 import React, { useMemo } from "react";
 import { Box, LinearProgress, Tooltip, Typography } from "@mui/material";
 import { useSelector } from "react-redux";
@@ -20,6 +20,17 @@ const ICON_BOOK    = "📚";
 const ICON_CHAPTER = "📄";
 const ICON_CLOCK   = "⏱";
 
+/* status colours */
+const CLR_COMPLETE = "#4CAF50";
+const CLR_PARTIAL  = "#FFB300";
+const CLR_NONE     = "#E53935";
+
+/* helper: Firestore / epoch → ms */
+const tsMs = (t) =>
+  t?._seconds ? t._seconds * 1e3 :
+  t?.seconds  ? t.seconds  * 1e3 :
+  0;
+
 /* =================================================================== */
 export default function DayActivities({
   activities = [],
@@ -27,7 +38,8 @@ export default function DayActivities({
   onOpenPlanFetcher,
   planId,
   userId,
-  ...rest            // modal handlers passed to ActivityAccordion
+  sessionDateISO,            // "YYYY-MM-DD"
+  ...rest
 }) {
   /* ---------- admin / user split ---------- */
   const reduxUid = useSelector((s) => s.auth?.userId);
@@ -35,7 +47,6 @@ export default function DayActivities({
   const isAdmin  = ADMIN_UIDS.includes(uid);
 
   if (isAdmin) {
-    /* legacy accordion view for admins */
     return (
       <Box>
         {activities.map((a, i) => (
@@ -47,55 +58,117 @@ export default function DayActivities({
 
   /* ================= USER CARD GRID ================= */
   const tasks = useMemo(
-    () => activities.map((act) => {
-        /* ─── 1) concept mastery (quizzes only) ───────────────── */
-        const stageKey = (act.type.toLowerCase() === "read")
-          ? "read"
-          : (act.quizStage || "").toLowerCase();
+    () =>
+      activities.map((act) => {
+        /* 1. stage key & meta ---------------------------------- */
+        const stageKey =
+          act.type.toLowerCase() === "read"
+            ? "read"
+            : (act.quizStage || "").toLowerCase();
 
-        const subObj   = subchapterStatusMap?.[act.subChapterId] ?? {};
-        const statsArr =
-          subObj.quizStagesData?.[stageKey]?.allAttemptsConceptStats ?? [];
+        const meta =
+          STAGE_META[(stageKey || "").toUpperCase()] || {
+            icon: "❓",
+            color: "#888",
+            label: stageKey,
+          };
 
+        /* 2. aggregator slices --------------------------------- */
+        const subObj  = subchapterStatusMap?.[act.subChapterId] ?? {};
+        const stageObj= subObj.quizStagesData?.[stageKey] ?? {};
+        const statsArr= stageObj.allAttemptsConceptStats ?? [];
+
+        /* concept mastery % (quiz only) */
         const conceptMap = new Map();
-        statsArr.forEach(att =>
-          (att.conceptStats || []).forEach(cs => {
-            if (!conceptMap.has(cs.conceptName) || conceptMap.get(cs.conceptName) !== "PASS") {
-              conceptMap.set(cs.conceptName, cs.passOrFail);  // final PASS wins
+        statsArr.forEach((att) =>
+          (att.conceptStats || []).forEach((cs) => {
+            if (
+              !conceptMap.has(cs.conceptName) ||
+              conceptMap.get(cs.conceptName) !== "PASS"
+            ) {
+              conceptMap.set(cs.conceptName, cs.passOrFail);
             }
           })
         );
+        const total    = conceptMap.size;
+        const mastered = [...conceptMap.values()].filter((v) => v === "PASS").length;
+        const pct      = total ? Math.round((mastered / total) * 100) : 0;
 
-        const total     = conceptMap.size;
-        const mastered  = [...conceptMap.values()].filter(v => v === "PASS").length;
-        const pct       = total ? Math.round(mastered / total * 100) : 0;
-
-        /* ─── 2) stage meta / colours ────────────────────────── */
-        const meta = STAGE_META[(stageKey || "").toUpperCase()] || {
-          icon: "❓", color: "#888", label: stageKey,
-        };
-
-        /* ─── 3) READING completion logic ────────────────────── */
-        let readDone   = false;
+        /* reading completion ----------------------------------- */
+        let readDone = false;
         let readingPct = 0;
-
         if (meta.label === "Read") {
-          const rSum = subObj.readingSummary || {};          // FIX ← subObj
+          const rSum = subObj.readingSummary || {};
           readDone   = !!(act.completed || rSum.completed || rSum.dateCompleted);
           readingPct = readDone
             ? 100
-            : (typeof rSum.percent === "number" ? Math.round(rSum.percent) : 0);
+            : typeof rSum.percent === "number"
+            ? Math.round(rSum.percent)
+            : 0;
         }
 
-        /* --- 4) final status flag (for card colours) ---------- */
-        const status = meta.label === "Read"
-          ? (readDone ? "done" : "normal")
-          : (pct === 100 ? "done" : "normal");
+        /* 3. attempt lists + next-activity --------------------- */
+        let attemptsSoFar = [];
+        let nextActivity  = null;
+        let attBefore=[] , attToday=[] , attAfter=[];
+
+        if (meta.label !== "Read") {
+          const quizAtt = stageObj.quizAttempts     ?? [];
+          const revAtt  = stageObj.revisionAttempts ?? [];
+
+          const combined = [
+            ...quizAtt.map((o) => ({ ...o, type: "quiz"     })),
+            ...revAtt .map((o) => ({ ...o, type: "revision" })),
+          ].sort((a, b) => tsMs(a.timestamp) - tsMs(b.timestamp));
+
+          const labelOf = (at) =>
+            `${at.type === "quiz" ? "Q" : "R"}${
+              at.attemptNumber || at.revisionNumber || 1
+            }`;
+
+          attemptsSoFar = combined.map(labelOf);
+
+          /* progress <100% → figure next activity */
+          const progressPct = pct;
+          if (progressPct < 100) {
+            const qCount = quizAtt.length;
+            const rCount = revAtt.length;
+
+            if (qCount === 0 && rCount === 0)       nextActivity = "Q1";
+            else if (qCount === rCount)            nextActivity = `Q${qCount + 1}`;
+            else if (qCount === rCount + 1)        nextActivity = `R${qCount}`;
+          }
+
+          /* bucket by date */
+          if (sessionDateISO) {
+            combined.forEach((at) => {
+              const dISO = new Date(tsMs(at.timestamp))
+                             .toISOString().slice(0, 10);
+              const lbl  = labelOf(at);
+              if (dISO < sessionDateISO)        attBefore.push(lbl);
+              else if (dISO === sessionDateISO) attToday .push(lbl);
+              else                              attAfter .push(lbl);
+            });
+          }
+        }
+
+        /* 4. status logic -------------------------------------- */
+        const deferred = !!act.deferred;
+
+        let status;            // 'completed' | 'partial' | 'notstarted'
+        if (meta.label === "Read") {
+          status = readDone ? "completed" : "notstarted";
+        } else {
+          if (pct === 100 && !deferred)          status = "completed";
+          else if (pct < 100 && attToday.length) status = "partial";
+          else                                   status = "notstarted";
+        }
 
         return {
-          id:        act.activityId,
+          id: act.activityId,
           meta,
           status,
+          deferred,
           _rawActivity: act,
 
           subch:   act.subChapterName || act.subChapterId,
@@ -113,19 +186,20 @@ export default function DayActivities({
             ok: res === "PASS",
           })),
 
-          /* handy for SummaryBar */
-          readDone,
+          attemptsSoFar,
+          nextActivity,
+          attBefore,
+          attToday,
+          attAfter,
         };
       }),
-    [activities, subchapterStatusMap]
+    [activities, subchapterStatusMap, sessionDateISO]
   );
 
-  /* click → bubble up to AdaptPG2 → PlanFetcher modal */
-  const openFetcher = (t) => {
+  /* ---------- UI ---------- */
+  const openFetcher = (t) =>
     onOpenPlanFetcher?.(planId, t._rawActivity);
-  };
 
-  /* -------------- render -------------- */
   return (
     <Box sx={{ mt: 1 }}>
       <SummaryBar tasks={tasks} />
@@ -146,20 +220,31 @@ export default function DayActivities({
 }
 
 /* =====================================================================
-   TaskCard – colours itself when t.status === "done"
+   TaskCard – colours itself by status
 ===================================================================== */
 function TaskCard({ t, onOpen }) {
-  const { meta, status } = t;
+  const { meta, status, deferred } = t;
 
-  const done   = status === "done";
-  const bg     = done ? "rgba(76,175,80,.15)" : "#1a1a1a";
-  const border = done ? "#4CAF50"             : meta.color;
-  const badge  = done ? "Completed"           : null;
+  /* border / bg colour */
+  const border =
+    status === "completed" ? CLR_COMPLETE :
+    status === "partial"   ? CLR_PARTIAL  :
+                             CLR_NONE;
+  const bg =
+    status === "completed" ? "rgba(76,175,80,.15)"  :
+    status === "partial"   ? "rgba(255,152,0,.15)"  :
+                             "rgba(229,57,53,.15)";
+
+  /* badge text */
+  const badge =
+    status === "completed" ? "Completed"      :
+    status === "partial"   ? "Partially done" :
+                             "Not started";
 
   const conceptTip = t.total
     ? (
         <Box sx={{ fontSize: 12 }}>
-          {t.conceptList.map(c => (
+          {t.conceptList.map((c) => (
             <Box key={c.name}>
               {c.ok ? "✅" : "❌"} {c.name}
             </Box>
@@ -179,7 +264,7 @@ function TaskCard({ t, onOpen }) {
         borderRadius: 2,
         display: "flex",
         flexDirection: "column",
-        height: 225,
+        height: 305,   /* taller to fit extra line(s) */
         transition: "transform .15s",
         "&:hover": { transform: "translateY(-3px)" },
       }}
@@ -201,12 +286,17 @@ function TaskCard({ t, onOpen }) {
         </Typography>
       </Tooltip>
 
-      {badge && (
-        <Typography sx={{ fontSize: 11, fontWeight: 700, color: border }}>
-          {badge}
+      {/* status badge */}
+      <Typography sx={{ fontSize: 11, fontWeight: 700, color: border }}>
+        {badge}
+      </Typography>
+      {deferred && (
+        <Typography sx={{ fontSize: 11, color: "#ccc" }}>
+          Deferred to next day
         </Typography>
       )}
 
+      {/* core rows */}
       <Row icon={meta.icon} label={meta.label} bold color={meta.color} />
       <Row icon={ICON_BOOK}    label={t.book} />
       <Row icon={ICON_CHAPTER} label={t.chapter} />
@@ -214,6 +304,7 @@ function TaskCard({ t, onOpen }) {
 
       <Box sx={{ flex: 1 }} />
 
+      {/* progress bar (quizzes only) */}
       {meta.label !== "Read" && (
         <>
           <LinearProgress
@@ -242,6 +333,37 @@ function TaskCard({ t, onOpen }) {
               </span>
             </Tooltip>
           </Box>
+
+          {/* attempt section */}
+          <Box sx={{ mt: 0.8, fontSize: 11, lineHeight: 1.35 }}>
+            <div>
+              <strong>Attempts so far:&nbsp;</strong>
+              {t.attemptsSoFar.length ? t.attemptsSoFar.join(", ") : "—"}
+            </div>
+            {t.nextActivity && (
+              <div>
+                <strong>Next activity:&nbsp;</strong>{t.nextActivity}
+              </div>
+            )}
+
+            {/* buckets */}
+            {t.attBefore.length + t.attToday.length + t.attAfter.length > 0 && (
+              <Box sx={{ mt: 0.6 }}>
+                <div>
+                  <strong>Before:&nbsp;</strong>
+                  {t.attBefore.length ? t.attBefore.join(", ") : "—"}
+                </div>
+                <div>
+                  <strong>This day:&nbsp;</strong>
+                  {t.attToday.length ? t.attToday.join(", ") : "—"}
+                </div>
+                <div>
+                  <strong>Later:&nbsp;</strong>
+                  {t.attAfter.length ? t.attAfter.join(", ") : "—"}
+                </div>
+              </Box>
+            )}
+          </Box>
         </>
       )}
     </Box>
@@ -251,7 +373,7 @@ function TaskCard({ t, onOpen }) {
 /* ---------- Summary bar ---------- */
 function SummaryBar({ tasks }) {
   const total       = tasks.length;
-  const completed   = tasks.filter(t => t.status === "done").length;
+  const completed   = tasks.filter((t) => t.status === "completed").length;
   const spentMin    = tasks.reduce((s, t) => s + t.spentMin, 0);
 
   return (

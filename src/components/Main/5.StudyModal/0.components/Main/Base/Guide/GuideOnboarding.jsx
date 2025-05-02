@@ -1,57 +1,222 @@
 /* ────────────────────────────────────────────────────────────────
    File:  src/components/GuideOnboarding.jsx
-          2-step dummy wizard  •  multi-subject topic picker
+   Purpose:
+     • Pick subjects → groups (tied to chapter selection behind the scenes)
+     • Pick target date, daily minutes, mastery level
+     • POST to PLAN_ENDPOINT to generate an adaptive plan
 ───────────────────────────────────────────────────────────────── */
-import React, { useState } from "react";
+
+import React, { useEffect, useState, useMemo } from "react";
+import { useSelector } from "react-redux";
+import axios from "axios";
+
 import {
   Box,
   Typography,
-  Button,
-  Slider,
+  CircularProgress,
+  Alert,
   Chip,
-  Paper,
+  Button,
   Grid,
+  Paper,
+  Slider,
   Stack,
+  TextField,
+  Tooltip,
+  IconButton,
+  RadioGroup,
+  Radio,
+  FormControlLabel,
+  FormControl,
+  FormLabel,
 } from "@mui/material";
 
-/* =================================================================================
-   1.  STATIC DATA
-================================================================================= */
-const ACCENT   = "#BB86FC";               // single accent colour
-const OFF_BG   = "rgba(255,255,255,.08)";
-const SUBJECTS = ["physics", "chemistry", "biology"];
+import CalendarMonthIcon        from "@mui/icons-material/CalendarMonth";
+import AccessTimeIcon           from "@mui/icons-material/AccessTime";
+import AssignmentTurnedInIcon   from "@mui/icons-material/AssignmentTurnedIn";
+import InfoIcon                 from "@mui/icons-material/Info";
 
-const TOPICS = {
-  physics:   ["Mechanics", "Optics", "Electrostatics", "Modern Phy"],
-  chemistry: ["Organic", "Inorganic", "Physical"],
-  biology:   ["Botany", "Zoology", "Genetics", "Ecology"],
-};
+/* ════════════════════════════════════════════════════════════════
+   0.  CONSTANTS / STYLES
+═════════════════════════════════════════════════════════════════ */
+const ACCENT  = "#BB86FC";               // primary purple accent
+const OFF_BG  = "rgba(255,255,255,.08)"; // muted card bg
 
+/* emojis for subject headers (optional) */
 const EMOJI = {
   physics:   "🔭",
   chemistry: "⚗️",
   biology:   "🧬",
 };
 
-/* =================================================================================
-   2.  COMPONENT
-================================================================================= */
+/* ════════════════════════════════════════════════════════════════
+   1.  COMPONENT
+═════════════════════════════════════════════════════════════════ */
 export default function GuideOnboarding() {
-  /* wizard state -------------------------------------------------------------- */
-  const [step,     setStep]     = useState(0);       // 0 | 1
-  const [topics,   setTopics]   = useState({});      // { physics:[...], chemistry:[...], … }
-  const [goal,     setGoal]     = useState("fresh"); // fresh | brush | diagnose
-  const [minutes,  setMinutes]  = useState(30);
+  /* ───── Redux selectors ───── */
+  const userId   = useSelector((s) => s.auth?.userId);
+  const examType = useSelector((s) => s.exam?.examType);
 
-  function toggleTopic(subject, topic) {
-    setTopics((prev) => {
-      const set   = new Set(prev[subject] || []);
-      set.has(topic) ? set.delete(topic) : set.add(topic);
-      return { ...prev, [subject]: [...set] };
+  /* ───── Wizard state (step switch) ───── */
+  const [step, setStep] = useState(0);               // 0: topics, 1: goal/minutes
+
+  /* ───── BookId lookup (Firestore read) ───── */
+  const [bookId,   setBookId]   = useState(null);
+  const [bookErr,  setBookErr]  = useState(null);
+  const [loadingBook, setLB]    = useState(false);
+
+  
+
+  useEffect(() => {
+    if (!userId || !examType) return;
+
+    (async () => {
+      setLB(true); setBookErr(null);
+      try {
+        const { doc, getDoc } = await import("firebase/firestore");
+        const firebase        = await import("../../../../../../../firebase");
+
+        const snap = await getDoc(doc(firebase.db, "users", userId));
+        if (!snap.exists()) throw new Error("User doc not found");
+
+        const fieldMap = {
+          NEET:  "clonedNeetBook",
+          TOEFL: "clonedToeflBooks",
+        };
+
+        const entry = snap.data()[fieldMap[(examType || "").toUpperCase()]];
+        const id =
+          Array.isArray(entry) ? entry?.[0]?.newBookId : entry?.newBookId;
+
+        if (!id) throw new Error("newBookId missing");
+        setBookId(id);
+      } catch (e) {
+        setBookErr(typeof e === "string" ? e : e.message);
+      } finally {
+        setLB(false);
+      }
+    })();
+  }, [userId, examType]);
+
+  /* ───── Chapter list (API fetch) ───── */
+  const backendURL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
+  const [chapters, setChapters]   = useState([]);     // [{ id, title, subject, grouping, selected }]
+  const [chapErr, setChapErr]     = useState(null);
+  const [loadingCh, setLoadingCh] = useState(false);
+
+  useEffect(() => {
+    if (!userId || !bookId) return;
+
+    (async () => {
+      setLoadingCh(true); setChapErr(null);
+      try {
+        const res  = await axios.get(`${backendURL}/api/process-book-data`, {
+          params: { userId, bookId },
+        });
+        const list = res.data?.chapters ?? [];
+
+        const cooked = list.map((c) => ({
+          id:        c.id,
+          title:     c.name,
+          subject:   c.subject  || "Unknown",
+          grouping:  c.grouping || "Other",
+          selected:  true,          // default ON
+        }));
+        setChapters(cooked);
+      } catch (e) {
+        setChapErr(typeof e === "string" ? e : e.message);
+      } finally {
+        setLoadingCh(false);
+      }
+    })();
+  }, [userId, bookId, backendURL]);
+
+  /* ───── Subject → Group lookup (memoised) ───── */
+  const subjectsMap = useMemo(() => {
+    const map = {};
+    chapters.forEach((c, idx) => {
+      const subj = c.subject;
+      const grp  = c.grouping;
+      (map[subj]      = map[subj] || {});
+      (map[subj][grp] = map[subj][grp] || []).push(idx);
     });
+    return map;
+  }, [chapters]);
+
+  /* ───── Plan-option local state ───── */
+  const [targetDate,       setTargetDate]       = useState("");
+  const [dailyMinutes,     setDailyMinutes]     = useState(30);
+  const [masteryLevel,     setMasteryLevel]     = useState("mastery"); // mastery | revision | glance
+
+  /* ───── Goal cards state (fresh / brush / diagnose) ───── */
+  const [goal, setGoal] = useState("fresh");
+
+  /* ───── Generate-plan call state ───── */
+  const [creating, setCreating] = useState(false);
+  const [success,  setSuccess]  = useState(false);
+  const [genErr,   setGenErr]   = useState(null);
+
+  const PLAN_ENDPOINT =
+    "https://generateadaptiveplan2-zfztjkkvva-uc.a.run.app";
+
+  /* ════════════════════════════════════════════════════════════
+       Helper: build request body from current selections
+  ════════════════════════════════════════════════════════════ */
+  function buildBody() {
+      /* derive selected-chapter IDs */
+      const selected = chapters.filter((c) => c.selected);
+      const chapterIds =
+        selected.length === chapters.length ? null : selected.map((c) => c.id);
+    
+      /* derive quiz / revise minutes from mastery level */
+      const qrMap = { mastery: 5, revision: 3, glance: 1 };
+      const qr    = qrMap[masteryLevel] ?? 1;
+    
+      /* generate a default target date = today + 6 months */
+      const d = new Date();
+      d.setMonth(d.getMonth() + 6);
+      const targetDateISO = d.toISOString().slice(0, 10); // "YYYY-MM-DD"
+    
+      return {
+        userId,
+        bookId,
+        targetDate: targetDateISO,           // always present
+        dailyReadingTime: dailyMinutes,
+        planType: masteryLevel,
+        quizTime: qr,
+        reviseTime: qr,
+        ...(chapterIds ? { selectedChapters: chapterIds } : {}),
+      };
+    }
+
+  async function handleGenerate() {
+    if (!bookId) return;
+    if (!chapters.some((c) => c.selected)) {
+      setGenErr("Please keep at least one chapter selected.");
+      return;
+    }
+
+    setCreating(true); setSuccess(false); setGenErr(null);
+    try {
+      await axios.post(PLAN_ENDPOINT, buildBody(), {
+        headers: { "Content-Type": "application/json" },
+      });
+      setSuccess(true);
+    } catch (e) {
+      const msg = e.response?.data?.error ||
+                  e.response?.data?.message ||
+                  e.message;
+      setGenErr(msg);
+    } finally {
+      setCreating(false);
+    }
   }
 
-  /* helper –  “Goal card”  ---------------------------------------------------- */
+  /* ════════════════════════════════════════════════════════════
+       UI BUILDERS
+  ════════════════════════════════════════════════════════════ */
+
+  /* -- GoalCard subcomponent ----------------------------------- */
   function GoalCard({ id, emoji, title, desc }) {
     const active = goal === id;
     return (
@@ -81,16 +246,16 @@ export default function GuideOnboarding() {
     );
   }
 
-  /* STEP-0  ▸  TOPIC PICKER =================================================== */
+  /* -- STEP 0  : subject → group picker ------------------------ */
   const StepTopics = (
     <>
       <Typography variant="h5" sx={{ fontWeight: "bold", mb: 3 }}>
-        1&nbsp;&nbsp;Pick the topics you’d like to cover
+        1&nbsp;&nbsp;Pick the areas you’d like to cover
       </Typography>
 
-      {SUBJECTS.map((sub) => (
-        <Box key={sub} sx={{ mb: 3 }}>
-          {/* subject title ----------------------------------------------------- */}
+      {Object.entries(subjectsMap).map(([subj, groups]) => (
+        <Box key={subj} sx={{ mb: 3 }}>
+          {/* subject header */}
           <Typography
             sx={{
               fontWeight: "bold",
@@ -98,29 +263,41 @@ export default function GuideOnboarding() {
               display: "flex",
               alignItems: "center",
               gap: 1,
+              textTransform: "capitalize",
             }}
           >
-            <span style={{ fontSize: "1.4rem" }}>{EMOJI[sub]}</span>
-            {sub.charAt(0).toUpperCase() + sub.slice(1)}
+            <span style={{ fontSize: "1.4rem" }}>
+              {EMOJI[subj.toLowerCase()] || "📘"}
+            </span>
+            {subj}
           </Typography>
 
-          {/* chips ------------------------------------------------------------- */}
+          {/* group chips */}
           <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-            {TOPICS[sub].map((t) => {
-              const selected = (topics[sub] || []).includes(t);
+            {Object.entries(groups).map(([grpLabel, idxArr]) => {
+              const allOn = idxArr.every((i) => chapters[i].selected);
+
+              function toggleGroup() {
+                setChapters((prev) =>
+                  prev.map((c, i) =>
+                    idxArr.includes(i)
+                      ? { ...c, selected: !allOn }
+                      : c
+                  )
+                );
+              }
+
               return (
                 <Chip
-                  key={t}
-                  label={t}
-                  onClick={() => toggleTopic(sub, t)}
-                  variant={selected ? "filled" : "outlined"}
+                  key={grpLabel}
+                  label={grpLabel}
+                  onClick={toggleGroup}
+                  variant={allOn ? "filled" : "outlined"}
                   sx={{
                     cursor: "pointer",
-                    bgcolor: selected ? ACCENT : "transparent",
+                    bgcolor: allOn ? ACCENT : "transparent",
                     borderColor: ACCENT,
-                    "& .MuiChip-label": {
-                      color: selected ? "#000" : "#fff",
-                    },
+                    "& .MuiChip-label": { color: allOn ? "#000" : "#fff" },
                   }}
                 />
               );
@@ -129,7 +306,7 @@ export default function GuideOnboarding() {
         </Box>
       ))}
 
-      {/* nav button ----------------------------------------------------------- */}
+      {/* nav button */}
       <Box sx={{ textAlign: "right", mt: 4 }}>
         <Button
           variant="contained"
@@ -142,14 +319,14 @@ export default function GuideOnboarding() {
     </>
   );
 
-  /* STEP-1  ▸  GOAL + MINUTES ================================================= */
+  /* -- STEP 1 : goal & daily minutes --------------------------- */
   const StepGoal = (
     <>
       <Typography variant="h5" sx={{ fontWeight: "bold", mb: 2 }}>
         2&nbsp;&nbsp;Set your goal & daily budget
       </Typography>
 
-      {/* goal cards ----------------------------------------------------------- */}
+      {/* goal cards */}
       <Grid container spacing={2} sx={{ mb: 4 }}>
         <Grid item xs={12} md={4}>
           <GoalCard
@@ -177,7 +354,7 @@ export default function GuideOnboarding() {
         </Grid>
       </Grid>
 
-      {/* daily minutes slider ------------------------------------------------- */}
+      {/* minutes slider */}
       <Typography variant="h6" sx={{ mb: 1 }}>
         Daily study budget
       </Typography>
@@ -186,14 +363,57 @@ export default function GuideOnboarding() {
           min={5}
           max={120}
           step={5}
-          value={minutes}
-          onChange={(_, v) => setMinutes(v)}
+          value={dailyMinutes}
+          onChange={(_, v) => setDailyMinutes(v)}
           sx={{ flex: 1, color: ACCENT }}
         />
-        <Typography sx={{ width: 60, textAlign: "right" }}>{minutes} m</Typography>
+        <Typography sx={{ width: 60, textAlign: "right" }}>
+          {dailyMinutes} m
+        </Typography>
       </Box>
 
-      {/* navigation buttons --------------------------------------------------- */}
+      {/* mastery radio */}
+      <Grid container sx={{ mt: 4 }}>
+        <Grid item xs={12}>
+          <Box display="flex" alignItems="center" gap={1}>
+            <Typography sx={{ fontWeight: "bold" }}>
+              <AssignmentTurnedInIcon
+                sx={{ fontSize: "1rem", verticalAlign: "middle", color: ACCENT }}
+              />{" "}
+              Mastery Level
+            </Typography>
+          </Box>
+          <FormControl sx={{ mt: 1 }}>
+            <FormLabel sx={{ color: "#fff" }}>
+              Choose level
+            </FormLabel>
+            <RadioGroup
+              row
+              value={masteryLevel}
+              onChange={(e) => setMasteryLevel(e.target.value)}
+            >
+              {["mastery", "revision", "glance"].map((lvl) => (
+                <FormControlLabel
+                  key={lvl}
+                  value={lvl}
+                  control={
+                    <Radio
+                      sx={{
+                        color: ACCENT,
+                        "&.Mui-checked": { color: ACCENT },
+                      }}
+                    />
+                  }
+                  label={lvl.charAt(0).toUpperCase() + lvl.slice(1)}
+                  sx={{ color: "#fff" }}
+                />
+              ))}
+            </RadioGroup>
+          </FormControl>
+        </Grid>
+      </Grid>
+
+      {/* nav */}
       <Stack direction="row" spacing={2} sx={{ mt: 4 }}>
         <Button
           variant="outlined"
@@ -204,26 +424,31 @@ export default function GuideOnboarding() {
         </Button>
         <Button
           variant="contained"
+          disabled={creating || !bookId || loadingBook || loadingCh}
           sx={{ bgcolor: ACCENT, fontWeight: "bold" }}
-          onClick={() =>
-            alert(
-              JSON.stringify(
-                { topics, minutes, goal },
-                null,
-                2
-              )
-            )
-          }
+          onClick={handleGenerate}
         >
-          Generate Dummy Plan
+          {creating ? "Generating…" : "Generate Plan"}
         </Button>
       </Stack>
+
+      {/* result toasts */}
+      {success && (
+        <Alert severity="success" sx={{ mt: 2 }}>
+          🎉 Plan created successfully!
+        </Alert>
+      )}
+      {genErr && (
+        <Alert severity="error" sx={{ mt: 2 }}>
+          {genErr}
+        </Alert>
+      )}
     </>
   );
 
-  /* =================================================================================
-     3.  RENDER WRAPPER
-  ================================================================================= */
+  /* ════════════════════════════════════════════════════════════
+       RENDER WRAPPER
+  ════════════════════════════════════════════════════════════ */
   return (
     <Box
       sx={{
@@ -238,6 +463,16 @@ export default function GuideOnboarding() {
         borderRadius: 2,
       }}
     >
+      <Typography variant="h5" sx={{ fontWeight: "bold", mb: 2 }}>
+        {examType ? `${examType} Plan Setup` : "Loading…"}
+      </Typography>
+
+      {(loadingBook || loadingCh) && (
+        <CircularProgress sx={{ color: ACCENT }} />
+      )}
+      {bookErr && <Alert severity="error" sx={{ mb: 2 }}>{bookErr}</Alert>}
+      {chapErr && <Alert severity="error" sx={{ mb: 2 }}>{chapErr}</Alert>}
+
       {step === 0 ? StepTopics : StepGoal}
     </Box>
   );
