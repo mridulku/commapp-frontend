@@ -13,11 +13,55 @@ import {
   ListItemButton,
   Tooltip,
   IconButton,
+  CircularProgress,
 } from "@mui/material";
 
 import MenuIcon from "@mui/icons-material/Menu";
 import LockIcon from "@mui/icons-material/Lock";
 import axios from "axios";
+
+/**
+ * DayProgressCircle
+ * -----------------
+ * shows a 28-px ring that fills to `pct` and prints the % inside.
+ * Uses MUI <CircularProgress variant="determinate">.
+ */
+function DayProgressCircle({ pct = 0 }) {
+  return (
+    <Box sx={{ position: "relative", width: 28, height: 28 }}>
+      <CircularProgress
+        variant="determinate"
+        value={pct}
+        size={28}
+        thickness={4}
+        sx={{
+          color: "#66BB6A",
+          bgcolor: "#333",
+          borderRadius: "50%",
+        }}
+      />
+      <Box
+        sx={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Typography
+          variant="caption"
+          sx={{ fontSize: "0.55rem", color: "#fff", fontWeight: 600 }}
+        >
+          {pct}%
+        </Typography>
+      </Box>
+    </Box>
+  );
+}
 
 // ============= Helpers =============
 function getStageNumberAndLabel(act) {
@@ -399,117 +443,49 @@ function ActivityList({ activities, currentIndex, onSelectAct }) {
  *     - else => 0
  *   Summation / totalActivities => progressPct
  */
-function DayLevelProgress({ session }) {
-  const plan = useSelector((state) => state.plan.planDoc);
-  const userId = plan?.userId || "";
-  const planId = plan?.id || plan?.planId || "";
+/**
+ * useDayProgress(session)  → `%` integer 0-100
+ * identical logic to previous DayLevelProgress but returns number.
+ */
+function useDayProgress(session) {
+  const planDoc = useSelector((s) => s.plan.planDoc);
+  const userId  = planDoc?.userId || "";
+  const planId  = planDoc?.id || planDoc?.planId || "";
 
-  const [progressPct, setProgressPct] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [pct, setPct] = useState(0);
 
   useEffect(() => {
-    if (!session?.activities || session.activities.length === 0) {
-      setProgressPct(0);
-      return;
-    }
-
     let cancel = false;
-    setLoading(true);
+    async function calc() {
+      if (!session?.activities?.length) { setPct(0); return; }
 
-    async function computeDayProgress() {
-      const { activities } = session;
-      const results = [];
-
-      for (let i = 0; i < activities.length; i++) {
-        const act = activities[i];
-        // (1) If completed => 1.0
-        if (act.completed === true) {
-          results.push(1.0);
-          continue;
-        }
-        // (2) If type=quiz => aggregator => mastery fraction
-        if ((act.type || "").toLowerCase() === "quiz") {
+      const out = [];
+      for (const a of session.activities) {
+        if (a.completed) { out.push(1); continue; }
+        if ((a.type || "").toLowerCase() === "quiz") {
           try {
-            const resp = await axios.get("http://localhost:3001/subchapter-status", {
-              params: { userId, planId, subchapterId: act.subChapterId },
+            const r = await axios.get("http://localhost:3001/subchapter-status", {
+              params: { userId, planId, subchapterId: a.subChapterId },
             });
-            if (cancel) return; // break early if unmounted
-            const data = resp.data || {};
-            const stageObj = data.quizStagesData?.[act.quizStage] || {};
-            const allStats = stageObj.allAttemptsConceptStats || [];
-            const frac = computeMasteryFraction(allStats);
-            results.push(frac);
-          } catch (err) {
-            console.error("DayProgress aggregator error for activity:", act, err);
-            // if aggregator fails, just push 0
-            results.push(0);
-          }
-        } else {
-          // (3) read or anything else => 0 if not completed
-          results.push(0);
-        }
+            if (cancel) return;
+            const stage = r.data?.quizStagesData?.[a.quizStage] || {};
+            const frac  = computeMasteryFraction(stage.allAttemptsConceptStats || []);
+            out.push(frac);
+          } catch { out.push(0); }
+        } else { out.push(0); }
       }
-
       if (!cancel) {
-        const sum = results.reduce((acc, x) => acc + x, 0);
-        const total = activities.length;
-        const pct = total > 0 ? (sum / total) * 100 : 0;
-        setProgressPct(Math.round(pct));
-        setLoading(false);
+        const pctVal = Math.round(
+          (out.reduce((s,x)=>s+x,0) / out.length) * 100
+        );
+        setPct(pctVal);
       }
     }
-
-    computeDayProgress();
-    return () => {
-      cancel = true;
-    };
+    calc();
+    return () => { cancel = true; };
   }, [session, planId, userId]);
 
-  if (loading) {
-    return (
-      <Box sx={{ color: "#fff", mb: 2, ml: 1 }}>
-        <Typography variant="body2" sx={{ fontSize: "0.75rem", mb: 0.5 }}>
-          <strong>Today's Progress</strong>
-        </Typography>
-        <Typography variant="body2" sx={{ fontSize: "0.75rem" }}>
-          Calculating day progress...
-        </Typography>
-      </Box>
-    );
-  }
-
-  return (
-    <Box sx={{ color: "#fff", mb: 2, ml: 1 }}>
-      <Typography variant="body2" sx={{ fontSize: "0.75rem", mb: 0.5 }}>
-        <strong>Today's Progress</strong>
-      </Typography>
-      <Box
-        sx={{
-          position: "relative",
-          width: "80%",
-          height: "8px",
-          bgcolor: "#444",
-          borderRadius: "4px",
-          overflow: "hidden",
-        }}
-      >
-        <Box
-          sx={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            bottom: 0,
-            width: `${progressPct}%`,
-            bgcolor: "#66BB6A",
-            borderRadius: "4px",
-          }}
-        />
-      </Box>
-      <Typography variant="body2" sx={{ fontSize: "0.75rem", mt: 0.5 }}>
-        {progressPct}%
-      </Typography>
-    </Box>
-  );
+  return pct;
 }
 
 // ============= Main LeftPanel =============
@@ -551,62 +527,59 @@ export default function LeftPanel({
     setSelectedDayIndex(val);
   }
 
+    // pick the session whose progress we want
+  const sessionForProgress =
+    planType === "book"
+      ? sessions[0] || {}
+      : sessions[selectedDayIndex] || {};
+
+  // ★ call the hook every render, regardless of planType
+  const dayProgressPct = useDayProgress(sessionForProgress);
+
   function renderTopRow(type) {
     return (
       <Box
         sx={{
           display: "flex",
           alignItems: "center",
+          justifyContent: "space-between",
           mb: 1,
-          position: "relative",
           height: 32,
         }}
       >
+        {/* hamburger */}
         <IconButton
           size="small"
           onClick={onToggleCollapse}
-          sx={{
-            color: "#fff",
-            marginRight: 1,
-            zIndex: 2,
-          }}
+          sx={{ color: "#fff" }}
         >
           <MenuIcon />
         </IconButton>
-
-        {/* If not collapsed and planType != "book" => show day dropdown */}
+  
+        {/* Day selector (only when not collapsed & adaptive) */}
         {!isCollapsed && type !== "book" && (
-          <Box
-            sx={{
-              position: "absolute",
-              left: "50%",
-              transform: "translateX(-50%)",
-              zIndex: 1,
-            }}
-          >
-            <FormControl variant="standard" sx={{ minWidth: 60 }}>
-              <Select
-                value={selectedDayIndex}
-                onChange={handleDayChange}
-                disableUnderline
-                sx={selectSx}
-                MenuProps={{
-                  PaperProps: {
-                    sx: {
-                      bgcolor: "#222",
-                      color: "#fff",
-                    },
-                  },
-                }}
-              >
-                {sessions.map((sess, idx) => (
-                  <MenuItem key={idx} value={idx}>
-                    Day {sess.sessionLabel || idx + 1}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Box>
+          <FormControl variant="standard" sx={{ minWidth: 60 }}>
+            <Select
+              value={selectedDayIndex}
+              onChange={handleDayChange}
+              disableUnderline
+              sx={selectSx}
+              MenuProps={{
+                PaperProps: { sx: { bgcolor: "#222", color: "#fff" } },
+              }}
+            >
+              {sessions.map((s, idx) => (
+                <MenuItem key={idx} value={idx}>
+                  Day&nbsp;{s.sessionLabel || idx + 1}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
+  
+        {/* compact progress dial */}
+        {!isCollapsed && (
+          <DayProgressCircle pct={dayProgressPct} />
         )}
       </Box>
     );
@@ -621,7 +594,6 @@ export default function LeftPanel({
         {renderTopRow("book")}
         {!isCollapsed && (
           <>
-            <DayLevelProgress session={singleSession} />
             <Box sx={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
               <ActivityList
                 activities={activities}
@@ -644,7 +616,6 @@ export default function LeftPanel({
       {renderTopRow("adaptive")}
       {!isCollapsed && (
         <>
-          <DayLevelProgress session={currentSession} />
           <Box sx={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
             <ActivityList
               activities={activities}
