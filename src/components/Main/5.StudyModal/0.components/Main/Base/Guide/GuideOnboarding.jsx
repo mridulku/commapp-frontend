@@ -9,6 +9,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useSelector } from "react-redux";
 import axios from "axios";
+import SuccessPlanCreation from "./SuccessPlanCreation";
 
 import {
   Box,
@@ -64,6 +65,8 @@ export default function GuideOnboarding() {
   const [bookId,   setBookId]   = useState(null);
   const [bookErr,  setBookErr]  = useState(null);
   const [loadingBook, setLB]    = useState(false);
+
+  const [planDoc,  setPlanDoc]  = useState(null);    // ← new
 
   
 
@@ -198,9 +201,10 @@ export default function GuideOnboarding() {
 
     setCreating(true); setSuccess(false); setGenErr(null);
     try {
-      await axios.post(PLAN_ENDPOINT, buildBody(), {
+      const { data } = await axios.post(PLAN_ENDPOINT, buildBody(), {
         headers: { "Content-Type": "application/json" },
       });
+      setPlanDoc(data?.planDoc || null);             // ← save it
       setSuccess(true);
     } catch (e) {
       const msg = e.response?.data?.error ||
@@ -432,12 +436,7 @@ export default function GuideOnboarding() {
         </Button>
       </Stack>
 
-      {/* result toasts */}
-      {success && (
-        <Alert severity="success" sx={{ mt: 2 }}>
-          🎉 Plan created successfully!
-        </Alert>
-      )}
+      
       {genErr && (
         <Alert severity="error" sx={{ mt: 2 }}>
           {genErr}
@@ -449,8 +448,18 @@ export default function GuideOnboarding() {
   /* ════════════════════════════════════════════════════════════
        RENDER WRAPPER
   ════════════════════════════════════════════════════════════ */
-  return (
-    <Box
+  if (success) {
+       return (
+          <SuccessPlanCreation
+            /* pass the real plan if you captured it; falls back to mock otherwise */
+            planDoc={planDoc}
+            onClose={() => setSuccess(false)}   // whatever “continue” means for you
+          />
+        );
+      }
+    
+      return (
+        <Box
       sx={{
         maxWidth: 760,
         mx: "auto",
