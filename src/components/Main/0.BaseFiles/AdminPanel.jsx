@@ -8,6 +8,9 @@ import BookExplorer   from "./BookExplorer";
 import CSVBookUploader from "./AdminPanel/CSVBookUploader";
 import OnboardingWizard from "./AdminPanel/OnboardingWizard";
 
+import ReadingViewDummy from "./AdminPanel/ReadingViewDummy";
+
+
 // Add more admin tools here later and extend the enum ↓
 const TOOLS = {
   uploader: "Slice Uploader",
@@ -15,6 +18,7 @@ const TOOLS = {
     explorer: "Book Explorer",
   csv:      "CSV Book Uploader",
   onboarding: "Onboarding Wizard",
+  readingviewdummy: "Reading View Dummy", 
 };
 
 function AdminPanel({ userId }) {
@@ -69,6 +73,8 @@ function AdminPanel({ userId }) {
             return <CSVBookUploader   userId={userId} />;
             case "onboarding":
             return <OnboardingWizard   userId={userId} />;
+            case "readingviewdummy":
+            return <ReadingViewDummy   userId={userId} />;
       default:
         return null;
     }

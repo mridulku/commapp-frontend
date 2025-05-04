@@ -72,6 +72,7 @@
      /* ------------ local state ------------ */
      const [dayIdx, setDayIdx] = useState(0);       // adaptive only
      const [page, setPage]     = useState(1);       // pagination (1-based)
+     const [autoSync, setAutoSync] = useState(true);
 
 
 
@@ -114,11 +115,14 @@ const pageTasks = useMemo(
 
 /* auto-flip page when currentIndex jumps to a card on another page */
 useEffect(() => {
-  const idxInList = tasks.findIndex((t) => t.index === currentIndex);
+  if (!autoSync) return;                           // respect manual browse
+  const idxInList = tasks.findIndex(
+    (t) => t.flatIndex === currentIndex
+  );
   if (idxInList === -1) return;                        // not in current list
   const requiredPage = Math.floor(idxInList / CARD_PAGE_SIZE) + 1; // 1-based
   if (requiredPage !== page) setPage(requiredPage);
-}, [currentIndex, tasks, page]);
+  }, [currentIndex, tasks, page, autoSync]);
 
 /* on day change reset page to 1 */
 const handleDayChange = (e) => {
@@ -140,8 +144,11 @@ const handleDayChange = (e) => {
            <TaskCard
              key={t.id}
              t={t}
-             selected={currentIndex === t.index}
- onOpen={() => dispatch(setCurrentIndex(t.index))}
+             selected={currentIndex === t.flatIndex}
+              onOpen={() => {
+                 setAutoSync(true);                      // re-enable auto-sync
+                 dispatch(setCurrentIndex(t.flatIndex));
+               }}
            />
          ))}
    
@@ -157,25 +164,29 @@ const handleDayChange = (e) => {
      }}
    >
              <Pagination
-               count={totalPages}
-               page={page}
-               onChange={(_, p) => setPage(p)}
-               size="small"
-               siblingCount={0}
-               boundaryCount={1}
-                sx={{
-                   /* numbers & chevrons */
-                   '& .MuiPaginationItem-root':       { color: '#fff' },
-                   '& .MuiPaginationItem-icon':       { color: '#fff' },
-                
-                   /* selected page */
-                   '& .Mui-selected': {
-                     color: '#000',
-                     bgcolor: '#FFD700',
-                     '&:hover': { bgcolor: '#ffcc32' },
-                   },
-                 }}
-             />
+  count={totalPages}
+  page={page}
+  onChange={(_, p) => {
+    setAutoSync(false);
+    setPage(p);
+  }}
+  size="small"
+  siblingCount={0}
+  boundaryCount={1}
+  /* ---------- COLORS ---------- */
+  sx={{
+    /* numbers + chevron icons */
+    "& .MuiPaginationItem-root":  { color: "#fff" },
+    "& .MuiPaginationItem-icon":  { color: "#fff" },
+
+    /* selected page */
+    "& .MuiPaginationItem-root.Mui-selected": {
+      color: "#000",            // text
+      bgcolor: "#FFD700",       // gold circle
+      "&:hover": { bgcolor: "#ffcc32" },
+    },
+  }}
+/>
            </Box>
          )}
        </Box>

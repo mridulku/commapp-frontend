@@ -128,7 +128,7 @@ export default function useTaskModel(
 
         return {
           /* indexing / navigation */
-          index: idx,
+          flatIndex: act.flatIndex ?? idx,   // ← global index; fall back when book-plan
           id: act.activityId,
 
           /* visual & status */
