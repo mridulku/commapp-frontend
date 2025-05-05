@@ -21,6 +21,7 @@ import AdaptPG2        from "./AdaptPG2/AdaptPG2";
 
 import AdaptPlayground        from "./AdaptPlayground";
 
+import ConceptProgressTable from "./ConceptProgressTable";
 
 import Adapting       from "./Adapting";
 import AggregatorPanel from "./AggregatorPanel";
@@ -103,6 +104,14 @@ export default function Child2({
                          planId={planId}
                          colorScheme={colorScheme}/> },
                          { label:"Timeline",    comp: renderTimeline },
+
+                         { label:"Concept Progress",      comp: () =>
+                          <ConceptProgressTable userId={userId}
+                                             plan={plan}
+                                             planId={planId}
+                                             colorScheme={colorScheme}/> },
+                                             { label:"Timeline",    comp: renderTimeline },
+
     { label:"Daily Plan",    admin:true,        comp: renderDaily },
     { label:"AdaptPG2",     comp: renderAdaptPG2 },
 

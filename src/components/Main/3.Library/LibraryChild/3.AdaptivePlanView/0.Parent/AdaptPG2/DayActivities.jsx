@@ -14,6 +14,8 @@ const STAGE_META = {
   UNDERSTAND:  { icon: "🤔", color: "#FFD54F", label: "Understand" },
   APPLY:       { icon: "🔧", color: "#AED581", label: "Apply" },
   ANALYSE:     { icon: "🔬", color: "#F48FB1", label: "Analyse" },
+    CUMULATIVEQUIZ:      { icon: "📊", color: "#FF7043", label: "Cumulative Quiz" },
+  CUMULATIVEREVISION:  { icon: "🔁", color: "#64B5F6", label: "Cumulative Revision" },
 };
 
 const ICON_BOOK    = "📚";

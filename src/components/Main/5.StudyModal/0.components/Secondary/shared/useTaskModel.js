@@ -8,6 +8,8 @@ const STAGE_META = {
   UNDERSTAND: { icon: "🤔", color: "#FFD54F", label: "Understand" },
   APPLY:      { icon: "🔧", color: "#AED581", label: "Apply" },
   ANALYSE:    { icon: "🔬", color: "#F48FB1", label: "Analyse" },
+    CUMULATIVEQUIZ:      { icon: "📊", color: "#FF7043", label: "Cumulative Quiz" },
+  CUMULATIVEREVISION:  { icon: "🔁", color: "#64B5F6", label: "Cumulative Rev." },
 };
 
 const ICON_BOOK    = "📚";
@@ -42,11 +44,25 @@ export default function useTaskModel(
   return useMemo(
     () =>
       activities.map((act, idx) => {
+        console.log('DBG-stage', act.activityId, act.type, act.quizStage);
+        
         /* stage + meta */
-        const stageKey =
-          (act.type || "").toLowerCase() === "read"
-            ? "read"
-            : (act.quizStage || "").toLowerCase();
+               /* ----------------------------------------------------------
+           Normalise quizStage:
+             • remove spaces / underscores
+             • lower-case
+           This lets values like "Cumulative Quiz" or
+           "cumulative_revision" map to the STAGE_META keys
+           CUMULATIVEQUIZ / CUMULATIVEREVISION.
+        ----------------------------------------------------------- */
+        let stageKey;
+        if ((act.type || "").toLowerCase() === "read") {
+          stageKey = "read";
+        } else {
+          stageKey = (act.quizStage || "")
+            .replace(/[\s_]+/g, "")    // kill spaces / underscores
+            .toLowerCase();            // => "cumulativequiz", etc.
+        }
         const meta =
           STAGE_META[(stageKey || "").toUpperCase()] || {
             icon: "❓",

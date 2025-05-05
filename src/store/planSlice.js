@@ -85,7 +85,8 @@ function addFlatIndexes(planDoc) {
         // If the server already provides it, convert to lower:
         const rawStage = (act.quizStage || "").toLowerCase();
         // If it's recognized, keep it. Otherwise default to "remember".
-        const recognizedStages = ["remember", "understand", "apply", "analyze"];
+        const recognizedStages = ["remember", "understand", "apply", "analyze","cumulativequiz",
+   "cumulativerevision",];
         derivedQuizStage = recognizedStages.includes(rawStage)
           ? rawStage
           : "remember";
