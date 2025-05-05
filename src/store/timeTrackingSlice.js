@@ -7,9 +7,12 @@ export const fetchDailyTime = createAsyncThunk(
   "timeTracking/fetchDailyTime",
   async ({ planId, userId }, { rejectWithValue }) => {
     try {
-      const res = await axios.get("http://localhost:3001/api/dailyTime", {
-        params: { planId, userId },
-      });
+      const res = await axios.get(
+        `${import.meta.env.VITE_BACKEND_URL}/api/dailyTime`,
+        {
+          params: { planId, userId },
+        }
+      );
       return res.data.totalSeconds || 0;
     } catch (err) {
       return rejectWithValue(err.message || "Error fetching daily time");
@@ -22,7 +25,8 @@ export const incrementDailyTime = createAsyncThunk(
   "timeTracking/incrementDailyTime",
   async ({ planId, userId, increment }, { rejectWithValue }) => {
     try {
-      const res = await axios.post("http://localhost:3001/api/incrementTime", {
+      const res = await axios.post(
+        `${import.meta.env.VITE_BACKEND_URL}/api/incrementTime`, {
         planId,
         userId,
         increment,

@@ -7,9 +7,12 @@ export const fetchReadingTime = createAsyncThunk(
   "reading/fetchReadingTime",
   async ({ userId, planId, subChapterId }, { rejectWithValue }) => {
     try {
-      const res = await axios.get("http://localhost:3001/api/getReadingTime", {
-        params: { userId, planId, subChapterId },
-      });
+      const res = await axios.get(
+        `${import.meta.env.VITE_BACKEND_URL}/api/getReadingTime`,
+        {
+          params: { userId, planId, subChapterId },
+        }
+      );
       return res.data.totalSeconds || 0;
     } catch (err) {
       return rejectWithValue(err.message || "Error fetching reading time");
@@ -22,14 +25,17 @@ export const incrementReadingTime = createAsyncThunk(
   "reading/incrementReadingTime",
   async ({ userId, planId, subChapterId, increment, activityId }, { rejectWithValue }) => {
     try {
-      const res = await axios.post("http://localhost:3001/api/incrementReadingTime", {
-        userId,
-        activityId,
-        planId,
-        subChapterId,
-        increment,
-      });
-      return res.data.newTotalSeconds; 
+      const res = await axios.post(
+        `${import.meta.env.VITE_BACKEND_URL}/api/incrementReadingTime`,
+        {
+          userId,
+          activityId,
+          planId,
+          subChapterId,
+          increment,
+        }
+      );
+      return res.data.newTotalSeconds;
     } catch (err) {
       return rejectWithValue(err.message || "Error incrementing reading time");
     }

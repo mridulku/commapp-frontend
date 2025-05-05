@@ -105,7 +105,8 @@ export default function AdaptPG2({
           const requestPayload = { activityId: act.activityId, type: paramType };
 
           try {
-            const timeRes = await axios.get("http://localhost:3001/api/getActivityTime", {
+            const timeRes = await axios.get(
+              `${import.meta.env.VITE_BACKEND_URL}/api/getActivityTime`, {
               params: requestPayload,
             });
             const totalTime = timeRes.data?.totalTime || 0;
@@ -137,7 +138,8 @@ export default function AdaptPG2({
         for (const subId of uniqueSubIds) {
           const requestPayload = { userId, planId, subchapterId: subId };
           try {
-            const res = await axios.get("http://localhost:3001/subchapter-status", {
+            const res = await axios.get(
+              `${import.meta.env.VITE_BACKEND_URL}/subchapter-status`, {
               params: requestPayload,
             });
             newStatusMap[subId] = res.data;

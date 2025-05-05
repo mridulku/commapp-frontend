@@ -9,7 +9,8 @@ function PromptIdInput() {
 
   const handleSend = async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/generate', {
+      const res = await fetch(
+        `${import.meta.env.VITE_BACKEND_URL}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, subchapterId, promptId }),

@@ -18,7 +18,7 @@ import axios from "axios";
  *
  *   No back-end persistence yet – state only lives in the component.
  */
-export default function SliceUploader({ apiRoot = "http://localhost:3001" }) {
+export default function SliceUploader({ apiRoot = import.meta.env.VITE_BACKEND_URL }) {
   /* ------------------------------------------------------------------ */
   /* local state                                                         */
   /* ------------------------------------------------------------------ */

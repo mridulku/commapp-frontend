@@ -11,6 +11,8 @@ import { useSelector } from "react-redux";
 import axios from "axios";
 import SuccessPlanCreation from "./SuccessPlanCreation";
 
+import Loader from "./Loader";
+
 import {
   Box,
   Typography,
@@ -106,6 +108,11 @@ export default function GuideOnboarding() {
   const [chapters, setChapters]   = useState([]);     // [{ id, title, subject, grouping, selected }]
   const [chapErr, setChapErr]     = useState(null);
   const [loadingCh, setLoadingCh] = useState(false);
+  const [topicErr, setTopicErr] = useState(null);
+
+
+
+
 
   useEffect(() => {
     if (!userId || !bookId) return;
@@ -118,13 +125,14 @@ export default function GuideOnboarding() {
         });
         const list = res.data?.chapters ?? [];
 
-        const cooked = list.map((c) => ({
-          id:        c.id,
-          title:     c.name,
-          subject:   c.subject  || "Unknown",
-          grouping:  c.grouping || "Other",
-          selected:  true,          // default ON
-        }));
+         const cooked = list.map((c) => ({
+             id:        c.id,
+             title:     c.name,
+             subject:   c.subject  || "Unknown",
+             grouping:  c.grouping || "Other",
+             selected:  false,         // ← default OFF ✅
+           }));
+
         setChapters(cooked);
       } catch (e) {
         setChapErr(typeof e === "string" ? e : e.message);
@@ -149,7 +157,7 @@ export default function GuideOnboarding() {
   /* ───── Plan-option local state ───── */
   const [targetDate,       setTargetDate]       = useState("");
   const [dailyMinutes,     setDailyMinutes]     = useState(30);
-  const [masteryLevel,     setMasteryLevel]     = useState("mastery"); // mastery | revision | glance
+  const [masteryLevel]     = useState("mastery"); // mastery | revision | glance
 
   /* ───── Goal cards state (fresh / brush / diagnose) ───── */
   const [goal, setGoal] = useState("fresh");
@@ -221,17 +229,21 @@ export default function GuideOnboarding() {
   ════════════════════════════════════════════════════════════ */
 
   /* -- GoalCard subcomponent ----------------------------------- */
-  function GoalCard({ id, emoji, title, desc }) {
+  function GoalCard({ id, emoji, title, desc, disabled = false }) {
     const active = goal === id;
     return (
       <Paper
-        onClick={() => setGoal(id)}
+      onClick={() => !disabled && setGoal(id)}      // ignore clicks when disabled
         elevation={0}
         sx={{
           p: 2,
           flex: 1,
           cursor: "pointer",
-          bgcolor: active ? ACCENT : OFF_BG,
+          bgcolor: disabled
+          ? "rgba(255,255,255,.12)"
+          : active
+            ? ACCENT
+            : OFF_BG,
           color: active ? "#000" : "#fff",
           border: `1px solid ${active ? ACCENT : "#666"}`,
           transition: ".2s",
@@ -315,7 +327,14 @@ export default function GuideOnboarding() {
         <Button
           variant="contained"
           sx={{ bgcolor: ACCENT, fontWeight: "bold" }}
-          onClick={() => setStep(1)}
+           onClick={() => {
+               if (chapters.some(c => c.selected)) {
+                 setTopicErr(null);
+                 setStep(1);
+               } else {
+                 setTopicErr("Please select at least one unit before continuing.");
+               }
+             }}
         >
           Next
         </Button>
@@ -337,7 +356,7 @@ export default function GuideOnboarding() {
             id="fresh"
             emoji="📚"
             title="Start fresh"
-            desc="Cover everything from scratch in order."
+            desc="Cover everything from scratch"
           />
         </Grid>
         <Grid item xs={12} md={4}>
@@ -345,7 +364,8 @@ export default function GuideOnboarding() {
             id="brush"
             emoji="📝"
             title="Quick brush-up"
-            desc="Revise and identify weak areas to dive deeper."
+            desc="(coming soon)"
+            disabled
           />
         </Grid>
         <Grid item xs={12} md={4}>
@@ -353,7 +373,8 @@ export default function GuideOnboarding() {
             id="diagnose"
             emoji="❓"
             title="Not sure – diagnose me"
-            desc="Let the system figure out what you need first."
+            desc="(coming soon)"
+            disabled
           />
         </Grid>
       </Grid>
@@ -377,45 +398,7 @@ export default function GuideOnboarding() {
       </Box>
 
       {/* mastery radio */}
-      <Grid container sx={{ mt: 4 }}>
-        <Grid item xs={12}>
-          <Box display="flex" alignItems="center" gap={1}>
-            <Typography sx={{ fontWeight: "bold" }}>
-              <AssignmentTurnedInIcon
-                sx={{ fontSize: "1rem", verticalAlign: "middle", color: ACCENT }}
-              />{" "}
-              Mastery Level
-            </Typography>
-          </Box>
-          <FormControl sx={{ mt: 1 }}>
-            <FormLabel sx={{ color: "#fff" }}>
-              Choose level
-            </FormLabel>
-            <RadioGroup
-              row
-              value={masteryLevel}
-              onChange={(e) => setMasteryLevel(e.target.value)}
-            >
-              {["mastery", "revision", "glance"].map((lvl) => (
-                <FormControlLabel
-                  key={lvl}
-                  value={lvl}
-                  control={
-                    <Radio
-                      sx={{
-                        color: ACCENT,
-                        "&.Mui-checked": { color: ACCENT },
-                      }}
-                    />
-                  }
-                  label={lvl.charAt(0).toUpperCase() + lvl.slice(1)}
-                  sx={{ color: "#fff" }}
-                />
-              ))}
-            </RadioGroup>
-          </FormControl>
-        </Grid>
-      </Grid>
+      
 
       {/* nav */}
       <Stack direction="row" spacing={2} sx={{ mt: 4 }}>
@@ -448,18 +431,50 @@ export default function GuideOnboarding() {
   /* ════════════════════════════════════════════════════════════
        RENDER WRAPPER
   ════════════════════════════════════════════════════════════ */
+ 
+
+    /* 1️⃣  Early-exit while we are still fetching ----------------- */
+  if (loadingBook || loadingCh) {
+    return (
+      <Box
+        sx={{
+          maxWidth: 760,
+          mx: "auto",
+          my: 8,
+          textAlign: "center",
+          color: "#fff",
+        }}
+      >
+        <Typography variant="h5" sx={{ fontWeight: "bold", mb: 4 }}>
+         {examType ? `${examType} Plan Setup` : "Loading…"}
+        </Typography>
+
+        <Loader
+          type="bar"
+          accent={ACCENT}
+          fullScreen={false}
+          message={
+            loadingBook
+              ? "Fetching your cloned book…"
+              : "Loading chapter metadata…"
+          }
+        />
+      </Box>
+    );
+  }
+
+  /* 2️⃣  Normal wizard once everything is ready ---------------- */
   if (success) {
-       return (
-          <SuccessPlanCreation
-            /* pass the real plan if you captured it; falls back to mock otherwise */
-            planDoc={planDoc}
-            onClose={() => setSuccess(false)}   // whatever “continue” means for you
-          />
-        );
-      }
-    
-      return (
-        <Box
+    return (
+      <SuccessPlanCreation
+        planDoc={planDoc}
+        onClose={() => setSuccess(false)}
+      />
+    );
+  }
+
+  return (
+    <Box
       sx={{
         maxWidth: 760,
         mx: "auto",
@@ -473,16 +488,12 @@ export default function GuideOnboarding() {
       }}
     >
       <Typography variant="h5" sx={{ fontWeight: "bold", mb: 2 }}>
-        {examType ? `${examType} Plan Setup` : "Loading…"}
+        {examType} Plan Setup
       </Typography>
-
-      {(loadingBook || loadingCh) && (
-        <CircularProgress sx={{ color: ACCENT }} />
-      )}
       {bookErr && <Alert severity="error" sx={{ mb: 2 }}>{bookErr}</Alert>}
       {chapErr && <Alert severity="error" sx={{ mb: 2 }}>{chapErr}</Alert>}
 
       {step === 0 ? StepTopics : StepGoal}
     </Box>
   );
-}
+ }

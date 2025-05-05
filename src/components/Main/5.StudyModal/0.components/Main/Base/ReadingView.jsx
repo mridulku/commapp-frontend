@@ -1,6 +1,10 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import axios from "axios";
+
+import Loader from "./Loader";
+ 
+
 import {
   Box,
   Button,
@@ -173,7 +177,7 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
       try {
         // (A) load subchapter from server
         const res = await axios.get(
-          `http://localhost:3001/api/subchapters/${subChapterId}`
+  `${import.meta.env.VITE_BACKEND_URL}/api/subchapters/${subChapterId}`
         );
         const scData = res.data;
         setSubChapter(scData);
@@ -204,7 +208,13 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
     const chunked = chunkHtmlByParagraphs(subChapter.summary, 180);
     cache.current.original = chunked;
     setPages(chunked);
-    setCurrentPageIndex(0);
+     // If the activity is complete, open on the last page so the
+ // disabled “Reading Already Complete” button is visible.
+ if (completed === true) {
+   setCurrentPageIndex(chunked.length - 1);
+ } else {
+   setCurrentPageIndex(0);
+ }
   }, [subChapter]);
 
   // ---- lumps-of-15 to aggregator (legacy) ----
@@ -267,7 +277,10 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
     if (!activityId) return;
     async function fetchTimeDetails() {
       try {
-        const resp = await axios.get("http://localhost:3001/api/getActivityTime", {
+        ;
+
+const resp = await axios.get(
+  `${import.meta.env.VITE_BACKEND_URL}/api/getActivityTime`, {
           params: { activityId, type: "read" },
         });
         if (resp.data && resp.data.details) {
@@ -327,7 +340,8 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
 
       // (A) Post reading usage
       // TODO persistence
-      await axios.post("http://localhost:3001/api/submitReading", {
+      await axios.post(
+        `${import.meta.env.VITE_BACKEND_URL}/api/submitReading`,{
         userId,
         activityId,
         subChapterId,
@@ -348,13 +362,18 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
       if (typeof activity.replicaIndex === "number") {
         payload.replicaIndex = activity.replicaIndex;
       }
-      await axios.post("http://localhost:3001/api/markActivityCompletion", payload);
+      
+
+await axios.post(
+  `${import.meta.env.VITE_BACKEND_URL}/api/markActivityCompletion`, payload);
 
       // (C) Refresh local or parent state
       if (typeof onNeedsRefreshStatus === "function") {
         onNeedsRefreshStatus();
       }
-      const backendURL = "http://localhost:3001";
+      
+
+const backendURL = import.meta.env.VITE_BACKEND_URL;
       const fetchUrl   = "/api/adaptive-plan";
       const fetchAction = await dispatch(
         fetchPlan({ planId, backendURL, fetchUrl })
@@ -376,19 +395,25 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
     ? serverTime
     : serverTime + leftoverSec;
 
-  // ---- guards ----
-  if (loadingSubchapter) {
-    return (
-      <Box
-        sx={{
-          width: "100%", height: "100%", bgcolor: "#000",
-          display: "flex", justifyContent: "center", alignItems: "center"
-        }}
-      >
-        <CircularProgress sx={{ color: "#FFD700" }} />
-      </Box>
-    );
-  }
+  
+      /* ------------------------------------------------------------
+         GLOBAL LOADER
+         • shows while we’re still pulling the sub-chapter from the server
+      ------------------------------------------------------------ */
+      const isBusy = loadingSubchapter;   // ← there is no loadingBook / loadingCh here
+      if (isBusy) {
+        return (
+          <Loader
+            type="bar"          // animated bar with fake % inside Loader
+            fullScreen          // blur overlay
+            message="Loading your reading passage…"
+          />
+        );
+      }
+
+
+
+
   if (!pages?.length) {
     return (
       <Box sx={{ color: "#fff", p: 4, textAlign: "center" }}>
@@ -398,7 +423,11 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
   }
 
   // ---- pick the correct style version of the pages from cache ----
+    /*  after a style switch the cache might not be ready yet —
+      fallback to original pages until rewrite is finished     */
   const VIEW = cache.current[style] || pages;
+
+
   const currentPageHtml = VIEW[currentPageIndex] || "";
 
   // ---- render ----
@@ -592,7 +621,7 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
                 Next
               </Button>
             )}
-            {currentPageIndex === VIEW.length - 1 && (
+           {currentPageIndex === VIEW.length - 1 && (
               <Button
                 size="small"
                 variant="contained"

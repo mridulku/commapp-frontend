@@ -232,7 +232,8 @@ export default function ReviseView({
       try {
         if (!planId || !subChapterId) return;
         setLoadingConceptData(true);
-        const resp = await axios.get("http://localhost:3001/subchapter-status", {
+        const resp = await axios.get(
+          `${import.meta.env.VITE_BACKEND_URL}/subchapter-status`, {
           params: { userId, planId, subchapterId: subChapterId },
         });
         if (resp.data) {
@@ -361,7 +362,9 @@ export default function ReviseView({
       revisionNumber,
       planId,
     };
-    await axios.post("http://localhost:3001/api/submitRevision", payload);
+    
+await axios.post(
+  `${import.meta.env.VITE_BACKEND_URL}/api/submitRevision`,payload);
     console.log("Revision attempt recorded on server!");
   }
 
@@ -378,7 +381,8 @@ export default function ReviseView({
     try {
       const oldIndex = currentIndex;
       if (activityId) {
-        await axios.post("http://localhost:3001/api/markActivityCompletion", {
+        await axios.post(
+          `${import.meta.env.VITE_BACKEND_URL}/api/markActivityCompletion`, {
           userId,
           planId,
           activityId,
@@ -386,7 +390,7 @@ export default function ReviseView({
         });
         console.log(`Activity '${activityId}' marked deferred!`);
       }
-      const backendURL = "http://localhost:3001";
+      const backendURL = import.meta.env.VITE_BACKEND_URL;
       const fetchUrl = "/api/adaptive-plan";
       const fetchAction = await dispatch(fetchPlan({ planId, backendURL, fetchUrl }));
       if (fetchPlan.fulfilled.match(fetchAction)) {

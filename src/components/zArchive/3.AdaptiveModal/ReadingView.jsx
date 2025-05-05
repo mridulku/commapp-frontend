@@ -26,7 +26,7 @@ export default function ReadingView({
   subChapterId,
   userId,
   level,
-  backendURL = "http://localhost:3001",
+  backendURL = import.meta.env.VITE_BACKEND_URL,
   onRefreshData,
 }) {
   // ==================== State ====================

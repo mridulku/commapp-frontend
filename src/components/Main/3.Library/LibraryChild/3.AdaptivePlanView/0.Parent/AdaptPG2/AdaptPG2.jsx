@@ -64,14 +64,16 @@ export default function AdaptPG2({ userId, plan, planId, onOpenPlanFetcher }) {
       if (!act.activityId) continue;
       const t   = act.type?.toLowerCase().includes("read") ? "read" : "quiz";
       const req = { activityId: act.activityId, type: t };
-      const { data } = await axios.get("http://localhost:3001/api/getActivityTime", { params: req });
+      const { data } = await axios.get(
+        `${import.meta.env.VITE_BACKEND_URL}/api/getActivityTime`, { params: req });
       timeMap[act.activityId] = data?.totalTime || 0;
       timeLogs.push({ field: "timeSpent", activityId: act.activityId, usedApi: "/api/getActivityTime", requestPayload: req, responsePayload: data });
     }
     const subIds = [...new Set(acts.map(a => a.subChapterId).filter(Boolean))];
     for (const sid of subIds) {
       const req = { userId, planId, subchapterId: sid };
-      const { data } = await axios.get("http://localhost:3001/subchapter-status", { params: req });
+      const { data } = await axios.get(
+        `${import.meta.env.VITE_BACKEND_URL}/subchapter-status`, { params: req });
       subMap[sid] = data;
       statLogs.push({ field: "subchapterStatus", subchapterId: sid, usedApi: "/subchapter-status", requestPayload: req, responsePayload: data });
     }

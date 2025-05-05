@@ -118,7 +118,8 @@ export default function DailyPlan({
             const type = rawType.includes("read") ? "read" : "quiz";
 
             try {
-              const res = await axios.get("http://localhost:3001/api/getActivityTime", {
+              const res = await axios.get(
+                `${import.meta.env.VITE_BACKEND_URL}/api/getActivityTime`, {
                 params: { activityId: act.activityId, type },
               });
               const totalTime = res.data?.totalTime || 0;
@@ -139,7 +140,8 @@ export default function DailyPlan({
           const newStatusMap = {};
           for (const subId of uniqueSubIds) {
             try {
-              const res = await axios.get("http://localhost:3001/subchapter-status", {
+              const res = await axios.get(
+                `${import.meta.env.VITE_BACKEND_URL}/subchapter-status`, {
                 params: { userId, planId, subchapterId: subId },
               });
               newStatusMap[subId] = res.data;

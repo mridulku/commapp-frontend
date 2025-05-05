@@ -101,7 +101,8 @@ export default function PlanView2({ plan, userId = "" }) {
 
     try {
       // POST /api/setCompletionStatus
-      const res = await axios.post("http://localhost:3001/api/setCompletionStatus", {
+      const res = await axios.post(
+        `${import.meta.env.VITE_BACKEND_URL}/api/setCompletionStatus`,{
         userId,
         planId,
         activityId,
@@ -128,7 +129,8 @@ export default function PlanView2({ plan, userId = "" }) {
     }
 
     try {
-      const res = await axios.post("http://localhost:3001/api/replicateActivity", {
+      const res = await axios.post(
+        `${import.meta.env.VITE_BACKEND_URL}/api/replicateActivity`,{
         userId,
         planId,
         activityId,

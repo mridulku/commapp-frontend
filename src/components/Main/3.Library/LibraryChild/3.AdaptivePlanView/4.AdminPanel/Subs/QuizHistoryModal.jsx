@@ -58,7 +58,8 @@ export default function QuizHistoryModal({
       setError("");
 
       // 1) getQuiz => same as StageManager => "http://localhost:3001/api/getQuiz"
-      const quizRes = await axios.get("http://localhost:3001/api/getQuiz", {
+      const quizRes = await axios.get(
+        `${import.meta.env.VITE_BACKEND_URL}/api/getQuiz`, {
         params: {
           userId,
           planId,
@@ -69,7 +70,8 @@ export default function QuizHistoryModal({
       const quizArr = quizRes?.data?.attempts || [];
 
       // 2) getRevisions => "http://localhost:3001/api/getRevisions"
-      const revRes = await axios.get("http://localhost:3001/api/getRevisions", {
+      const revRes = await axios.get(
+        `${import.meta.env.VITE_BACKEND_URL}/api/getRevisions`, {
         params: {
           userId,
           planId,
@@ -80,7 +82,8 @@ export default function QuizHistoryModal({
       const revArr = revRes?.data?.revisions || [];
 
       // 3) getSubchapterConcepts => "http://localhost:3001/api/getSubchapterConcepts"
-      const conceptRes = await axios.get("http://localhost:3001/api/getSubchapterConcepts", {
+      const conceptRes = await axios.get(
+        `${import.meta.env.VITE_BACKEND_URL}/api/getSubchapterConcepts`, {
         params: { subchapterId: subChapterId },
       });
       const conceptArr = conceptRes?.data?.concepts || [];

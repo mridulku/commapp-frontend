@@ -47,7 +47,7 @@ export default function OnboardingChatContent() {
   // 1) Basic Config
   // ----------------------------------
   const [currentUserId, setCurrentUserId] = useState("demoUserId");
-  const backendURL = "http://localhost:3001"; // adjust for your server
+  const backendURL = import.meta.env.VITE_BACKEND_URL; // adjust for your server
   useEffect(() => {
     const user = auth.currentUser;
     if (user?.uid) {

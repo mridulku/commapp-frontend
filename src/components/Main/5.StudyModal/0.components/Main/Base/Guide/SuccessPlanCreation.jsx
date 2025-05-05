@@ -109,7 +109,8 @@ const currentIndex   = useSelector((s) => s.plan?.currentIndex);
 async function handleStart() {
   const oldIndex = currentIndex;
   try {
-    await axios.post("http://localhost:3001/api/markActivityCompletion", {
+    await axios.post(
+      `${import.meta.env.VITE_BACKEND_URL}/api/markActivityCompletion`, {
       userId,
       planId,
       activityId: "GUIDE_CAROUSEL_ID",           // placeholder -- use real id if you have it
@@ -119,7 +120,7 @@ async function handleStart() {
     await dispatch(
       fetchPlan({
         planId,
-        backendURL: "http://localhost:3001",
+        backendURL: import.meta.env.VITE_BACKEND_URL,
         fetchUrl: "/api/adaptive-plan",
       })
     );

@@ -455,7 +455,8 @@ export default function ProgressView({
       // skip if we already have it
       if (quizDataMap[subChId]?.[quizStage]) return;
       // quiz attempts
-      const quizRes = await axios.get("http://localhost:3001/api/getQuiz", {
+      const quizRes = await axios.get(
+        `${import.meta.env.VITE_BACKEND_URL}/api/getQuiz`, {
         params: {
           userId,
           planId,
@@ -466,7 +467,8 @@ export default function ProgressView({
       const quizArr = quizRes?.data?.attempts || [];
 
       // revision attempts
-      const revRes = await axios.get("http://localhost:3001/api/getRevisions", {
+      const revRes = await axios.get(
+        `${import.meta.env.VITE_BACKEND_URL}/api/getRevisions`,{
         params: {
           userId,
           planId,
@@ -477,7 +479,8 @@ export default function ProgressView({
       const revArr = revRes?.data?.revisions || [];
 
       // concepts
-      const conceptRes = await axios.get("http://localhost:3001/api/getSubchapterConcepts", {
+      const conceptRes = await axios.get(
+        `${import.meta.env.VITE_BACKEND_URL}/api/getSubchapterConcepts`, {
         params: { subchapterId: subChId },
       });
       const conceptArr = conceptRes?.data?.concepts || [];
@@ -512,7 +515,8 @@ export default function ProgressView({
   }
   async function fetchCumulativeQuizTime(subChId, quizStage) {
     try {
-      const url = `http://localhost:3001/api/cumulativeQuizTime?userId=${userId}&planId=${planId}&subChapterId=${subChId}&quizStage=${quizStage}`;
+      const url = `${import.meta.env.VITE_BACKEND_URL}/api/cumulativeQuizTime?userId=${userId}&planId=${planId}&subChapterId=${subChId}&quizStage=${quizStage}`;
+
       const res = await axios.get(url);
       return res.data.totalSeconds || 0;
     } catch (err) {
@@ -522,7 +526,7 @@ export default function ProgressView({
   }
   async function fetchCumulativeReviseTime(subChId, quizStage) {
     try {
-      const url = `http://localhost:3001/api/cumulativeReviseTime?userId=${userId}&planId=${planId}&subChapterId=${subChId}&quizStage=${quizStage}`;
+      const url = `${import.meta.env.VITE_BACKEND_URL}/api/cumulativeReviseTime?userId=${userId}&planId=${planId}&subChapterId=${subChId}&quizStage=${quizStage}`;
       const res = await axios.get(url);
       return res.data.totalSeconds || 0;
     } catch (err) {

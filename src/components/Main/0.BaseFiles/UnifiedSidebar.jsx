@@ -97,14 +97,7 @@ function UnifiedSidebar({
 
       {/* Mode toggle buttons stacked vertically */}
       <div style={modeToggleContainerStyle}>
-        {/* Overview */}
-        <button
-          style={toggleButtonStyle(viewMode === "overview")}
-          onClick={() => switchMode("overview")}
-          title="Overview"
-        >
-          {collapsed ? "🏠" : <>🏠 Overview</>}
-        </button>
+        
 
         {/* Home */}
         <button
@@ -115,14 +108,7 @@ function UnifiedSidebar({
           {collapsed ? "📚" : <>📚 Plans</>}
         </button>
 
-
-        <button
-            style={toggleButtonStyle(viewMode === "newHome")}
-            onClick={() => switchMode("newHome")}
-            title="Roadmap"
-          >
-{collapsed ? "📍" : <>📍 Roadmap</>}
-          </button>
+        
 
         {/* Profile */}
         <button
@@ -157,6 +143,29 @@ function UnifiedSidebar({
           >
             {collapsed ? "🛠️" : <>🛠️ Admin</>}
           </button>
+
+                 {/* Overview  (only visible to admins) */}
+       {isAdmin && (
+         <button
+           style={toggleButtonStyle(viewMode === "overview")}
+           onClick={() => switchMode("overview")}
+           title="Overview"
+         >
+           {collapsed ? "🏠" : <>🏠 Overview</>}
+         </button>
+       )}
+
+
+{isAdmin && (
+        <button
+            style={toggleButtonStyle(viewMode === "newHome")}
+            onClick={() => switchMode("newHome")}
+            title="Roadmap"
+          >
+{collapsed ? "📍" : <>📍 Roadmap</>}
+          </button>
+
+)}
 
 
 

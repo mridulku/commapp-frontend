@@ -163,7 +163,7 @@ export default function Adapting({ userId, plan, planId }) {
     setError(""); setOutPlan(null); setLoading(true);
     try {
       const { data } = await axios.post(
-        "http://localhost:3001/api/rebalancePlan",
+        `${import.meta.env.VITE_BACKEND_URL}/api/rebalancePlan`,
         { planId, userId, todayISO }
       );
       if (!data?.plan) throw new Error("Server did not return {plan}");

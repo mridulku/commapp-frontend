@@ -50,7 +50,7 @@ function normalizeExamId(examId) {
 export default function UserProgressComprehensive({
   userId,
   colorScheme = {},
-  backendURL = "http://localhost:3001", // or wherever your server runs
+  backendURL = import.meta.env.VITE_BACKEND_URL, // or wherever your server runs
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);

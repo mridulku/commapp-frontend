@@ -22,7 +22,8 @@ export default function TimeBreakdownPanel({ activity }) {
     setError("");
     setBreakdown(null);
     try {
-      const res = await axios.get("http://localhost:3001/api/getActivityTime", {
+      const res = await axios.get(
+        `${import.meta.env.VITE_BACKEND_URL}/api/getActivityTime`, {
         params: {
           activityId: activity.activityId,
           type: typeParam,

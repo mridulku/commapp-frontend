@@ -505,7 +505,8 @@ export default function HistoryView({
         setError("");
 
         // aggregator
-        const aggRes = await axios.get("http://localhost:3001/subchapter-status", {
+        const aggRes = await axios.get(
+          `${import.meta.env.VITE_BACKEND_URL}/subchapter-status`, {
           params: { userId, planId, subchapterId: subChapterId },
         });
         if (!cancel) {
@@ -513,7 +514,8 @@ export default function HistoryView({
         }
 
         // lumps => getActivityTime
-        const timeRes = await axios.get("http://localhost:3001/api/getActivityTime", {
+        const timeRes = await axios.get(
+          `${import.meta.env.VITE_BACKEND_URL}/api/getActivityTime`, {
           params: { activityId, type: activityType },
         });
         if (!cancel) {

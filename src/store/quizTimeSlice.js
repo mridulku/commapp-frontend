@@ -12,9 +12,12 @@ export const fetchQuizTime = createAsyncThunk(
   "quizTime/fetchQuizTime",
   async ({ docId }, { rejectWithValue }) => {
     try {
-      const res = await axios.get("http://localhost:3001/api/getQuizTime", {
-        params: { docId },
-      });
+      const res = await axios.get(
+        `${import.meta.env.VITE_BACKEND_URL}/api/getQuizTime`,
+        {
+          params: { docId },
+        }
+      );
       return res.data.totalSeconds || 0;
     } catch (err) {
       return rejectWithValue(err.message || "Error fetching quiz time");
@@ -55,19 +58,23 @@ export const incrementQuizTime = createAsyncThunk(
     { rejectWithValue }
   ) => {
     try {
-      const res = await axios.post("http://localhost:3001/api/incrementQuizTime", {
-        docId,
-        activityId,
-        increment,
-        userId,
-        planId,
-        subChapterId,
-        quizStage,
-        dateStr,
-        attemptNumber, // send to server
-      });
+      const res = await axios.post(
+        `${import.meta.env.VITE_BACKEND_URL}/api/incrementQuizTime`,
+        {
+          docId,
+          activityId,
+          increment,
+          userId,
+          planId,
+          subChapterId,
+          quizStage,
+          dateStr,
+          attemptNumber, // send to server
+        }
+      );
       return res.data.newTotalSeconds;
-    } catch (err) {
+    }
+     catch (err) {
       return rejectWithValue(err.message || "Error incrementing quiz time");
     }
   }

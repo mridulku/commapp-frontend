@@ -12,9 +12,12 @@ export const fetchReviseTime = createAsyncThunk(
   "reviseTime/fetchReviseTime",
   async ({ docId }, { rejectWithValue }) => {
     try {
-      const res = await axios.get("http://localhost:3001/api/getReviseTime", {
-        params: { docId },
-      });
+      const res = await axios.get(
+        `${import.meta.env.VITE_BACKEND_URL}/api/getReviseTime`,
+        {
+          params: { docId },
+        }
+      );
       return res.data.totalSeconds || 0;
     } catch (err) {
       return rejectWithValue(err.message || "Error fetching revise time");
@@ -55,18 +58,21 @@ export const incrementReviseTime = createAsyncThunk(
     { rejectWithValue }
   ) => {
     try {
-      const res = await axios.post("http://localhost:3001/api/incrementReviseTime", {
-        docId,
-        activityId,
-        increment,
-        userId,
-        planId,
-        subChapterId,
-        quizStage,
-        dateStr,
-        revisionNumber
-      });
-      return res.data.newTotalSeconds; 
+      const res = await axios.post(
+        `${import.meta.env.VITE_BACKEND_URL}/api/incrementReviseTime`,
+        {
+          docId,
+          activityId,
+          increment,
+          userId,
+          planId,
+          subChapterId,
+          quizStage,
+          dateStr,
+          revisionNumber,
+        }
+      );
+      return res.data.newTotalSeconds;
     } catch (err) {
       return rejectWithValue(err.message || "Error incrementing revise time");
     }

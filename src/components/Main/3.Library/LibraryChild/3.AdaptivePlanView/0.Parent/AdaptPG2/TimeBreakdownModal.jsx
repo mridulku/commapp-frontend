@@ -35,7 +35,8 @@ export default function TimeBreakdownModal({ open, onClose, activity }) {
       setData(null);
 
       try {
-        const res = await axios.get("http://localhost:3001/api/getActivityTime", {
+        const res = await axios.get(
+          `${import.meta.env.VITE_BACKEND_URL}/api/getActivityTime`, {
           params: { activityId: activity.activityId, type: typeParam },
         });
         if (!cancel) {

@@ -122,7 +122,8 @@ export default function QuizView({
     async function fetchAggregator() {
       try {
         setLoadingConceptData(true);
-        const resp = await axios.get("http://localhost:3001/subchapter-status", {
+        const resp = await axios.get(
+          `${import.meta.env.VITE_BACKEND_URL}/subchapter-status`, {
           params: { userId, planId, subchapterId: subChapterId },
         });
         if (resp.data) {
@@ -452,7 +453,8 @@ export default function QuizView({
         attemptNumber,
         planId,
       };
-      await axios.post("http://localhost:3001/api/submitQuiz", payload);
+      await axios.post(
+        `${import.meta.env.VITE_BACKEND_URL}/api/submitQuiz`,payload);
       console.log("Quiz submission saved on server!");
     } catch (err) {
       console.error("Error submitting quiz:", err);
@@ -474,11 +476,12 @@ export default function QuizView({
         if (typeof replicaIndex === "number") {
           aggregatorPayload.replicaIndex = replicaIndex;
         }
-        await axios.post("http://localhost:3001/api/markActivityCompletion", aggregatorPayload);
+        await axios.post(
+          `${import.meta.env.VITE_BACKEND_URL}/api/markActivityCompletion`, aggregatorPayload);
         console.log("[QuizView] aggregator => completed =>", aggregatorPayload);
 
         // Re-fetch plan
-        const backendURL = "http://localhost:3001";
+        const backendURL = import.meta.env.VITE_BACKEND_URL;
         const fetchUrl = "/api/adaptive-plan";
         const fetchAction = await dispatch(fetchPlan({ planId, backendURL, fetchUrl }));
         if (fetchPlan.fulfilled.match(fetchAction)) {
@@ -514,7 +517,8 @@ export default function QuizView({
         if (typeof replicaIndex === "number") {
           payload.replicaIndex = replicaIndex;
         }
-        await axios.post("http://localhost:3001/api/markActivityCompletion", payload);
+        await axios.post(
+          `${import.meta.env.VITE_BACKEND_URL}/api/markActivityCompletion`,payload);
         console.log("[QuizView] handleQuizSuccess => activity completed =>", payload);
       }
       if (onQuizComplete) {
@@ -547,10 +551,11 @@ export default function QuizView({
           defPayload.replicaIndex = replicaIndex;
         }
 
-        await axios.post("http://localhost:3001/api/markActivityCompletion", defPayload);
+        await axios.post(
+          `${import.meta.env.VITE_BACKEND_URL}/api/markActivityCompletion`, defPayload);
         console.log(`Activity '${activityId}' marked as completed=false (deferred)`);
       }
-      const backendURL = "http://localhost:3001";
+      const backendURL = import.meta.env.VITE_BACKEND_URL;
       const fetchUrl = "/api/adaptive-plan";
       const fetchAction = await dispatch(fetchPlan({ planId, backendURL, fetchUrl }));
       if (fetchPlan.fulfilled.match(fetchAction)) {

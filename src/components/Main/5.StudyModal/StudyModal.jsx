@@ -24,7 +24,7 @@ export default function PlanFetcher({
   initialActivityContext,
   userId = null,
 
-  backendURL = "http://localhost:3001",
+  backendURL = import.meta.env.VITE_BACKEND_URL,
   fetchUrl = "/api/adaptive-plan",
 
   daysUntilExam = 10,

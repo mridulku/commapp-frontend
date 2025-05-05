@@ -91,7 +91,8 @@ export default function CompletionSummaryPanel({
       setErr("");
       try {
         const typeParam = isReading ? "read" : "quiz";
-        const res = await axios.get("http://localhost:3001/api/getActivityTime", {
+        const res = await axios.get(
+          `${import.meta.env.VITE_BACKEND_URL}/api/getActivityTime`, {
           params: { activityId: activity.activityId, type: typeParam },
         });
         if (!cancel) {

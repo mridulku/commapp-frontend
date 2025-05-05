@@ -219,7 +219,8 @@ export default function AdaptPG({
           const rawType = (act.type || "").toLowerCase();
           const type = rawType.includes("read") ? "read" : "quiz";
           try {
-            const res = await axios.get("http://localhost:3001/api/getActivityTime", {
+            const res = await axios.get(
+  `${import.meta.env.VITE_BACKEND_URL}/api/getActivityTime`, {
               params: { activityId: act.activityId, type },
             });
             newTimeMap[act.activityId] = res.data?.totalTime || 0;
@@ -236,7 +237,8 @@ export default function AdaptPG({
         const newStatusMap = {};
         for (const subId of uniqueSubIds) {
           try {
-            const res = await axios.get("http://localhost:3001/subchapter-status", {
+            const res = await axios.get(
+              `${import.meta.env.VITE_BACKEND_URL}/api/subchapter-status`, {
               params: { userId, planId, subchapterId: subId },
             });
             newStatusMap[subId] = res.data;
@@ -305,7 +307,8 @@ export default function AdaptPG({
   async function handleOpenHistoryDebug(subChId) {
     try {
       setHistoryTitle(`(New) Subchapter-History => subChId='${subChId}'`);
-      const res = await axios.get("http://localhost:3001/subchapter-history", {
+      const res = await axios.get(
+        `${import.meta.env.VITE_BACKEND_URL}/api/subchapter-history`, {
         params: { userId, planId, subchapterId: subChId },
       });
       setHistoryData(res.data);
@@ -326,7 +329,8 @@ export default function AdaptPG({
   async function handleOpenPrevious(subChId, activity) {
     try {
       const stage = (activity.quizStage || "").toLowerCase();
-      const res = await axios.get("http://localhost:3001/subchapter-history", {
+      const res = await axios.get(
+        `${import.meta.env.VITE_BACKEND_URL}/api/subchapter-history`, {
         params: { userId, planId, subchapterId: subChId },
       });
       const historyObj = res.data?.history?.[stage];
@@ -397,7 +401,8 @@ export default function AdaptPG({
   async function handleOpenProgress(subChId, stageLower) {
     try {
       setProgressTitle(`Progress => subCh='${subChId}', stage='${stageLower}'`);
-      const res = await axios.get("http://localhost:3001/subchapter-history", {
+      const res = await axios.get(
+        `${import.meta.env.VITE_BACKEND_URL}/api/subchapter-history`, {
         params: { userId, planId, subchapterId: subChId },
       });
       const stgData = res.data?.history?.[stageLower] || {};
@@ -419,7 +424,8 @@ export default function AdaptPG({
   async function handleOpenTimeDetail(activityId, type) {
     try {
       setTimeDetailTitle(`Time Breakdown => activityId='${activityId}'`);
-      const res = await axios.get("http://localhost:3001/api/getActivityTime", {
+      const res = await axios.get(
+        `${import.meta.env.VITE_BACKEND_URL}/api/getActivityTime`, {
         params: { activityId, type },
       });
       setTimeDetailData(res.data?.details || []);

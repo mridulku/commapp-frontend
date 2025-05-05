@@ -159,7 +159,8 @@ export default function PlanView({
       });
 
       // 1) getQuiz
-      const quizRes = await axios.get("http://localhost:3001/api/getQuiz", {
+      const quizRes = await axios.get(
+        `${import.meta.env.VITE_BACKEND_URL}/api/getQuiz`, {
         params: {
           userId,
           planId,
@@ -170,7 +171,8 @@ export default function PlanView({
       const quizArr = quizRes?.data?.attempts || [];
 
       // 2) getRevisions
-      const revRes = await axios.get("http://localhost:3001/api/getRevisions", {
+      const revRes = await axios.get(
+        `${import.meta.env.VITE_BACKEND_URL}/api/getRevisions`, {
         params: {
           userId,
           planId,
@@ -181,7 +183,8 @@ export default function PlanView({
       const revArr = revRes?.data?.revisions || [];
 
       // 3) getSubchapterConcepts
-      const conceptRes = await axios.get("http://localhost:3001/api/getSubchapterConcepts", {
+      const conceptRes = await axios.get(
+        `${import.meta.env.VITE_BACKEND_URL}/api/getSubchapterConcepts`, {
         params: { subchapterId: subChapterId },
       });
       const conceptArr = conceptRes?.data?.concepts || [];

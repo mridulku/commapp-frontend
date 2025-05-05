@@ -99,7 +99,8 @@ export default function OnboardingCarousel({ onFinish }) {
     const oldIndex = currentIndex;
 
     try {
-      await axios.post("http://localhost:3001/api/markActivityCompletion", {
+      await axios.post(
+        `${import.meta.env.VITE_BACKEND_URL}/api/markActivityCompletion`, {
         userId,
         planId,
         activityId: "GUIDE_ACTIVITY_ID",
@@ -109,7 +110,7 @@ export default function OnboardingCarousel({ onFinish }) {
       await dispatch(
         fetchPlan({
           planId,
-          backendURL: "http://localhost:3001",
+          backendURL: import.meta.env.VITE_BACKEND_URL,
           fetchUrl: "/api/adaptive-plan",
         })
       );

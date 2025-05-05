@@ -73,7 +73,7 @@ export default function EditAdaptivePlanModal({
   open = false,
   onClose,
   userId = null,
-  backendURL = "http://localhost:3001",
+  backendURL = import.meta.env.VITE_BACKEND_URL,
   bookId = "",
 }) {
   // -------------------------------------------------

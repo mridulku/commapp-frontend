@@ -24,7 +24,7 @@ export default function Child3({
   userId = null,
   bookId = "",
   planId: propPlanId,  // If a parent wants to forcibly specify a planId
-  backendURL = "http://localhost:3001",
+  backendURL = import.meta.env.VITE_BACKEND_URL,
   onHomeSelect = () => {},
   onOpenPlayer = () => {},
   colorScheme = {},

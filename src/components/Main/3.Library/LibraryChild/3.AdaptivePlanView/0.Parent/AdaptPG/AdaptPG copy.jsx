@@ -219,9 +219,12 @@ export default function AdaptPG({
           const rawType = (act.type || "").toLowerCase();
           const type = rawType.includes("read") ? "read" : "quiz";
           try {
-            const res = await axios.get("http://localhost:3001/api/getActivityTime", {
-              params: { activityId: act.activityId, type },
-            });
+            const res = await axios.get(
+              `${import.meta.env.VITE_BACKEND_URL}/api/getActivityTime`,
+              {
+                params: { activityId: act.activityId, type },
+              }
+            );
             newTimeMap[act.activityId] = res.data?.totalTime || 0;
           } catch (err) {
             console.error("Error fetching time for", act.activityId, err);
@@ -236,9 +239,12 @@ export default function AdaptPG({
         const newStatusMap = {};
         for (const subId of uniqueSubIds) {
           try {
-            const res = await axios.get("http://localhost:3001/subchapter-status", {
-              params: { userId, planId, subchapterId: subId },
-            });
+            const res = await axios.get(
+              `${import.meta.env.VITE_BACKEND_URL}/subchapter-status`,
+              {
+                params: { userId, planId, subchapterId: subId },
+              }
+            );
             newStatusMap[subId] = res.data;
           } catch (err) {
             console.error("Error fetching subchapter-status for", subId, err);
@@ -305,9 +311,12 @@ export default function AdaptPG({
   async function handleOpenHistoryDebug(subChId) {
     try {
       setHistoryTitle(`(New) Subchapter-History => subChId='${subChId}'`);
-      const res = await axios.get("http://localhost:3001/subchapter-history", {
-        params: { userId, planId, subchapterId: subChId },
-      });
+      const res = await axios.get(
+        `${import.meta.env.VITE_BACKEND_URL}/subchapter-history`,
+        {
+          params: { userId, planId, subchapterId: subChId },
+        }
+      );
       setHistoryData(res.data);
     } catch (err) {
       console.error("handleOpenHistory => error:", err);
@@ -326,7 +335,8 @@ export default function AdaptPG({
   async function handleOpenPrevious(subChId, activity) {
     try {
       const stage = (activity.quizStage || "").toLowerCase();
-      const res = await axios.get("http://localhost:3001/subchapter-history", {
+      const res = await axios.get(
+        `${import.meta.env.VITE_BACKEND_URL}/subchapter-history`, {
         params: { userId, planId, subchapterId: subChId },
       });
       const historyObj = res.data?.history?.[stage];
@@ -395,14 +405,18 @@ export default function AdaptPG({
 
   // "Progress"
   async function handleOpenProgress(subChId, stageLower) {
-    try {
-      setProgressTitle(`Progress => subCh='${subChId}', stage='${stageLower}'`);
-      const res = await axios.get("http://localhost:3001/subchapter-history", {
-        params: { userId, planId, subchapterId: subChId },
-      });
-      const stgData = res.data?.history?.[stageLower] || {};
-      setProgressData(stgData);
-    } catch (err) {
+   
+try {
+  setProgressTitle(`Progress => subCh='${subChId}', stage='${stageLower}'`);
+  const res = await axios.get(
+    `${import.meta.env.VITE_BACKEND_URL}/subchapter-history`,
+    {
+      params: { userId, planId, subchapterId: subChId },
+    }
+  );
+  const stgData = res.data?.history?.[stageLower] || {};
+  setProgressData(stgData);
+} catch (err) {
       console.error("handleOpenProgress => error:", err);
       setProgressData({ error: err.message });
     } finally {
@@ -419,9 +433,12 @@ export default function AdaptPG({
   async function handleOpenTimeDetail(activityId, type) {
     try {
       setTimeDetailTitle(`Time Breakdown => activityId='${activityId}'`);
-      const res = await axios.get("http://localhost:3001/api/getActivityTime", {
-        params: { activityId, type },
-      });
+      const res = await axios.get(
+        `${import.meta.env.VITE_BACKEND_URL}/api/getActivityTime`,
+        {
+          params: { activityId, type },
+        }
+      );
       setTimeDetailData(res.data?.details || []);
     } catch (err) {
       console.error("handleOpenTimeDetail => error:", err);

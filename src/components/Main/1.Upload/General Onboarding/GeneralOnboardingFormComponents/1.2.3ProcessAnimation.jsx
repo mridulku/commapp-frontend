@@ -90,7 +90,7 @@ export default function ProcessAnimation({
       return;
     }
     try {
-      const baseURL = backendURL || 'http://localhost:3001';
+      const baseURL = backendURL || import.meta.env.VITE_BACKEND_URL;
       // e.g. GET /api/process-book-data?userId=XYZ&bookId=ABC
       const res = await axios.get(`${baseURL}/api/process-book-data`, {
         params: { userId, bookId: latestBookId },
@@ -165,7 +165,7 @@ export default function ProcessAnimation({
 
   async function fetchLatestBookAndProcess() {
     try {
-      const baseURL = backendURL || 'http://localhost:3001';
+      const baseURL = backendURL || import.meta.env.VITE_BACKEND_URL;
       // GET /api/latest-book?userId=...
       const res = await axios.get(`${baseURL}/api/latest-book`, {
         params: { userId },
