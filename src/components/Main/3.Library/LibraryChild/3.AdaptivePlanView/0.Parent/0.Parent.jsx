@@ -1,6 +1,7 @@
 /* ────────────────────────────────────────────────────────────────
    File:  src/components/3.AdaptivePlanView/0.Parent/Child2.jsx
-   v6 –   inline day-picker chip fixed (pointer-events restored)
+   v7 –   pushes fetched plan into Redux so AdaptPG2’s “Today” view
+          hydrates on first render (pointer-events fix kept)
 ───────────────────────────────────────────────────────────────── */
 import React, { useEffect, useState, useMemo } from "react";
 import axios from "axios";
@@ -35,6 +36,10 @@ import DailyOverviewDemo    from "./DailyOverviewDemo";
 import PlanFetcher from "../../../../5.StudyModal/StudyModal";
 import { db }      from "../../../../../../firebase";
 
+/* ⬇️ NEW: Redux hooks / action */
+import { useDispatch } from "react-redux";
+import { setPlanDoc }  from "../../../../../../store/planSlice"; // adjust path if needed
+
 /* ---------- tiny helpers just for counts on the chip ---------- */
 const dateOnly   = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const addDays    = (d, n) => new Date(+d + n * 86400000);
@@ -60,6 +65,9 @@ export default function Child2({
   const [plan, setPlan]           = useState(null);
   const [loadingPlan, setLoad]    = useState(false);
 
+  /* ⬇️ NEW: get a dispatch fn (used after fetch succeeds) */
+  const dispatch = useDispatch();
+
   useEffect(() => {
     if (!planId) { setPlan(null); return; }
     (async () => {
@@ -69,11 +77,21 @@ export default function Child2({
           `${import.meta.env.VITE_BACKEND_URL}/api/adaptive-plan`,
           { params: { planId } }
         );
-        setPlan(data?.planDoc || null);
-      } catch { setPlan(null); }
-      finally  { setLoad(false); }
+        const doc = data?.planDoc || null;
+        setPlan(doc);
+
+        /* ----------------------------------------------------------
+           Push the fetched plan into the Redux store so thunks in
+           aggregatorSlice can see state.plan.planDoc immediately.
+        ----------------------------------------------------------- */
+        if (doc) dispatch(setPlanDoc({ ...doc, id: planId }));
+      } catch {
+        setPlan(null);
+      } finally {
+        setLoad(false);
+      }
     })();
-  }, [planId]);
+  }, [planId, dispatch]);
 
   /* derive counts for Today / History / Future (memoised) */
   const todayCounts = useMemo(() => {
@@ -142,7 +160,7 @@ export default function Child2({
         bookId={bookId}
         planId={planId}
         colorScheme={colorScheme}
-        onResume={() => openFetcher(planId)}
+        onResume={openFetcher} 
       />
 
       {/* global tab strip + in-tab day-picker */}

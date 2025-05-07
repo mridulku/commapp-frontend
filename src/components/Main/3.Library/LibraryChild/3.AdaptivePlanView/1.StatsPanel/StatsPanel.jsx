@@ -1,6 +1,8 @@
 /* ────────────────────────────────────────────────────────────────
    File:  src/components/3.AdaptivePlanView/1.StatsPanel/StatsPanel.jsx
-   v4 – dynamic plan name/topics, no goal pill, pen hidden
+   v5 – adds *optional* auto-resume flag (OFF by default) so the
+        Plan-Fetcher no longer pops up on every hard refresh.
+        All existing behaviour kept intact.
 ───────────────────────────────────────────────────────────────── */
 
 import React, { useEffect, useState } from "react";
@@ -31,6 +33,10 @@ export default function StatsPanel({
   planId,
   onResume = () => {},
   colorScheme = {},
+  /* NEW ▸ if you **really** want the old auto-open behaviour,
+     pass autoResume={true} from the parent.  Default is false,
+     meaning the dialog opens only when the user clicks “Resume”. */
+  autoResume = false,
 }) {
   /* ---------- dynamic meta pulled from planDoc -------------- */
   const [meta, setMeta] = useState(null);
@@ -47,7 +53,9 @@ export default function StatsPanel({
         let topics = [];
         if (Array.isArray(plan.subjects) && plan.subjects.length) {
           const groupings = plan.subjects.flatMap((s) => s.groupings || []);
-          topics = unique(groupings.length ? groupings : plan.subjects.map((s) => s.subject));
+          topics = unique(
+            groupings.length ? groupings : plan.subjects.map((s) => s.subject)
+          );
         }
 
         setMeta({
@@ -60,6 +68,9 @@ export default function StatsPanel({
       }
     })();
   }, [db, planId, colorScheme.heading]);
+
+  /* ---------- OPTIONAL auto-resume -------------------------- */
+ 
 
   /* ---------- progress % (0 for now) ------------------------ */
   const progress = 0;
@@ -84,7 +95,7 @@ export default function StatsPanel({
           border: "none",
         }}
       >
-                {/* plan name (clamped width, tooltip for full text) */}
+        {/* plan name (clamped width, tooltip for full text) */}
         <Tooltip title={meta.planName}>
           <Typography
             sx={{

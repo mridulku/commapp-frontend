@@ -1,39 +1,46 @@
 // File: planSlice.js
+// ────────────────────────────────────────────────────────────────
+//  v2 – adds `setPlanDoc` so other components can inject a plan
+//       into Redux without refetching.  Nothing else removed.
+// ────────────────────────────────────────────────────────────────
 
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import axios from "axios";
 
-/**
- * fetchPlan
- * ----------
- * Async thunk to load a plan by planId from your endpoint (GET /api/adaptive-plan?planId=xxx).
- * Also accepts an optional 'initialActivityContext' (e.g. { subChapterId: "x", type: "READ" })
- */
+/* ================================================================
+   1 ▪ Async thunk – fetchPlan (unchanged)
+================================================================ */
 export const fetchPlan = createAsyncThunk(
   "plan/fetchPlan",
   async ({ planId, backendURL, fetchUrl, initialActivityContext }, thunkAPI) => {
     try {
-      console.log("[planSlice] fetchPlan => planId:", planId, "initialActivityContext:", initialActivityContext);
+      console.log(
+        "[planSlice] fetchPlan => planId:",
+        planId,
+        "initialActivityContext:",
+        initialActivityContext
+      );
 
-      // GET /api/adaptive-plan?planId=...
       const res = await axios.get(`${backendURL}${fetchUrl}`, {
         params: { planId },
       });
 
       if (!res.data || !res.data.planDoc) {
-        console.warn("[planSlice] fetchPlan => no planDoc in response:", res.data);
+        console.warn(
+          "[planSlice] fetchPlan => no planDoc in response:",
+          res.data
+        );
         return thunkAPI.rejectWithValue("No planDoc found in response");
       }
 
-      // Return planDoc + initialActivityContext so we can handle it in 'fulfilled'
-      console.log("[planSlice] fetchPlan => planDoc found =>", res.data.planDoc);
+      console.log(
+        "[planSlice] fetchPlan => planDoc found =>",
+        res.data.planDoc
+      );
 
       return {
         planDoc: res.data.planDoc,
         initialActivityContext: initialActivityContext || null,
-
-        // We also return the planId we used,
-        // in case the backend didn't embed it in planDoc
         requestedPlanId: planId,
       };
     } catch (err) {
@@ -43,13 +50,9 @@ export const fetchPlan = createAsyncThunk(
   }
 );
 
-/**
- * Helper: addFlatIndexes
- *  1) Iterates over planDoc.sessions
- *  2) For each activity, adds { dayIndex, flatIndex }.
- *  3) Optionally ensures aggregatorTask & aggregatorStatus exist (null if missing).
- *  4) Returns: { updatedPlanDoc, flattenedActivities }
- */
+/* ================================================================
+   2 ▪ Helper – addFlatIndexes (unchanged)
+================================================================ */
 function addFlatIndexes(planDoc) {
   let globalIndex = 0;
   console.log(
@@ -59,34 +62,23 @@ function addFlatIndexes(planDoc) {
 
   const newSessions = (planDoc.sessions || []).map((sess, dayIndex) => {
     const newActivities = (sess.activities || []).map((act) => {
-      // Keep aggregatorTask/aggregatorStatus if they exist (harmless to keep)
       const aggregatorTask = act.aggregatorTask ?? null;
       const aggregatorStatus = act.aggregatorStatus ?? null;
 
-      // -----------------------------------------------------------------
-      // 1) Derive .type (either "read" or "quiz")
-      //    - If the server sometimes uses "READ" vs. "QUIZ", convert them to lowercase
-      //    - If the server is definitely giving them as "read" or "quiz" already,
-      //      you can skip the conditional logic and just assign them directly.
-      // -----------------------------------------------------------------
       let derivedType = (act.type || "").toLowerCase();
-      if (!derivedType) {
-        // In case 'type' is missing or empty, default to "read"
-        derivedType = "read";
-      }
+      if (!derivedType) derivedType = "read";
 
-      // -----------------------------------------------------------------
-      // 2) Derive .quizStage (one of "remember", "understand", "apply", "analyze")
-      //    - Only relevant if .type === "quiz"
-      //    - Otherwise, leave it empty or null
-      // -----------------------------------------------------------------
       let derivedQuizStage = "";
       if (derivedType === "quiz") {
-        // If the server already provides it, convert to lower:
         const rawStage = (act.quizStage || "").toLowerCase();
-        // If it's recognized, keep it. Otherwise default to "remember".
-        const recognizedStages = ["remember", "understand", "apply", "analyze","cumulativequiz",
-   "cumulativerevision",];
+        const recognizedStages = [
+          "remember",
+          "understand",
+          "apply",
+          "analyze",
+          "cumulativequiz",
+          "cumulativerevision",
+        ];
         derivedQuizStage = recognizedStages.includes(rawStage)
           ? rawStage
           : "remember";
@@ -98,10 +90,8 @@ function addFlatIndexes(planDoc) {
         aggregatorStatus,
         dayIndex,
         flatIndex: globalIndex,
-
-        // Insert or override these fields:
-        type: derivedType,         // "read" or "quiz"
-        quizStage: derivedQuizStage, // "remember"/"understand"/"apply"/"analyze" (if quiz), else ""
+        type: derivedType,
+        quizStage: derivedQuizStage,
       };
       globalIndex += 1;
       return updatedAct;
@@ -111,7 +101,6 @@ function addFlatIndexes(planDoc) {
 
   const updatedPlanDoc = { ...planDoc, sessions: newSessions };
 
-  // build flattened array
   const flattenedActivities = [];
   newSessions.forEach((sess) => {
     (sess.activities || []).forEach((act) => {
@@ -126,20 +115,46 @@ function addFlatIndexes(planDoc) {
   return { updatedPlanDoc, flattenedActivities };
 }
 
-// The Redux slice
+/* ================================================================
+   3 ▪ Slice definition
+================================================================ */
 const planSlice = createSlice({
   name: "plan",
   initialState: {
-    planDoc: null,           // mutated planDoc (with flatIndex)
-    flattenedActivities: [], // global flattened array
+    planDoc: null,
+    flattenedActivities: [],
     currentIndex: -1,
-    status: "idle",          // 'idle' | 'loading' | 'succeeded' | 'failed'
+    status: "idle", // 'idle' | 'loading' | 'succeeded' | 'failed'
     error: null,
-    examId: "general",       // store examId in Redux
+    examId: "general",
   },
   reducers: {
+    /* Keep existing reducer */
     setCurrentIndex(state, action) {
       state.currentIndex = action.payload;
+    },
+
+    /* NEW ▸ allow components to inject / overwrite the planDoc
+       without going through fetchPlan again */
+    setPlanDoc(state, action) {
+      const incoming = action.payload;
+      if (!incoming) return;
+
+      console.log("[planSlice] setPlanDoc => received planDoc:", incoming);
+
+      /* 1) Apply flat indexes & aggregator placeholders */
+      const { updatedPlanDoc, flattenedActivities } = addFlatIndexes(incoming);
+
+      /* 2) Store */
+      state.planDoc = updatedPlanDoc;
+      state.flattenedActivities = flattenedActivities;
+
+      /* 3) Reset pointer to first activity (or -1 if none) */
+      state.currentIndex =
+        flattenedActivities.length > 0 ? 0 : -1;
+
+      /* 4) Keep examId handy */
+      state.examId = updatedPlanDoc.examId || "general";
     },
   },
   extraReducers: (builder) => {
@@ -156,59 +171,34 @@ const planSlice = createSlice({
         console.log("[planSlice] fetchPlan => fulfilled!");
         state.status = "succeeded";
 
-        // We expect { planDoc, initialActivityContext, requestedPlanId }
-        const { planDoc, initialActivityContext, requestedPlanId } = action.payload;
-        console.log("[planSlice] planDoc =>", planDoc);
-        console.log("[planSlice] initialActivityContext =>", initialActivityContext);
-        console.log("[planSlice] requestedPlanId =>", requestedPlanId);
+        const { planDoc, initialActivityContext, requestedPlanId } =
+          action.payload;
 
-        // 1) Insert dayIndex + flatIndex + aggregator fields
-        const { updatedPlanDoc, flattenedActivities } = addFlatIndexes(planDoc);
+        const { updatedPlanDoc, flattenedActivities } =
+          addFlatIndexes(planDoc);
 
-        // 2) If there's no planId in the doc => forcibly set them
         if (requestedPlanId) {
-          if (!updatedPlanDoc.planId) {
-            updatedPlanDoc.planId = requestedPlanId;
-            console.log(`[planSlice] forcibly set updatedPlanDoc.planId = ${requestedPlanId}`);
-          }
-          if (!updatedPlanDoc.id) {
-            updatedPlanDoc.id = requestedPlanId;
-            console.log(`[planSlice] forcibly set updatedPlanDoc.id = ${requestedPlanId}`);
-          }
+          if (!updatedPlanDoc.planId) updatedPlanDoc.planId = requestedPlanId;
+          if (!updatedPlanDoc.id) updatedPlanDoc.id = requestedPlanId;
         }
 
-        // 3) Store mutated doc + flattened array in Redux
         state.planDoc = updatedPlanDoc;
         state.flattenedActivities = flattenedActivities;
-
-        // 4) Also store examId for global convenience
         state.examId = updatedPlanDoc.examId || "general";
 
-        // 5) Default currentIndex => 0 if we have items
         let newIndex = flattenedActivities.length > 0 ? 0 : -1;
 
-        // 6) If we have initialActivityContext => find matching item
         if (initialActivityContext && flattenedActivities.length > 0) {
           const { subChapterId, type } = initialActivityContext;
-          console.log("[planSlice] searching for subChapterId:", subChapterId, "and type:", type);
-
           const found = flattenedActivities.find(
             (a) =>
               a.subChapterId === subChapterId &&
               (a.type || "").toUpperCase() === (type || "").toUpperCase()
           );
-
-          if (found) {
-            console.log("[planSlice] found match =>", found);
-            newIndex = found.flatIndex;
-          } else {
-            console.log("[planSlice] no match found => defaulting to first activity");
-          }
+          if (found) newIndex = found.flatIndex;
         }
 
-        // 7) Set currentIndex
         state.currentIndex = newIndex;
-        console.log("[planSlice] final currentIndex =>", newIndex);
       })
       .addCase(fetchPlan.rejected, (state, action) => {
         console.log("[planSlice] fetchPlan => rejected!");
@@ -218,6 +208,8 @@ const planSlice = createSlice({
   },
 });
 
-export const { setCurrentIndex } = planSlice.actions;
+/* ================================================================
+   4 ▪ Exports
+================================================================ */
+export const { setCurrentIndex, setPlanDoc } = planSlice.actions;
 export default planSlice.reducer;
-
