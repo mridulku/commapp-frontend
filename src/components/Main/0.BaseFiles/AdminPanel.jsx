@@ -10,6 +10,9 @@ import OnboardingWizard from "./AdminPanel/OnboardingWizard";
 
 import ReadingViewDummy from "./AdminPanel/ReadingViewDummy";
 
+import AggregatorBootloader from "./AdminPanel/AggregatorBootloader";
+import AggregatorDebugPanel from "./AdminPanel/AggregatorDebugPanel";
+
 
 // Add more admin tools here later and extend the enum ↓
 const TOOLS = {
@@ -19,6 +22,8 @@ const TOOLS = {
   csv:      "CSV Book Uploader",
   onboarding: "Onboarding Wizard",
   readingviewdummy: "Reading View Dummy", 
+  AggregatorBootloader: "Aggregator Bootloader",
+  AggregatorDebugPanel: "Aggregator Debug Panel",
 };
 
 function AdminPanel({ userId }) {
@@ -75,6 +80,10 @@ function AdminPanel({ userId }) {
             return <OnboardingWizard   userId={userId} />;
             case "readingviewdummy":
             return <ReadingViewDummy   userId={userId} />;
+            case "AggregatorBootloader":
+            return <AggregatorBootloader   userId={userId} />;
+            case "AggregatorDebugPanel":
+            return <AggregatorDebugPanel   userId={userId} />;
       default:
         return null;
     }

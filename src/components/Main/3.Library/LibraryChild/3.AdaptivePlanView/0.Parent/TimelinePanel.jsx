@@ -1,5 +1,9 @@
 // File: TimelinePanel/TimelinePanel.jsx
 import React, { useState, useEffect } from "react";
+import { Box, Typography } from "@mui/material";
+import ConstructionIcon from "@mui/icons-material/Construction";   // 🛠 tool icon
+
+
 import {
   collection,
   query,
@@ -18,6 +22,45 @@ export default function TimelinePanel({
   bookId = "",
   colorScheme = {},
 }) {
+
+    /* -----------------------------------------------------------
+     TEMPORARY PLACEHOLDER – remove this block when timeline is
+     ready to ship
+  ----------------------------------------------------------- */
+ /* TEMPORARY PLACEHOLDER – remove this block when timeline is ready to ship */
+const PLACEHOLDER_ON = true;
+if (PLACEHOLDER_ON) {
+  return (
+    <Box
+      sx={{
+        // CHANGED ↓ — make it transparent so it blends with the page
+        bgcolor: "transparent",
+        color:   "#fff",
+        p: 4,
+
+        // leave the rest as-is
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 2,
+        minHeight: 240,
+      }}
+    >
+      <ConstructionIcon sx={{ fontSize: 48, color: "#BB86FC" }} />
+      <Typography variant="h6" sx={{ fontWeight: "bold" }}>
+        Timeline – Work in Progress
+      </Typography>
+      <Typography sx={{ opacity: 0.7 }}>
+        Check back soon!
+      </Typography>
+    </Box>
+  );
+}
+
+
+
+
   // Loading/error
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -362,10 +405,13 @@ export default function TimelinePanel({
 
 const styles = {
   container: {
-    backgroundColor: "#fff",
-    color: "#000",
-    padding: "1rem",
-    borderRadius: "6px",
+    // CHANGED ↓ — remove light card styling
+    backgroundColor: "transparent",
+    color:           "#fff",
+    padding:         "1rem",
+
+    // optional: flush with surroundings
+    borderRadius:    0,
   },
   title: {
     margin: 0,

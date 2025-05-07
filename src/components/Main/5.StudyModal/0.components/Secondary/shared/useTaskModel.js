@@ -1,4 +1,3 @@
-// shared/useTaskModel.js   (replace whole file)
 import { useMemo } from "react";
 
 /* ---------- icon / colour map copied verbatim from PG-2 ---------- */
@@ -8,13 +7,9 @@ const STAGE_META = {
   UNDERSTAND: { icon: "🤔", color: "#FFD54F", label: "Understand" },
   APPLY:      { icon: "🔧", color: "#AED581", label: "Apply" },
   ANALYSE:    { icon: "🔬", color: "#F48FB1", label: "Analyse" },
-    CUMULATIVEQUIZ:      { icon: "📊", color: "#FF7043", label: "Cumulative Quiz" },
-  CUMULATIVEREVISION:  { icon: "🔁", color: "#64B5F6", label: "Cumulative Rev." },
+  CUMULATIVEQUIZ:     { icon: "📊", color: "#FF7043", label: "Cumulative Quiz" },
+  CUMULATIVEREVISION: { icon: "🔁", color: "#64B5F6", label: "Cumulative Rev." },
 };
-
-const ICON_BOOK    = "📚";
-const ICON_CHAPTER = "📄";
-const ICON_CLOCK   = "⏱";
 
 /* ---------- utilities ---------- */
 const tsMs = (t) =>
@@ -39,29 +34,19 @@ export default function useTaskModel(
   activities = [],
   subchapterStatusMap = {},
   timeMap = {},
-  sessionDateISO = null,        // you can pass undefined from Left-panel
+  sessionDateISO = null,
 ) {
   return useMemo(
     () =>
       activities.map((act, idx) => {
-        console.log('DBG-stage', act.activityId, act.type, act.quizStage);
-        
-        /* stage + meta */
-               /* ----------------------------------------------------------
-           Normalise quizStage:
-             • remove spaces / underscores
-             • lower-case
-           This lets values like "Cumulative Quiz" or
-           "cumulative_revision" map to the STAGE_META keys
-           CUMULATIVEQUIZ / CUMULATIVEREVISION.
-        ----------------------------------------------------------- */
+        /* ---------- stage meta ---------- */
         let stageKey;
         if ((act.type || "").toLowerCase() === "read") {
           stageKey = "read";
         } else {
           stageKey = (act.quizStage || "")
-            .replace(/[\s_]+/g, "")    // kill spaces / underscores
-            .toLowerCase();            // => "cumulativequiz", etc.
+            .replace(/[\s_]+/g, "")
+            .toLowerCase();                                  // "cumulativequiz"
         }
         const meta =
           STAGE_META[(stageKey || "").toUpperCase()] || {
@@ -70,22 +55,20 @@ export default function useTaskModel(
             label: stageKey,
           };
 
-        /* aggregator slice */
-        const subObj   = subchapterStatusMap?.[act.subChapterId] ?? {};
-        const stageObj = subObj.quizStagesData?.[stageKey] ?? {};
+        /* ---------- slices from aggregator ---------- */
+        const subObj   = subchapterStatusMap?.[act.subChapterId];
+        const stageObj = subObj?.quizStagesData?.[stageKey] ?? {};
         const statsArr = stageObj.allAttemptsConceptStats ?? [];
 
-        /* concept mastery */
+        /* ---------- concept mastery ---------- */
         const conceptMap   = buildConceptStats(statsArr);
         const totalConcept = conceptMap.size;
         const mastered     = [...conceptMap.values()].filter((v) => v === "PASS")
           .length;
-        const quizPct = totalConcept
-          ? Math.round((mastered / totalConcept) * 100)
-          : 0;
+        const quizPct = totalConcept ? Math.round((mastered / totalConcept) * 100) : 0;
 
-        /* reading progress */
-        const readSum  = subObj.readingSummary || {};
+        /* ---------- reading progress ---------- */
+        const readSum  = subObj?.readingSummary || {};
         const readingPct = act.completed
           ? 100
           : typeof readSum.percent === "number"
@@ -94,7 +77,7 @@ export default function useTaskModel(
 
         const pct = meta.label === "Read" ? readingPct : quizPct;
 
-        /* attempts & next-activity (quiz only) */
+        /* ---------- attempts and buckets (quiz only) ---------- */
         let attemptsSoFar = [];
         let nextActivity  = null;
         let attBefore=[] , attToday=[] , attAfter=[];
@@ -113,45 +96,47 @@ export default function useTaskModel(
             }`;
           attemptsSoFar = all.map(tag);
 
-          /* which comes next? */
+          /* next activity */
           if (pct < 100) {
-            const qCnt = q.length;
-            const rCnt = r.length;
+            const qCnt = q.length, rCnt = r.length;
             if (qCnt === 0 && rCnt === 0)       nextActivity = "Q1";
             else if (qCnt === rCnt)             nextActivity = `Q${qCnt + 1}`;
             else if (qCnt === rCnt + 1)         nextActivity = `R${qCnt}`;
           }
 
-          /* bucket by date for tooltip rows */
+          /* bucket by date */
           if (sessionDateISO) {
             all.forEach((at) => {
-              const dISO = new Date(tsMs(at.timestamp))
-                .toISOString()
-                .slice(0, 10);
-              const lb = tag(at);
-              if (dISO < sessionDateISO)        attBefore.push(lb);
+              const dISO = new Date(tsMs(at.timestamp)).toISOString().slice(0,10);
+              const lb   = tag(at);
+              if      (dISO <  sessionDateISO) attBefore.push(lb);
               else if (dISO === sessionDateISO) attToday .push(lb);
-              else                              attAfter .push(lb);
+              else                               attAfter .push(lb);
             });
           }
         }
 
-        /* status flag */
+        /* ---------- status + loading flag ---------- */
+        const hasAggregatorData =
+          meta.label === "Read"
+            ? true                                       // we rely on planDoc
+            : !!subObj && timeMap[act.activityId] != null;
+
         let status;
-        if (pct === 100)       status = "completed";
-        else if (pct > 0)      status = "partial";
-        else                   status = "notstarted";
+        if (!hasAggregatorData)   status = "loading";
+        else if (pct === 100)     status = "completed";
+        else if (pct > 0)         status = "partial";
+        else                      status = "notstarted";
 
         return {
-          /* indexing / navigation */
-          flatIndex: act.flatIndex ?? idx,   // ← global index; fall back when book-plan
+          /* navigation */
+          flatIndex: act.flatIndex ?? idx,
           id: act.activityId,
 
-          /* visual & status */
+          /* flags */
           meta,
-          status,
-          locked:
-            (act.aggregatorStatus || "").toLowerCase() === "locked",
+          status,                      // now includes "loading"
+          locked:   (act.aggregatorStatus || "").toLowerCase() === "locked",
           deferred: !!act.deferred,
 
           /* labels */
@@ -163,7 +148,7 @@ export default function useTaskModel(
           spentMin: Math.round((timeMap[act.activityId] || 0) / 60),
           expMin:   act.timeNeeded || 0,
 
-          /* progress */
+          /* progress + concepts */
           pct,
           mastered,
           total: totalConcept,

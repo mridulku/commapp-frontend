@@ -191,74 +191,77 @@
   
   /* =================================================================== */
   /* inline styles – tweak freely                                        */
-  const styles = {
-    /* container row */
-    panel: {
-      display:        "flex",
-  flexWrap:       "wrap",        // allow wrapping **only when necessary**
-  columnGap:      24,            // horiz. space between cards
-  rowGap:         12,            // gap if it *does* wrap
-  padding:        15,
-  borderRadius:   8,
-  background:     "rgba(255,255,255,.07)",
-  backdropFilter: "blur(6px)",
-  alignItems:     "stretch",
-  justifyContent: "flex-start",  // or "space-between"
-    },
-  
-    /* each mini-card */
-    card: {
-      flex:           "1 1 180px",   // grow | shrink | basis
-  display:        "flex",
-  alignItems:     "center",
-  gap:            12,
-  padding:        "12px 16px",
-  borderRadius:   8,
-  background:     "rgba(255,255,255,.16)",
-  color:          "#fff",
-    },
-  
-    iconWrap: {
-      background: "rgba(255,255,255,0.25)",
-      width: 40,
-      height: 40,
-      borderRadius: "50%",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontSize: 22,
-    },
-  
-    txtCol: {
-      display: "flex",
-      flexDirection: "column",
-      flex: 1,
-    },
-  
-    val: {
-      fontWeight: 700,
-      fontSize: "1.05rem",
-      lineHeight: 1.1,
-      whiteSpace: "nowrap",
-    },
-  
-    lbl: {
-      fontSize: "0.8rem",
-      opacity: 0.85,
-      lineHeight: 1.2,
-    },
-  
-    /* progress bar (for today’s target) */
-    barTrack: {
-      marginTop: 4,
-      width: "100%",
-      height: 6,
-      background: "rgba(255,255,255,0.30)",
-      borderRadius: 3,
-    },
-    barFill: {
-      height: "100%",
-      background: "#B39DDB",
-      borderRadius: 3,
-    },
-  };
+  /* =================================================================== */
+/* inline styles – “dense” version                                     */
+const styles = {
+  /* container row */
+  panel: {
+    display:        "flex",
+    flexWrap:       "wrap",
+    columnGap:      16,          // tighter gap
+    rowGap:         6,
+    padding:        6,           // <<< was 15
+    borderRadius:   6,
+    background:     "transparent",     // blend with page
+  backdropFilter: "none",
+    alignItems:     "center",
+    justifyContent: "space-between",
+    minHeight:      48,          // keeps strip thin
+  },
+
+  /* each mini-card */
+  card: {
+    flex: "1 1 160px",  // shrink-to-fit
+    display:        "flex",
+    alignItems:     "center",
+    gap:            8,           // tighter gap
+    padding:        "4px 8px",   // <<< was 12 × 16
+    borderRadius:   6,
+    background:     "transparent",   // no inner slabs
+    color:          "#fff",
+  },
+
+  iconWrap: {
+    background: "rgba(255,255,255,0.20)",
+    width:      28,              // <<< was 40
+    height:     28,
+    borderRadius: "50%",
+    display:    "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 18,                // <<< was 22
+  },
+
+  txtCol: {
+    display: "flex",
+    flexDirection: "column",
+    flex: 1,
+  },
+
+  val: {
+    fontWeight: 600,
+    fontSize: "0.9rem",          // <<< was 1.05
+    lineHeight: 1.1,
+    whiteSpace: "nowrap",
+  },
+
+  lbl: {
+    fontSize: "0.68rem",         // <<< was 0.8
+    opacity: 0.8,
+    lineHeight: 1.2,
+  },
+
+  /* progress bar (today’s target) */
+  barTrack: {
+    marginTop: 3,
+    width: "100%",
+    height: 4,                   // thinner
+    background: "rgba(255,255,255,0.25)",
+    borderRadius: 2,
+  },
+  barFill: {
+    height: "100%",
+    background: "#B39DDB",
+    borderRadius: 2,
+  },
+};

@@ -4,6 +4,8 @@ import { fetchPlan } from "../../../store/planSlice";
 import { setUserId } from "../../../store/authSlice";
 import { fetchDailyTime, incrementDailyTime } from "../../../store/timeTrackingSlice";
 
+
+
 import TopBar from "./0.components/Secondary/TopBar";
 import BottomBar from "./0.components/Secondary/BottomBar";
 import LeftPanel from "./0.components/Secondary/LeftPanel";
@@ -11,6 +13,48 @@ import MainContent from "./0.components/Main/Base/MainContent";
 
 // Constants
 const HEARTBEAT_INTERVAL = 15; // in seconds
+
+/* ────────────────────────────────────────────────────────────────
++   Floating close button (×)
++   • fixed in the top-right corner
++   • also closes on Esc
++───────────────────────────────────────────────────────────────── */
+function FloatingClose({ onClose }) {
+    // ⌨️  Esc = close
+    React.useEffect(() => {
+      const h = (e) => e.key === "Escape" && onClose();
+      window.addEventListener("keydown", h);
+     return () => window.removeEventListener("keydown", h);
+    }, [onClose]);
+  
+    return (
+      <button
+        aria-label="Close"
+        onClick={onClose}
+       style={{
+          position: "fixed",
+          top: 12,
+          right: 12,
+        zIndex: 1200,
+          width: 32,
+          height: 32,
+          borderRadius: "50%",
+          border: "1px solid #666",
+          background: "rgba(0,0,0,.6)",
+          color: "#fff",
+          fontSize: 20,
+          lineHeight: "28px",
+          cursor: "pointer",
+          transition: "background .2s",
+        }}
+        onMouseOver={(e) => (e.currentTarget.style.background = "rgba(0,0,0,.8)")}
+        onMouseOut={(e) => (e.currentTarget.style.background = "rgba(0,0,0,.6)")}
+      >
+        &times;
+      </button>
+    );
+  }
+   
 
 /**
  * PlanFetcher:
@@ -57,6 +101,10 @@ export default function PlanFetcher({
 
   // lastHeartbeatTime => tracks when we last sent an increment to the server
   const [lastHeartbeatTime, setLastHeartbeatTime] = useState(null);
+
+    /* ── left-panel collapse state ─────────────────────────── */
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+
 
   // ==============================
   // 3) On mount => store userId in Redux
@@ -169,12 +217,8 @@ export default function PlanFetcher({
   return (
     <div style={styles.appContainer}>
       {/* Top bar => includes close button that calls onClose */}
-      <TopBar
-        daysUntilExam={daysUntilExam}
-        sessionLength={sessionLength}
-        dailyTime={displayTime}
-        onClose={onClose}
-      />
+      {/* floating close button (header bar removed) */}
+      <FloatingClose onClose={onClose} />
 
       {status === "loading" && (
         <p style={{ color: "#fff", margin: 8 }}>Loading plan...</p>
@@ -192,8 +236,19 @@ export default function PlanFetcher({
       {planDoc && (
         <div style={styles.mainArea}>
           {/* Left panel */}
-          <div style={{ ...styles.leftPanelContainer, width: 300 }}>
-            <LeftPanel />
+                    <div
+            style={{
+              ...styles.leftPanelContainer,
+              width: leftCollapsed ? 48 : 300,          // 2️⃣  shrink when collapsed
+              transition: "width .25s",
+            }}
+          >
+            <LeftPanel                                // 3️⃣  pass props
+              isCollapsed={leftCollapsed}
+              onToggleCollapse={() =>
+                setLeftCollapsed((prev) => !prev)
+              }
+            />
           </div>
 
           {/* Right side content */}

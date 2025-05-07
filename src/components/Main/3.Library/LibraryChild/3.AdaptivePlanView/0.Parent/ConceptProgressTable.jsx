@@ -152,7 +152,8 @@ export default function ConceptProgressTable(){
                     [subject,topic,chapter,subch]);
 
   return(
-    <Box sx={{p:2,bgcolor:"#000",color:"#fff",height:"100%",overflow:"auto"}}>
+    <Box sx={{ p:2, bgcolor:"transparent", color:"#fff", height:"100%", overflow:"auto" }}>
+
       {/* filters */}
       <Filters {...{subjects,subject,setSubject,topic,setTopic,
                     chapter,setChapter,subch,setSubch,
@@ -161,8 +162,8 @@ export default function ConceptProgressTable(){
       {rows.length===0? <Typography>No concepts match the filter.</Typography>:
         <Table size="small" sx={{bgcolor:"#111"}}>
           <TableHead>
-            <TableRow sx={{position:"sticky",top:0,zIndex:1,bgcolor:"#262626",
-                           boxShadow:"0 2px 4px rgba(0,0,0,.4)"}}>
+          <TableRow sx={{ position:"sticky", top:0, zIndex:1, bgcolor:"rgba(255,255,255,.05)", backdropFilter:"blur(4px)" }}>
+
               <Head text="Concept"/>
               <Head text="Wt"           align="center"/>
               <Head text="Journey"      align="center"/>

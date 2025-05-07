@@ -2,11 +2,14 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { useSelector } from "react-redux";
+import { Box } from "@mui/material";      // ← NEW
 
 // Child Components
 import ReadingView from "./ReadingView";
 import ActivityView from "./ActivityView";
 import HistoryView from "./HistoryView";
+
+import Loader from "./Loader";
 
 const QUIZ_STAGES = ["remember", "understand", "apply", "analyze"];
 
@@ -302,8 +305,12 @@ export default function StageManager({ examId, activity, userId }) {
 
   // --------------- Normal UI ---------------
   if (taskInfoLoading) {
-    return <div style={{ color: "#fff" }}>Loading stage statuses...</div>;
-  }
+        return (
+          <Box sx={{ mt: 4, display: "flex", justifyContent: "center" }}>
+            <Loader type="bar" accent="#FFD700" determinate={false} />
+          </Box>
+        );
+      }
   if (taskInfoError) {
     return <div style={{ color: "red" }}>{taskInfoError}</div>;
   }
@@ -419,8 +426,12 @@ export default function StageManager({ examId, activity, userId }) {
     // (2) Quiz stage
     if (QUIZ_STAGES.includes(tabKey)) {
       if (loading) {
-        return <div style={{ color: "#fff" }}>Loading quiz data...</div>;
-      }
+                return (
+                  <Box sx={{ mt: 4, display: "flex", justifyContent: "center" }}>
+                    <Loader type="bar" accent="#FFD700" determinate={false} />
+                  </Box>
+                );
+              }
       if (error) {
         return <div style={{ color: "red" }}>{error}</div>;
       }

@@ -97,6 +97,9 @@ function formatTime(totalSeconds) {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+  // -- jump past a chapter that is already complete --------------
+ 
+
 /* ===================================================================
    ReadingView
    Merged from legacy + GPT rewrite prototype
@@ -159,6 +162,12 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
 
   // debug overlay toggle
   const [showDebug, setShowDebug] = useState(false);
+
+  function handleGotoNext() {
+    /*  We don’t need to ping the backend again – the chapter is
+        already recorded as finished – we just advance the cursor.  */
+    dispatch(setCurrentIndex(currentIndex + 1));
+  }
 
   // ---- fetch subchapter & usage on mount or subchapter change (legacy) ----
   useEffect(() => {
@@ -621,17 +630,19 @@ const backendURL = import.meta.env.VITE_BACKEND_URL;
                 Next
               </Button>
             )}
-           {currentPageIndex === VIEW.length - 1 && (
+                       {/* last-page action button */}
+            {currentPageIndex === VIEW.length - 1 && (
               <Button
                 size="small"
                 variant="contained"
                 color="success"
-                onClick={isComplete ? undefined : handleFinishReading}
-                disabled={isComplete}
+                onClick={isComplete ? handleGotoNext : handleFinishReading}
               >
-                {isComplete ? "Reading Already Complete" : "Finish Reading"}
+                {isComplete ? "Next Task" : "Finish Reading"}
               </Button>
             )}
+
+
           </Box>
         )}
       </Box>

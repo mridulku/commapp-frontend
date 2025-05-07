@@ -6,6 +6,7 @@ import timeTrackingReducer from "./timeTrackingSlice"; // <--- new
 import readingReducer from "./readingSlice";
 import quizTimeReducer from "./quizTimeSlice";
 import reviseTimeReducer from "./reviseTimeSlice";
+import aggregatorReducer from "./aggregatorSlice";
 
 
 
@@ -13,6 +14,7 @@ import reviseTimeReducer from "./reviseTimeSlice";
 export const store = configureStore({
   reducer: {
     plan: planReducer,
+    aggregator: aggregatorReducer,
     auth: authReducer, 
     exam: examReducer, // <--- add the exam slice
     timeTracking: timeTrackingReducer, // <--- add it

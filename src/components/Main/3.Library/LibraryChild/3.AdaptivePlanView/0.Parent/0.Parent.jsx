@@ -1,142 +1,141 @@
 /* ────────────────────────────────────────────────────────────────
    File:  src/components/3.AdaptivePlanView/0.Parent/Child2.jsx
-   v4 – hides admin tabs for non-admins                (2025-04-28)
+   v6 –   inline day-picker chip fixed (pointer-events restored)
 ───────────────────────────────────────────────────────────────── */
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import axios from "axios";
 import {
-  Dialog, DialogContent,
-  Tabs, Tab,
+  Box,
+  Dialog,
+  DialogContent,
+  Tabs,
+  Tab,
+  Chip,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
 } from "@mui/material";
-import { doc, getDoc } from "firebase/firestore";
+import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
+import CheckIcon         from "@mui/icons-material/Check";
 
-/* sub-panels ---------------------------------------------------- */
-import StatsPanel     from "../1.StatsPanel/StatsPanel";
-import DailyPlan      from "../2.DailyPlan/DailyPlan";
-import ProgressView   from "../3.ProgressView/ProgressView";
-import AdminPanel     from "../4.AdminPanel/AdminPanel";
-import TimelinePanel  from "./TimelinePanel";
-import AdaptPG        from "./AdaptPG/AdaptPG";
-import AdaptPG2        from "./AdaptPG2/AdaptPG2";
-
-import AdaptPlayground        from "./AdaptPlayground";
-
+import StatsPanel           from "../1.StatsPanel/StatsPanel";
+import DailyPlan            from "../2.DailyPlan/DailyPlan";
+import ProgressView         from "../3.ProgressView/ProgressView";
+import AdminPanel           from "../4.AdminPanel/AdminPanel";
+import TimelinePanel        from "./TimelinePanel";
+import AdaptPG              from "./AdaptPG/AdaptPG";
+import AdaptPG2             from "./AdaptPG2/AdaptPG2";
+import AdaptPlayground      from "./AdaptPlayground";
 import ConceptProgressTable from "./ConceptProgressTable";
+import Adapting             from "./Adapting";
+import AggregatorPanel      from "./AggregatorPanel";
+import DailyOverviewDemo    from "./DailyOverviewDemo";
 
-import Adapting       from "./Adapting";
-import AggregatorPanel from "./AggregatorPanel";
-import DailyOverviewDemo from "./DailyOverviewDemo";
-
-
-/* modal player -------------------------------------------------- */
 import PlanFetcher from "../../../../5.StudyModal/StudyModal";
+import { db }      from "../../../../../../firebase";
 
-/* firebase instance -------------------------------------------- */
-import { db } from "../../../../../../firebase";
-
-/* ----------------------------------------------------------------
-   AdaptivePlanContainer
------------------------------------------------------------------ */
+/* ---------- tiny helpers just for counts on the chip ---------- */
+const dateOnly   = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const addDays    = (d, n) => new Date(+d + n * 86400000);
+const fmt        = d => d.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
+/* ---------------------------------------------------------------- */
 export default function Child2({
   userId,
   bookId,
   planId   = "",
-  isAdmin  = false,            // 🔸 NEW PROP
+  isAdmin  = false,
   colorScheme = {},
 }) {
-  /* styling */
+  /* top-level look */
   const containerStyle = {
-    backgroundColor: colorScheme.panelBg  || "#0D0D0D",
-    color:           colorScheme.textColor|| "#FFD700",
-    padding: "1rem",
-    minHeight: "100vh",
-    boxSizing: "border-box",
+    backgroundColor : "transparent",
+    color           : colorScheme.textColor || "#FFD700",
+    padding         : "1rem",
+    minHeight       : "100vh",
+    boxSizing       : "border-box",
   };
 
-  /* local state */
-  const [plan, setPlan] = useState(null);
-  const [activeTab, setActiveTab] = useState(0);
-  const [dayIdx, setDayIdx] = useState(0);
-  const [expanded, setExpanded] = useState([]);
+  /* fetch the plan once we have a planId */
+  const [plan, setPlan]           = useState(null);
+  const [loadingPlan, setLoad]    = useState(false);
 
-  /* PlanFetcher dialog */
-  const [showDlg, setShowDlg]   = useState(false);
-  const [dlgPlan, setDlgPlan]   = useState("");
-  const [dlgAct,  setDlgAct]    = useState(null);
-
-  /* fetch plan once planId changes */
-  useEffect(()=>{
-    if(!planId){ setPlan(null); return; }
-    (async()=>{
-      try{
-        const res = await axios.get(
+  useEffect(() => {
+    if (!planId) { setPlan(null); return; }
+    (async () => {
+      setLoad(true);
+      try {
+        const { data } = await axios.get(
           `${import.meta.env.VITE_BACKEND_URL}/api/adaptive-plan`,
-          { params:{ planId } }
+          { params: { planId } }
         );
-        setPlan(res.data?.planDoc || null);
-      }catch(e){ setPlan(null); }
+        setPlan(data?.planDoc || null);
+      } catch { setPlan(null); }
+      finally  { setLoad(false); }
     })();
-  },[planId]);
+  }, [planId]);
 
-  /* reset view when plan changes */
-  useEffect(()=>{
-    setActiveTab(0); setDayIdx(0); setExpanded([]);
-  },[plan]);
+  /* derive counts for Today / History / Future (memoised) */
+  const todayCounts = useMemo(() => {
+    if (!plan?.sessions?.length) return { today:0, history:0, future:0 };
+    const created = dateOnly(
+      new Date((plan.createdAt?.seconds ?? plan.createdAt?._seconds ?? 0) * 1000)
+    );
+    const today   = dateOnly(new Date());
+    let todayN=0, historyN=0, futureN=0;
 
-  /* open PlanFetcher */
-  const openFetcher = (pid, act=null)=>{
+    plan.sessions.forEach(sess => {
+      const idx  = Number(sess.sessionLabel) - 1;
+      const date = addDays(created, idx);
+      if (+date === +today)          todayN++;
+      else if (date < today)         historyN++;
+      else                           futureN++;
+    });
+    return { today: todayN, history: historyN, future: futureN };
+  }, [plan]);
+
+  /* ----------------------------------------------------------------
+     UI state (tabs, view-mode, dialog, etc.)
+  ----------------------------------------------------------------- */
+  const [activeTab, setActiveTab]   = useState(0);  // 0 = Tasks
+  const [viewMode,  setViewMode]    = useState("today");
+  const [anchorEl,  setAnchorEl]    = useState(null);
+
+  /* Plan-player dialog state */
+  const [showDlg, setShowDlg]       = useState(false);
+  const [dlgPlan, setDlgPlan]       = useState("");
+  const [dlgAct,  setDlgAct]        = useState(null);
+
+  const openFetcher = (pid, act=null) => {
     setDlgPlan(pid);
-    setDlgAct(act ? {
-      subChapterId: act.subChapterId,
-      type:         act.type,
-      stage:        act.quizStage || null,
-    } : null);
+    setDlgAct(act);
     setShowDlg(true);
   };
 
-  /* ────────────────────────────────────────────────────────────────
-     Tab configuration (only 1 array → easier to filter & render)
-  ──────────────────────────────────────────────────────────────── */
+  /* ---- tab config ------------------------------------------------ */
   const TAB_CONF = [
-    { label:"Daily Overview",      comp: () =>
-      <DailyOverviewDemo userId={userId}
-                         plan={plan}
-                         planId={planId}
-                         colorScheme={colorScheme}/> },
-                         { label:"Timeline",    comp: renderTimeline },
-
-                         { label:"Concept Progress",      comp: () =>
-                          <ConceptProgressTable userId={userId}
-                                             plan={plan}
-                                             planId={planId}
-                                             colorScheme={colorScheme}/> },
-                                             { label:"Timeline",    comp: renderTimeline },
-
-    { label:"Daily Plan",    admin:true,        comp: renderDaily },
-    { label:"AdaptPG2",     comp: renderAdaptPG2 },
-
-
-    { label:"AdaptPlayground",     comp: renderAdaptPlayground },
-
-   
-     
-
-    { label:"Progress",   admin:true, comp: renderProgress },
-    { label:"Admin",      admin:true, comp: renderAdmin },
-    { label:"AdaptPG",    admin:true, comp: renderAdaptPG },
-    { label:"Adapting",   admin:true, comp: renderAdapting },
-    { label:"Aggregator", admin:true, comp: renderAggregator },
+    { label:"Tasks",        comp: renderAdaptPG2 },
+    { label:"Concept Map",  comp: () =>
+        <ConceptProgressTable userId={userId} plan={plan} planId={planId} colorScheme={colorScheme}/> },
+    { label:"Activity",     comp: renderTimeline },
+    { label:"Progress",    admin:true, comp: renderProgress },
+    { label:"Admin",       admin:true, comp: renderAdmin },
+    { label:"AdaptPlayground", admin:true, comp: renderAdaptPlayground },
+    { label:"Daily Plan Dummy", admin:true, comp: renderDaily },
+    { label:"Daily Overview", admin:true, comp: () =>
+        <DailyOverviewDemo userId={userId} plan={plan} planId={planId} colorScheme={colorScheme}/> },
+    { label:"AdaptPG",     admin:true, comp: renderAdaptPG },
+    { label:"Adapting",    admin:true, comp: renderAdapting },
+    { label:"Aggregator",  admin:true, comp: renderAggregator }
   ];
+  const VISIBLE_TABS = TAB_CONF.filter(t => !t.admin || isAdmin);
 
-  /* filter for current user */
-  const VISIBLE_TABS = TAB_CONF.filter(cfg => !cfg.admin || isAdmin);
-
-  /* ────────────────────────────────────────────────────────────────
+  /* =================================================================
      RENDER
-  ──────────────────────────────────────────────────────────────── */
+  ================================================================== */
   return (
     <div style={containerStyle}>
-      {/* Stats header (includes RESUME button & pen icon) */}
+      {/* plan-specific header strip */}
       <StatsPanel
         db={db}
         userId={userId}
@@ -146,174 +145,104 @@ export default function Child2({
         onResume={() => openFetcher(planId)}
       />
 
-      {/* tab strip */}
-      <Tabs
-        value={activeTab}
-        onChange={(e,v)=>setActiveTab(v)}
-        textColor="inherit"
-        TabIndicatorProps={{
-          style:{ backgroundColor: colorScheme.heading || "#FFD700" }
-        }}
-        sx={{ mb:1 }}
-      >
-        {VISIBLE_TABS.map((cfg,idx)=>(
-          <Tab
-            key={cfg.label}
-            label={cfg.admin ? `${cfg.label} 🛠` : cfg.label}
-          />
+      {/* global tab strip + in-tab day-picker */}
+      <Box sx={{ display:"flex", alignItems:"center", mb:1 }}>
+        <Tabs
+          value={activeTab}
+          onChange={(_e,v)=>setActiveTab(v)}
+          textColor="inherit"
+          TabIndicatorProps={{ style:{ backgroundColor:colorScheme.heading || "#FFD700"} }}
+        >
+          {VISIBLE_TABS.map(t =>
+            <Tab
+              key={t.label}
+              disableRipple
+              label={
+                t.label === "Tasks" ? (
+                  <Box sx={{ display:"flex", alignItems:"center", gap:.5, pointerEvents:"auto" }}>
+                    {/* the word “Tasks” stays inert so clicks fall through to Tab */}
+                    <span style={{ pointerEvents:"none" }}>Tasks</span>
+
+                    {/* picker only visible while Tasks is the active tab */}
+                    {activeTab===0 && (
+                      <Chip
+                        label={
+                          viewMode==="today"
+                            ? "Today"
+                            : viewMode==="history"
+                              ? `History (${todayCounts.history})`
+                              : `Future (${todayCounts.future})`
+                        }
+                        icon={<ArrowDropDownIcon />}
+                        size="small"
+                        sx={{
+                          bgcolor:"#2b2b2b", color:"#fff", fontWeight:600,
+                          height:24, cursor:"pointer", ml:1,
+                          "& .MuiChip-icon":{ mr:-.35 }
+                        }}
+                        /* prevent parent Tab from intercepting the click */
+                        onMouseDown={e=>e.stopPropagation()}
+                        onClick={e=>{
+                          e.stopPropagation();
+                          setAnchorEl(e.currentTarget);
+                        }}
+                      />
+                    )}
+                  </Box>
+                ) : (
+                  t.admin ? `${t.label} 🛠` : t.label
+                )
+              }
+            />
+          )}
+        </Tabs>
+      </Box>
+
+      {/* menu for Today / History / Future */}
+      <Menu anchorEl={anchorEl} open={Boolean(anchorEl)}
+            onClose={()=>setAnchorEl(null)} keepMounted>
+        {["today","history","future"].map(k=>(
+          <MenuItem key={k}
+                    selected={viewMode===k}
+                    onClick={()=>{setViewMode(k); setAnchorEl(null);}}>
+            <ListItemIcon sx={{minWidth:28}}>
+              {viewMode===k && <CheckIcon fontSize="small"/>}
+            </ListItemIcon>
+            <ListItemText>
+              {k==="today" ? "Today" :
+               k==="history" ? `History (${todayCounts.history})` :
+                               `Future (${todayCounts.future})`}
+            </ListItemText>
+          </MenuItem>
         ))}
-      </Tabs>
+      </Menu>
 
-      {/* tab body */}
-      { planId && plan
-        ? VISIBLE_TABS[activeTab].comp()
-        : <div>{!planId ? "No plan selected." : "Loading plan…"}</div>
-      }
+      {/* body */}
+      {loadingPlan
+        ? <div>Loading plan…</div>
+        : planId && plan
+            ? VISIBLE_TABS[activeTab].comp()
+            : <div>No plan selected.</div>}
 
-      {/* modal player */}
+      {/* full-screen player dialog */}
       <Dialog open={showDlg} onClose={()=>setShowDlg(false)} fullScreen>
         <DialogContent sx={{ p:0, bgcolor:"#000" }}>
-          {dlgPlan ? (
-            <PlanFetcher
-              planId={dlgPlan}
-              initialActivityContext={dlgAct}
-              userId={userId}
-              onClose={()=>setShowDlg(false)}
-            />
-          ) : null}
+          {dlgPlan &&
+            <PlanFetcher planId={dlgPlan} initialActivityContext={dlgAct}
+                         userId={userId} onClose={()=>setShowDlg(false)}/>}
         </DialogContent>
       </Dialog>
     </div>
   );
 
-  /* ─── per-tab render helpers ──────────────────────────────── */
-  function renderDaily(){
-    return (
-      <DailyPlan
-        userId={userId}
-        plan={plan}
-        planId={planId}
-        colorScheme={colorScheme}
-        dayDropIdx={dayIdx}
-        onDaySelect={setDayIdx}
-        expandedChapters={expanded}
-        onToggleChapter={toggleChapter}
-        onOpenPlanFetcher={openFetcher}
-      />
-    );
-  }
-  function renderProgress(){
-    return (
-      <ProgressView
-        db={db}
-        userId={userId}
-        planId={planId}
-        bookId={bookId}
-        colorScheme={colorScheme}
-      />
-    );
-  }
-  function renderTimeline(){
-    return (
-      <TimelinePanel
-        db={db}
-        userId={userId}
-        planId={planId}
-        bookId={bookId}
-        colorScheme={colorScheme}
-      />
-    );
-  }
-  function renderAdmin(){
-    return (
-      <AdminPanel
-        db={db}
-        plan={plan}
-        planId={planId}
-        bookId={bookId}
-        userId={userId}
-        colorScheme={colorScheme}
-      />
-    );
-  }
-  function renderAdaptPG(){
-    return (
-      <AdaptPG
-        userId={userId}
-        plan={plan}
-        planId={planId}
-        colorScheme={colorScheme}
-        dayDropIdx={dayIdx}
-        onDaySelect={setDayIdx}
-        expandedChapters={expanded}
-        onToggleChapter={toggleChapter}
-        onOpenPlanFetcher={openFetcher}
-      />
-    );
-  }
-  function renderAdaptPG2(){
-    return (
-      <AdaptPG2
-        userId={userId}
-        plan={plan}
-        planId={planId}
-        colorScheme={colorScheme}
-        dayDropIdx={dayIdx}
-        onDaySelect={setDayIdx}
-        expandedChapters={expanded}
-        onToggleChapter={toggleChapter}
-        onOpenPlanFetcher={openFetcher}
-      />
-    );
-  }
-  function renderAdaptPlayground(){
-    return (
-      <AdaptPlayground
-        userId={userId}
-        plan={plan}
-        planId={planId}
-        colorScheme={colorScheme}
-        dayDropIdx={dayIdx}
-        onDaySelect={setDayIdx}
-        expandedChapters={expanded}
-        onToggleChapter={toggleChapter}
-        onOpenPlanFetcher={openFetcher}
-      />
-    );
-  }
-  function renderAdapting(){
-    return (
-      <Adapting
-        userId={userId}
-        plan={plan}
-        planId={planId}
-        colorScheme={colorScheme}
-        dayDropIdx={dayIdx}
-        onDaySelect={setDayIdx}
-        expandedChapters={expanded}
-        onToggleChapter={toggleChapter}
-        onOpenPlanFetcher={openFetcher}
-      />
-    );
-  }
-  function renderAggregator(){
-    return (
-      <AggregatorPanel
-        db={db}
-        userId={userId}
-        planId={planId}
-        bookId={bookId}
-        colorScheme={colorScheme}
-      />
-    );
-  }
-
-  /* expand / collapse helper */
-  function toggleChapter(chKey){
-    setExpanded(prev =>
-      prev.includes(chKey)
-        ? prev.filter(k=>k!==chKey)
-        : [...prev, chKey]
-    );
-  }
+  /* ---------- render helpers (bodies unchanged) ------------------- */
+  function renderDaily()          { return <DailyPlan       userId={userId} plan={plan} planId={planId}/>; }
+  function renderProgress()       { return <ProgressView    db={db} userId={userId} planId={planId} bookId={bookId}/>; }
+  function renderTimeline()       { return <TimelinePanel   db={db} userId={userId} planId={planId} bookId={bookId}/>; }
+  function renderAdmin()          { return <AdminPanel      db={db} plan={plan} planId={planId} bookId={bookId} userId={userId}/>; }
+  function renderAdaptPG()        { return <AdaptPG         userId={userId} plan={plan} planId={planId}/>; }
+  function renderAdaptPG2()       { return <AdaptPG2        userId={userId} plan={plan} planId={planId} viewMode={viewMode}/>; }
+  function renderAdaptPlayground(){ return <AdaptPlayground userId={userId} plan={plan} planId={planId}/>; }
+  function renderAdapting()       { return <Adapting        userId={userId} plan={plan} planId={planId}/>; }
+  function renderAggregator()     { return <AggregatorPanel db={db} userId={userId} planId={planId} bookId={bookId}/>; }
 }

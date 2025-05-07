@@ -5,7 +5,9 @@ import { useDispatch, useSelector } from "react-redux";
 import { setCurrentIndex } from "../../../../../../store/planSlice";
 import { Box } from "@mui/material";
 
-// Updated import paths to match your new structure:
+/* 🆕 inline loader */
+import Loader from "./Loader";              // ← adjust relative path if needed
+
 import {
   parseCreatedAt,
   dateOnly,
@@ -13,12 +15,9 @@ import {
   formatDate,
 } from "./components/dailyPlanUtils";
 
-import StatusBar from "./components/StatusBar";     // <--- Using StatusBar now
+import StatusBar from "./components/StatusBar";
 import ActivityList from "./components/ActivityList";
 
-/**
- * The main DailyPlan component
- */
 export default function DailyPlan({
   userId,
   plan,
@@ -30,183 +29,138 @@ export default function DailyPlan({
   onToggleChapter,
   onOpenPlanFetcher,
 }) {
-  const dispatch = useDispatch();
+  const dispatch  = useDispatch();
   const currentIndex = useSelector((state) => state.plan.currentIndex);
 
+  /* ───── Bail if plan has no sessions ───── */
   if (!plan?.sessions?.length) {
     return <div>No sessions found in this plan.</div>;
   }
-  const sessions = plan.sessions;
 
-  // Parse creation date
+  /* ───── Pre-compute constants ───── */
+  const sessions      = plan.sessions;
   const createdAtDate = parseCreatedAt(plan);
-  const today = dateOnly(new Date());
+  const today         = dateOnly(new Date());
 
-  // Build day labels
   const dayLabels = sessions.map((sess) => {
-    const sNum = Number(sess.sessionLabel); // e.g. 1,2,...
-    const dayDate = addDays(createdAtDate, sNum - 1);
+    const sNum      = Number(sess.sessionLabel);
+    const dayDate   = addDays(createdAtDate, sNum - 1);
     const dayDateStr = formatDate(dayDate);
-
-    if (dayDate.getTime() === today.getTime()) {
-      return `Today (${dayDateStr})`;
-    }
-    return `Day ${sNum} (${dayDateStr})`;
+    return dayDate.getTime() === today.getTime()
+      ? `Today (${dayDateStr})`
+      : `Day ${sNum} (${dayDateStr})`;
   });
 
-  // Make sure dayDropIdx is within bounds
+  /* ───── Clamp dayDropIdx into bounds & auto-jump to today ───── */
   useEffect(() => {
-    const firstDayDate = addDays(createdAtDate, 0);
-    const lastDayDate = addDays(createdAtDate, sessions.length - 1);
+    const firstDay = createdAtDate;
+    const lastDay  = addDays(createdAtDate, sessions.length - 1);
 
-    if (today < firstDayDate) {
-      onDaySelect(0);
-      return;
-    }
-    if (today > lastDayDate) {
-      onDaySelect(sessions.length - 1);
-      return;
-    }
-    const daysDiff = (today.getTime() - firstDayDate.getTime()) / (1000 * 60 * 60 * 24);
-    const exactIdx = Math.floor(daysDiff);
-    if (exactIdx < 0) {
-      onDaySelect(0);
-    } else if (exactIdx >= sessions.length) {
-      onDaySelect(sessions.length - 1);
-    } else {
-      onDaySelect(exactIdx);
-    }
+    if (today < firstDay)        return onDaySelect(0);
+    if (today > lastDay)         return onDaySelect(sessions.length - 1);
+
+    const idx = Math.floor((today - firstDay) / (1000 * 60 * 60 * 24));
+    onDaySelect(Math.max(0, Math.min(idx, sessions.length - 1)));
   }, [planId, sessions]);
 
-  let safeIdx = dayDropIdx;
-  if (safeIdx < 0) safeIdx = 0;
-  if (safeIdx >= sessions.length) safeIdx = sessions.length - 1;
+  let safeIdx = Math.min(Math.max(dayDropIdx, 0), sessions.length - 1);
 
-  // Current day's session
-  const currentSession = sessions[safeIdx] || {};
+  /* ───── State for per-activity info ───── */
+  const currentSession      = sessions[safeIdx] || {};
   const { activities = [] } = currentSession;
 
-  // We'll store timeMap & subchapterStatusMap in local state
-  const [timeMap, setTimeMap] = useState({});
-  const [subchapterStatusMap, setSubchapterStatusMap] = useState({});
-  const [loading, setLoading] = useState(false);
+  const [timeMap, setTimeMap]                 = useState({});
+  const [subchapterStatusMap, setStatusMap]   = useState({});
+  const [loading, setLoading]                 = useState(false);
 
-  // Debug log
-  useEffect(() => {
-    console.log("DailyPlan => dayActivities =>", activities);
-  }, [activities]);
-
-  // ============= 1) Fetch times + subchapter-status for this day's activities =============
+  /* ───── Fetch time + status whenever activities change ───── */
   useEffect(() => {
     let cancel = false;
     if (!activities.length) {
-      setTimeMap({});
-      setSubchapterStatusMap({});
+      setTimeMap({}); setStatusMap({});
       return;
     }
 
-    async function doFetch() {
+    (async () => {
       try {
         setLoading(true);
 
-        // 1) fetch times
-        const fetchTimePromise = (async () => {
-          const newMap = {};
+        /* 1 — time per activity */
+        const timePromise = (async () => {
+          const map = {};
           for (const act of activities) {
-            if (!act.activityId) continue;
-            const rawType = (act.type || "").toLowerCase();
-            const type = rawType.includes("read") ? "read" : "quiz";
-
+            const id = act.activityId;
+            if (!id) continue;
+            const type = (act.type || "").toLowerCase().includes("read") ? "read" : "quiz";
             try {
-              const res = await axios.get(
-                `${import.meta.env.VITE_BACKEND_URL}/api/getActivityTime`, {
-                params: { activityId: act.activityId, type },
-              });
-              const totalTime = res.data?.totalTime || 0;
-              newMap[act.activityId] = totalTime;
-            } catch (err) {
-              console.error("Error fetching time for", act.activityId, err);
+              const { data } = await axios.get(
+                `${import.meta.env.VITE_BACKEND_URL}/api/getActivityTime`,
+                { params: { activityId: id, type } }
+              );
+              map[id] = data?.totalTime || 0;
+            } catch (e) {
+              console.error("getActivityTime", id, e);
             }
           }
-          return newMap;
+          return map;
         })();
 
-        // 2) fetch aggregator subchapter-status
-        const fetchStatusPromise = (async () => {
-          const uniqueSubIds = new Set();
-          for (const act of activities) {
-            if (act.subChapterId) uniqueSubIds.add(act.subChapterId);
-          }
-          const newStatusMap = {};
-          for (const subId of uniqueSubIds) {
+        /* 2 — aggregator status per sub-chapter */
+        const statusPromise = (async () => {
+          const subIds = new Set(activities.map(a => a.subChapterId).filter(Boolean));
+          const map = {};
+          for (const subId of subIds) {
             try {
-              const res = await axios.get(
-                `${import.meta.env.VITE_BACKEND_URL}/subchapter-status`, {
-                params: { userId, planId, subchapterId: subId },
-              });
-              newStatusMap[subId] = res.data;
-            } catch (err) {
-              console.error("Error fetching subchapter-status for", subId, err);
+              const { data } = await axios.get(
+                `${import.meta.env.VITE_BACKEND_URL}/subchapter-status`,
+                { params: { userId, planId, subchapterId: subId } }
+              );
+              map[subId] = data;
+            } catch (e) {
+              console.error("subchapter-status", subId, e);
             }
           }
-          return newStatusMap;
+          return map;
         })();
 
-        const [finalTimeMap, finalStatusMap] = await Promise.all([
-          fetchTimePromise,
-          fetchStatusPromise,
-        ]);
-
+        const [tMap, sMap] = await Promise.all([timePromise, statusPromise]);
         if (!cancel) {
-          setTimeMap(finalTimeMap);
-          setSubchapterStatusMap(finalStatusMap);
+          setTimeMap(tMap);
+          setStatusMap(sMap);
         }
       } catch (err) {
-        console.error("Error in doFetch dailyplan =>", err);
+        console.error("DailyPlan fetch", err);
       } finally {
-        if (!cancel) {
-          setLoading(false);
-        }
+        if (!cancel) setLoading(false);
       }
-    }
+    })();
 
-    doFetch();
-    return () => {
-      cancel = true;
-    };
+    return () => { cancel = true; };
   }, [activities, planId, userId]);
 
-  // ============= 2) onClickActivity => dispatch & open PlanFetcher =============
+  /* ───── Activity click handler ───── */
   function handleClickActivity(act) {
     dispatch(setCurrentIndex(act.flatIndex));
-    if (onOpenPlanFetcher) {
-      onOpenPlanFetcher(planId, act);
-    }
+    onOpenPlanFetcher?.(planId, act);
   }
 
-  // ============= (Optional) Calculate Time Spent / Expected for StatusBar =============
-  // Example: totalTimeSpent is sum of all lumps (in seconds) => convert to minutes
-  const totalTimeSpentSec = Object.values(timeMap).reduce((acc, val) => acc + val, 0);
-  const totalTimeSpentMin = Math.round(totalTimeSpentSec / 60);  // e.g. 12
+  /* ───── Status bar metrics (example) ───── */
+  const totalTimeSpentMin = Math.round(
+    Object.values(timeMap).reduce((acc, s) => acc + s, 0) / 60
+  );
+  const totalTimeExpected = 30;   // placeholder
 
-  // Hard-coded example for totalTimeExpected (30m?), or read from persona
-  const totalTimeExpected = 30;
-
-  // ============= 3) Render =============
+  /* ───── Render ───── */
   if (loading) {
     return (
-      <div style={{ color: "#fff", marginTop: "1rem" }}>
-        <h2>Loading daily plan...</h2>
-      </div>
+      <Box sx={{ display:"flex", justifyContent:"center", mt: 3 }}>
+        <Loader type="linear" accent={colorScheme?.heading || "#BB86FC"} />
+      </Box>
     );
   }
 
   return (
-    <Box sx={{ marginTop: "1rem" }}>
-      {/*
-        Now we use our new StatusBar component in place of DayDropdownBar
-        and pass all the relevant props, including timeSpent/timeExpected.
-      */}
+    <Box sx={{ mt: 1 }}>
       <StatusBar
         safeIdx={safeIdx}
         dayLabels={dayLabels}
@@ -217,7 +171,6 @@ export default function DailyPlan({
         totalTimeSpent={totalTimeSpentMin}
         totalTimeExpected={totalTimeExpected}
         timeMap={timeMap}
-
       />
 
       <ActivityList
