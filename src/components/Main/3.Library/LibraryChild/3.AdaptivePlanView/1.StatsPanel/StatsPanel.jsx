@@ -70,7 +70,13 @@ export default function StatsPanel({
   }, [db, planId, colorScheme.heading]);
 
   /* ---------- OPTIONAL auto-resume -------------------------- */
- 
+  useEffect(() => {
+    /* Fire only once per mount when autoResume is explicitly true */
+    if (autoResume && meta && planId) {
+      onResume(planId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoResume, meta, planId]); // keep deps minimal & explicit
 
   /* ---------- progress % (0 for now) ------------------------ */
   const progress = 0;
