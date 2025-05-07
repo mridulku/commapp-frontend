@@ -87,7 +87,7 @@ function AttemptsByDate({ attempts, onOpen }){
             </Typography>
           </AccordionSummary>
           <AccordionDetails>
-            <Box sx={{display:"flex",flexWrap:"wrap",gap:1, }}>
+            <Box sx={{display:"flex",flexWrap:"wrap",gap:1}}>
               {arr.map((att,i)=>(
                 <Box key={i} sx={{
                   display:"inline-flex",alignItems:"center",gap:0.5,
