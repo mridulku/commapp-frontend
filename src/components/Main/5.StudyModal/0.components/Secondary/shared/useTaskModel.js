@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-/* ---------- icon / colour map copied verbatim from PG-2 ---------- */
+/* ---------- stage meta ---------- */
 const STAGE_META = {
   READ:       { icon: "📖", color: "#BB86FC", label: "Read" },
   REMEMBER:   { icon: "🧠", color: "#80DEEA", label: "Remember" },
@@ -24,17 +24,23 @@ function buildConceptStats(arr = []) {
       if (!map.has(c.conceptName) || map.get(c.conceptName) !== "PASS") {
         map.set(c.conceptName, c.passOrFail);
       }
-    }),
+    })
   );
   return map;
 }
 
-/* --------------------------------------------------------------- */
+/* ===================================================================
+   useTaskModel
+   • Converts raw activities + aggregator maps into render-ready objects
+   • A task is "loading" until both:
+       1) subchapterMap[subChapterId] exists   AND
+       2) timeMap[activityId] is not undefined
+=================================================================== */
 export default function useTaskModel(
   activities = [],
   subchapterStatusMap = {},
   timeMap = {},
-  sessionDateISO = null,
+  sessionDateISO = null
 ) {
   return useMemo(
     () =>
@@ -46,7 +52,7 @@ export default function useTaskModel(
         } else {
           stageKey = (act.quizStage || "")
             .replace(/[\s_]+/g, "")
-            .toLowerCase();                                  // "cumulativequiz"
+            .toLowerCase(); // e.g. "cumulativequiz"
         }
         const meta =
           STAGE_META[(stageKey || "").toUpperCase()] || {
@@ -55,7 +61,7 @@ export default function useTaskModel(
             label: stageKey,
           };
 
-        /* ---------- slices from aggregator ---------- */
+        /* ---------- aggregator slices ---------- */
         const subObj   = subchapterStatusMap?.[act.subChapterId];
         const stageObj = subObj?.quizStagesData?.[stageKey] ?? {};
         const statsArr = stageObj.allAttemptsConceptStats ?? [];
@@ -63,12 +69,11 @@ export default function useTaskModel(
         /* ---------- concept mastery ---------- */
         const conceptMap   = buildConceptStats(statsArr);
         const totalConcept = conceptMap.size;
-        const mastered     = [...conceptMap.values()].filter((v) => v === "PASS")
-          .length;
-        const quizPct = totalConcept ? Math.round((mastered / totalConcept) * 100) : 0;
+        const mastered     = [...conceptMap.values()].filter((v) => v === "PASS").length;
+        const quizPct      = totalConcept ? Math.round((mastered / totalConcept) * 100) : 0;
 
         /* ---------- reading progress ---------- */
-        const readSum  = subObj?.readingSummary || {};
+        const readSum   = subObj?.readingSummary || {};
         const readingPct = act.completed
           ? 100
           : typeof readSum.percent === "number"
@@ -77,10 +82,12 @@ export default function useTaskModel(
 
         const pct = meta.label === "Read" ? readingPct : quizPct;
 
-        /* ---------- attempts and buckets (quiz only) ---------- */
+        /* ---------- attempts & buckets (quiz only) ---------- */
         let attemptsSoFar = [];
         let nextActivity  = null;
-        let attBefore=[] , attToday=[] , attAfter=[];
+        let attBefore = [],
+          attToday  = [],
+          attAfter  = [];
 
         if (meta.label !== "Read") {
           const q = stageObj.quizAttempts ?? [];
@@ -91,42 +98,41 @@ export default function useTaskModel(
           ].sort((a, b) => tsMs(a.timestamp) - tsMs(b.timestamp));
 
           const tag = (at) =>
-            `${at.type === "quiz" ? "Q" : "R"}${
-              at.attemptNumber || at.revisionNumber || 1
-            }`;
+            `${at.type === "quiz" ? "Q" : "R"}${at.attemptNumber || at.revisionNumber || 1}`;
           attemptsSoFar = all.map(tag);
 
-          /* next activity */
+          /* next activity recommendation */
           if (pct < 100) {
-            const qCnt = q.length, rCnt = r.length;
-            if (qCnt === 0 && rCnt === 0)       nextActivity = "Q1";
-            else if (qCnt === rCnt)             nextActivity = `Q${qCnt + 1}`;
-            else if (qCnt === rCnt + 1)         nextActivity = `R${qCnt}`;
+            const qCnt = q.length,
+              rCnt = r.length;
+            if (qCnt === 0 && rCnt === 0) nextActivity = "Q1";
+            else if (qCnt === rCnt)       nextActivity = `Q${qCnt + 1}`;
+            else if (qCnt === rCnt + 1)   nextActivity = `R${qCnt}`;
           }
 
-          /* bucket by date */
+          /* date buckets */
           if (sessionDateISO) {
             all.forEach((at) => {
-              const dISO = new Date(tsMs(at.timestamp)).toISOString().slice(0,10);
+              const dISO = new Date(tsMs(at.timestamp)).toISOString().slice(0, 10);
               const lb   = tag(at);
-              if      (dISO <  sessionDateISO) attBefore.push(lb);
-              else if (dISO === sessionDateISO) attToday .push(lb);
+              if (dISO < sessionDateISO)         attBefore.push(lb);
+              else if (dISO === sessionDateISO)  attToday .push(lb);
               else                               attAfter .push(lb);
             });
           }
         }
 
-        /* ---------- status + loading flag ---------- */
-        const hasAggregatorData =
+        /* ---------- overall status ---------- */
+        const hasAgg =
           meta.label === "Read"
-            ? true                                       // we rely on planDoc
-            : !!subObj && timeMap[act.activityId] != null;
+            ? true
+            : !!subObj && timeMap[act.activityId] !== undefined;
 
         let status;
-        if (!hasAggregatorData)   status = "loading";
-        else if (pct === 100)     status = "completed";
-        else if (pct > 0)         status = "partial";
-        else                      status = "notstarted";
+        if (!hasAgg)        status = "loading";
+        else if (pct === 100) status = "completed";
+        else if (pct > 0)     status = "partial";
+        else                  status = "notstarted";
 
         return {
           /* navigation */
@@ -135,7 +141,7 @@ export default function useTaskModel(
 
           /* flags */
           meta,
-          status,                      // now includes "loading"
+          status,
           locked:   (act.aggregatorStatus || "").toLowerCase() === "locked",
           deferred: !!act.deferred,
 
@@ -148,7 +154,7 @@ export default function useTaskModel(
           spentMin: Math.round((timeMap[act.activityId] || 0) / 60),
           expMin:   act.timeNeeded || 0,
 
-          /* progress + concepts */
+          /* progress & concepts */
           pct,
           mastered,
           total: totalConcept,

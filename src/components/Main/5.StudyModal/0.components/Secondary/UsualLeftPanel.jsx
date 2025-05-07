@@ -3,9 +3,10 @@
    always full-width; any scrollbar floats transparently)
 ────────────────────────────────────────────────────────────── */
 import React, { useEffect, useMemo, useState } from "react";
-import axios from "axios";
 import { useSelector, useDispatch } from "react-redux";
 import { setCurrentIndex } from "../../../../../store/planSlice";
+import { fetchAggregatorForDay } from "../../../../../store/aggregatorSlice";
+
 import {
   Box,
   Typography,
@@ -17,16 +18,12 @@ import {
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 
-import useTaskModel from "./shared/useTaskModel";   // ← new richer hook
-import TaskCard     from "./shared/TaskCard";       // ← full-fat card
-import DayProgressCircle from "./shared/DayProgressCircle";
+import useTaskModel       from "./shared/useTaskModel";   // builds Task objects
+import TaskCard           from "./shared/TaskCard";
+import DayProgressCircle  from "./shared/DayProgressCircle";
 
 /* ---------- constants ---------- */
 const CARD_PAGE_SIZE = 2;
-
-/* ---------- tiny in-memory caches so we never re-download a doc ---------- */
-const timeCache      = {};   // { activityId   : seconds }
-const subStatusCache = {};   // { subChapterId : {...}  }
 
 /* ---------- outer container ---------- */
 const containerSx = {
@@ -39,7 +36,7 @@ const containerSx = {
   boxSizing: "border-box",
 };
 
-/* ---------- scrollable column; scrollbar floats transparently ---------- */
+/* ---------- scrollable column ---------- */
 const columnSx = {
   flex: 1,
   overflowY: "auto",
@@ -61,10 +58,11 @@ export default function LeftPanel({ isCollapsed = false, onToggleCollapse }) {
     currentIndex,
     status: planStatus,
   } = useSelector((s) => s.plan);
-  const userId   = useSelector((s) => s.auth?.userId);
-  const planId   = planDoc?.id;
 
-  /* early guard */
+  const timeMap        = useSelector((s) => s.aggregator.timeMap);
+  const subchapterMap  = useSelector((s) => s.aggregator.subchapterMap);
+
+  /* ---- early guard ---- */
   if (planStatus !== "succeeded" || !planDoc) {
     return (
       <Box sx={containerSx}>
@@ -74,25 +72,26 @@ export default function LeftPanel({ isCollapsed = false, onToggleCollapse }) {
   }
 
   /* ---------- local UI state ---------- */
-  const [dayIdx,   setDayIdx]   = useState(0);   // adaptive only
-  const [page,     setPage]     = useState(1);   // pagination (1-based)
+  const [dayIdx, setDayIdx]     = useState(0);        // only for adaptive plans
+  const [page, setPage]         = useState(1);        // pagination (1-based)
   const [autoSync, setAutoSync] = useState(true);
 
   /* ---------- plan fields ---------- */
   const { planType = "adaptive", sessions = [] } = planDoc;
-  const rawSession = planType === "book" ? sessions[0] : sessions[dayIdx] || {};
+  const rawSession = planType === "book"
+    ? sessions[0]
+    : sessions[dayIdx] || {};
   const rawActs    = rawSession.activities || [];
 
-  /* ---------- aggregator maps (lazy-filled) ---------- */
-  const [timeMap, setTimeMap] = useState(() => ({ ...(planDoc.timeMap || {}) }));
-  const [subStatusMap, setSubStatusMap] = useState(() => ({
-    ...(planDoc.subchapterStatusMap || {}),
-  }));
+  /* ---------- FETCH aggregator for this day if missing ---------- */
+  useEffect(() => {
+    dispatch(fetchAggregatorForDay({ dayIndex: dayIdx }));
+  }, [dayIdx, dispatch]);
 
   /* ---------- build task models ---------- */
-  const tasks = useTaskModel(rawActs, subStatusMap, timeMap);
+  const tasks = useTaskModel(rawActs, subchapterMap, timeMap);
 
-  /* ---------- day selector stays in sync with central index ---------- */
+  /* ---------- keep dayIdx in sync with central index ---------- */
   useEffect(() => {
     if (planType === "book" || !flattenedActivities?.length) return;
     const act = flattenedActivities[currentIndex];
@@ -111,12 +110,12 @@ export default function LeftPanel({ isCollapsed = false, onToggleCollapse }) {
     [tasks, page]
   );
 
-  /* auto-flip page when someone clicks a card in another page */
+  /* auto-flip page when a card outside the current page becomes selected */
   useEffect(() => {
     if (!autoSync) return;
     const idxInList = tasks.findIndex((t) => t.flatIndex === currentIndex);
     if (idxInList === -1) return;
-    const needPage = Math.floor(idxInList / CARD_PAGE_SIZE) + 1; // 1-based
+    const needPage = Math.floor(idxInList / CARD_PAGE_SIZE) + 1;
     if (needPage !== page) setPage(needPage);
   }, [currentIndex, tasks, page, autoSync]);
 
@@ -124,53 +123,6 @@ export default function LeftPanel({ isCollapsed = false, onToggleCollapse }) {
     setDayIdx(Number(e.target.value));
     setPage(1);
   };
-
-  /* ================================================================
-     LAZY AGGREGATOR FETCH  –  only for cards visible on *this* page
-  ================================================================ */
-  useEffect(() => {
-    if (!flattenedActivities?.length) return;
-
-    pageTasks.forEach(async (t) => {
-      const rawAct = flattenedActivities[t.flatIndex];
-      if (!rawAct) return;
-
-      const { subChapterId, type = "" } = rawAct;
-      const activityId = t.id;
-
-      /* ---- (A) time spent ------------------------------------ */
-      if (activityId && timeCache[activityId] == null) {
-        try {
-          const apiType = type.toLowerCase().includes("read") ? "read" : "quiz";
-          const { data } = await axios.get(
-            `${import.meta.env.VITE_BACKEND_URL}/api/getActivityTime`,
-            { params: { activityId, type: apiType } }
-          );
-          timeCache[activityId] = data?.totalTime || 0;
-        } catch {
-          timeCache[activityId] = 0;
-        }
-        setTimeMap((m) => ({ ...m, [activityId]: timeCache[activityId] }));
-      }
-
-      /* ---- (B) sub-chapter status ---------------------------- */
-      if (subChapterId && subStatusCache[subChapterId] == null) {
-        try {
-          const { data } = await axios.get(
-            `${import.meta.env.VITE_BACKEND_URL}/subchapter-status`,
-            { params: { userId, planId, subchapterId: subChapterId } }
-          );
-          subStatusCache[subChapterId] = data || {};
-        } catch {
-          subStatusCache[subChapterId] = {};
-        }
-        setSubStatusMap((s) => ({
-          ...s,
-          [subChapterId]: subStatusCache[subChapterId],
-        }));
-      }
-    });
-  }, [pageTasks, flattenedActivities, userId, planId]);
 
   /* ---------- helpers ---------- */
   const progressPct =
@@ -181,6 +133,7 @@ export default function LeftPanel({ isCollapsed = false, onToggleCollapse }) {
         )
       : 0;
 
+  /* ---------- inner column ---------- */
   const CardColumn = () => (
     <Box sx={columnSx}>
       {pageTasks.map((t) => (

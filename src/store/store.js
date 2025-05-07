@@ -28,4 +28,8 @@ export const store = configureStore({
   },
 });
 
+if (import.meta.env.MODE === "development") {
+  window.__APP_STORE__ = store;
+}
+
 export default store;

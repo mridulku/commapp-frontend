@@ -58,7 +58,7 @@ function AttemptDetail({ attempt }) {
               c.pass === true ? "Pass" : c.pass === false ? "Fail" : "Not Tested";
             return (
               <div key={i} style={{ marginLeft: "8px" }}>
-                - {c.name} => {conceptResult}
+                - {c.name} =&gt; {conceptResult}
               </div>
             );
           })
