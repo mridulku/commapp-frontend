@@ -238,6 +238,7 @@ export const fetchAggregatorForSubchapter = createAsyncThunk(
         subchapterMap: {},           // { [subChapterId]: blob }
         loadedDays:  {},             // { [dayIdx]: true }
         loadingDays: {},             // { [dayIdx]: true }
+        subchapterErrors: {},   // NEW  { [subChapterId]: "msg" }
       },
       reducers: {},
       extraReducers: (builder) => {
@@ -288,11 +289,25 @@ export const fetchAggregatorForSubchapter = createAsyncThunk(
             st.timeMap[activityId] = (st.timeMap[activityId] || 0) + seconds;
           });
 
-
           builder
-             .addCase(fetchAggregatorForSubchapter.fulfilled, (st, { payload }) => {
-               if (!payload.cached) st.subchapterMap[payload.subChapterId] = payload.payload;
-  });
+            .addCase(fetchAggregatorForSubchapter.pending, (st, { meta }) => {
+              const id = meta.arg.subChapterId;
+              delete st.subchapterErrors[id];
+            })
+            .addCase(fetchAggregatorForSubchapter.fulfilled, (st, { payload }) => {
+              const id = payload.subChapterId;
+              delete st.subchapterErrors[id];
+              if (!payload.cached) {
+                st.subchapterMap[id] = payload.payload;
+              }
+            })
+            .addCase(fetchAggregatorForSubchapter.rejected, (st, { payload, meta, error }) => {
+              const id = meta.arg.subChapterId;
+              st.subchapterErrors[id] = payload || error.message || "unknown error";
+            });
+
+
+          
       },
     });
     

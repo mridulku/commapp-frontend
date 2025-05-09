@@ -7,6 +7,7 @@ import readingReducer from "./readingSlice";
 import quizTimeReducer from "./quizTimeSlice";
 import reviseTimeReducer from "./reviseTimeSlice";
 import aggregatorReducer from "./aggregatorSlice";
+import quizReducer from "./quizSlice"; // <-- import the quiz slice
 
 
 
@@ -21,6 +22,7 @@ export const store = configureStore({
     reading: readingReducer,
     quizTime: quizTimeReducer,
     reviseTime: reviseTimeReducer,
+    quiz: quizReducer,
 
 
     // <-- add the auth slice

@@ -1,9 +1,10 @@
 // File: StageManager.jsx
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import { useSelector } from "react-redux";
-import { Box } from "@mui/material";      // ← NEW
+import { useSelector, useDispatch } from "react-redux";
+import { fetchAggregatorForSubchapter } from "../../../../../../store/aggregatorSlice";
 
+import { Box } from "@mui/material";
 // Child Components
 import ReadingView from "./ReadingView";
 import ActivityView from "./ActivityView";
@@ -104,40 +105,23 @@ export default function StageManager({ examId, activity, userId }) {
     setRefreshKey((prev) => prev + 1);
   }
 
-  // ----------------- aggregator => subchapter-status => for locked/done info -----------------
-  const [taskInfo, setTaskInfo] = useState([]);
-  const [taskInfoLoading, setTaskInfoLoading] = useState(false);
-  const [taskInfoError, setTaskInfoError] = useState("");
+  // ----------------- aggregator data – from Redux -----------------
+const dispatch = useDispatch();
+const subchapterData = useSelector(
+  (state) => state.aggregator.subchapterMap[subChapterId]
+);
+const taskInfo        = subchapterData?.taskInfo ?? [];
+const taskInfoLoading = !subchapterData && !!subChapterId;
+const taskInfoError = useSelector(
+    (s) => s.aggregator.subchapterErrors[subChapterId] || null
+  );
 
-  useEffect(() => {
-    if (!userId || !planId || !subChapterId) {
-      setTaskInfo([]);
-      setTaskInfoLoading(false);
-      return;
-    }
-    async function fetchSubchapterStatus() {
-      try {
-        setTaskInfoLoading(true);
-        setTaskInfoError("");
-        const res = await axios.get(
-          `${import.meta.env.VITE_BACKEND_URL}/subchapter-status`, {
-          params: {
-            userId,
-            planId,
-            subchapterId: subChapterId,
-          },
-        });
-        setTaskInfo(res.data.taskInfo || []);
-      } catch (err) {
-        console.error("[StageManager] subchapter-status error:", err);
-        setTaskInfoError(err.message || "Error loading subchapter status");
-        setTaskInfo([]);
-      } finally {
-        setTaskInfoLoading(false);
-      }
-    }
-    fetchSubchapterStatus();
-  }, [userId, planId, subChapterId, refreshKey]);
+// lazy-load once per sub-chapter
+useEffect(() => {
+  if (subChapterId && !subchapterData) {
+    dispatch(fetchAggregatorForSubchapter({ subChapterId }));
+  }
+}, [dispatch, subChapterId, subchapterData]);
 
   // ----------------- Quiz & Status Data (for the active quiz stage) -----------------
   const [quizAttempts, setQuizAttempts] = useState([]);
