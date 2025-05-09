@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { useSelector, useDispatch } from "react-redux";
 import { fetchAggregatorForSubchapter } from "../../../../../../store/aggregatorSlice";
+import { fetchQuizStage, invalidateQuizStage } from "../../../../../../store/quizSlice";
 
 import { Box } from "@mui/material";
 // Child Components
@@ -124,29 +125,51 @@ useEffect(() => {
 }, [dispatch, subChapterId, subchapterData]);
 
   // ----------------- Quiz & Status Data (for the active quiz stage) -----------------
-  const [quizAttempts, setQuizAttempts] = useState([]);
-  const [revisionAttempts, setRevisionAttempts] = useState([]);
-  const [subchapterConcepts, setSubchapterConcepts] = useState([]);
+  const key = `${subChapterId}|${activeTab}`;
+  const quizObj   = useSelector((s) => s.quiz.entities[key]);
+  const loading   = useSelector((s) => s.quiz.loading[key]);
+  const error     = quizObj?.error;
+  const quizAttempts      = quizObj?.quizAttempts     ?? [];
+  const revisionAttempts  = quizObj?.revisionAttempts ?? [];
+  const subchapterConcepts= quizObj?.concepts         ?? [];
   const [mode, setMode] = useState("LOADING");
   const [lastQuizAttempt, setLastQuizAttempt] = useState(null);
   const [latestConceptStats, setLatestConceptStats] = useState(null);
   const [allAttemptsConceptStats, setAllAttemptsConceptStats] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+
+
+    /* ------------------------------------------------------------
+     Whenever quiz data arrives in the slice, recompute:
+       • mode
+      • lastQuizAttempt
+       • latestConceptStats
+       • allAttemptsConceptStats   (for HistoryView)
+  ------------------------------------------------------------ */
+  useEffect(() => {
+    if (!QUIZ_STAGES.includes(activeTab)) return;
+
+    /* 1) choose which arrays we’ll use */
+    const quizArr = quizAttempts;
+    const revArr  = revisionAttempts;
+    const conceptArr = subchapterConcepts;
+
+    /* 2) update derived state */
+    computeMode(quizArr, revArr, conceptArr, activeTab);
+    buildAllAttemptsConceptStats(quizArr, conceptArr);
+  }, [quizAttempts, revisionAttempts, subchapterConcepts, activeTab]);
+  
 
   // If activeTab is a quiz stage => fetch quiz data
   useEffect(() => {
     if (!subChapterId || !userId) return;
 
     if (QUIZ_STAGES.includes(activeTab)) {
-      fetchQuizData(activeTab);
+          dispatch(
+              fetchQuizStage({ userId, planId, subChapterId, stage: activeTab })
+            );
     } else {
       // Not a quiz => clear data
       setMode("LOADING");
-      setQuizAttempts([]);
-      setRevisionAttempts([]);
-      setSubchapterConcepts([]);
-      setAllAttemptsConceptStats([]);
       setLastQuizAttempt(null);
       setLatestConceptStats(null);
     }
@@ -269,19 +292,23 @@ useEffect(() => {
 
   // If a quiz or revision finishes => re-fetch
   function handleQuizComplete() {
-    if (QUIZ_STAGES.includes(activeTab)) {
-      fetchQuizData(activeTab);
-    }
+      if (QUIZ_STAGES.includes(activeTab)) {
+          dispatch(invalidateQuizStage(key));                // clear cache
+          dispatch(fetchQuizStage({ userId, planId,          // refetch fresh data
+                                   subChapterId, stage: activeTab }));
+        }
   }
   function handleQuizFail() {
-    if (QUIZ_STAGES.includes(activeTab)) {
-      fetchQuizData(activeTab);
-    }
+      if (QUIZ_STAGES.includes(activeTab)) {
+          dispatch(invalidateQuizStage(key));
+          dispatch(fetchQuizStage({ userId, planId, subChapterId, stage: activeTab }));
+        }
   }
   function handleRevisionDone() {
-    if (QUIZ_STAGES.includes(activeTab)) {
-      fetchQuizData(activeTab);
-    }
+      if (QUIZ_STAGES.includes(activeTab)) {
+          dispatch(invalidateQuizStage(key));
+          dispatch(fetchQuizStage({ userId, planId, subChapterId, stage: activeTab }));
+        }
   }
 
   // ========== If activity is deferred/complete => short-circuit ==========

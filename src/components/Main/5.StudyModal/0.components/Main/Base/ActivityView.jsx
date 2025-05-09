@@ -35,6 +35,14 @@ export default function ActivityView({
   const dispatch = useDispatch();
   const currentIndex = useSelector((state) => state.plan?.currentIndex ?? 0);
 
+    if (mode === "LOADING") {
+        return (
+          <div style={{ display: "flex", justifyContent: "center", padding: 32 }}>
+            <span style={{ color: "#ccc" }}>Loading…</span>
+          </div>
+        );
+      }
+
   return (
     <div style={styles.container}>
       {/* 1) No quiz => show first quiz attempt */}
