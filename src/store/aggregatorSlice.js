@@ -1,15 +1,17 @@
 /*  ──────────────────────────────────────────────────────────────
-    aggregatorSlice.js
+    aggregatorSlice.js   •   v5 (ES-module safe)
     • Two fetch modes
         1.  fetchAggregatorData      ⟶ legacy “load everything once”
         2.  fetchAggregatorForDay    ⟶ NEW lazy day-by-day loader
-    • The slice now tracks which session-days it has hydrated so
-      subsequent requests are no-ops.
-    • Existing incremental thunks (incrementReadingTime / QuizTime)
-      untouched.
+    • Per-sub-chapter loader  fetchAggregatorForSubchapter
+        – idempotent
+        – forwards concepts to planSlice via mergeSubchapterConcepts
+    • Incremental bump thunks unchanged
     ────────────────────────────────────────────────────────────── */
+
     import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-    import axios from "axios";
+    import axios                            from "axios";
+    import { mergeSubchapterConcepts }      from "./planSlice";   // ✅ ESM import
     
     /* ================================================================
        1 ▪ Legacy whole-plan fetch  (kept for backward compatibility)
@@ -28,9 +30,9 @@
         }
     
         /* ----- derive id lists from entire plan ------------------- */
-        const activityIds    = [];
-        const subchapterIds  = new Set();
-        const typeById       = {};
+        const activityIds   = [];
+        const subchapterIds = new Set();
+        const typeById      = {};
     
         (planDoc.sessions || []).forEach((sess) =>
           (sess.activities || []).forEach((act) => {
@@ -43,6 +45,7 @@
           })
         );
     
+        /* ---- time map ------------------------------------------- */
         const timeMap = {};
         await Promise.all(
           activityIds.map(async (id) => {
@@ -58,6 +61,7 @@
           })
         );
     
+        /* ---- sub-chapter map ------------------------------------- */
         const subchapterMap = {};
         await Promise.all(
           [...subchapterIds].map(async (sid) => {
@@ -79,8 +83,6 @@
     
     /* ================================================================
        2 ▪ NEW  fetchAggregatorForDay({ dayIndex })
-          • idempotent  – exits if day already loaded
-          • merges results into global maps
     ================================================================ */
     export const fetchAggregatorForDay = createAsyncThunk(
       "aggregator/fetchAggregatorForDay",
@@ -154,42 +156,54 @@
         return { dayIndex, cached: false, timeMap, subchapterMap };
       }
     );
-
-    /* --------------------------------------------------------------
-   fetchAggregatorForSubchapter({ subChapterId })
-   • idempotent – exits if that sub-chapter is already cached
--------------------------------------------------------------- */
-export const fetchAggregatorForSubchapter = createAsyncThunk(
-    "aggregator/fetchAggregatorForSubchapter",
-    async ({ subChapterId }, thunkAPI) => {
-      const state      = thunkAPI.getState();
-      const userId     = state.auth?.userId;
-      const planDoc    = state.plan?.planDoc;
-      const planId     = planDoc?.id;
-      const backendURL = import.meta.env.VITE_BACKEND_URL;
-  
-      if (!userId || !planId) {
-        return thunkAPI.rejectWithValue("Missing userId / planId");
-      }
-      /* already cached? */
-      if (state.aggregator.subchapterMap[subChapterId]) {
-        return { subChapterId, cached: true, payload: {} };
-      }
-  
-      try {
-        const { data } = await axios.get(
-          `${backendURL}/subchapter-status`,
-          { params: { userId, planId, subchapterId: subChapterId } }
-        );
-        return { subChapterId, cached: false, payload: data || {} };
-      } catch (err) {
-        return thunkAPI.rejectWithValue(err.message || "subchapter-status err");
-      }
-    }
-  );
-  
- 
     
+    /* --------------------------------------------------------------
+       fetchAggregatorForSubchapter({ subChapterId, force=false })
+    ---------------------------------------------------------------- */
+    export const fetchAggregatorForSubchapter = createAsyncThunk(
+      "aggregator/fetchAggregatorForSubchapter",
+      async ({ subChapterId, force = false }, thunkAPI) => {
+        const state      = thunkAPI.getState();
+        const userId     = state.auth?.userId;
+        const planDoc    = state.plan?.planDoc;
+        const planId     = planDoc?.id;
+        const backendURL = import.meta.env.VITE_BACKEND_URL;
+    
+        if (!userId || !planId) {
+          return thunkAPI.rejectWithValue("Missing userId / planId");
+        }
+    
+        /* ---------- helper to push concepts into planSlice ---------- */
+        const forwardConcepts = (conceptArr = []) => {
+          if (Array.isArray(conceptArr) && conceptArr.length) {
+            thunkAPI.dispatch(
+              mergeSubchapterConcepts({ subChapterId, concepts: conceptArr })
+            );
+          }
+        };
+    
+        /* ---------- cache logic ------------------------------------- */
+        const cachedBlob = state.aggregator.subchapterMap[subChapterId];
+        const hasConcepts = cachedBlob?.concepts && cachedBlob.concepts.length;
+    
+        if (cachedBlob && hasConcepts && !force) {
+          forwardConcepts(cachedBlob.concepts);   // UI gets them instantly
+          return { subChapterId, cached: true, payload: cachedBlob };
+        }
+    
+        /* ---------- fetch fresh blob -------------------------------- */
+        try {
+          const { data } = await axios.get(
+            `${backendURL}/subchapter-status`,
+            { params: { userId, planId, subchapterId: subChapterId } }
+          );
+          forwardConcepts(data?.concepts);
+          return { subChapterId, cached: false, payload: data || {} };
+        } catch (err) {
+          return thunkAPI.rejectWithValue(err.message || "subchapter-status error");
+        }
+      }
+    );
     
     /* ================================================================
        3 ▪ Incremental “bump” thunks  (unchanged)
@@ -238,13 +252,13 @@ export const fetchAggregatorForSubchapter = createAsyncThunk(
         subchapterMap: {},           // { [subChapterId]: blob }
         loadedDays:  {},             // { [dayIdx]: true }
         loadingDays: {},             // { [dayIdx]: true }
-        subchapterErrors: {},   // NEW  { [subChapterId]: "msg" }
+        subchapterErrors: {},        // { [subChapterId]: "msg" }
       },
       reducers: {},
       extraReducers: (builder) => {
         /* ---------- legacy whole-plan loader ---------- */
         builder
-          .addCase(fetchAggregatorData.pending,   (st) => {
+          .addCase(fetchAggregatorData.pending, (st) => {
             st.status = "loading";
             st.error  = null;
           })
@@ -252,16 +266,16 @@ export const fetchAggregatorForSubchapter = createAsyncThunk(
             st.status = "succeeded";
             Object.assign(st.timeMap,       payload.timeMap);
             Object.assign(st.subchapterMap, payload.subchapterMap);
-            /* mark ALL days as loaded because we hydrated the whole plan */
-            const planSessions = Object.keys(payload.subchapterMap).length;
-            for (let i = 0; i < planSessions; i++) st.loadedDays[i] = true;
+            // mark ALL days as loaded (we hydrated whole plan)
+            const totalSess = Object.keys(payload.subchapterMap).length;
+            for (let i = 0; i < totalSess; i++) st.loadedDays[i] = true;
           })
-          .addCase(fetchAggregatorData.rejected,  (st, action) => {
+          .addCase(fetchAggregatorData.rejected, (st, action) => {
             st.status = "failed";
             st.error  = action.payload ?? action.error.message;
           });
     
-        /* ---------- new day-scoped loader ---------- */
+        /* ---------- day-scoped loader ---------- */
         builder
           .addCase(fetchAggregatorForDay.pending, (st, { meta }) => {
             st.loadingDays[meta.arg.dayIndex] = true;
@@ -288,26 +302,27 @@ export const fetchAggregatorForSubchapter = createAsyncThunk(
             const { activityId, seconds } = payload;
             st.timeMap[activityId] = (st.timeMap[activityId] || 0) + seconds;
           });
-
-          builder
-            .addCase(fetchAggregatorForSubchapter.pending, (st, { meta }) => {
-              const id = meta.arg.subChapterId;
-              delete st.subchapterErrors[id];
-            })
-            .addCase(fetchAggregatorForSubchapter.fulfilled, (st, { payload }) => {
-              const id = payload.subChapterId;
-              delete st.subchapterErrors[id];
-              if (!payload.cached) {
-                st.subchapterMap[id] = payload.payload;
-              }
-            })
-            .addCase(fetchAggregatorForSubchapter.rejected, (st, { payload, meta, error }) => {
-              const id = meta.arg.subChapterId;
-              st.subchapterErrors[id] = payload || error.message || "unknown error";
-            });
-
-
-          
+    
+        /* ---------- per-sub-chapter loader ---------- */
+        builder
+          .addCase(fetchAggregatorForSubchapter.pending, (st, { meta }) => {
+            const id = meta.arg.subChapterId;
+            delete st.subchapterErrors[id];
+          })
+          .addCase(fetchAggregatorForSubchapter.fulfilled, (st, { payload }) => {
+            const id = payload.subChapterId;
+            delete st.subchapterErrors[id];
+            if (!payload.cached) {
+              st.subchapterMap[id] = {
+                ...st.subchapterMap[id],   // keep older data
+                ...payload.payload         // merge fresh data
+              };
+            }
+          })
+          .addCase(fetchAggregatorForSubchapter.rejected, (st, { payload, meta, error }) => {
+            const id = meta.arg.subChapterId;
+            st.subchapterErrors[id] = payload || error.message || "unknown error";
+          });
       },
     });
     

@@ -1,215 +1,288 @@
-// File: planSlice.js
-// ────────────────────────────────────────────────────────────────
-//  v2 – adds `setPlanDoc` so other components can inject a plan
-//       into Redux without refetching.  Nothing else removed.
-// ────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────
+// store/planSlice.js   •   v5  (JavaScript)
+//
+// ▸ fetchPlan()                 – async thunk  (unchanged)
+// ▸ addFlatIndexes()            – inject flatIndex / type / quizStage
+// ▸ buildCatalogFromPlanDoc()   – NEW tree: book ▸ subject ▸ grouping ▸ chapter
+// ▸ setPlanDoc()                – overwrite plan without re-fetch
+// ▸ mergeSubchapterConcepts()   – add concepts after lazy fetch
+// ▸ memo selectors              – selectCatalog / selectSubChList / selectConcepts
+// ───────────────────────────────────────────────────────────────
 
-import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import {
+  createSlice,
+  createAsyncThunk,
+  createSelector,
+} from "@reduxjs/toolkit";
 import axios from "axios";
 
-/* ================================================================
-   1 ▪ Async thunk – fetchPlan (unchanged)
-================================================================ */
+/* ══════════════════════════════════════════════════════════════
+   1 ▪ Async thunk – fetchPlan  (unchanged)
+═══════════════════════════════════════════════════════════════ */
 export const fetchPlan = createAsyncThunk(
   "plan/fetchPlan",
-  async ({ planId, backendURL, fetchUrl, initialActivityContext }, thunkAPI) => {
+  async (
+    {
+      planId,
+      backendURL,
+      fetchUrl = "/api/adaptive-plan",
+      initialActivityContext = null,
+    },
+    thunkAPI
+  ) => {
     try {
-      console.log(
-        "[planSlice] fetchPlan => planId:",
-        planId,
-        "initialActivityContext:",
-        initialActivityContext
-      );
-
-      const res = await axios.get(`${backendURL}${fetchUrl}`, {
+      const { data } = await axios.get(`${backendURL}${fetchUrl}`, {
         params: { planId },
       });
-
-      if (!res.data || !res.data.planDoc) {
-        console.warn(
-          "[planSlice] fetchPlan => no planDoc in response:",
-          res.data
-        );
-        return thunkAPI.rejectWithValue("No planDoc found in response");
+      if (!data?.planDoc) {
+        return thunkAPI.rejectWithValue("No planDoc in response");
       }
 
-      console.log(
-        "[planSlice] fetchPlan => planDoc found =>",
-        res.data.planDoc
-      );
-
       return {
-        planDoc: res.data.planDoc,
-        initialActivityContext: initialActivityContext || null,
+        planDoc: data.planDoc,
+        initialActivityContext,
         requestedPlanId: planId,
       };
     } catch (err) {
-      console.error("[planSlice] fetchPlan => error:", err);
       return thunkAPI.rejectWithValue(err.message || "Error fetching plan");
     }
   }
 );
 
-/* ================================================================
-   2 ▪ Helper – addFlatIndexes (unchanged)
-================================================================ */
+/* ══════════════════════════════════════════════════════════════
+   2 ▪ Helpers
+═══════════════════════════════════════════════════════════════ */
+
+/** 2-a ▸ addFlatIndexes – inject flatIndex & derive type / quizStage */
 function addFlatIndexes(planDoc) {
-  let globalIndex = 0;
-  console.log(
-    "[planSlice] addFlatIndexes => start, planDoc.sessions length:",
-    (planDoc.sessions || []).length
-  );
+  let globalIdx = 0;
 
-  const newSessions = (planDoc.sessions || []).map((sess, dayIndex) => {
-    const newActivities = (sess.activities || []).map((act) => {
-      const aggregatorTask = act.aggregatorTask ?? null;
-      const aggregatorStatus = act.aggregatorStatus ?? null;
+  const sessions = (planDoc.sessions || []).map((sess, dayIndex) => {
+    const acts = (sess.activities || []).map((act) => {
+      const type = (act.type || "").toLowerCase() || "read";
 
-      let derivedType = (act.type || "").toLowerCase();
-      if (!derivedType) derivedType = "read";
-
-      let derivedQuizStage = "";
-      if (derivedType === "quiz") {
-        const rawStage = (act.quizStage || "").toLowerCase();
-        const recognizedStages = [
-          "remember",
-          "understand",
-          "apply",
-          "analyze",
-          "cumulativequiz",
-          "cumulativerevision",
-        ];
-        derivedQuizStage = recognizedStages.includes(rawStage)
-          ? rawStage
-          : "remember";
+      /* normalise quizStage only if it’s a quiz activity */
+      let quizStage = "";
+      if (type === "quiz") {
+        const raw = (act.quizStage || "").toLowerCase();
+        const ok =
+          ["remember", "understand", "apply", "analyze"].includes(raw) && raw;
+        quizStage = ok || "remember";
       }
 
-      const updatedAct = {
+      return {
         ...act,
-        aggregatorTask,
-        aggregatorStatus,
+        type,
+        quizStage,
         dayIndex,
-        flatIndex: globalIndex,
-        type: derivedType,
-        quizStage: derivedQuizStage,
+        flatIndex: globalIdx++,
       };
-      globalIndex += 1;
-      return updatedAct;
     });
-    return { ...sess, activities: newActivities };
-  });
 
-  const updatedPlanDoc = { ...planDoc, sessions: newSessions };
+    return { ...sess, activities: acts };
+  });
 
   const flattenedActivities = [];
-  newSessions.forEach((sess) => {
-    (sess.activities || []).forEach((act) => {
-      flattenedActivities.push(act);
-    });
-  });
-
-  console.log(
-    "[planSlice] addFlatIndexes => final flattenedActivities length:",
-    flattenedActivities.length
+  sessions.forEach((s) =>
+    s.activities.forEach((a) => flattenedActivities.push(a))
   );
-  return { updatedPlanDoc, flattenedActivities };
+
+  return { updatedPlanDoc: { ...planDoc, sessions }, flattenedActivities };
 }
 
-/* ================================================================
-   3 ▪ Slice definition
-================================================================ */
+/** 2-b ▸ buildCatalogFromPlanDoc – derives hierarchy / subChapters / concepts
+ *        TREE:  book ▸ subject ▸ grouping ▸ chapter ▸ [subChapterIds]
+ */
+function buildCatalogFromPlanDoc(planDoc, extraConceptMap = {}) {
+  const hierarchy = {}; // nested tree
+  const subChapters = [];
+  const concepts = [];
+
+  (planDoc.sessions || []).forEach((sess) =>
+    (sess.activities || []).forEach((act) => {
+      /* — Actual field names coming from the plan — */
+      const book      = act.bookName       || "Unknown Book";
+      const subject   = act.subject        || "General";
+      const grouping  = act.grouping       || "Misc";
+      const chapter   = act.chapterName    || "Untitled";
+      const subch     = act.subChapterName || "Untitled";
+      const subId     = act.subChapterId   || "";
+      const conceptArr = extraConceptMap[subId] || []; // may still be empty
+
+      /* ① Build hierarchy tree */
+      if (!hierarchy[book])                   hierarchy[book] = {};
+      if (!hierarchy[book][subject])          hierarchy[book][subject] = {};
+      if (!hierarchy[book][subject][grouping])hierarchy[book][subject][grouping] = {};
+      if (!hierarchy[book][subject][grouping][chapter])
+        hierarchy[book][subject][grouping][chapter] = [];
+      const arr = hierarchy[book][subject][grouping][chapter];
+      if (!arr.includes(subId)) arr.push(subId);
+
+      /* ② Flat sub-chapter record (dedup by subId) */
+      if (!subChapters.find((s) => s.subChapterId === subId)) {
+        subChapters.push({
+          subChapterId: subId,
+          book,
+          subject,
+          grouping,
+          chapter,
+          subChapter: subch,
+        });
+      }
+
+      /* ③ Flat concepts */
+      conceptArr.forEach((c) =>
+        concepts.push({
+          conceptName : typeof c === "string" ? c : c.name,
+          subChapterId: subId,
+          book,
+          subject,
+          grouping,
+          chapter,
+          subChapter  : subch,
+        })
+      );
+    })
+  );
+
+  /* ④ Sort for deterministic UI render */
+  subChapters.sort((a, b) =>
+    `${a.book}|${a.subject}|${a.grouping}|${a.chapter}|${a.subChapter}`.localeCompare(
+      `${b.book}|${b.subject}|${b.grouping}|${b.chapter}|${b.subChapter}`
+    )
+  );
+  concepts.sort((a, b) => a.conceptName.localeCompare(b.conceptName));
+
+  return { hierarchy, subChapters, concepts };
+}
+
+/* ══════════════════════════════════════════════════════════════
+   3 ▪ Slice
+═══════════════════════════════════════════════════════════════ */
 const planSlice = createSlice({
   name: "plan",
   initialState: {
-    planDoc: null,
-    flattenedActivities: [],
-    currentIndex: -1,
     status: "idle", // 'idle' | 'loading' | 'succeeded' | 'failed'
     error: null,
+
+    planDoc: null,
+    flattenedActivities: [],
+
+    catalog: { hierarchy: {}, subChapters: [], concepts: [] },
+
+    currentIndex: -1,
     examId: "general",
   },
+
   reducers: {
-    /* Keep existing reducer */
+    /* 3-a ▸ jump the current pointer */
     setCurrentIndex(state, action) {
       state.currentIndex = action.payload;
     },
 
-    /* NEW ▸ allow components to inject / overwrite the planDoc
-       without going through fetchPlan again */
+    /* 3-b ▸ overwrite the whole planDoc (e.g. after an import) */
     setPlanDoc(state, action) {
-      const incoming = action.payload;
-      if (!incoming) return;
+      if (!action.payload) return;
 
-      console.log("[planSlice] setPlanDoc => received planDoc:", incoming);
+      const { updatedPlanDoc, flattenedActivities } =
+        addFlatIndexes(action.payload);
 
-      /* 1) Apply flat indexes & aggregator placeholders */
-      const { updatedPlanDoc, flattenedActivities } = addFlatIndexes(incoming);
-
-      /* 2) Store */
       state.planDoc = updatedPlanDoc;
       state.flattenedActivities = flattenedActivities;
-
-      /* 3) Reset pointer to first activity (or -1 if none) */
-      state.currentIndex =
-        flattenedActivities.length > 0 ? 0 : -1;
-
-      /* 4) Keep examId handy */
+      state.catalog = buildCatalogFromPlanDoc(updatedPlanDoc);
+      state.currentIndex = flattenedActivities.length ? 0 : -1;
       state.examId = updatedPlanDoc.examId || "general";
     },
+
+    /* 3-c ▸ merge concepts fetched lazily for one sub-chapter
+             payload: { subChapterId, concepts:[…] } */
+    mergeSubchapterConcepts(state, action) {
+      const { subChapterId, concepts: newConcepts } = action.payload || {};
+      if (!subChapterId || !Array.isArray(newConcepts)) return;
+
+      /* quick lookup for dedup */
+      const seen = {};
+      state.catalog.concepts.forEach(
+        (c) => (seen[`${c.conceptName}|${c.subChapterId}`] = true)
+      );
+
+      newConcepts.forEach((c) => {
+        const cName = typeof c === "string" ? c : c.name;
+        const key = `${cName}|${subChapterId}`;
+        if (seen[key]) return;
+
+        /* inherit meta from sub-chapter row */
+        const meta = state.catalog.subChapters.find(
+          (s) => s.subChapterId === subChapterId
+        );
+        if (!meta) return;
+
+        state.catalog.concepts.push({
+          conceptName: cName,
+          subChapterId,
+          ...meta, // contains book / subject / grouping / chapter / subChapter
+        });
+        seen[key] = true;
+      });
+
+      state.catalog.concepts.sort((a, b) =>
+        a.conceptName.localeCompare(b.conceptName)
+      );
+    },
   },
+
   extraReducers: (builder) => {
     builder
       .addCase(fetchPlan.pending, (state) => {
-        console.log("[planSlice] fetchPlan => pending...");
-        state.status = "loading";
-        state.error = null;
-        state.planDoc = null;
-        state.flattenedActivities = [];
-        state.currentIndex = -1;
+        Object.assign(state, {
+          status: "loading",
+          error: null,
+          planDoc: null,
+          flattenedActivities: [],
+          catalog: { hierarchy: {}, subChapters: [], concepts: [] },
+          currentIndex: -1,
+        });
       })
       .addCase(fetchPlan.fulfilled, (state, action) => {
-        console.log("[planSlice] fetchPlan => fulfilled!");
         state.status = "succeeded";
 
-        const { planDoc, initialActivityContext, requestedPlanId } =
-          action.payload;
-
+        const { planDoc } = action.payload;
         const { updatedPlanDoc, flattenedActivities } =
           addFlatIndexes(planDoc);
 
-        if (requestedPlanId) {
-          if (!updatedPlanDoc.planId) updatedPlanDoc.planId = requestedPlanId;
-          if (!updatedPlanDoc.id) updatedPlanDoc.id = requestedPlanId;
-        }
-
         state.planDoc = updatedPlanDoc;
         state.flattenedActivities = flattenedActivities;
+        state.catalog = buildCatalogFromPlanDoc(updatedPlanDoc);
         state.examId = updatedPlanDoc.examId || "general";
-
-        let newIndex = flattenedActivities.length > 0 ? 0 : -1;
-
-        if (initialActivityContext && flattenedActivities.length > 0) {
-          const { subChapterId, type } = initialActivityContext;
-          const found = flattenedActivities.find(
-            (a) =>
-              a.subChapterId === subChapterId &&
-              (a.type || "").toUpperCase() === (type || "").toUpperCase()
-          );
-          if (found) newIndex = found.flatIndex;
-        }
-
-        state.currentIndex = newIndex;
+        state.currentIndex = flattenedActivities.length ? 0 : -1;
       })
       .addCase(fetchPlan.rejected, (state, action) => {
-        console.log("[planSlice] fetchPlan => rejected!");
         state.status = "failed";
         state.error = action.payload || action.error.message;
       });
   },
 });
 
-/* ================================================================
-   4 ▪ Exports
-================================================================ */
-export const { setCurrentIndex, setPlanDoc } = planSlice.actions;
+/* ══════════════════════════════════════════════════════════════
+   4 ▪ Memo selectors – handy shortcuts for components
+═══════════════════════════════════════════════════════════════ */
+export const selectCatalog = (s) => s.plan.catalog;
+export const selectSubChList = createSelector(
+  selectCatalog,
+  (c) => c.subChapters
+);
+export const selectConcepts = createSelector(
+  selectCatalog,
+  (c) => c.concepts
+);
+
+/* ══════════════════════════════════════════════════════════════
+   5 ▪ Exports
+═══════════════════════════════════════════════════════════════ */
+export const {
+  setCurrentIndex,
+  setPlanDoc,
+  mergeSubchapterConcepts,
+} = planSlice.actions;
+
 export default planSlice.reducer;

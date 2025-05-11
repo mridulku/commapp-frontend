@@ -108,6 +108,14 @@ function UnifiedSidebar({
           {collapsed ? "📚" : <>📚 Plans</>}
         </button>
 
+        <button
+           style={toggleButtonStyle(viewMode === "overview")}
+           onClick={() => switchMode("overview")}
+           title="Overview"
+         >
+           {collapsed ? "🏠" : <>🏠 Overview</>}
+         </button>
+
         
 
         {/* Profile */}
@@ -143,6 +151,8 @@ function UnifiedSidebar({
           >
             {collapsed ? "🛠️" : <>🛠️ Admin</>}
           </button>
+
+         
 
                  {/* Overview  (only visible to admins) */}
        {isAdmin && (

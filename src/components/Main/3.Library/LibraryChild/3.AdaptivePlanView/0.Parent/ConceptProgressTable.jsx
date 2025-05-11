@@ -1,56 +1,73 @@
 /***********************************************************************
- * ConceptProgressTable.jsx                                            *
- *                                                                     *
- * — Keeps your 4 filters, breadcrumb rows and styling intact.         *
- * — Adds two new columns:                                             *
- *       ▸ Quiz History (3 coloured dots + tooltip)                    *
- *       ▸ Next Revision (formatted date + “Xd”)                       *
- * — Confidence is now a High/Med/Low chip (same style as Weight).     *
- **********************************************************************/
-import React, { useMemo, useState } from "react";
+ * ConceptProgressTable.jsx – v10
+ * --------------------------------------------------------------------
+ * • Journey pill (sub-chapter level) stays beside the breadcrumb.
+ * • Table now has 6 columns:
+ *       Concept | Weight | Stage-Status | Quiz-History | Confidence | Next-Rev
+ * • Weight, Quiz-History, Confidence, Next-Revision are **static
+ *   placeholders** for now (shown in green/orange chips & dots).
+ * • All data-fetch, loading, retry and concept-status logic from v9
+ *   remains unchanged.
+ ***********************************************************************/
+
+import React, { useEffect, useMemo, useState } from "react";
+import { useSelector, useDispatch }            from "react-redux";
 import {
-  Box, FormControl, Select, MenuItem, Typography,
+  selectSubChList,
+  selectConcepts,
+} from "../../../../../../store/planSlice";
+import { fetchAggregatorForSubchapter }        from "../../../../../../store/aggregatorSlice";
+
+import {
+  Box, Typography,
+  FormControl, Select, MenuItem,
   Table, TableHead, TableRow, TableCell, TableBody,
-  Tooltip, Chip
+  Chip, Tooltip
 } from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-import { curriculum }   from "./dummyCurriculum";
 
-/* ───────── colour palette (unchanged + a few extras) ───────── */
+/* ──────────────── colours ──────────────── */
 const CLR = {
-  reading:"#BB86FC", remember:"#80DEEA", understand:"#FFD54F",
-  apply:"#AED581",   analyze:"#F48FB1",
+  reading:"#BB86FC", remember:"#80DEEA", understand:"#FFD54F", apply:"#AED581", analyze:"#F48FB1",
   hi:"#66BB6A", med:"#FFA726", low:"#EF5350",
-  pass:"#4CAF50", fail:"#E53935", nt:"#999"
+  pass:"#4CAF50", fail:"#E53935", nt:"#888",
+  lock:"#c62828", done:"#2e7d32", dark:"#444"
 };
-
-/* ───────── High / Med / Low helpers (Weight + Conf) ───────── */
-const band = v => v==null?"—":v>=67?"High":v>=34?"Med":"Low";
-const bandClr = t => t==="High"?CLR.hi:t==="Med"?CLR.med:CLR.low;
-const bandChip = v => {
-  const txt = band(v);
-  return txt==="—" ? "—" :
-    <Chip size="small" label={txt}
-      sx={{bgcolor:bandClr(txt),color:"#000",fontSize:11,fontWeight:700,
-           "& .MuiChip-label":{px:.8}}}/>;
-};
-const weightChip = bandChip;
-const confChip   = bandChip;
-
-/* ───────── Journey badge (current stage only) ───────── */
 const STAGES = ["reading","remember","understand","apply","analyze"];
-function JourneyCell({stages={}}){
-  const cur = STAGES.find(k=>stages[k]==null||stages[k]<100) || "analyze";
-  const pct = stages[cur]??0;
-  const lbl = stages[cur]==null?"Locked":stages[cur]===100?"Done":`${pct}%`;
 
-  const tip = (
+/* ═════════ helper: tiny chip ═════════ */
+const TinyChip = ({label,bg=CLR.dark,color="#000"})=>(
+  <Chip size="small" label={label}
+        sx={{bgcolor:bg,color,fontSize:11,m:0.15,"& .MuiChip-label":{px:.8}}}/>
+);
+
+/* ═════════ 1. Journey pill (unchanged from v9) ═════════ */
+function JourneyPill({pct={}}){
+  const state={}, getCur=()=>{
+    let gate=true,cur="analyze";
+    STAGES.forEach(st=>{
+      const v=pct[st];
+      if(st==="reading"){
+        const r=v==null?0:v; state[st]=r===100?100:r; gate=r===100; return;
+      }
+      if(!gate){state[st]="LOCKED";return;}
+      if(v==null){state[st]=0;gate=false;}
+      else if(v>=100){state[st]=100;}
+      else{state[st]=v;gate=false;}
+      if(state[st]!=="LOCKED"&&state[st]<100) cur=st;
+    });return cur;
+  };
+  const cur=getCur();
+  const lbl=state[cur]==="LOCKED"?"Locked"
+           :state[cur]===100?"Done":`${state[cur]}%`;
+
+  const tip=(
     <Box sx={{fontSize:13}}>
       {STAGES.map(k=>{
-        const v = stages[k];
-        const txt = v==null?"🔒 locked":v===100?"✅ 100 %":`${v}%`;
+        const v=state[k];
+        const t=v==="LOCKED"?"🔒 locked":v===100?"✅ 100 %":`${v}%`;
         return <div key={k} style={{color:CLR[k]}}>
-          <strong style={{textTransform:"capitalize"}}>{k}</strong>: {txt}
+          <strong style={{textTransform:"capitalize"}}>{k}</strong>: {t}
         </div>;
       })}
     </Box>
@@ -58,191 +75,212 @@ function JourneyCell({stages={}}){
 
   return (
     <Tooltip arrow title={tip}>
-      <Box sx={{display:"inline-flex",alignItems:"center",gap:.5}}>
-        <Chip size="small"
-          label={`${cur[0].toUpperCase()}${cur.slice(1)} ${lbl}`}
-          sx={{bgcolor:CLR[cur],color:"#000",fontSize:11,"& .MuiChip-label":{px:.8}}}/>
+      <Box sx={{display:"inline-flex",alignItems:"center",gap:.6,cursor:"default"}}>
+        <TinyChip label={`${cur[0].toUpperCase()}${cur.slice(1)} ${lbl}`}
+                  bg={CLR[cur]} color="#000"/>
         <InfoOutlinedIcon sx={{fontSize:16,color:"#bbb"}}/>
       </Box>
     </Tooltip>
   );
 }
 
-/* ───────── Quiz-history cell (last 3 attempts) ───────── */
-const Dot = ({ok})=>(
-  <Box sx={{
-    width:10,height:10,borderRadius:"50%",
-    bgcolor: ok==null?CLR.nt : ok?CLR.pass:CLR.fail,
-    display:"inline-block"}}/>
-);
-
-function HistoryCell({attempts=[]}){
-  const last3=[...attempts].slice(-3);
-  while(last3.length<3) last3.unshift(null);
-
-  const tip=(
-    <Box sx={{fontSize:13}}>
-      {attempts.length===0?"No attempts yet":
-        attempts.map((ok,i)=>(
-          <div key={i}>
-            Attempt&nbsp;{i+1}: {ok===true?"✅ Pass":ok===false?"❌ Fail":"—"}
-          </div>
-        ))}
-    </Box>
-  );
-
-  return (
-    <Tooltip arrow title={tip}>
-      <Box sx={{display:"flex",gap:.6,justifyContent:"center"}}>
-        {last3.map((ok,i)=><Dot key={i} ok={ok}/>)}
-      </Box>
-    </Tooltip>
-  );
+/* ═════════ 2. Stage-status chip for a concept ═════════ */
+function conceptStatusChip({stage, readingDone, result}){
+  if(!readingDone)    return <TinyChip label="📖 Reading…" bg={CLR.reading} color="#000"/>;
+  if(stage==="done")  return <TinyChip label="🎉 Done"     bg={CLR.done}    color="#000"/>;
+  if(result==="PASS") return <TinyChip label="✅"          bg={CLR.apply}   color="#000"/>;
+  if(result==="FAIL") return <TinyChip label="❌"          bg={CLR.lock}    color="#fff"/>;
+  return <TinyChip label="—" bg={CLR.dark} color="#fff"/>;
 }
 
-/* ───────── day-difference helper for Next Revision ───────── */
-const daysFromNow = iso => Math.round((new Date(iso)-Date.now())/864e5);
+/* ═════════ 3. static placeholder columns ═════════ */
+//   Weight  (Med)
+const weightChip = <TinyChip label="Med"  bg={CLR.med} color="#000"/>;
+//   Confidence (High)
+const confChip   = <TinyChip label="High" bg={CLR.hi}  color="#000"/>;
+//   Quiz-History (three green dots + tooltip)
+const Dot=()=><Box sx={{width:10,height:10,borderRadius:"50%",bgcolor:CLR.pass}}/>;
+const histTip=(<Box sx={{fontSize:13,lineHeight:1.4}}>
+  <div>Attempt&nbsp;1&nbsp;: ✅ Pass</div>
+  <div>Attempt&nbsp;2&nbsp;: ✅ Pass</div>
+  <div>Attempt&nbsp;3&nbsp;: ✅ Pass</div>
+</Box>);
+const HistoryCell=()=>(
+  <Tooltip title={histTip} arrow>
+    <Box sx={{display:"flex",gap:.6,justifyContent:"center"}}><Dot/><Dot/><Dot/></Box>
+  </Tooltip>
+);
 
-/* ───────── flatten curriculum (unchanged) ───────── */
-const match=(want,val)=>want==="__ALL__"||want===val;
-const flatten=(filt)=>{
-  const out=[];
-  Object.entries(curriculum).forEach(([s,tps])=>{
-    if(!match(filt.subject,s)) return;
-    tps.forEach(tp=>{
-      if(!match(filt.topic,tp.topic)) return;
-      tp.chapters.forEach(ch=>{
-        if(!match(filt.chapter,ch.name)) return;
-        ch.subs.forEach(sc=>{
-          if(!match(filt.subch,sc.name)) return;
-          sc.conceptList.forEach(c=>out.push({
-            subject:s,topic:tp.topic,chapter:ch.name,subch:sc.name,...c
-          }));
-        });
-      });
-    });
-  });
-  out.sort((a,b)=>`${a.subject}|${a.topic}|${a.chapter}|${a.subch}`
-                   .localeCompare(`${b.subject}|${b.topic}|${b.chapter}|${b.subch}`));
-  return out;
+/* ═════════ 4. tiny helpers from v9 (readingPct, stagePct, buildConceptMap) ═════════ */
+const readingPct=rec=>{
+  if(!rec) return 0;
+  if(rec.locked) return null;
+  const s=(rec.status||"").toLowerCase();
+  if(s==="done") return 100;
+  if(s==="in-progress") return 50;
+  return 0;
 };
+function parseRatio(str=""){
+  const t=str.trim(); if(!t) return NaN;
+  if(t.endsWith("%")){const n=parseFloat(t);return isNaN(n)?NaN:n/100;}
+  if(t.includes("/")){const [n,d]=t.split("/").map(parseFloat);return d>0?n/d:NaN;}
+  const n=parseFloat(t); return isNaN(n)?NaN:(n<=1?n:n/100);
+}
+function buildConceptMap(arr=[]){
+  const m=new Map();
+  arr.forEach(att=>(att.conceptStats||[]).forEach(c=>{
+    if(!m.has(c.conceptName)||m.get(c.conceptName)!=="PASS") m.set(c.conceptName,c.passOrFail);
+  }));
+  return m;
+}
+function stagePct(blob,stage){
+  const node=blob?.quizStagesData?.[stage];
+  if(node?.overallPct!=null){
+    const raw=node.overallPct; return Math.min(100,Math.round(raw<=1?raw*100:raw));
+  }
+  if(node?.allAttemptsConceptStats?.length){
+    const m=buildConceptMap(node.allAttemptsConceptStats);
+    const total=m.size,pass=[...m.values()].filter(v=>v==="PASS").length;
+    if(total) return Math.round(pass/total*100);
+  }
+  const att=node?.quizAttempts||[]; if(att.length){
+    const r=parseRatio(att[0].score); if(!isNaN(r)) return Math.min(100,Math.round(r*100));
+  }
+  return null;
+}
 
-/* ───────── MAIN COMPONENT ───────── */
+/* ═════════ 5. component ═════════ */
 export default function ConceptProgressTable(){
-  /* filters (same as before) */
-  const subjects=Object.keys(curriculum);
-  const [subject,setSubject]=useState("__ALL__");
-  const [topic,setTopic]=useState("__ALL__");
-  const [chapter,setChapter]=useState("__ALL__");
-  const [subch,setSubch]=useState("__ALL__");
 
-  const topicOpt = useMemo(()=>subject==="__ALL__"?["__ALL__"]:
-    ["__ALL__",...curriculum[subject].map(t=>t.topic)],[subject]);
-  const chapOpt = useMemo(()=>{
-    if(subject==="__ALL__"||topic==="__ALL__") return ["__ALL__"];
-    return ["__ALL__",...curriculum[subject].find(t=>t.topic===topic)?.chapters.map(c=>c.name)];
-  },[subject,topic]);
-  const subOpt  = useMemo(()=>{
-    if(subject==="__ALL__"||topic==="__ALL__"||chapter==="__ALL__") return ["__ALL__"];
-    return ["__ALL__",...curriculum[subject].find(t=>t.topic===topic)
-            ?.chapters.find(c=>c.name===chapter)?.subs.map(s=>s.name)];
-  },[subject,topic,chapter]);
+  /* redux & fetch (unchanged) */
+  const dispatch=useDispatch();
+  const subChapters=useSelector(selectSubChList);
+  const conceptsArr=useSelector(selectConcepts);
+  const subMap     =useSelector(s=>s.aggregator.subchapterMap);
+  const subErrors  =useSelector(s=>s.aggregator.subchapterErrors);
 
-  const rows=useMemo(()=>flatten({subject,topic,chapter,subch}),
-                    [subject,topic,chapter,subch]);
+  const [selSubId,setSelSubId]=useState(subChapters[0]?.subChapterId||"");
+  const [loadingSub,setLoadingSub]=useState({});
 
+  useEffect(()=>{
+    if(!selSubId) return;
+    setLoadingSub(ls=>({...ls,[selSubId]:true}));
+    dispatch(fetchAggregatorForSubchapter({subChapterId:selSubId}))
+      .finally(()=>setLoadingSub(ls=>({...ls,[selSubId]:false})));
+  },[selSubId,dispatch]);
+
+  const subOpts=useMemo(()=>subChapters.map(sc=>({
+    value:sc.subChapterId,
+    label:`${sc.book} › ${sc.grouping} › ${sc.subChapter}`
+  })),[subChapters]);
+
+  const meta=useMemo(()=>subChapters.find(s=>s.subChapterId===selSubId)||{},
+                     [selSubId,subChapters]);
+  const conceptList=useMemo(()=>conceptsArr.filter(c=>c.subChapterId===selSubId)
+                                           .map(c=>c.conceptName)
+                                           .sort((a,b)=>(a||"").localeCompare(b||"")),
+                            [selSubId,conceptsArr]);
+
+  const blob=subMap[selSubId]||{};
+  const readingRec=blob.taskInfo?.find(t=>(t.stageLabel||"").toLowerCase()==="reading");
+
+  const pctObj={
+    reading   :readingPct(readingRec),
+    remember  :stagePct(blob,"remember"),
+    understand:stagePct(blob,"understand"),
+    apply     :stagePct(blob,"apply"),
+    analyze   :stagePct(blob,"analyze")
+  };
+
+  /* determine active stage & concept PASS/FAIL map */
+  const readingDone=pctObj.reading===100;
+  let active="reading";
+  if(readingDone){
+    for(const st of ["remember","understand","apply","analyze"])
+      if(pctObj[st]==null||pctObj[st]<100){active=st;break;}
+    if(pctObj.analyze===100) active="done";
+  }
+  let conceptMap=new Map();
+  if(active!=="reading"&&active!=="done"&&blob.quizStagesData?.[active]?.allAttemptsConceptStats)
+    conceptMap=buildConceptMap(blob.quizStagesData[active].allAttemptsConceptStats);
+
+  const isLoading=loadingSub[selSubId];
+  const hasErr=!!subErrors[selSubId];
+  const showEmpty=!isLoading&&!hasErr&&conceptList.length===0;
+
+  /* placeholder next-revision date (today+10 d) */
+  const nextRevISO=useMemo(()=>{const d=new Date();d.setDate(d.getDate()+10);return d;},[selSubId]);
+  const nextRevStr=`${nextRevISO.toLocaleDateString("en-GB",{day:"2-digit",month:"short"})} (10 d)`;
+
+  /* render */
   return(
-    <Box sx={{ p:2, bgcolor:"transparent", color:"#fff", height:"100%", overflow:"auto" }}>
+    <Box sx={{p:3,color:"#fff"}}>
+      <Typography variant="h6" gutterBottom>Concept Catalogue</Typography>
 
-      {/* filters */}
-      <Filters {...{subjects,subject,setSubject,topic,setTopic,
-                    chapter,setChapter,subch,setSubch,
-                    topicOpt,chapOpt,subOpt}}/>
+      <FormControl variant="standard" sx={{minWidth:380,mb:2}}>
+        <Select value={selSubId} onChange={e=>setSelSubId(e.target.value)}
+                disableUnderline
+                sx={{bgcolor:"#222",color:"#fff",px:1,py:.5,
+                     "& .MuiSelect-icon":{color:"#fff"}}}>
+          {subOpts.map(o=><MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
+        </Select>
+      </FormControl>
 
-      {rows.length===0? <Typography>No concepts match the filter.</Typography>:
-        <Table size="small" sx={{bgcolor:"#111"}}>
-          <TableHead>
-          <TableRow sx={{ position:"sticky", top:0, zIndex:1, bgcolor:"rgba(255,255,255,.05)", backdropFilter:"blur(4px)" }}>
+      {hasErr&&<Box sx={{color:"red",mb:2}}> {subErrors[selSubId]} </Box>}
 
-              <Head text="Concept"/>
-              <Head text="Wt"           align="center"/>
-              <Head text="Journey"      align="center"/>
-              <Head text="Quiz Hist."   align="center"/>
-              <Head text="Conf"         align="center"/>
-              <Head text="Next Rev."    align="center"/>
+      {selSubId&&(
+        <Box sx={{mb:1,fontSize:14,color:"#bbb",display:"flex",alignItems:"center",gap:1.2,flexWrap:"wrap"}}>
+          <span><b>Book:</b> {meta.book||"—"} &nbsp;|&nbsp;
+            <b>Subject:</b> {meta.subject||"—"} &nbsp;|&nbsp;
+            <b>Grouping:</b> {meta.grouping||"—"} &nbsp;|&nbsp;
+            <b>Chapter:</b> {meta.chapter||"—"}
+          </span>
+          <JourneyPill pct={pctObj}/>
+        </Box>
+      )}
+
+      <Table size="small" sx={{bgcolor:"#111"}}>
+        <TableHead>
+          <TableRow sx={{bgcolor:"#222"}}>
+            <Th>Concept</Th>
+            <Th align="center">Weight</Th>
+            <Th align="center">Status&nbsp;({active==="done"?"All":active})</Th>
+            <Th align="center">Quiz&nbsp;Hist.</Th>
+            <Th align="center">Conf.</Th>
+            <Th align="center">Next&nbsp;Rev.</Th>
+          </TableRow>
+        </TableHead>
+
+        <TableBody>
+          {isLoading&&<TableRow><Td colSpan={6} align="center">Loading…</Td></TableRow>}
+
+          {!isLoading&&conceptList.map(c=>(
+            <TableRow key={c} hover sx={{"&:nth-of-type(odd)":
+                                          {backgroundColor:"#181818"}}}>
+              <Td>{c}</Td>
+              <Td align="center">{weightChip}</Td>
+              <Td align="center">{conceptStatusChip({
+                                   stage:active,
+                                   readingDone,
+                                   result:conceptMap.get(c)||"NOT_TESTED"})}
+              </Td>
+              <Td align="center"><HistoryCell/></Td>
+              <Td align="center">{confChip}</Td>
+              <Td align="center">{nextRevStr}</Td>
             </TableRow>
-          </TableHead>
+          ))}
 
-          <TableBody>
-            {rows.map((r,i)=>{
-              const prev=rows[i-1];
-              const hdr= !prev||prev.subject!==r.subject||prev.topic!==r.topic
-                         ||prev.chapter!==r.chapter||prev.subch!==r.subch;
-
-              return (
-                <React.Fragment key={i}>
-                  {hdr&&(
-                    <TableRow sx={{bgcolor:"#222"}}>
-                      <TableCell colSpan={6} sx={{color:"#FFD700",fontWeight:600}}>
-                        {`${r.subject} › ${r.topic} › ${r.chapter} › ${r.subch}`}
-                      </TableCell>
-                    </TableRow>
-                  )}
-
-                  <TableRow hover>
-                    <Cell>{r.name}</Cell>
-                    <Cell align="center">{weightChip(r.weight)}</Cell>
-                    <TableCell align="center"><JourneyCell stages={r.stages}/></TableCell>
-                    <TableCell align="center"><HistoryCell attempts={r.quizAttempts}/></TableCell>
-                    <Cell align="center">{confChip(r.confidence)}</Cell>
-                    <Cell align="center">
-                      {r.nextRevDate
-                        ? `${new Date(r.nextRevDate)
-                              .toLocaleDateString("en-GB",{day:"2-digit",month:"short"})}
-                           (${daysFromNow(r.nextRevDate)} d)`
-                        : "—"}
-                    </Cell>
-                  </TableRow>
-                </React.Fragment>
-              );
-            })}
-          </TableBody>
-        </Table>}
+          {showEmpty&&<TableRow><Td colSpan={6} align="center">
+            No concepts available for this sub-chapter.
+          </Td></TableRow>}
+        </TableBody>
+      </Table>
     </Box>
   );
 }
 
-/* ───────── small presentational helpers ───────── */
-const Head=({text,align="left"})=>
-  <TableCell align={align}
-    sx={{color:"#FFD700",fontWeight:700,borderBottom:"2px solid #555"}}>
-    {text}
-  </TableCell>;
-
-const Cell=({children,align="left"})=>
+/* tiny cells */
+const Th=({children,align="left"})=>
+  <TableCell align={align} sx={{fontWeight:700,color:"#FFD700"}}>{children}</TableCell>;
+const Td=({children,align="left"})=>
   <TableCell align={align} sx={{color:"#fff"}}>{children}</TableCell>;
-
-const FilterBox = ({label,value,options,onChange})=>(
-  <FormControl variant="standard" sx={{minWidth:140}}>
-    <Typography sx={{fontSize:12,mb:.3,color:"#bbb"}}>{label}</Typography>
-    <Select value={value} onChange={e=>onChange(e.target.value)} disableUnderline
-      sx={{bgcolor:"#222",borderRadius:1,color:"#fff",fontSize:14,px:1,py:0.3,
-           "& .MuiSelect-icon":{color:"#fff"}}}
-      MenuProps={{PaperProps:{sx:{bgcolor:"#222",color:"#fff"}}}}>
-      {options.map(o=><MenuItem key={o} value={o}>{o==="__ALL__"?"All":o}</MenuItem>)}
-    </Select>
-  </FormControl>
-);
-
-const Filters = (p)=>(
-  <Box sx={{display:"flex",gap:2,flexWrap:"wrap",mb:3}}>
-    <FilterBox label="Subject"    value={p.subject} options={["__ALL__",...p.subjects]}
-      onChange={v=>{p.setSubject(v);p.setTopic("__ALL__");p.setChapter("__ALL__");p.setSubch("__ALL__");}}/>
-    <FilterBox label="Topic"      value={p.topic}   options={p.topicOpt}
-      onChange={v=>{p.setTopic(v);p.setChapter("__ALL__");p.setSubch("__ALL__");}}/>
-    <FilterBox label="Chapter"    value={p.chapter} options={p.chapOpt}
-      onChange={v=>{p.setChapter(v);p.setSubch("__ALL__");}}/>
-    <FilterBox label="Sub-chapter" value={p.subch}  options={p.subOpt}
-      onChange={p.setSubch}/>
-  </Box>
-);

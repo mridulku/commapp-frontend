@@ -29,6 +29,8 @@ import AdaptPG              from "./AdaptPG/AdaptPG";
 import AdaptPG2             from "./AdaptPG2/AdaptPG2";
 import AdaptPlayground      from "./AdaptPlayground";
 import ConceptProgressTable from "./ConceptProgressTable";
+import ConceptProgressTableOld from "./ConceptProgressTableOld";
+
 import Adapting             from "./Adapting";
 import AggregatorPanel      from "./AggregatorPanel";
 import DailyOverviewDemo    from "./DailyOverviewDemo";
@@ -135,6 +137,9 @@ export default function Child2({
     { label:"Tasks",        comp: renderAdaptPG2 },
     { label:"Concept Map",  comp: () =>
         <ConceptProgressTable userId={userId} plan={plan} planId={planId} colorScheme={colorScheme}/> },
+    { label:"Concept Map Old",  comp: () =>
+          <ConceptProgressTableOld userId={userId} plan={plan} planId={planId} colorScheme={colorScheme}/> },
+  
     { label:"Activity",     comp: renderTimeline },
     { label:"Progress",    admin:true, comp: renderProgress },
     { label:"Admin",       admin:true, comp: renderAdmin },
