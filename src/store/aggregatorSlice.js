@@ -239,6 +239,20 @@
         }
       }
     );
+
+    // after imports and above slice definition
+export const refreshSubchapter = createAsyncThunk(
+  "aggregator/refreshSubchapter",
+  async (subChapterId, { dispatch }) => {
+    // We already have the heavy‑lifting loader;
+    // just force it to bypass the cache.
+    await dispatch(
+      fetchAggregatorForSubchapter({ subChapterId, force: true })
+    );
+    // nothing to return – the inner thunk updates the store
+    return subChapterId;
+  }
+);
     
     /* ================================================================
        4 ▪ Slice definition

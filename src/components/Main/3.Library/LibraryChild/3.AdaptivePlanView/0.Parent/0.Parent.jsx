@@ -35,6 +35,9 @@ import Adapting             from "./Adapting";
 import AggregatorPanel      from "./AggregatorPanel";
 import DailyOverviewDemo    from "./DailyOverviewDemo";
 
+
+import ConceptProgressTableHeavy from "./ConceptProgressTableHeavy";
+
 import PlanFetcher from "../../../../5.StudyModal/StudyModal";
 import { db }      from "../../../../../../firebase";
 
@@ -139,6 +142,8 @@ export default function Child2({
         <ConceptProgressTable userId={userId} plan={plan} planId={planId} colorScheme={colorScheme}/> },
     { label:"Concept Map Old",  comp: () =>
           <ConceptProgressTableOld userId={userId} plan={plan} planId={planId} colorScheme={colorScheme}/> },
+          { label:"Concept Map Heavy",  comp: () =>
+            <ConceptProgressTableHeavy userId={userId} plan={plan} planId={planId} colorScheme={colorScheme}/> },
   
     { label:"Activity",     comp: renderTimeline },
     { label:"Progress",    admin:true, comp: renderProgress },

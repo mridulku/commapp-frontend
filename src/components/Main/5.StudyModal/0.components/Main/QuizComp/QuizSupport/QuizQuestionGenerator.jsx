@@ -94,21 +94,14 @@ export async function generateQuestions({
     console.log("[generateQuestions] conceptList (after filter) =>", conceptList.map((c) => c.name));
 
     // 4) If no concepts remain => fallback approach (maybe empty or generate overall)
-    if (conceptList.length === 0) {
-      console.log("[generateQuestions] No remaining concepts => generating fallback questions ...");
-      const fallbackQuestions = await generateQuestions_Overall({
-        db,
-        subChapterId,
-        openAiKey,
-        quizConfigData,
-      });
-      console.log("[generateQuestions] returning fallbackQuestions =>", fallbackQuestions.length);
-      return {
-        success: true,
-        error: null,
-        questionsData: { questions: fallbackQuestions },
-      };
-    }
+     if (conceptList.length === 0) {
+         console.log("[generateQuestions] All concepts mastered — returning 0 questions.");
+         return {
+           success: true,
+           error: null,
+           questionsData: { questions: [] },   // <-- key point
+         };
+       }
 
     // 5) If we do have filtered concepts => generate question sets per concept
     let allConceptQuestions = [];

@@ -7,6 +7,7 @@ import { useSelector, useDispatch } from "react-redux";
 import { generateRevisionContent } from "./RevSupport/RevisionContentGenerator";
 import { fetchReviseTime, incrementReviseTime } from "../../../../../../store/reviseTimeSlice";
 import { setCurrentIndex, fetchPlan } from "../../../../../../store/planSlice";
+import { refreshSubchapter } from "../../../../../../store/aggregatorSlice";
 
 function formatTime(totalSeconds) {
   const m = Math.floor(totalSeconds / 60);
@@ -366,6 +367,7 @@ export default function ReviseView({
 await axios.post(
   `${import.meta.env.VITE_BACKEND_URL}/api/submitRevision`,payload);
     console.log("Revision attempt recorded on server!");
+    dispatch(refreshSubchapter(subChapterId));
   }
 
   async function handleTakeQuizNow() {

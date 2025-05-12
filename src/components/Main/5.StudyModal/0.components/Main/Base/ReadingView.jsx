@@ -23,8 +23,10 @@ import SmartToyIcon from "@mui/icons-material/SmartToy";
 import AskAIChat from "./AskAIChat";               // <-- keep the same import path
 import { gptRewrite } from "./gptRewrite";         // <-- keep the same import path
 
+
 import { fetchReadingTime, incrementReadingTime } from "../../../../../../store/readingSlice";
-import { fetchPlan, setCurrentIndex } from "../../../../../../store/planSlice";
+import { fetchPlan, setCurrentIndex }            from "../../../../../../store/planSlice";
+import { refreshSubchapter }                     from "../../../../../../store/aggregatorSlice";  // ⬅️ add this
 
 /* ---------------- rewrite styles ---------------- */
 const STYLES = [
@@ -371,6 +373,8 @@ const resp = await axios.get(
       if (typeof activity.replicaIndex === "number") {
         payload.replicaIndex = activity.replicaIndex;
       }
+
+      await dispatch(refreshSubchapter(subChapterId));
       
 
 await axios.post(

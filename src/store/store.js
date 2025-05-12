@@ -8,7 +8,7 @@ import quizTimeReducer from "./quizTimeSlice";
 import reviseTimeReducer from "./reviseTimeSlice";
 import aggregatorReducer from "./aggregatorSlice";
 import quizReducer from "./quizSlice"; // <-- import the quiz slice
-
+import  planSummaryReducer from "./planSummarySlice"; // <-- import the plan summary slice
 
 
 
@@ -23,7 +23,7 @@ export const store = configureStore({
     quizTime: quizTimeReducer,
     reviseTime: reviseTimeReducer,
     quiz: quizReducer,
-
+    planSummary: planSummaryReducer, // <-- add the plan summary slice
 
     // <-- add the auth slice
     // ... add other slices as needed

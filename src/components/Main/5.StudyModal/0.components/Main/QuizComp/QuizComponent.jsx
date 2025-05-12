@@ -6,6 +6,7 @@ import { useSelector, useDispatch } from "react-redux";
 
 import { fetchQuizTime, incrementQuizTime } from "../../../../../../store/quizTimeSlice";
 import { setCurrentIndex, fetchPlan } from "../../../../../../store/planSlice";
+import { refreshSubchapter } from "../../../../../../store/aggregatorSlice";
 
 // Render each question
 import QuizQuestionRenderer from "./QuizSupport/QuizQuestionRenderer";
@@ -242,6 +243,25 @@ export default function QuizView({
 
         const allQs = result.questionsData?.questions || [];
 
+        // ————— NEW: if nothing to test, jump straight to the pass summary —————
+if (allQs.length === 0) {
+    setGeneratedQuestions([]);   // make sure state is clean
+    setPages([]);                // no pagination
+    setShowGradingResults(true); // show the summary panel
+    setQuizPassed(true);         // toggles the “Finish” button
+    setFinalPercentage("100%");  // cosmetic
+    setStatus("All concepts mastered – no quiz needed.");   // <— add this
+    setLoading(false);     
+          // stop any spinners
+    return;                      // skip normal quiz flow
+  }
+
+
+        
+
+
+        
+
         // fetch subchapter summary for GPT grading context
         let summary = "";
         try {
@@ -456,6 +476,7 @@ export default function QuizView({
       await axios.post(
         `${import.meta.env.VITE_BACKEND_URL}/api/submitQuiz`,payload);
       console.log("Quiz submission saved on server!");
+      dispatch(refreshSubchapter(subChapterId));
     } catch (err) {
       console.error("Error submitting quiz:", err);
       setError("Error submitting quiz: " + err.message);
@@ -521,6 +542,7 @@ export default function QuizView({
           `${import.meta.env.VITE_BACKEND_URL}/api/markActivityCompletion`,payload);
         console.log("[QuizView] handleQuizSuccess => activity completed =>", payload);
       }
+      dispatch(refreshSubchapter(subChapterId));
       if (onQuizComplete) {
         onQuizComplete();
       }

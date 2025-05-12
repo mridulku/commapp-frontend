@@ -1,82 +1,69 @@
 /***********************************************************************
- * ConceptProgressTable.jsx – v10
+ * ConceptProgressTable.jsx – v15
  * --------------------------------------------------------------------
- * • Journey pill (sub-chapter level) stays beside the breadcrumb.
- * • Table now has 6 columns:
- *       Concept | Weight | Stage-Status | Quiz-History | Confidence | Next-Rev
- * • Weight, Quiz-History, Confidence, Next-Revision are **static
- *   placeholders** for now (shown in green/orange chips & dots).
- * • All data-fetch, loading, retry and concept-status logic from v9
- *   remains unchanged.
+ * • On first mount the 1st sub-chapter is selected automatically.
+ * • If the current scope would render >400 concept rows we first
+ *   display a “Loading concepts…” spinner for one animation frame.
  ***********************************************************************/
 
-import React, { useEffect, useMemo, useState } from "react";
-import { useSelector, useDispatch }            from "react-redux";
+import React, {
+  useEffect, useMemo, useState, useLayoutEffect, useRef
+} from "react";
+import { useDispatch, useSelector }            from "react-redux";
 import {
-  selectSubChList,
-  selectConcepts,
-} from "../../../../../../store/planSlice";
-import { fetchAggregatorForSubchapter }        from "../../../../../../store/aggregatorSlice";
+  fetchSubSummary,
+} from "../../../../../../store/planSummarySlice";
+import { selectSubChList }                     from "../../../../../../store/planSlice";
 
 import {
-  Box, Typography,
-  FormControl, Select, MenuItem,
+  Box, Typography, FormControl, Select, MenuItem,
   Table, TableHead, TableRow, TableCell, TableBody,
-  Chip, Tooltip
+  Chip, Tooltip, LinearProgress, CircularProgress
 } from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 
-/* ──────────────── colours ──────────────── */
+/* ───────────── palette ───────────── */
 const CLR = {
-  reading:"#BB86FC", remember:"#80DEEA", understand:"#FFD54F", apply:"#AED581", analyze:"#F48FB1",
+  reading:"#BB86FC", remember:"#80DEEA", understand:"#FFD54F",
+  apply:"#AED581",   analyze:"#F48FB1",
   hi:"#66BB6A", med:"#FFA726", low:"#EF5350",
   pass:"#4CAF50", fail:"#E53935", nt:"#888",
   lock:"#c62828", done:"#2e7d32", dark:"#444"
 };
 const STAGES = ["reading","remember","understand","apply","analyze"];
 
-/* ═════════ helper: tiny chip ═════════ */
-const TinyChip = ({label,bg=CLR.dark,color="#000"})=>(
+/* tiny chip ---------------------------------------------------------- */
+const ChipTiny=({label,bg="#444",color="#fff"})=>(
   <Chip size="small" label={label}
         sx={{bgcolor:bg,color,fontSize:11,m:0.15,"& .MuiChip-label":{px:.8}}}/>
 );
 
-/* ═════════ 1. Journey pill (unchanged from v9) ═════════ */
-function JourneyPill({pct={}}){
-  const state={}, getCur=()=>{
-    let gate=true,cur="analyze";
+/* Journey pill ------------------------------------------------------- */
+function JourneyPill({ pct }){
+  const state={}, cur=(()=>{let g=true,c="analyze";
     STAGES.forEach(st=>{
       const v=pct[st];
-      if(st==="reading"){
-        const r=v==null?0:v; state[st]=r===100?100:r; gate=r===100; return;
-      }
-      if(!gate){state[st]="LOCKED";return;}
-      if(v==null){state[st]=0;gate=false;}
+      if(st==="reading"){const r=v??0;state[st]=r===100?100:r;g=r===100;return;}
+      if(!g){state[st]="LOCKED";return;}
+      if(v==null){state[st]=0;g=false;}
       else if(v>=100){state[st]=100;}
-      else{state[st]=v;gate=false;}
-      if(state[st]!=="LOCKED"&&state[st]<100) cur=st;
-    });return cur;
-  };
-  const cur=getCur();
-  const lbl=state[cur]==="LOCKED"?"Locked"
-           :state[cur]===100?"Done":`${state[cur]}%`;
-
-  const tip=(
-    <Box sx={{fontSize:13}}>
-      {STAGES.map(k=>{
-        const v=state[k];
-        const t=v==="LOCKED"?"🔒 locked":v===100?"✅ 100 %":`${v}%`;
-        return <div key={k} style={{color:CLR[k]}}>
-          <strong style={{textTransform:"capitalize"}}>{k}</strong>: {t}
-        </div>;
-      })}
-    </Box>
-  );
-
-  return (
+      else{state[st]=v;g=false;}
+      if(state[st]!=="LOCKED"&&state[st]<100) c=st;
+    });return c;
+  })();
+  const lbl=state[cur]==="LOCKED"?"Locked":state[cur]===100?"Done":`${state[cur]}%`;
+  const tip=(<Box sx={{fontSize:13}}>
+    {STAGES.map(k=>{
+      const v=state[k],t=v==="LOCKED"?"🔒 locked":v===100?"✅ 100 %":`${v}%`;
+      return <div key={k} style={{color:CLR[k]}}>
+        <strong style={{textTransform:"capitalize"}}>{k}</strong>: {t}
+      </div>;
+    })}
+  </Box>);
+  return(
     <Tooltip arrow title={tip}>
-      <Box sx={{display:"inline-flex",alignItems:"center",gap:.6,cursor:"default"}}>
-        <TinyChip label={`${cur[0].toUpperCase()}${cur.slice(1)} ${lbl}`}
+      <Box sx={{display:"inline-flex",alignItems:"center",gap:.6}}>
+        <ChipTiny label={`${cur[0].toUpperCase()}${cur.slice(1)} ${lbl}`}
                   bg={CLR[cur]} color="#000"/>
         <InfoOutlinedIcon sx={{fontSize:16,color:"#bbb"}}/>
       </Box>
@@ -84,202 +71,244 @@ function JourneyPill({pct={}}){
   );
 }
 
-/* ═════════ 2. Stage-status chip for a concept ═════════ */
-function conceptStatusChip({stage, readingDone, result}){
-  if(!readingDone)    return <TinyChip label="📖 Reading…" bg={CLR.reading} color="#000"/>;
-  if(stage==="done")  return <TinyChip label="🎉 Done"     bg={CLR.done}    color="#000"/>;
-  if(result==="PASS") return <TinyChip label="✅"          bg={CLR.apply}   color="#000"/>;
-  if(result==="FAIL") return <TinyChip label="❌"          bg={CLR.lock}    color="#fff"/>;
-  return <TinyChip label="—" bg={CLR.dark} color="#fff"/>;
+/* status chip -------------------------------------------------------- */
+function statusChip({stage,readingDone,res}){
+  if(!readingDone)    return <ChipTiny label="📖 Reading…" bg={CLR.reading} color="#000"/>;
+  if(stage==="done")  return <ChipTiny label="🎉 Done"     bg={CLR.done}    color="#000"/>;
+  if(res==="PASS")    return <ChipTiny label="✅"          bg={CLR.apply}   color="#000"/>;
+  if(res==="FAIL")    return <ChipTiny label="❌"          bg={CLR.lock}    color="#fff"/>;
+  return <ChipTiny label="—" bg={CLR.dark}/>;
 }
 
-/* ═════════ 3. static placeholder columns ═════════ */
-//   Weight  (Med)
-const weightChip = <TinyChip label="Med"  bg={CLR.med} color="#000"/>;
-//   Confidence (High)
-const confChip   = <TinyChip label="High" bg={CLR.hi}  color="#000"/>;
-//   Quiz-History (three green dots + tooltip)
-const Dot=()=><Box sx={{width:10,height:10,borderRadius:"50%",bgcolor:CLR.pass}}/>;
-const histTip=(<Box sx={{fontSize:13,lineHeight:1.4}}>
-  <div>Attempt&nbsp;1&nbsp;: ✅ Pass</div>
-  <div>Attempt&nbsp;2&nbsp;: ✅ Pass</div>
-  <div>Attempt&nbsp;3&nbsp;: ✅ Pass</div>
-</Box>);
-const HistoryCell=()=>(
-  <Tooltip title={histTip} arrow>
-    <Box sx={{display:"flex",gap:.6,justifyContent:"center"}}><Dot/><Dot/><Dot/></Box>
+/* static placeholders ------------------------------------------------ */
+const weightChip=<ChipTiny label="Med"  bg={CLR.med} color="#000"/>;
+const confChip  =<ChipTiny label="High" bg={CLR.hi}  color="#000"/>;
+const HistDots  =()=>(
+  <Tooltip arrow title={<Box sx={{fontSize:13,lineHeight:1.4}}>
+     Attempt&nbsp;1&nbsp;: ✅<br/>Attempt&nbsp;2&nbsp;: ✅
+  </Box>}>
+    <Box sx={{display:"flex",gap:.6,justifyContent:"center"}}>
+      {[0,1,2].map(i=>
+        <Box key={i} sx={{width:10,height:10,borderRadius:"50%",bgcolor:CLR.pass}}/>
+      )}
+    </Box>
   </Tooltip>
 );
 
-/* ═════════ 4. tiny helpers from v9 (readingPct, stagePct, buildConceptMap) ═════════ */
-const readingPct=rec=>{
-  if(!rec) return 0;
-  if(rec.locked) return null;
-  const s=(rec.status||"").toLowerCase();
-  if(s==="done") return 100;
-  if(s==="in-progress") return 50;
-  return 0;
+/* helpers ------------------------------------------------------------ */
+const pctFromStats=s=>{
+  const vals=Object.values(s||{}); if(!vals.length) return null;
+  return Math.round(vals.filter(v=>v==="PASS").length/vals.length*100);
 };
-function parseRatio(str=""){
-  const t=str.trim(); if(!t) return NaN;
-  if(t.endsWith("%")){const n=parseFloat(t);return isNaN(n)?NaN:n/100;}
-  if(t.includes("/")){const [n,d]=t.split("/").map(parseFloat);return d>0?n/d:NaN;}
-  const n=parseFloat(t); return isNaN(n)?NaN:(n<=1?n:n/100);
-}
-function buildConceptMap(arr=[]){
-  const m=new Map();
-  arr.forEach(att=>(att.conceptStats||[]).forEach(c=>{
-    if(!m.has(c.conceptName)||m.get(c.conceptName)!=="PASS") m.set(c.conceptName,c.passOrFail);
-  }));
-  return m;
-}
-function stagePct(blob,stage){
-  const node=blob?.quizStagesData?.[stage];
-  if(node?.overallPct!=null){
-    const raw=node.overallPct; return Math.min(100,Math.round(raw<=1?raw*100:raw));
-  }
-  if(node?.allAttemptsConceptStats?.length){
-    const m=buildConceptMap(node.allAttemptsConceptStats);
-    const total=m.size,pass=[...m.values()].filter(v=>v==="PASS").length;
-    if(total) return Math.round(pass/total*100);
-  }
-  const att=node?.quizAttempts||[]; if(att.length){
-    const r=parseRatio(att[0].score); if(!isNaN(r)) return Math.min(100,Math.round(r*100));
-  }
-  return null;
-}
+const conceptNamesFromSummary=s=>{
+  if(!s?.conceptStats) return [];
+  const first = s.conceptStats.remember
+             || s.conceptStats.understand
+             || s.conceptStats.apply
+             || s.conceptStats.analyze
+             || {};
+  return Object.keys(first).sort((a,b)=>a.localeCompare(b));
+};
 
-/* ═════════ 5. component ═════════ */
+/* main component ----------------------------------------------------- */
 export default function ConceptProgressTable(){
 
-  /* redux & fetch (unchanged) */
-  const dispatch=useDispatch();
-  const subChapters=useSelector(selectSubChList);
-  const conceptsArr=useSelector(selectConcepts);
-  const subMap     =useSelector(s=>s.aggregator.subchapterMap);
-  const subErrors  =useSelector(s=>s.aggregator.subchapterErrors);
+  const dispatch   = useDispatch();
+  const planId     = useSelector(s=>s.plan.planDoc?.id);
+  const allSubs    = useSelector(selectSubChList);
+  const summaries  = useSelector(s=>s.planSummary.entities);
 
-  const [selSubId,setSelSubId]=useState(subChapters[0]?.subChapterId||"");
-  const [loadingSub,setLoadingSub]=useState({});
-
+  /* ---------- auto-pick first sub on first load ---------- */
+  const firstPickDone = useRef(false);
   useEffect(()=>{
-    if(!selSubId) return;
-    setLoadingSub(ls=>({...ls,[selSubId]:true}));
-    dispatch(fetchAggregatorForSubchapter({subChapterId:selSubId}))
-      .finally(()=>setLoadingSub(ls=>({...ls,[selSubId]:false})));
-  },[selSubId,dispatch]);
+    if(firstPickDone.current) return;
+    if(allSubs.length){
+      const first = allSubs[0];
+      setBook(first.book); setSubject(first.subject);
+      setGrouping(first.grouping); setChapter(first.chapter);
+      setSubId(first.subChapterId);
+      firstPickDone.current = true;
+    }
+  },[allSubs]);
 
-  const subOpts=useMemo(()=>subChapters.map(sc=>({
-    value:sc.subChapterId,
-    label:`${sc.book} › ${sc.grouping} › ${sc.subChapter}`
-  })),[subChapters]);
+  /* filters ------------------------------------------------ */
+  const [book,setBook]         = useState("__ALL__");
+  const [subject,setSubject]   = useState("__ALL__");
+  const [grouping,setGrouping] = useState("__ALL__");
+  const [chapter,setChapter]   = useState("__ALL__");
+  const [subId,setSubId]       = useState("__ALL__");
 
-  const meta=useMemo(()=>subChapters.find(s=>s.subChapterId===selSubId)||{},
-                     [selSubId,subChapters]);
-  const conceptList=useMemo(()=>conceptsArr.filter(c=>c.subChapterId===selSubId)
-                                           .map(c=>c.conceptName)
-                                           .sort((a,b)=>(a||"").localeCompare(b||"")),
-                            [selSubId,conceptsArr]);
+  const match=(w,v)=>w==="__ALL__"||w===v;
+  const books     = useMemo(()=>Array.from(new Set(allSubs.map(s=>s.book))),[allSubs]);
+  const subjects  = useMemo(()=>Array.from(new Set(allSubs.filter(s=>match(book ,s.book))
+                                                           .map(s=>s.subject))),[book,allSubs]);
+  const groupings = useMemo(()=>Array.from(new Set(allSubs.filter(s=>match(book ,s.book)
+                                                                   && match(subject,s.subject))
+                                                         .map(s=>s.grouping))),[book,subject,allSubs]);
+  const chapters  = useMemo(()=>Array.from(new Set(allSubs.filter(s=>match(book ,s.book)
+                                                                   && match(subject,s.subject)
+                                                                   && match(grouping,s.grouping))
+                                                         .map(s=>s.chapter))),[book,subject,grouping,allSubs]);
+  const subs      = useMemo(()=>allSubs.filter(s=>match(book ,s.book)
+                                            && match(subject,s.subject)
+                                            && match(grouping,s.grouping)
+                                            && match(chapter ,s.chapter)),[book,subject,grouping,chapter,allSubs]);
 
-  const blob=subMap[selSubId]||{};
-  const readingRec=blob.taskInfo?.find(t=>(t.stageLabel||"").toLowerCase()==="reading");
+  const rows = useMemo(()=>{
+    if(subId!=="__ALL__"){
+      const sub = subs.find(s=>s.subChapterId===subId);
+      return sub ? [sub] : [];
+    }
+    return subs;
+  },[subs,subId]);
 
-  const pctObj={
-    reading   :readingPct(readingRec),
-    remember  :stagePct(blob,"remember"),
-    understand:stagePct(blob,"understand"),
-    apply     :stagePct(blob,"apply"),
-    analyze   :stagePct(blob,"analyze")
-  };
+  /* fetch needed summaries --------------------------------- */
+  useEffect(()=>{
+    if(!planId) return;
+    rows.forEach(r=>{
+      if(!summaries?.[r.subChapterId])
+        dispatch(fetchSubSummary({planId,subId:r.subChapterId}));
+    });
+  },[rows,planId,summaries,dispatch]);
 
-  /* determine active stage & concept PASS/FAIL map */
-  const readingDone=pctObj.reading===100;
-  let active="reading";
-  if(readingDone){
-    for(const st of ["remember","understand","apply","analyze"])
-      if(pctObj[st]==null||pctObj[st]<100){active=st;break;}
-    if(pctObj.analyze===100) active="done";
+  /* wait until summaries present */
+  const ready = rows.every(r=>!!summaries?.[r.subChapterId]);
+
+  /* ---------- build concept rows ---------- */
+  const conceptRows = ready ? rows.flatMap(sub=>{
+    const summary = summaries[sub.subChapterId];
+    const list    = conceptNamesFromSummary(summary);
+    return list.map(c=>({sub,summary,concept:c}));
+  }) : [];
+
+  /* ---------- deferred heavy render if >400 rows ---------- */
+  const [deferredReady,setDeferredReady]=useState(false);
+  const giant = conceptRows.length>400;
+  useLayoutEffect(()=>{
+    if(!giant) { setDeferredReady(true); return; }
+    // defer one animation frame so UI can paint spinner
+    setDeferredReady(false);
+    const id=requestAnimationFrame(()=>setDeferredReady(true));
+    return()=>cancelAnimationFrame(id);
+  },[giant,conceptRows.length]);
+
+  /* ---------- loading states ---------- */
+  if(!ready || !deferredReady){
+    return(
+      <Box sx={{p:3,color:"#fff",display:"flex",justifyContent:"center",mt:6}}>
+        <CircularProgress size={28} sx={{mr:1}}/>
+        <Typography>Loading concepts…</Typography>
+      </Box>
+    );
   }
-  let conceptMap=new Map();
-  if(active!=="reading"&&active!=="done"&&blob.quizStagesData?.[active]?.allAttemptsConceptStats)
-    conceptMap=buildConceptMap(blob.quizStagesData[active].allAttemptsConceptStats);
 
-  const isLoading=loadingSub[selSubId];
-  const hasErr=!!subErrors[selSubId];
-  const showEmpty=!isLoading&&!hasErr&&conceptList.length===0;
+  /* progress bar stub */
+  const fakePct=30;
 
-  /* placeholder next-revision date (today+10 d) */
-  const nextRevISO=useMemo(()=>{const d=new Date();d.setDate(d.getDate()+10);return d;},[selSubId]);
-  const nextRevStr=`${nextRevISO.toLocaleDateString("en-GB",{day:"2-digit",month:"short"})} (10 d)`;
-
-  /* render */
   return(
     <Box sx={{p:3,color:"#fff"}}>
       <Typography variant="h6" gutterBottom>Concept Catalogue</Typography>
 
-      <FormControl variant="standard" sx={{minWidth:380,mb:2}}>
-        <Select value={selSubId} onChange={e=>setSelSubId(e.target.value)}
-                disableUnderline
-                sx={{bgcolor:"#222",color:"#fff",px:1,py:.5,
-                     "& .MuiSelect-icon":{color:"#fff"}}}>
-          {subOpts.map(o=><MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
-        </Select>
-      </FormControl>
+      <FilterRow {...{
+        book,books,setBook,
+        subject,subjects,setSubject,
+        grouping,groupings,setGrouping,
+        chapter,chapters,setChapter,
+        subId,setSubId,subs
+      }}/>
 
-      {hasErr&&<Box sx={{color:"red",mb:2}}> {subErrors[selSubId]} </Box>}
-
-      {selSubId&&(
-        <Box sx={{mb:1,fontSize:14,color:"#bbb",display:"flex",alignItems:"center",gap:1.2,flexWrap:"wrap"}}>
-          <span><b>Book:</b> {meta.book||"—"} &nbsp;|&nbsp;
-            <b>Subject:</b> {meta.subject||"—"} &nbsp;|&nbsp;
-            <b>Grouping:</b> {meta.grouping||"—"} &nbsp;|&nbsp;
-            <b>Chapter:</b> {meta.chapter||"—"}
-          </span>
-          <JourneyPill pct={pctObj}/>
-        </Box>
-      )}
+      <Box sx={{mt:1,mb:3}}>
+        <LinearProgress variant="determinate" value={fakePct}
+          sx={{height:8,borderRadius:1,bgcolor:"#333",
+              "& .MuiLinearProgress-bar":{bgcolor:"#FFD700"}}}/>
+        <Typography sx={{fontSize:12,mt:.4}}>{fakePct}% completed</Typography>
+      </Box>
 
       <Table size="small" sx={{bgcolor:"#111"}}>
-        <TableHead>
-          <TableRow sx={{bgcolor:"#222"}}>
-            <Th>Concept</Th>
-            <Th align="center">Weight</Th>
-            <Th align="center">Status&nbsp;({active==="done"?"All":active})</Th>
-            <Th align="center">Quiz&nbsp;Hist.</Th>
-            <Th align="center">Conf.</Th>
-            <Th align="center">Next&nbsp;Rev.</Th>
-          </TableRow>
-        </TableHead>
-
+        <TableHead><TableRow sx={{bgcolor:"#222"}}>
+          <Th>Concept</Th><Th align="center">Weight</Th>
+          <Th align="center">Status</Th><Th align="center">Quiz&nbsp;Hist.</Th>
+          <Th align="center">Conf.</Th><Th align="center">Next&nbsp;Rev.</Th>
+        </TableRow></TableHead>
         <TableBody>
-          {isLoading&&<TableRow><Td colSpan={6} align="center">Loading…</Td></TableRow>}
+          {conceptRows.length===0 && (
+            <TableRow><Td colSpan={6} align="center">No concepts.</Td></TableRow>)}
 
-          {!isLoading&&conceptList.map(c=>(
-            <TableRow key={c} hover sx={{"&:nth-of-type(odd)":
-                                          {backgroundColor:"#181818"}}}>
-              <Td>{c}</Td>
-              <Td align="center">{weightChip}</Td>
-              <Td align="center">{conceptStatusChip({
-                                   stage:active,
-                                   readingDone,
-                                   result:conceptMap.get(c)||"NOT_TESTED"})}
-              </Td>
-              <Td align="center"><HistoryCell/></Td>
-              <Td align="center">{confChip}</Td>
-              <Td align="center">{nextRevStr}</Td>
-            </TableRow>
-          ))}
-
-          {showEmpty&&<TableRow><Td colSpan={6} align="center">
-            No concepts available for this sub-chapter.
-          </Td></TableRow>}
+          {conceptRows.map(({sub,summary,concept})=>{
+            const pctObj={
+              reading:summary.readingPct??0,
+              remember:pctFromStats(summary.conceptStats?.remember),
+              understand:pctFromStats(summary.conceptStats?.understand),
+              apply:pctFromStats(summary.conceptStats?.apply),
+              analyze:pctFromStats(summary.conceptStats?.analyze)
+            };
+            const readingDone=pctObj.reading===100;
+            let active="reading";
+            if(readingDone){
+              for(const st of ["remember","understand","apply","analyze"])
+                if(pctObj[st]==null||pctObj[st]<100){active=st;break;}
+              if(pctObj.analyze===100) active="done";
+            }
+            const conceptMap=summary.conceptStats?.[active]||{};
+            return(
+              <TableRow key={`${sub.subChapterId}|${concept}`}
+                        hover sx={{"&:nth-of-type(odd)":
+                                   {bgcolor:"#181818"}}}>
+                <Td>{concept}</Td>
+                <Td align="center">{weightChip}</Td>
+                <Td align="center">
+                  {statusChip({stage:active,readingDone,
+                               res:conceptMap[concept]})}
+                </Td>
+                <Td align="center"><HistDots/></Td>
+                <Td align="center">{confChip}</Td>
+                <Td align="center">—</Td>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     </Box>
   );
 }
 
-/* tiny cells */
+/* ────────── filter helpers ────────── */
+const FilterBox=({label,value,setValue,options})=>(
+  <FormControl variant="standard" sx={{minWidth:150}}>
+    <Typography sx={{fontSize:12,mb:.3,color:"#bbb"}}>{label}</Typography>
+    <Select value={value} onChange={e=>setValue(e.target.value)} disableUnderline
+      sx={{bgcolor:"#222",borderRadius:1,color:"#fff",fontSize:14,px:1,py:.3,
+           "& .MuiSelect-icon":{color:"#fff"}}}
+      MenuProps={{PaperProps:{sx:{bgcolor:"#222",color:"#fff"}}}}>
+      <MenuItem value="__ALL__">All</MenuItem>
+      {options.map(o=><MenuItem key={o} value={o}>{o}</MenuItem>)}
+    </Select>
+  </FormControl>
+);
+
+function FilterRow(p){
+  return(
+    <Box sx={{display:"flex",gap:2,flexWrap:"wrap"}}>
+      <FilterBox label="Book"      value={p.book}
+        setValue={v=>{p.setBook(v);p.setSubject("__ALL__");p.setGrouping("__ALL__");p.setChapter("__ALL__");p.setSubId("__ALL__");}}
+        options={p.books}/>
+      <FilterBox label="Subject"   value={p.subject}
+        setValue={v=>{p.setSubject(v);p.setGrouping("__ALL__");p.setChapter("__ALL__");p.setSubId("__ALL__");}}
+        options={p.subjects}/>
+      <FilterBox label="Grouping"  value={p.grouping}
+        setValue={v=>{p.setGrouping(v);p.setChapter("__ALL__");p.setSubId("__ALL__");}}
+        options={p.groupings}/>
+      <FilterBox label="Chapter"   value={p.chapter}
+        setValue={v=>{p.setChapter(v);p.setSubId("__ALL__");}}
+        options={p.chapters}/>
+      <FilterBox label="Sub-chapter" value={p.subId}
+        setValue={p.setSubId}
+        options={p.subs.map(s=>s.subChapterId)}/>
+    </Box>
+  );
+}
+
+/* ───────────── tiny cells ───────────── */
 const Th=({children,align="left"})=>
   <TableCell align={align} sx={{fontWeight:700,color:"#FFD700"}}>{children}</TableCell>;
 const Td=({children,align="left"})=>
