@@ -61,16 +61,29 @@ export default function useTaskModel(
             label: stageKey,
           };
 
+        const isCum =
+          stageKey === "cumulativequiz" || stageKey === "cumulativerevision";
+
         /* ---------- aggregator slices ---------- */
-        const subObj   = subchapterStatusMap?.[act.subChapterId];
-        const stageObj = subObj?.quizStagesData?.[stageKey] ?? {};
-        const statsArr = stageObj.allAttemptsConceptStats ?? [];
+        let subObj   = null;
+        let stageObj = {};
+        let statsArr = [];
+
+        if (!isCum) {
+          subObj   = subchapterStatusMap?.[act.subChapterId];
+          stageObj = subObj?.quizStagesData?.[stageKey] ?? {};
+          statsArr = stageObj.allAttemptsConceptStats ?? [];
+        }
 
         /* ---------- concept mastery ---------- */
-        const conceptMap   = buildConceptStats(statsArr);
+        const conceptMap   = isCum ? new Map() : buildConceptStats(statsArr);
         const totalConcept = conceptMap.size;
-        const mastered     = [...conceptMap.values()].filter((v) => v === "PASS").length;
-        const quizPct      = totalConcept ? Math.round((mastered / totalConcept) * 100) : 0;
+        const mastered     = isCum
+          ? 0
+          : [...conceptMap.values()].filter((v) => v === "PASS").length;
+        const quizPct      = totalConcept
+          ? Math.round((mastered / totalConcept) * 100)
+          : 0;
 
         /* ---------- reading progress ---------- */
         const readSum   = subObj?.readingSummary || {};
@@ -80,18 +93,21 @@ export default function useTaskModel(
           ? Math.round(readSum.percent)
           : 0;
 
-        const pct = meta.label === "Read" ? readingPct : quizPct;
+        let pct;
+        if (meta.label === "Read")            pct = readingPct;
+        else if (isCum)                       pct = act.completed ? 100 : 0;
+        else                                   pct = quizPct;
 
         /* ---------- attempts & buckets (quiz only) ---------- */
         let attemptsSoFar = [];
         let nextActivity  = null;
         let attBefore = [],
-          attToday  = [],
-          attAfter  = [];
+            attToday  = [],
+            attAfter  = [];
 
-        if (meta.label !== "Read") {
-          const q = stageObj.quizAttempts ?? [];
-          const r = stageObj.revisionAttempts ?? [];
+        if (!isCum && meta.label !== "Read") {
+          const q   = stageObj.quizAttempts     ?? [];
+          const r   = stageObj.revisionAttempts ?? [];
           const all = [
             ...q.map((o) => ({ ...o, type: "quiz" })),
             ...r.map((o) => ({ ...o, type: "revision" })),
@@ -101,10 +117,10 @@ export default function useTaskModel(
             `${at.type === "quiz" ? "Q" : "R"}${at.attemptNumber || at.revisionNumber || 1}`;
           attemptsSoFar = all.map(tag);
 
-          /* next activity recommendation */
+          /* next-activity recommendation (normal quizzes only) */
           if (pct < 100) {
             const qCnt = q.length,
-              rCnt = r.length;
+                  rCnt = r.length;
             if (qCnt === 0 && rCnt === 0) nextActivity = "Q1";
             else if (qCnt === rCnt)       nextActivity = `Q${qCnt + 1}`;
             else if (qCnt === rCnt + 1)   nextActivity = `R${qCnt}`;
@@ -124,35 +140,39 @@ export default function useTaskModel(
 
         /* ---------- overall status ---------- */
         const hasAgg =
-          meta.label === "Read"
+          isCum
+            ? true                                      // cumulative tasks need no aggregator
+            : meta.label === "Read"
             ? true
             : !!subObj && timeMap[act.activityId] !== undefined;
 
         let status;
-        if (!hasAgg)        status = "loading";
-        else if (pct === 100) status = "completed";
-        else if (pct > 0)     status = "partial";
-        else                  status = "notstarted";
+        if (!hasAgg)            status = "loading";
+        else if (pct === 100)   status = "completed";
+        else if (pct > 0)       status = "partial";
+        else                    status = "notstarted";
 
+        /* ---------- return render-ready object ---------- */
         return {
           /* navigation */
           flatIndex: act.flatIndex ?? idx,
-          id: act.activityId,
+          id       : act.activityId,
 
           /* flags */
           meta,
           status,
-          locked:   (act.aggregatorStatus || "").toLowerCase() === "locked",
-          deferred: !!act.deferred,
+          isCumulative : isCum,
+          locked       : (act.aggregatorStatus || "").toLowerCase() === "locked",
+          deferred     : !!act.deferred,
 
           /* labels */
-          subch:   act.subChapterName || act.subChapterId,
-          book:    act.bookName       || "—",
+          subch  : act.subChapterName || act.subChapterId,
+          book   : act.bookName       || "—",
           chapter: act.chapterName    || "—",
 
           /* timing */
           spentMin: Math.round((timeMap[act.activityId] || 0) / 60),
-          expMin:   act.timeNeeded || 0,
+          expMin  : act.timeNeeded || (isCum ? 5 : 0),
 
           /* progress & concepts */
           pct,

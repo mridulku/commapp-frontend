@@ -1,3 +1,4 @@
+// TaskCard.jsx  (updated)
 import React from "react";
 import {
   Box,
@@ -6,18 +7,27 @@ import {
   Tooltip,
 } from "@mui/material";
 import ArrowRightAltIcon from "@mui/icons-material/ArrowRightAlt";
-import Loader from "./Loader";                // ⬅ added
+import Loader from "./Loader";                  // still used elsewhere
 
-/* ---------- colours ---------- */
+/* ---------- common colours ---------- */
 const CLR_COMPLETE = "#4CAF50";
 const CLR_PARTIAL  = "#FFB300";
 const CLR_NONE     = "#E53935";
 
-/* ---------- tiny helper row ---------- */
-function Row({ icon, label, bold = false, color = "#fff" }) {
+/* ---------- helper row ---------- */
+function Row({ icon, label, bold = false, color = "#fff", center = false }) {
   return (
-    <Box sx={{ display: "flex", alignItems: "center", mb: 0.3 }}>
-      <Box sx={{ width: 18, textAlign: "center", mr: 0.6 }}>{icon}</Box>
+    <Box
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        mb: 0.3,
+        justifyContent: center ? "center" : "flex-start",
+      }}
+    >
+      <Box sx={{ width: 18, textAlign: "center", mr: center ? 0.6 : 0.6 }}>
+        {icon}
+      </Box>
       <Typography
         sx={{
           fontSize: 12,
@@ -59,14 +69,21 @@ function Locked() {
 export default function TaskCard({ t, onOpen, selected = false }) {
   const { meta, status, deferred } = t;
 
-  /* ---------- color presets ---------- */
-  const border =
+  /* ---------- detect cumulative ---------- */
+  const isCum =
+    meta.label === "Cumulative Quiz" || meta.label === "Cumulative Rev.";
+
+  /* ---------- colour presets ---------- */
+  const accent    = isCum ? "#AB47BC" : meta.color;
+  const borderClr =
     status === "completed" ? CLR_COMPLETE :
     status === "partial"   ? CLR_PARTIAL  :
+    status === "loading"   ? "#555"       :
                              CLR_NONE;
-  const bg =
+  const bgClr =
     status === "completed" ? "rgba(76,175,80,.15)"  :
     status === "partial"   ? "rgba(255,152,0,.15)"  :
+    isCum                  ? "rgba(171,71,188,.12)" : // soft purple
                              "rgba(229,57,53,.15)";
 
   const badge =
@@ -87,6 +104,9 @@ export default function TaskCard({ t, onOpen, selected = false }) {
       )
     : "No concepts";
 
+  /* ============================================================= */
+  /*                       RENDER STARTS HERE                      */
+  /* ============================================================= */
   return (
     <Box
       onClick={onOpen}
@@ -94,8 +114,8 @@ export default function TaskCard({ t, onOpen, selected = false }) {
         position: "relative",
         p: 1.2,
         cursor: "pointer",
-        bgcolor: bg,
-        border: `2px solid ${border}`,
+        bgcolor: bgClr,
+        border: `2px solid ${isCum ? accent : borderClr}`,
         boxSizing: "border-box",
         borderRadius: 2,
         display: "flex",
@@ -103,10 +123,12 @@ export default function TaskCard({ t, onOpen, selected = false }) {
         width: "100%",
         transition: "transform .15s",
         "&:hover": { transform: "translateY(-3px)" },
+        minHeight: isCum ? 120 : 0,         // shrink cumulative card
       }}
     >
       {t.locked && <Locked />}
 
+      {/* floating arrow on currently open card */}
       {selected && (
         <Box
           sx={{
@@ -129,122 +151,183 @@ export default function TaskCard({ t, onOpen, selected = false }) {
         </Box>
       )}
 
-      {/* ---------- header ---------- */}
-      <Tooltip title={t.subch}>
-        <Typography
-          sx={{
-            fontWeight: 700,
-            fontSize: ".88rem",
-            color: meta.color,
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            mb: 0.6,
-          }}
-        >
-          {t.subch}
-        </Typography>
-      </Tooltip>
+      {/* ----------------------------------------------------------- */}
+      {/*       A.  CUSTOM LAYOUT for CUMULATIVE (quiz / revision)    */}
+      {/* ----------------------------------------------------------- */}
+      {isCum && (
+        <>
+          <Box
+            sx={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              textAlign: "center",
+            }}
+          >
+            {/* big icon + label */}
+            <Typography
+              sx={{
+                fontSize: "1rem",
+                fontWeight: 700,
+                color: accent,
+                display: "flex",
+                alignItems: "center",
+                gap: 0.5,
+              }}
+            >
+              <span style={{ fontSize: "1.3rem" }}>{meta.icon}</span>
+              {meta.label}
+            </Typography>
 
-      {/* ---------- status badge ---------- */}
-      <Typography sx={{ fontSize: 11, fontWeight: 700, color: border }}>
-        {badge}
-      </Typography>
-      {deferred && (
-        <Typography sx={{ fontSize: 11, color: "#ccc" }}>
-          Deferred to next day
-        </Typography>
+            {/* status badge */}
+            <Typography sx={{ fontSize: 11, fontWeight: 700, color: borderClr, mt: 0.4 }}>
+              {badge}
+            </Typography>
+
+            {/* time row */}
+            <Row
+              icon="⏱"
+              label={`${t.spentMin}/${t.expMin} min`}
+              center
+              color="#fff"
+            />
+          </Box>
+
+          {deferred && (
+            <Typography
+              sx={{ fontSize: 11, color: "#ccc", textAlign: "center", mt: 0.6 }}
+            >
+              Deferred to next day
+            </Typography>
+          )}
+        </>
       )}
 
-      {/* ---------- common rows ---------- */}
-      <Row icon={meta.icon} label={meta.label} bold color={meta.color} />
-      <Row icon="📚" label={t.book} />
-      <Row icon="📄" label={t.chapter} />
-      <Row icon="⏱" label={`${t.spentMin}/${t.expMin} min`} />
-
-      {/* ---------- CONTENT AREA ---------- */}
-      {meta.label !== "Read" && (
+      {/* ----------------------------------------------------------- */}
+      {/*                B.  DEFAULT LAYOUT (unchanged)               */}
+      {/* ----------------------------------------------------------- */}
+      {!isCum && (
         <>
-          <Box sx={{ flex: 1 }} />
+          {/* ---------- header ---------- */}
+          <Tooltip title={t.subch}>
+            <Typography
+              sx={{
+                fontWeight: 700,
+                fontSize: ".88rem",
+                color: meta.color,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                mb: 0.6,
+              }}
+            >
+              {t.subch}
+            </Typography>
+          </Tooltip>
 
-          {/* --- A. Loading placeholder --- */}
-          {status === "loading" && (
-            <Box sx={{ mt: 1 }}>
-              <LinearProgress
-                variant="indeterminate"
-                sx={{
-                  height: 6,
-                  borderRadius: 2,
-                  bgcolor: "#333",
-                  "& .MuiLinearProgress-bar": { bgcolor: meta.color },
-                }}
-              />
-              <Typography
-                sx={{ mt: 0.4, fontSize: 11, color: "#ccc", textAlign: "center" }}
-              >
-                Fetching status…
-              </Typography>
-            </Box>
+          {/* ---------- status badge ---------- */}
+          <Typography sx={{ fontSize: 11, fontWeight: 700, color: borderClr }}>
+            {badge}
+          </Typography>
+          {deferred && (
+            <Typography sx={{ fontSize: 11, color: "#ccc" }}>
+              Deferred to next day
+            </Typography>
           )}
 
-          {/* --- B. Real progress once fetched --- */}
-          {status !== "loading" && (
-            <>
-              <LinearProgress
-                variant="determinate"
-                value={t.pct}
-                sx={{
-                  height: 6,
-                  borderRadius: 2,
-                  bgcolor: "#333",
-                  "& .MuiLinearProgress-bar": { bgcolor: meta.color },
-                }}
-              />
-              <Box
-                sx={{
-                  mt: 0.4,
-                  fontSize: 11,
-                  display: "flex",
-                  justifyContent: "space-between",
-                  color: "#fff",
-                }}
-              >
-                <span>{t.pct}%</span>
-                <Tooltip title={conceptTip} arrow>
-                  <span style={{ cursor: "help", textDecoration: "underline" }}>
-                    {t.mastered}/{t.total} concepts
-                  </span>
-                </Tooltip>
-              </Box>
+          {/* ---------- common rows ---------- */}
+          <Row icon={meta.icon} label={meta.label} bold color={meta.color} />
+          <Row icon="📚" label={t.book} />
+          <Row icon="📄" label={t.chapter} />
+          <Row icon="⏱" label={`${t.spentMin}/${t.expMin} min`} />
 
-              {/* attempt buckets */}
-              <Box sx={{ mt: 0.8, fontSize: 11, lineHeight: 1.35 }}>
-                <div>
-                  <strong>Attempts so far:&nbsp;</strong>
-                  {t.attemptsSoFar.length ? t.attemptsSoFar.join(", ") : "—"}
-                </div>
-                {t.nextActivity && (
-                  <div>
-                    <strong>Next activity:&nbsp;</strong>{t.nextActivity}
-                  </div>
-                )}
-                {t.attBefore.length + t.attToday.length + t.attAfter.length > 0 && (
-                  <Box sx={{ mt: 0.6 }}>
-                    <div>
-                      <strong>Before:&nbsp;</strong>
-                      {t.attBefore.length ? t.attBefore.join(", ") : "—"}
-                    </div>
-                    <div>
-                      <strong>This day:&nbsp;</strong>
-                      {t.attToday.length ? t.attToday.join(", ") : "—"}
-                    </div>
-                    <div>
-                      <strong>Later:&nbsp;</strong>
-                      {t.attAfter.length ? t.attAfter.join(", ") : "—"}
-                    </div>
+          {/* ---------- CONTENT AREA ---------- */}
+          {meta.label !== "Read" && (
+            <>
+              <Box sx={{ flex: 1 }} />
+
+              {/* --- A. Loading placeholder --- */}
+              {status === "loading" && (
+                <Box sx={{ mt: 1 }}>
+                  <LinearProgress
+                    variant="indeterminate"
+                    sx={{
+                      height: 6,
+                      borderRadius: 2,
+                      bgcolor: "#333",
+                      "& .MuiLinearProgress-bar": { bgcolor: meta.color },
+                    }}
+                  />
+                  <Typography
+                    sx={{ mt: 0.4, fontSize: 11, color: "#ccc", textAlign: "center" }}
+                  >
+                    Fetching status…
+                  </Typography>
+                </Box>
+              )}
+
+              {/* --- B. Real progress once fetched --- */}
+              {status !== "loading" && (
+                <>
+                  <LinearProgress
+                    variant="determinate"
+                    value={t.pct}
+                    sx={{
+                      height: 6,
+                      borderRadius: 2,
+                      bgcolor: "#333",
+                      "& .MuiLinearProgress-bar": { bgcolor: meta.color },
+                    }}
+                  />
+                  <Box
+                    sx={{
+                      mt: 0.4,
+                      fontSize: 11,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      color: "#fff",
+                    }}
+                  >
+                    <span>{t.pct}%</span>
+                    <Tooltip title={conceptTip} arrow>
+                      <span style={{ cursor: "help", textDecoration: "underline" }}>
+                        {t.mastered}/{t.total} concepts
+                      </span>
+                    </Tooltip>
                   </Box>
-                )}
-              </Box>
+
+                  {/* attempt buckets */}
+                  <Box sx={{ mt: 0.8, fontSize: 11, lineHeight: 1.35 }}>
+                    <div>
+                      <strong>Attempts so far:&nbsp;</strong>
+                      {t.attemptsSoFar.length ? t.attemptsSoFar.join(", ") : "—"}
+                    </div>
+                    {t.nextActivity && (
+                      <div>
+                        <strong>Next activity:&nbsp;</strong>{t.nextActivity}
+                      </div>
+                    )}
+                    {t.attBefore.length + t.attToday.length + t.attAfter.length > 0 && (
+                      <Box sx={{ mt: 0.6 }}>
+                        <div>
+                          <strong>Before:&nbsp;</strong>
+                          {t.attBefore.length ? t.attBefore.join(", ") : "—"}
+                        </div>
+                        <div>
+                          <strong>This day:&nbsp;</strong>
+                          {t.attToday.length ? t.attToday.join(", ") : "—"}
+                        </div>
+                        <div>
+                          <strong>Later:&nbsp;</strong>
+                          {t.attAfter.length ? t.attAfter.join(", ") : "—"}
+                        </div>
+                      </Box>
+                    )}
+                  </Box>
+                </>
+              )}
             </>
           )}
         </>

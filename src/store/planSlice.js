@@ -54,6 +54,7 @@ export const fetchPlan = createAsyncThunk(
 ═══════════════════════════════════════════════════════════════ */
 
 /** 2-a ▸ addFlatIndexes – inject flatIndex & derive type / quizStage */
+/** ▸ addFlatIndexes – inject flatIndex & derive type / quizStage */
 function addFlatIndexes(planDoc) {
   let globalIdx = 0;
 
@@ -61,19 +62,16 @@ function addFlatIndexes(planDoc) {
     const acts = (sess.activities || []).map((act) => {
       const type = (act.type || "").toLowerCase() || "read";
 
-      /* normalise quizStage only if it’s a quiz activity */
+      /* ─── keep whatever quizStage was set in the plan ───────────── */
       let quizStage = "";
       if (type === "quiz") {
-        const raw = (act.quizStage || "").toLowerCase();
-        const ok =
-          ["remember", "understand", "apply", "analyze"].includes(raw) && raw;
-        quizStage = ok || "remember";
+        quizStage = (act.quizStage || "").toLowerCase();   // ← no whitelist
       }
 
       return {
         ...act,
-        type,
-        quizStage,
+        type,                       // "read" | "quiz"
+        quizStage,                  // may be "cumulativequiz" etc.
         dayIndex,
         flatIndex: globalIdx++,
       };
