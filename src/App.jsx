@@ -7,6 +7,14 @@ import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
 import { fetchExamType, clearExamType } from "./store/examSlice";
 
+import posthog from 'posthog-js';
+
+posthog.init('cFmE06V1he_XWlUEFAvrWB68ixtJ-huLm3qQeYJku6Y', {
+  api_host: 'https://us.i.posthog.com',
+  autocapture: true,
+  capture_pageview: true,
+});
+
 /* ---------- third-party css ---------- */
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
