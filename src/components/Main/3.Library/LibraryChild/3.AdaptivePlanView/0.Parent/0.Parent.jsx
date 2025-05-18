@@ -140,9 +140,9 @@ export default function Child2({
     { label:"Tasks",        comp: renderAdaptPG2 },
     { label:"Concept Map",  comp: () =>
         <ConceptProgressTable userId={userId} plan={plan} planId={planId} colorScheme={colorScheme}/> },
-    { label:"Concept Map Old",  comp: () =>
+    { label:"Concept Map Old", admin:true,  comp: () =>
           <ConceptProgressTableOld userId={userId} plan={plan} planId={planId} colorScheme={colorScheme}/> },
-          { label:"Concept Map Heavy",  comp: () =>
+          { label:"Concept Map Heavy", admin:true,  comp: () =>
             <ConceptProgressTableHeavy userId={userId} plan={plan} planId={planId} colorScheme={colorScheme}/> },
   
     { label:"Activity",     comp: renderTimeline },

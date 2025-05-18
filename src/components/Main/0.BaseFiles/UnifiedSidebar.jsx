@@ -108,6 +108,8 @@ function UnifiedSidebar({
           {collapsed ? "📚" : <>📚 Plans</>}
         </button>
 
+        {isAdmin && (
+
         <button
            style={toggleButtonStyle(viewMode === "overview")}
            onClick={() => switchMode("overview")}
@@ -115,6 +117,8 @@ function UnifiedSidebar({
          >
            {collapsed ? "🏠" : <>🏠 Overview</>}
          </button>
+
+        )}
 
         
 
