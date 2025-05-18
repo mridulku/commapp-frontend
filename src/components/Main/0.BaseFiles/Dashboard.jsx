@@ -4,9 +4,10 @@ import { useSelector, useDispatch } from "react-redux";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../../firebase"; // Adjust path as needed
 
-import AdminPanel from "./AdminPanel";    
-import NewHome from "./NewHome";    
-import NewHome2 from "./NewHome2";    
+import AdminPanel from "../6.AdminPanel/AdminPanel"; 
+
+import NewHome from "../7.NewHome/NewHome";    
+import NewHome2 from "../8.NewHome2/NewHome2";    
 
 
 const ADMIN_UIDS = [
@@ -24,10 +25,10 @@ import OnboardingModal from "../1.Upload/General Onboarding/ParentsOnboarding/0.
 import TOEFLOnboardingModal from "../1.Upload/TOEFLOnboarding/TOEFLOnboardingModal";
 
 // Import your separate Plan Editor modal
-import EditAdaptivePlanModal from "../3.Library/LibraryChild/2.CreateNewPlan/AdaptivePlanModal/EditAdaptivePlanModal";
+import EditAdaptivePlanModal from "../3.Library/2.CreateNewPlan(REDUNDANT PROBABLY)/AdaptivePlanModal/EditAdaptivePlanModal";
 
 // Existing components
-import MaterialsDashboard from "../3.Library/LibraryChild/0.Parent/0.MaterialsDashboard";
+import MaterialsDashboard from "../3.Library/0.Parent/0.MaterialsDashboard";
 import UnifiedSidebar from "./UnifiedSidebar";
 import ToursManager from "./ToursManager";
 
@@ -75,6 +76,11 @@ function Dashboard() {
   } = useBooksViewer();
 
   const isAdmin = ADMIN_UIDS.includes(userId);
+
+    /* ------------------------------------------------------------------ */
+  /* 1)  EXAM TYPE MUST BE DECLARED *BEFORE* ANYONE READS IT            */
+  /* ------------------------------------------------------------------ */
+  const examType = useSelector((state) => state.exam.examType);
 
   // 1) Controls whether onboarding is shown
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
@@ -165,21 +171,11 @@ function Dashboard() {
     setIsSidebarCollapsed((prev) => !prev);
   };
 
-  // -------------------------------------------
-  // MONITOR ONBOARDING STATUS & open if needed
-  // -------------------------------------------
-  useEffect(() => {
-    if (isOnboarded === false) {
-      setShowOnboardingModal(true);
-    } else {
-      setShowOnboardingModal(false);
-    }
-  }, [isOnboarded]);
+
 
   // -------------------------------------------
   // Manage Onboarding Plan for TOEFL
   // -------------------------------------------
-  const examType = useSelector((state) => state.exam.examType);
 
   const [onboardingPlanId, setOnboardingPlanId] = useState(null);
   const [isCheckingPlanId, setIsCheckingPlanId] = useState(false);
@@ -282,6 +278,17 @@ useEffect(() => {
     // 4) Show the cinematic player modal
     setShowPlayer(true);
   };
+
+    // -------------------------------------------
+  // 2) MONITOR ONBOARDING STATUS (now placed AFTER we have examType)
+  // -------------------------------------------
+  useEffect(() => {
+    if (examType && isOnboarded === false) {
+      setShowOnboardingModal(true);
+    } else if (isOnboarded === true) {
+      setShowOnboardingModal(false);
+    }
+  }, [examType, isOnboarded]);
 
   // Decide main content based on viewMode
   let mainContent;
@@ -539,35 +546,54 @@ useEffect(() => {
       {/* Onboarding Modal */}
       {/* ‑‑‑ Onboarding modal chooser  ---------------------------------- */}
 {["TOEFL","CBSE","JEEADVANCED","NEET","SAT","GATE","CAT","GRE","UPSC","FRM"].includes(examType) ? (
+  // ONBOARDING CHOOSER  --------------------------------------------------
   showOnboardingModal && (
-    isCheckingPlanId ? (
-      /* 1. full‑screen loader while we poll */
+    !examType ? (
+      /* 0️⃣  we don’t yet know which exam => stay on black loader */
       <div style={{
-        position:"fixed",top:0,left:0,width:"100%",height:"100%",
-        background:"#000",color:"#fff",display:"flex",
-        alignItems:"center",justifyContent:"center",zIndex:9999
+        position: "fixed",
+        inset: 0,
+        background: "#000",
+        color: "#fff",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 9999
       }}>
         <h2>Loading Onboarding…</h2>
       </div>
-    ) : onboardingPlanId ? (
-      /* 2. we found the planId ⇒ show PlanFetcher */
-      <PlanFetcher
-        planId={onboardingPlanId}
-        userId={userId}
-        initialActivityContext={null}
-        backendURL={import.meta.env.VITE_BACKEND_URL}
-        fetchUrl="/api/adaptive-plan"
-        onClose={() => setShowOnboardingModal(false)}
-      />
     ) : (
-      /* 3. polling finished but no planId */
-      <div style={{
-        position:"fixed",top:0,left:0,width:"100%",height:"100%",
-        background:"#000",color:"#fff",display:"flex",
-        alignItems:"center",justifyContent:"center",zIndex:9999
-      }}>
-        <h2>No Onboarding Plan Found Yet.</h2>
-      </div>
+      /* ✅  examType is present – now run your original logic */
+      isCheckingPlanId ? (
+        /* 1. still polling Firestore / Express */
+        <div style={{
+          position:"fixed",inset:0,
+          background:"#000",color:"#fff",display:"flex",
+          alignItems:"center",justifyContent:"center",zIndex:9999
+        }}>
+          <h2>Loading Onboarding…</h2>
+        </div>
+      ) : onboardingPlanId ? (
+        /* 2. planId arrived –> show PlanFetcher */
+        <PlanFetcher
+          planId={onboardingPlanId}
+          userId={userId}
+          initialActivityContext={null}
+          backendURL={import.meta.env.VITE_BACKEND_URL}
+          fetchUrl="/api/adaptive-plan"
+          onClose={() => setShowOnboardingModal(false)}
+           allowClose={isOnboarded} 
+        />
+      ) : (
+        /* 3. polling finished but nothing written yet */
+        <div style={{
+          position:"fixed",inset:0,
+          background:"#000",color:"#fff",display:"flex",
+          alignItems:"center",justifyContent:"center",zIndex:9999
+        }}>
+          <h2>No Onboarding Plan Found Yet.</h2>
+        </div>
+      )
     )
   )
 ) : (

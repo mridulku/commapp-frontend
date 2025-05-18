@@ -23,31 +23,31 @@ import FlowUpload from './diagrams/TechFlowCharts/FlowUpload';
 import FlowProfile from './diagrams/TechFlowCharts/FlowProfile';
 import FlowContentPipeline from './diagrams/TechFlowCharts/FlowContentPipeline';
 import FlowAPIRoutes from './diagrams/TechFlowCharts/FlowAPIRoutes';
-import ExamConfigCreator from '../Main/0.BaseFiles/AdminPanel/ExamConfigCreator';
+import ExamConfigCreator from '../Main/6.AdminPanel/Support/ExamConfigCreator';
 import HospitalERDiagram from './diagrams/Business/Junk/HospitalERDiagram';
 import FlowQuizRevisePipeline from './diagrams/TechFlowCharts/FlowQuizRevisePipeline';
 import PromptInput from './diagrams/Pilot|AddToDB|Coding/PilotComponents/PromptMgmtDeprecated/PromptInput';
 import PromptManager from './diagrams/Pilot|AddToDB|Coding/PilotComponents/PromptMgmtDeprecated/PromptManager';
-import ManualBookCreator from '../Main/0.BaseFiles/AdminPanel/ManualBookCreator';
-import QuestionTypesCreator from '../Main/0.BaseFiles/AdminPanel/QuestionTypesCreator';
+import ManualBookCreator from '../Main/6.AdminPanel/Support/ManualBookCreator';
+import QuestionTypesCreator from '../Main/6.AdminPanel/Support/QuestionTypesCreator';
 import QuestionTypePlayground from './diagrams/Pilot|AddToDB|Coding/PilotComponents/QuizDeprecated/QuestionTypePlayground';
 import FlowQuizLatest from './diagrams/TechFlowCharts/FlowQuizLatest';
 import FlowQuizReact from './diagrams/TechFlowCharts/FlowQuizReact';
-import QuizConfigCreator from '../Main/0.BaseFiles/AdminPanel/QuizConfigCreator';
-import CSVBookUploader from '../Main/0.BaseFiles/AdminPanel/CSVBookUploader';
+import QuizConfigCreator from '../Main/6.AdminPanel/Support/QuizConfigCreator';
+import CSVBookUploader from '../Main/6.AdminPanel/Support/CSVBookUploader';
 import FlowHolyGrailDataFlow from './diagrams/TechFlowCharts/FlowHolyGrailDataFlow';
-import FileExplorer from '../Main/0.BaseFiles/AdminPanel/FileExplorer';
-import FirebaseCollectionsViewer from '../Main/0.BaseFiles/AdminPanel/FirebaseCollectionsViewer';
+import FileExplorer from '../Main/6.AdminPanel/Support/FileExplorer';
+import FirebaseCollectionsViewer from '../Main/6.AdminPanel/Support/FirebaseCollectionsViewer';
 import AdaptivePlanLoader from './diagrams/Pilot|AddToDB|Coding/PilotComponents/AdaptivePlanViewersMar23/AdaptivePlanLoader';
 import AdaptivePlanConceptLoader from './diagrams/Pilot|AddToDB|Coding/PilotComponents/AdaptivePlanViewersMar23/AdaptivePlanConceptLoader';
-import UploadQuestionPaper from '../Main/0.BaseFiles/AdminPanel/UploadQuestionPaper';
-import UploadExamGuidelines from '../Main/0.BaseFiles/AdminPanel/UploadExamGuidelines';
+import UploadQuestionPaper from '../Main/6.AdminPanel/Support/UploadQuestionPaper';
+import UploadExamGuidelines from '../Main/6.AdminPanel/Support/UploadExamGuidelines';
 
 
 import Parent from './Parent';
 
 
-import QuickDeleteUserData from '../Main/0.BaseFiles/AdminPanel/QuickDeleteUserData';
+import QuickDeleteUserData from '../Main/6.AdminPanel/Support/QuickDeleteUserData';
 
 import TOEFLOnboardingTest from './diagrams/Pilot|AddToDB|Coding/PilotComponents/TOEFLOnboardingTest';
 import TOEFLOnboardingProcessing from './diagrams/Pilot|AddToDB|Coding/PilotComponents/TOEFLOnboardingProcessing';

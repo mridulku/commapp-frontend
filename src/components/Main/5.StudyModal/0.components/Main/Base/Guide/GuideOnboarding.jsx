@@ -78,7 +78,7 @@ export default function GuideOnboarding() {
     (async () => {
       setLB(true); setBookErr(null);
       try {
-        const { doc, getDoc } = await import("firebase/firestore");
+        const { doc, getDoc, updateDoc } = await import("firebase/firestore");
         const firebase        = await import("../../../../../../../firebase");
 
         const snap = await getDoc(doc(firebase.db, "users", userId));
@@ -214,6 +214,23 @@ export default function GuideOnboarding() {
       });
       setPlanDoc(data?.planDoc || null);             // ← save it
       setSuccess(true);
+
+
+         /* ★★★  mark the learner as onboarded  ★★★ */
+   {
+     const { doc, setDoc } = await import("firebase/firestore");
+     const firebase        = await import("../../../../../../../firebase");
+
+     await setDoc(
+       doc(firebase.db, "learnerPersonas", userId),   // ← correct collection
+       { isOnboarded: true },                         //  simple flat field
+       { merge: true }                                //  keep existing data
+     );
+   }
+
+
+
+
     } catch (e) {
       const msg = e.response?.data?.error ||
                   e.response?.data?.message ||

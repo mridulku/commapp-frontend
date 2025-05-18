@@ -20,7 +20,8 @@ import CelebrationIcon from "@mui/icons-material/Celebration";
 import AutorenewIcon from "@mui/icons-material/Autorenew";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 
-import { useSelector, useDispatch } from "react-redux";
+ import { useSelector, useDispatch } from "react-redux";
+ import { PlanModalCtx } from "../../../../StudyModal";
 import { setCurrentIndex } from "../../../../../../../store/planSlice";
 
   /*  ⬇︎  NEW imports – add to the top, with the other icon imports  */
@@ -32,7 +33,7 @@ import { setCurrentIndex } from "../../../../../../../store/planSlice";
 // Bloom's stages for demonstration
 const bloomStages = ["Remember", "Understand", "Apply", "Analyze", "Evaluate", "Create"];
 
-export default function GuideRememberRevisionFlow() {
+export default function GuideRemember() {
   // PHASES => 'guide' | 'quiz' | 'revision' | 'retake' | 'final'
   const [phase, setPhase] = useState("guide");
   const isSmallScreen = useMediaQuery("(max-width:600px)");
@@ -40,6 +41,7 @@ export default function GuideRememberRevisionFlow() {
   // Redux
   const dispatch = useDispatch();
   const currentIndex = useSelector((state) => state.plan?.currentIndex ?? 0);
+  const { onClose } = React.useContext(PlanModalCtx);            // ← real prop
 
   // Hard-coded quiz
   const initialQuestions = [
@@ -438,9 +440,15 @@ const bloomPreview = [
     }
   }
 
-  function handleFinish() {
-    dispatch(setCurrentIndex(currentIndex + 1));
-  }
+   function handleFinish() {
+   /* if PlanFetcher supplied an onClose → close the modal */
+   if (typeof onClose === "function") {
+     onClose();
+   } else {
+     /* fallback: old behaviour */
+     dispatch(setCurrentIndex(currentIndex + 1));
+   }
+ }
 
   // ---------------- RENDER MCQ ----------------
   function renderMCQ(qObj, qIdx) {

@@ -13,6 +13,9 @@ import CloseIcon  from "@mui/icons-material/CloseRounded";
 import QuizIcon   from "@mui/icons-material/Quiz";
 import TodayIcon  from "@mui/icons-material/Today";
 import CheckIcon  from "@mui/icons-material/CheckCircle";
+import { useDispatch } from "react-redux";
+import { setExamType } from "../../../../store/examSlice";   // ← ADDED
+
 
 import {
   GoogleAuthProvider, signInWithPopup, signInWithCustomToken
@@ -234,6 +237,8 @@ function ProofCTA({ onGoogle }) {
 
 /* ─────────────────────────  Main Export  ────────────────── */
 export default function NEETLandingPage(){
+  const dispatch = useDispatch();   //  <-- add this line
+
   const navigate = useNavigate();
   const slug = useLocation().pathname.split("/").pop().toLowerCase();
   const examType = slugToType[slug] ?? "NEET";
@@ -250,11 +255,28 @@ export default function NEETLandingPage(){
       const {data}=await axios.post(`${backend}/login-google`,{idToken,examType});
       if(!data.success) throw new Error(data.error);
       await signInWithCustomToken(auth,data.firebaseCustomToken);
+         /* make Redux know the exam right now */
+      dispatch(setExamType(examType));
+      localStorage.setItem("userId", auth.currentUser.uid);   // <– step 5
+      await createLearnerPersonaIfNeeded();                   // <– step 6
+
       localStorage.setItem("token",data.token);
       localStorage.setItem("userData",JSON.stringify(data.user));
       navigate("/dashboard");
     }catch(err){ console.error("Google sign-in failed:",err);}
   }
+
+  async function createLearnerPersonaIfNeeded() {
+  try {
+    if (!auth.currentUser) return;
+    await axios.post(
+      `${import.meta.env.VITE_BACKEND_URL || "http://localhost:3001"}/create-learner-persona`,
+      { userId: auth.currentUser.uid, wpm: 200, dailyReadingTime: 30 }
+    );
+  } catch (err) {
+    console.error("Error creating learner persona:", err);
+  }
+}
 
   useEffect(()=>{
     const bar=document.querySelector('.MuiAppBar-root');

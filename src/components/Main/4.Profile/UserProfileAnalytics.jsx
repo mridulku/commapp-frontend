@@ -6,9 +6,9 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth } from "../../../firebase";
 import { signOut } from "firebase/auth";
-import ConceptMappingView from "../0.BaseFiles/NewHome/ConceptMappingView";
-import ExamPaperBrowser from "../0.BaseFiles/NewHome/ExamPaperBrowser";
-import ExamGuidelinesViewer from "../0.BaseFiles/NewHome/ExamGuidelinesViewer";
+import ConceptMappingView from "../7.NewHome/Support/ConceptMappingView";
+import ExamPaperBrowser from "../7.NewHome/Support/ExamPaperBrowser";
+import ExamGuidelinesViewer from "../7.NewHome/Support/ExamGuidelinesViewer";
 
 
 import {
@@ -22,11 +22,11 @@ import {
   Divider,
 } from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-import UserHistory from "./UserHistory";
-import BookExplorer from "../0.BaseFiles/BookExplorer";
-import SliceUploader from "../0.BaseFiles/AdminPanel/SliceUploader";
+import UserHistory from "./REDUNDANT/UserHistory";
+import BookExplorer from "../6.AdminPanel/Support/BookExplorer";
+import SliceUploader from "../6.AdminPanel/Support/SliceUploader";
 
-import SliceViewer from "../0.BaseFiles/AdminPanel/SliceViewer";
+import SliceViewer from "../6.AdminPanel/Support/SliceViewer";
 
 /* -------------------------------------------------- auth stuff (unchanged) */
 export default function UserProfileAnalytics({ colorScheme = {} }) {
