@@ -139,6 +139,11 @@ function Dashboard() {
     backgroundColor: themeColors.background,
   };
 
+    const loaderStyle = {
+    position: "fixed", inset: 0, background: "#000", color: "#fff",
+    display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999
+  };
+
   // Floating "?" button style for tours
   const floatBtnBase = {
     position: "fixed",
@@ -179,6 +184,20 @@ function Dashboard() {
 
   const [onboardingPlanId, setOnboardingPlanId] = useState(null);
   const [isCheckingPlanId, setIsCheckingPlanId] = useState(false);
+
+    /* 🔒  Once we hand a planId to <PlanFetcher>, freeze that value so it
+   *     never updates while the modal is still open.  This prevents the
+   *     wizard from jumping to a brand-new adaptive plan created inside
+   *     the onboarding flow itself.                                      */
+  const [lockedOnboardingPlanId, setLockedOnboardingPlanId] = useState(null);
+
+  useEffect(() => {
+  if (showOnboardingModal                 // modal is visible
+      && onboardingPlanId                 // we already fetched a planId
+      && !lockedOnboardingPlanId) {       // but haven’t locked yet
+    setLockedOnboardingPlanId(onboardingPlanId);
+  }
+}, [showOnboardingModal, onboardingPlanId, lockedOnboardingPlanId]);
 
   /* ---------- replace the old polling effect with this ---------- */
 useEffect(() => {
@@ -222,12 +241,19 @@ useEffect(() => {
           { params: { userId } }
         );
 
-        const planId = res.data?.userDoc?.onboardingBook?.planId;
-        if (res.data?.success && planId) {
-          setOnboardingPlanId(planId);
-          setIsCheckingPlanId(false);
-          clearInterval(intervalId);            // stop polling
-        }
+   // NEW — handles both the old *and* new payload formats
+   const planId =
+     res.data?.planId ||                          // <— current backend
+     res.data?.userDoc?.onboardingBook?.planId;   // <— legacy fallback
+                console.log("[poll] server says →", res.data?.userDoc?.onboardingBook);
+           if (planId) {
+     setOnboardingPlanId(planId);
+     setIsCheckingPlanId(false);
+     clearInterval(intervalId);   // stop polling once we have it
+     return;                      // nothing else to do
+   }
+
+        
       } catch (err) {
         console.error("Error fetching onboarding planId:", err);
       }
@@ -242,6 +268,8 @@ useEffect(() => {
    */
   return () => clearInterval(intervalId);
 }, [examType, showOnboardingModal, userId]);
+
+
 
   /**
    * handleOpenPlanEditor(bookId) => Called by OnboardingModal
@@ -289,6 +317,35 @@ useEffect(() => {
       setShowOnboardingModal(false);
     }
   }, [examType, isOnboarded]);
+
+   // 🔒 1. Pause *all* dashboard data-fetching while onboarding modal is shown
+ if (showOnboardingModal) {
+   return (
+     <>
+       {/* render only the modal chooser block ↓↓↓  (exact same JSX you already have) */}
+       {["TOEFL","CBSE","JEEADVANCED","NEET","SAT","GATE","CAT","GRE","UPSC","FRM"]
+         .includes(examType) && showOnboardingModal && (
+           isCheckingPlanId ? (
+             <div style={loaderStyle}>Loading Onboarding…</div>
+           ) : lockedOnboardingPlanId ? (
+             <PlanFetcher
+               planId={lockedOnboardingPlanId}
+               userId={userId}
+               initialActivityContext={null}
+               backendURL={import.meta.env.VITE_BACKEND_URL}
+               fetchUrl="/api/adaptive-plan"
+               onClose={() => {
+                 setShowOnboardingModal(false);
+                 setLockedOnboardingPlanId(null);
+               }}
+             />
+           ) : (
+             <div style={loaderStyle}>No Onboarding Plan Found Yet.</div>
+           )
+       )}
+     </>
+   );
+ }
 
   // Decide main content based on viewMode
   let mainContent;
@@ -566,20 +623,23 @@ useEffect(() => {
           <h2>Loading Onboarding…</h2>
         </div>
             ) : (
-        /* 2️⃣  we’re done polling – now EITHER show the onboarding player
-               OR the “no plan yet” placeholder.  NOTE that we render the
-               PlanFetcher **only** when `onboardingPlanId` is a real string.
-               This prevents the modal from mounting early with a fallback
-               (e.g. `homePlanId`).                                         */
-        onboardingPlanId
+               /* 2️⃣  we’re done polling – now EITHER show the onboarding player
+               OR the “no plan yet” placeholder.  NOTE we pass the
+               *locked* planId to prevent hot-swapping while open.        */
+        
+
+        lockedOnboardingPlanId
           ? (
               <PlanFetcher
-                planId={onboardingPlanId}     // ← no more “|| homePlanId”
+planId={lockedOnboardingPlanId}
                 userId={userId}
                 initialActivityContext={null}
                 backendURL={import.meta.env.VITE_BACKEND_URL}
                 fetchUrl="/api/adaptive-plan"
-                onClose={() => setShowOnboardingModal(false)}
+                onClose={() => {
+                 /* hide modal + clear the lock for next time */
+                  setShowOnboardingModal(false);
+}}
               /*  allowClose={isOnboarded} */ 
              />
             )

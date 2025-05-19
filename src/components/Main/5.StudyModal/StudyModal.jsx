@@ -235,7 +235,7 @@ export default function PlanFetcher({
 /* ------------------------------------------------------------------ */
 const styles = {
   appContainer: {
-    height: "100%",
+    height: "100vh",
     display: "flex",
     flexDirection: "column",
     backgroundColor: "#000",
