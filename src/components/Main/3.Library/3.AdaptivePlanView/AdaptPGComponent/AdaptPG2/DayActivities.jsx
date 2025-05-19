@@ -201,6 +201,7 @@ export default function DayActivities({
   /* ---------- UI ---------- */
   const openFetcher = (t) =>
     onOpenPlanFetcher?.(planId, t._rawActivity);
+    
 
   return (
     <Box sx={{ mt: 1 }}>

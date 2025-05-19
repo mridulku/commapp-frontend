@@ -1,8 +1,6 @@
 /* ────────────────────────────────────────────────────────────────
    File:  src/components/3.AdaptivePlanView/1.StatsPanel/StatsPanel.jsx
-   v5 – adds *optional* auto-resume flag (OFF by default) so the
-        Plan-Fetcher no longer pops up on every hard refresh.
-        All existing behaviour kept intact.
+   v7 – auto-resume code removed (manual Resume button only)
 ───────────────────────────────────────────────────────────────── */
 
 import React, { useEffect, useState } from "react";
@@ -13,43 +11,32 @@ import {
   Button,
   Tooltip,
 } from "@mui/material";
-
 import { doc, getDoc } from "firebase/firestore";
 
-/* Floating “create / edit” pen  (temporarily hidden)          */
-// import ChildStats from "../../2.CreateNewPlan/CreatePlanButton";
+/* helper – de-dupe an array */
+const unique = (arr = []) => Array.from(new Set(arr));
 
-/* ──────────────────────────────────────────────────────────── */
-/* Helpers                                                     */
-function unique(arr = []) {
-  return Array.from(new Set(arr));
-}
-
-/* ──────────────────────────────────────────────────────────── */
 export default function StatsPanel({
   db,
-  userId,       // kept for future use
-  bookId,       // kept for future use
+  userId,          // reserved for future use
+  bookId,          // reserved for future use
   planId,
   onResume = () => {},
   colorScheme = {},
-  /* NEW ▸ if you **really** want the old auto-open behaviour,
-     pass autoResume={true} from the parent.  Default is false,
-     meaning the dialog opens only when the user clicks “Resume”. */
-  autoResume = false,
 }) {
-  /* ---------- dynamic meta pulled from planDoc -------------- */
+  /* ---------------- plan meta ---------------- */
   const [meta, setMeta] = useState(null);
 
   useEffect(() => {
     if (!db || !planId) return;
+
     (async () => {
       try {
         const snap = await getDoc(doc(db, "adaptive_demo", planId));
         if (!snap.exists()) return;
         const plan = snap.data() || {};
 
-        /* topics ⇒ use groupings if present; else subject names */
+        /* topics: use groupings if present, otherwise subjects */
         let topics = [];
         if (Array.isArray(plan.subjects) && plan.subjects.length) {
           const groupings = plan.subjects.flatMap((s) => s.groupings || []);
@@ -64,31 +51,26 @@ export default function StatsPanel({
           accent: colorScheme.heading || "#BB86FC",
         });
       } catch (e) {
-        console.error("StatsPanel: unable to fetch planDoc", e);
+        console.error("StatsPanel: failed to fetch planDoc", e);
       }
     })();
   }, [db, planId, colorScheme.heading]);
 
-  /* ---------- OPTIONAL auto-resume -------------------------- */
-  useEffect(() => {
-    /* Fire only once per mount when autoResume is explicitly true */
-    if (autoResume && meta && planId) {
-      onResume(planId);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoResume, meta, planId]); // keep deps minimal & explicit
-
-  /* ---------- progress % (0 for now) ------------------------ */
+  /* placeholder progress (wire up later if you track it) */
   const progress = 0;
 
-  /* ---------- RENDER ---------------------------------------- */
+  /* ---------------- render ------------------- */
   if (!meta) {
-    return <Box sx={{ color: "#888", mb: 2, mt: 1 }}>No plan selected.</Box>;
+    return (
+      <Box sx={{ color: "#888", mb: 2, mt: 1 }}>
+        No plan selected.
+      </Box>
+    );
   }
 
   return (
-    <Box sx={{ mb: 2 /* a tad tighter */ }}>
-      {/* header bar */}
+    <Box sx={{ mb: 2 }}>
+      {/* header strip */}
       <Box
         sx={{
           display: "flex",
@@ -97,17 +79,17 @@ export default function StatsPanel({
           alignItems: "center",
           py: 0.5,
           px: 0,
-          bgcolor: "transparent",              // ← FLUSH WITH PAGE
+          bgcolor: "transparent",
           border: "none",
         }}
       >
-        {/* plan name (clamped width, tooltip for full text) */}
+        {/* plan name (ellipsis + tooltip) */}
         <Tooltip title={meta.planName}>
           <Typography
             sx={{
               fontWeight: 700,
               color: meta.accent,
-              maxWidth: 260,             /* ← adjust to taste */
+              maxWidth: 260,
               whiteSpace: "nowrap",
               overflow: "hidden",
               textOverflow: "ellipsis",
@@ -118,7 +100,7 @@ export default function StatsPanel({
           </Typography>
         </Tooltip>
 
-        {/* % badge */}
+        {/* progress badge */}
         <Chip
           label={`${progress}%`}
           size="small"
@@ -130,7 +112,7 @@ export default function StatsPanel({
           }}
         />
 
-        {/* topics (up to 2) */}
+        {/* topic chips – first two */}
         {meta.topics.slice(0, 2).map((t) => (
           <Chip
             key={t}
@@ -139,17 +121,23 @@ export default function StatsPanel({
             sx={{ bgcolor: "#333", color: "#fff", height: 22 }}
           />
         ))}
+        {/* “+N more” overflow chip */}
         {meta.topics.length > 2 && (
           <Tooltip title={meta.topics.slice(2).join(", ")}>
             <Chip
               label={`+${meta.topics.length - 2} more`}
               size="small"
-              sx={{ bgcolor: "#444", color: "#ccc", height: 22, cursor: "default" }}
+              sx={{
+                bgcolor: "#444",
+                color: "#ccc",
+                height: 22,
+                cursor: "default",
+              }}
             />
           </Tooltip>
         )}
 
-        {/* resume button pushed to far right */}
+        {/* manual Resume button */}
         <Button
           variant="contained"
           size="small"
@@ -164,17 +152,6 @@ export default function StatsPanel({
         >
           Resume
         </Button>
-
-        {/* pen icon – hidden for now */}
-        {/*
-        <ChildStats
-          userId={userId}
-          bookId={bookId}
-          colorScheme={colorScheme}
-          backendURL={import.meta.env.VITE_BACKEND_URL}
-          sx={{ ml: 0.5 }}
-        />
-        */}
       </Box>
     </Box>
   );

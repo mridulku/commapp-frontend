@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from "react";
+/*  StudyModal.jsx  – “PlanFetcher”  */
+import React, { useEffect, useState, createContext } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchPlan } from "../../../store/planSlice";
 import { setUserId } from "../../../store/authSlice";
 import {
   fetchDailyTime,
-  incrementDailyTime
+  incrementDailyTime,
 } from "../../../store/timeTrackingSlice";
 
 import TopBar       from "./0.components/Secondary/TopBar";
@@ -13,7 +14,7 @@ import LeftPanel    from "./0.components/Secondary/LeftPanel";
 import MainContent  from "./0.components/Main/Base/MainContent";
 
 /* ★★★ 1. shared context so children can call onClose() */
-export const PlanModalCtx = React.createContext({ onClose: () => {} });
+export const PlanModalCtx = createContext({ onClose: () => {} });
 
 // ------------------------------------------------------------
 // constants & helpers
@@ -22,7 +23,7 @@ const HEARTBEAT_INTERVAL = 15; // seconds
 
 function FloatingClose({ onClose }) {
   /* Esc key also closes */
-  React.useEffect(() => {
+  useEffect(() => {
     const h = (e) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
@@ -46,7 +47,7 @@ function FloatingClose({ onClose }) {
         fontSize: 20,
         lineHeight: "28px",
         cursor: "pointer",
-        transition: "background .2s"
+        transition: "background .2s",
       }}
       onMouseOver={(e) =>
         (e.currentTarget.style.background = "rgba(0,0,0,.8)")
@@ -60,58 +61,78 @@ function FloatingClose({ onClose }) {
   );
 }
 
-/**
- * PlanFetcher modal
- */
+/* ------------------------------------------------------------------ */
+/*  PlanFetcher (modal)                                               */
+/* ------------------------------------------------------------------ */
 export default function PlanFetcher({
   planId,
   initialActivityContext,
   userId = null,
 
   backendURL = import.meta.env.VITE_BACKEND_URL,
-  fetchUrl = "/api/adaptive-plan",
+  fetchUrl   = "/api/adaptive-plan",
 
   daysUntilExam = 10,
   sessionLength = 30,
 
-  onClose = () => {},
-  allowClose = true
+  onClose   = () => {},
+  allowClose = true,
 }) {
   const dispatch = useDispatch();
 
-  // ----------------------------------------------------------
-  // 1. Redux state
-  // ----------------------------------------------------------
+  /* ----------------------------------------------------------------
+   * 0. Debug trace – run once
+   * ---------------------------------------------------------------- */
+  useEffect(() => {
+    console.trace("PlanFetcher mounted →", {
+      planId,
+      userId,
+      initialActivityContext,
+      backendURL,
+      fetchUrl,
+      daysUntilExam,
+      sessionLength,
+      allowClose,
+    });
+  }, []); //  ← once only
+
+  /* ----------------------------------------------------------------
+   * 1. Redux state
+   * ---------------------------------------------------------------- */
   const { status, error, planDoc, flattenedActivities, currentIndex } =
     useSelector((s) => s.plan);
   const { dailyTime } = useSelector((s) => s.timeTracking);
 
-  // ----------------------------------------------------------
-  // 2. local timers
-  // ----------------------------------------------------------
-  const [displayTime, setDisplayTime]       = useState(0);
-  const [lastHeartbeatTime, setLastHB]      = useState(null);
-  const [leftCollapsed, setLeftCollapsed]   = useState(false);
+  /* ----------------------------------------------------------------
+   * 2. Local timers
+   * ---------------------------------------------------------------- */
+  const [displayTime, setDisplayTime]     = useState(0);
+  const [lastHeartbeatTime, setLastHB]    = useState(null);
+  const [leftCollapsed,   setLeftCollapsed] = useState(false);
 
-  // store uid in Redux
+  /* ----------------------------------------------------------------
+   * 3. Side-effects
+   * ---------------------------------------------------------------- */
+
+  /* store uid in Redux */
   useEffect(() => {
     if (userId) dispatch(setUserId(userId));
   }, [userId, dispatch]);
 
-  // fetch plan
+  /* fetch plan –––––––––––––––––––––––––––––––––––––––––––––––––– */
   useEffect(() => {
     if (!planId) return;
     dispatch(
       fetchPlan({ planId, backendURL, fetchUrl, initialActivityContext })
     );
-  }, [planId, backendURL, fetchUrl, initialActivityContext, dispatch]);
+  }, [dispatch, planId, backendURL, fetchUrl, initialActivityContext]); // FIX: removed props.*
 
-  // fetch today's total study time
+  /* fetch today's total study time */
   useEffect(() => {
     if (planId && userId) dispatch(fetchDailyTime({ planId, userId }));
   }, [planId, userId, dispatch]);
 
-  // sync local timer once we have server value
+  /* sync local timer when server value arrives */
   useEffect(() => {
     if (dailyTime != null) {
       setDisplayTime(dailyTime);
@@ -119,13 +140,14 @@ export default function PlanFetcher({
     }
   }, [dailyTime, lastHeartbeatTime]);
 
-  // heartbeat every second
+  /* heartbeat – increment study time every second */
   useEffect(() => {
     const id = setInterval(async () => {
       setDisplayTime((v) => v + 1);
+
       if (!lastHeartbeatTime || !planId || !userId) return;
 
-      const now = Date.now();
+      const now  = Date.now();
       const diff = Math.floor((now - lastHeartbeatTime) / 1000);
       if (diff < HEARTBEAT_INTERVAL) return;
 
@@ -134,27 +156,33 @@ export default function PlanFetcher({
       );
       if (incrementDailyTime.fulfilled.match(res)) {
         const newTotal = res.payload;
-        setDisplayTime(typeof newTotal === "number" ? newTotal : (p) => p + diff);
+        setDisplayTime(
+          typeof newTotal === "number" ? newTotal : (p) => p + diff
+        );
         setLastHB(Date.now());
       }
     }, 1000);
     return () => clearInterval(id);
   }, [lastHeartbeatTime, planId, userId, dispatch]);
 
-  // progress bar data
-  const totalSteps   = flattenedActivities?.length || 0;
-  const currentStep  = currentIndex >= 0 ? currentIndex + 1 : 0;
-  const stepPercent  = totalSteps ? Math.floor((currentStep / totalSteps) * 100) : 0;
+  /* ----------------------------------------------------------------
+   * 4. Derived UI values
+   * ---------------------------------------------------------------- */
+  const totalSteps  = flattenedActivities?.length || 0;
+  const currentStep = currentIndex >= 0 ? currentIndex + 1 : 0;
+  const stepPercent =
+    totalSteps ? Math.floor((currentStep / totalSteps) * 100) : 0;
 
-  // ----------------------------------------------------------
-  // render
-  // ----------------------------------------------------------
+  /* ----------------------------------------------------------------
+   * 5. Render
+   * ---------------------------------------------------------------- */
   return (
     /* ★★★ 2. provide onClose to descendants */
     <PlanModalCtx.Provider value={{ onClose }}>
       <div style={styles.appContainer}>
         {allowClose && <FloatingClose onClose={onClose} />}
 
+        {/* Loading / error states */}
         {status === "loading" && (
           <p style={{ color: "#fff", margin: 8 }}>Loading plan…</p>
         )}
@@ -165,6 +193,7 @@ export default function PlanFetcher({
           </p>
         )}
 
+        {/* Main layout */}
         {planDoc && (
           <div style={styles.mainArea}>
             {/* left sidebar */}
@@ -172,7 +201,7 @@ export default function PlanFetcher({
               style={{
                 ...styles.leftPanelContainer,
                 width: leftCollapsed ? 48 : 300,
-                transition: "width .25s"
+                transition: "width .25s",
               }}
             >
               <LeftPanel
@@ -185,7 +214,7 @@ export default function PlanFetcher({
             <div style={styles.rightPanelContainer}>
               <MainContent
                 examId={planDoc.examId || "general"}
-                onClose={onClose}          
+                onClose={onClose}
               />
             </div>
           </div>
@@ -201,9 +230,9 @@ export default function PlanFetcher({
   );
 }
 
-// ------------------------------------------------------------
-// styles
-// ------------------------------------------------------------
+/* ------------------------------------------------------------------ */
+/*  styles                                                            */
+/* ------------------------------------------------------------------ */
 const styles = {
   appContainer: {
     height: "100%",
@@ -213,22 +242,22 @@ const styles = {
     color: "#fff",
     margin: 0,
     padding: 0,
-    boxSizing: "border-box"
+    boxSizing: "border-box",
   },
   mainArea: {
     flex: 1,
     display: "flex",
-    overflow: "hidden"
+    overflow: "hidden",
   },
   leftPanelContainer: {
     height: "100%",
     overflowY: "auto",
-    backgroundColor: "#000"
+    backgroundColor: "#000",
   },
   rightPanelContainer: {
     flex: 1,
     height: "100%",
     overflowY: "auto",
-    backgroundColor: "#000"
-  }
+    backgroundColor: "#000",
+  },
 };

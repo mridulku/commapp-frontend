@@ -257,7 +257,7 @@ useEffect(() => {
    * Accepts up to 3 arguments: planId, activity, fetchUrl
    */
   const handleOpenPlayer = (pId, activity, fetchUrl) => {
-    console.log("PARENT handleOpenPlayer =>", pId, activity, fetchUrl);
+    console.trace("[DEBUG] AdaptivePlayerModal requested for:", pId);
 
     // 1) Plan ID for the modal
     setCurrentModalPlanId(pId);
@@ -533,15 +533,7 @@ useEffect(() => {
         onTourDone={() => setTriggerTour(false)}
       />
 
-      {/* Cinematic Player Modal */}
-      <AdaptivePlayerModal
-        isOpen={showPlayer}
-        onClose={() => setShowPlayer(false)}
-        userId={userId}
-        planId={currentModalPlanId}
-        initialActivityContext={initialActivityContext}
-        fetchUrl={modalFetchUrl}
-      />
+      
 
       {/* Onboarding Modal */}
       {/* ‑‑‑ Onboarding modal chooser  ---------------------------------- */}
@@ -573,29 +565,36 @@ useEffect(() => {
         }}>
           <h2>Loading Onboarding…</h2>
         </div>
-      ) : onboardingPlanId ? (
-        /* 2. planId arrived –> show PlanFetcher */
-        <PlanFetcher
-          planId={onboardingPlanId}
-          userId={userId}
-          initialActivityContext={null}
-          backendURL={import.meta.env.VITE_BACKEND_URL}
-          fetchUrl="/api/adaptive-plan"
-          onClose={() => setShowOnboardingModal(false)}
-           allowClose={isOnboarded} 
-        />
-      ) : (
-        /* 3. polling finished but nothing written yet */
-        <div style={{
-          position:"fixed",inset:0,
-          background:"#000",color:"#fff",display:"flex",
-          alignItems:"center",justifyContent:"center",zIndex:9999
-        }}>
-          <h2>No Onboarding Plan Found Yet.</h2>
-        </div>
+            ) : (
+        /* 2️⃣  we’re done polling – now EITHER show the onboarding player
+               OR the “no plan yet” placeholder.  NOTE that we render the
+               PlanFetcher **only** when `onboardingPlanId` is a real string.
+               This prevents the modal from mounting early with a fallback
+               (e.g. `homePlanId`).                                         */
+        onboardingPlanId
+          ? (
+              <PlanFetcher
+                planId={onboardingPlanId}     // ← no more “|| homePlanId”
+                userId={userId}
+                initialActivityContext={null}
+                backendURL={import.meta.env.VITE_BACKEND_URL}
+                fetchUrl="/api/adaptive-plan"
+                onClose={() => setShowOnboardingModal(false)}
+              /*  allowClose={isOnboarded} */ 
+             />
+            )
+          : (
+              <div style={{
+                position:"fixed",inset:0,
+                background:"#000",color:"#fff",display:"flex",
+                alignItems:"center",justifyContent:"center",zIndex:9999
+              }}>
+                <h2>No Onboarding Plan Found Yet.</h2>
+              </div>
+           
       )
     )
-  )
+  ))
 ) : (
   /* fallback: generic upload‑first onboarding */
   <OnboardingModal

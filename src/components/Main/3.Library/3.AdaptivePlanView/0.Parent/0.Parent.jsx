@@ -130,6 +130,7 @@ export default function Child2({
   const [dlgAct,  setDlgAct]        = useState(null);
 
   const openFetcher = (pid, act=null) => {
+    console.trace("[DEBUG] PlanFetcher requested for", pid);
     setDlgPlan(pid);
     setDlgAct(act);
     setShowDlg(true);

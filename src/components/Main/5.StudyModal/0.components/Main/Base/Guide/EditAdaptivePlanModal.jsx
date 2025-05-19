@@ -452,10 +452,7 @@ export default function EditAdaptivePlanModal({
         onClose();
       }
       // Then open the new PlanFetcher in a modal
-      if (serverPlan && serverPlan.id) {
-        setPlayerPlanId(serverPlan.id);
-        setShowReduxPlanDialog(true);
-      }
+     
     }
   };
 
