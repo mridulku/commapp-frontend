@@ -9,6 +9,8 @@ import AdminPanel from "../6.AdminPanel/AdminPanel";
 import NewHome from "../7.NewHome/NewHome";    
 import NewHome2 from "../8.NewHome2/NewHome2";    
 
+import LoadingOnboarding from "./LoadingOnboarding";
+
 
 const ADMIN_UIDS = [
   "acbhbtiODoPPcks2CP6Z",   // ← example
@@ -326,7 +328,7 @@ useEffect(() => {
        {["TOEFL","CBSE","JEEADVANCED","NEET","SAT","GATE","CAT","GRE","UPSC","FRM"]
          .includes(examType) && showOnboardingModal && (
            isCheckingPlanId ? (
-             <div style={loaderStyle}>Loading Onboarding…</div>
+            <LoadingOnboarding estSeconds={90} />
            ) : lockedOnboardingPlanId ? (
              <PlanFetcher
                planId={lockedOnboardingPlanId}

@@ -11,6 +11,7 @@ import { useSelector } from "react-redux";
 import axios from "axios";
 import SuccessPlanCreation from "./SuccessPlanCreation";
 
+import LockIcon from "@mui/icons-material/Lock";
 import Loader from "./Loader";
 
 import {
@@ -18,6 +19,7 @@ import {
   Typography,
   CircularProgress,
   Alert,
+  LinearProgress  ,
   Chip,
   Button,
   Grid,
@@ -50,6 +52,14 @@ const EMOJI = {
   physics:   "🔭",
   chemistry: "⚗️",
   biology:   "🧬",
+};
+
+/* ── which buckets the learner can click ─────────────── */
+/* Keys = subject (lower-case).  Values = array of group labels.  */
+const ALLOWED_GROUPS = {
+  biology:   ["Human Physiology", "Plant Physiology", "Genetics & Evolution"],
+  physics:   ["Mechanics", "Optics"],
+  chemistry: ["Organic Chemistry - Basic", "Physical Chemistry"],
 };
 
 /* ════════════════════════════════════════════════════════════════
@@ -131,6 +141,8 @@ export default function GuideOnboarding() {
              subject:   c.subject  || "Unknown",
              grouping:  c.grouping || "Other",
              selected:  false,         // ← default OFF ✅
+             isLocked: !ALLOWED_GROUPS[(c.subject || "").toLowerCase()]
+                     ?.includes(c.grouping),   // true ⟹ locked
            }));
 
         setChapters(cooked);
@@ -166,6 +178,23 @@ export default function GuideOnboarding() {
   const [creating, setCreating] = useState(false);
   const [success,  setSuccess]  = useState(false);
   const [genErr,   setGenErr]   = useState(null);
+
+  const [fakePct, setFakePct] = useState(0);   // visual progress 0–100
+
+  // ⬇︎  drop this useEffect block anywhere in the component
+useEffect(() => {
+  if (!creating) {                     // request finished → reset
+    setFakePct(0);
+    return;
+  }
+
+  /* every 400 ms add 3 %   ( ≈ 13 s to reach 100 ) */
+  const id = setInterval(() => {
+    setFakePct((p) => (p >= 97 ? 97 : p + 3));   // never show 100 %
+  }, 400);
+
+  return () => clearInterval(id);      // cleanup on un-mount / done
+}, [creating]);
 
   const PLAN_ENDPOINT =
     "https://generateadaptiveplan2-zfztjkkvva-uc.a.run.app";
@@ -311,7 +340,8 @@ export default function GuideOnboarding() {
               const allOn = idxArr.every((i) => chapters[i].selected);
 
               function toggleGroup() {
-                setChapters((prev) =>
+                  if (locked) return;              // <- early-exit
+  setChapters((prev) =>
                   prev.map((c, i) =>
                     idxArr.includes(i)
                       ? { ...c, selected: !allOn }
@@ -320,20 +350,28 @@ export default function GuideOnboarding() {
                 );
               }
 
+              const locked = chapters[idxArr[0]].isLocked;   // any one entry works
+
+
               return (
-                <Chip
-                  key={grpLabel}
-                  label={grpLabel}
-                  onClick={toggleGroup}
-                  variant={allOn ? "filled" : "outlined"}
-                  sx={{
-                    cursor: "pointer",
-                    bgcolor: allOn ? ACCENT : "transparent",
-                    borderColor: ACCENT,
-                    "& .MuiChip-label": { color: allOn ? "#000" : "#fff" },
-                  }}
-                />
-              );
+  <Chip
+    key={grpLabel}
+    label={grpLabel}
+    icon={locked ? <LockIcon sx={{ fontSize: 14 }} /> : undefined}
+    onClick={locked ? undefined : toggleGroup}
+    disabled={locked}
+    variant={allOn && !locked ? "filled" : "outlined"}
+    sx={{
+      cursor: locked ? "not-allowed" : "pointer",
+      bgcolor: allOn && !locked ? ACCENT : "transparent",
+      borderColor: locked ? "#555" : ACCENT,
+      "& .MuiChip-label": {
+        color: locked ? "#777" : allOn ? "#000" : "#fff",
+        fontStyle: locked ? "italic" : "normal",
+      },
+    }}
+  />
+);
             })}
           </Box>
         </Box>
@@ -345,7 +383,7 @@ export default function GuideOnboarding() {
           variant="contained"
           sx={{ bgcolor: ACCENT, fontWeight: "bold" }}
            onClick={() => {
-               if (chapters.some(c => c.selected)) {
+              if (chapters.some(c => c.selected && !c.isLocked)) {
                  setTopicErr(null);
                  setStep(1);
                } else {
@@ -432,7 +470,26 @@ export default function GuideOnboarding() {
           sx={{ bgcolor: ACCENT, fontWeight: "bold" }}
           onClick={handleGenerate}
         >
-          {creating ? "Generating…" : "Generate Plan"}
+           {creating ? (
+     <Box sx={{ width: "100%" }}>
+       <LinearProgress
+         variant="determinate"
+         value={fakePct}
+         sx={{
+           "& .MuiLinearProgress-bar": { transition: "transform 0.4s linear" },
+           height: 6, borderRadius: 3, bgcolor: "#664bb0"
+         }}
+       />
+       <Typography
+         variant="caption"
+         sx={{ mt: 0.5, display: "block", color: "#eee" }}
+       >
+         Generating plan… {fakePct}%
+       </Typography>
+   </Box>
+ ) : (
+   "Generate Plan"
+ )}
         </Button>
       </Stack>
 

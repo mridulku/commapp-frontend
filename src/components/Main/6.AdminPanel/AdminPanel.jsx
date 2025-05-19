@@ -13,6 +13,8 @@ import ReadingViewDummy from "./Support/ReadingViewDummy";
 import AggregatorBootloader from "./Support/AggregatorBootloader";
 import AggregatorDebugPanel from "./Support/AggregatorDebugPanel";
 
+import ConceptExtractionPage from "./Support/ConceptExtractionPage";
+
 
 // Add more admin tools here later and extend the enum ↓
 const TOOLS = {
@@ -24,6 +26,7 @@ const TOOLS = {
   readingviewdummy: "Reading View Dummy", 
   AggregatorBootloader: "Aggregator Bootloader",
   AggregatorDebugPanel: "Aggregator Debug Panel",
+  ConceptExtractionPage: "Concept Extraction Page",
 };
 
 function AdminPanel({ userId }) {
@@ -84,6 +87,8 @@ function AdminPanel({ userId }) {
             return <AggregatorBootloader   userId={userId} />;
             case "AggregatorDebugPanel":
             return <AggregatorDebugPanel   userId={userId} />;
+            case "ConceptExtractionPage":
+            return <ConceptExtractionPage   userId={userId} />;
       default:
         return null;
     }
