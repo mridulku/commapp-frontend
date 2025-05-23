@@ -18,6 +18,8 @@ const styles = {
   scenarioBox    : { backgroundColor: "#444", padding: "8px", borderRadius: "4px", marginBottom: "0.5rem" },
 };
 
+import Chip from "@mui/material/Chip";   // ← add this line
+
 /* --------------------------- component ------------------------------- */
 export default function QuizQuestionRenderer({
   index,
@@ -40,10 +42,17 @@ export default function QuizQuestionRenderer({
       <p style={styles.questionPrompt}>Q{index + 1}: {questionText}</p>
 
       {conceptName && (
-        <p style={styles.conceptLabel}>
-          Concept: <em>{conceptName}</em>
-        </p>
-      )}
+  <Chip
+    label={conceptName}
+    size="small"
+    sx={{
+      bgcolor: "#263238",
+      color: "#80cbc4",
+      fontStyle: "normal",
+      mb: .5
+    }}
+  />
+)}
 
       {renderByType(qType, questionObj, userAnswer, onUserAnswerChange, readOnly)}
     </div>
@@ -64,25 +73,49 @@ function renderByType(qType, qObj, userAnswer, onUserAnswerChange, readOnly) {
   }
 }
 
-/* ---------------------- type-specific UIs ---------------------------- */
+import { ToggleButton, ToggleButtonGroup } from "@mui/material";
+
+
 function renderMultipleChoice(qObj, userAnswer, onUserAnswerChange, readOnly) {
-  if (!Array.isArray(qObj.options)) return <p>No MCQ options provided.</p>;
   return (
-    <div>
+    <ToggleButtonGroup
+      orientation="vertical"          // ⬅  stack choices top-to-bottom
+      exclusive
+      value={parseInt(userAnswer, 10)}
+      onChange={(_, v) => v !== null && onUserAnswerChange(String(v))}
+      sx={{
+        width: "100%",                // <-- the whole group spans the card width
+      }}
+    >
       {qObj.options.map((opt, i) => (
-        <label key={i} style={styles.optionLabel}>
-          <input
-            disabled={readOnly}
-            type="radio"
-            name={`mcq-${qObj.question}`}
-            value={i}
-            checked={parseInt(userAnswer, 10) === i}
-            onChange={() => onUserAnswerChange(i.toString())}
-          />
+        <ToggleButton
+          key={i}
+          value={i}
+          disabled={readOnly}
+          sx={{
+            width: "100%",            // ⬅ every button takes the full width
+            justifyContent: "flex-start",
+            textTransform: "none",    // keep the original capitalisation
+            whiteSpace: "normal",     // allow wrapping instead of one long line
+            lineHeight: 1.4,
+            borderRadius: 1,
+            my: 0.5,
+            px: 2,
+            bgcolor: "#263238",
+            color: "#cfd8dc",
+
+            "&.Mui-selected": {
+              bgcolor: "#512da8",
+              color: "#fff",
+              "&:hover": { bgcolor: "#4527a0" },
+            },
+            "&:hover": { bgcolor: "#37474f" },
+          }}
+        >
           {opt}
-        </label>
+        </ToggleButton>
       ))}
-    </div>
+    </ToggleButtonGroup>
   );
 }
 

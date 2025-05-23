@@ -64,13 +64,16 @@ function createHtmlFromGPTData(revisionData) {
   if (Array.isArray(revisionData.concepts)) {
     revisionData.concepts.forEach((cObj) => {
       html += `<h4>${cObj.conceptName}</h4>`;
-      if (Array.isArray(cObj.notes)) {
-        html += "<ul>";
-        cObj.notes.forEach((n) => {
-          html += `<li>${n}</li>`;
-        });
-        html += "</ul>";
-      }
+       html += `<p>${cObj.explanation}</p>`;
+      /* accept a few likely spellings so dev-cycle is smoother */
+     const ex = cObj.example
+            || cObj.examples
+            || cObj.workedExample
+            || null;
+     if (ex) {
+       html += `<blockquote><strong>Example:</strong> ${ex.prompt || ex.question || ""}<br/>
+                <em>Solution:</em> ${ex.solution || ex.answer || ""}</blockquote>`;
+     }
     });
   }
   return html;

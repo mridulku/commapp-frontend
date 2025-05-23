@@ -8,6 +8,27 @@ import { fetchQuizTime, incrementQuizTime } from "../../../../../../store/quizTi
 import { setCurrentIndex, fetchPlan } from "../../../../../../store/planSlice";
 import { refreshSubchapter } from "../../../../../../store/aggregatorSlice";
 
+import { CircularProgress, Fade, Chip } from "@mui/material";
+
+import AccessTimeIcon from "@mui/icons-material/AccessTimeRounded";
+
+function Pill({ label, icon }) {
+  return (
+    <Chip
+      icon={icon}
+      label={label}
+      size="small"
+      sx={{
+        bgcolor: "#263238",
+        color:  "#eceff1",
+        fontWeight: 500,
+        ".MuiChip-icon": { color: "#eceff1", ml: -.4 }  // icon colour
+      }}
+    />
+  );
+}
+
+
 import {
   gradeOpenEndedBatch as gradeOpenEndedBatchREAL
 } from "./QuizSupport/QuizQuestionGrader";
@@ -30,6 +51,31 @@ function formatTime(totalSeconds) {
 /**
  * Re-usable logic from HistoryView for final pass/fail per concept
  */
+
+// helper ✨
+function LoadingOverlay({ text = "Loading…" }) {
+  return (
+    <Fade in>
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "rgba(0,0,0,0.65)",
+          zIndex: 50,
+        }}
+      >
+        <CircularProgress size={48} color="secondary" />
+        <span style={{ marginTop: 12, color: "#eee" }}>{text}</span>
+      </div>
+    </Fade>
+  );
+}
+
+
 function computeConceptStatuses(allAtts) {
   const conceptStatusMap = new Map();
   const conceptSet = new Set();
@@ -192,7 +238,7 @@ const [showLastAttempt, setShowLastAttempt] = useState(false);
   //  3) On mount => build docId, fetch usage, generate quiz
   // ============================================================
   useEffect(() => {
-    if (!userId || !subChapterId) {
+    if (!userId || !subChapterId || !planId) {
       console.log("QuizView: userId or subChapterId missing => skip generation.");
       return;
     }
@@ -233,7 +279,6 @@ const [showLastAttempt, setShowLastAttempt] = useState(false);
     // B) Generate quiz
     async function doGenerateQuestions() {
       try {
-        setStatus("Generating questions via GPT...");
         const result = await generateQuestions({
           userId,
           planId,
@@ -282,7 +327,6 @@ if (allQs.length === 0) {
         setGeneratedQuestions(allQs);
         setUserAnswers(allQs.map(() => "")); // one answer slot per question
         setSubchapterSummary(summary);
-        setStatus(`Successfully generated ${allQs.length} questions.`);
 
         // Build pagination pages
         const newPages = [];
@@ -643,22 +687,38 @@ setShowLastAttempt(false);          // start collapsed
 
         {/* ---------- Top Header => "Quiz" + clock ---------- */}
         <div style={styles.cardHeader}>
-          <h2 style={{ margin: 0 }}>
-            Quiz
-            <span style={styles.clockWrapper}>
-              <span style={styles.clockIcon}>🕒</span>
-              {formatTime(displayedTime)}
-            </span>
-          </h2>
+         
+  {/* Title */}
+  <h2 style={{ margin: 0, fontWeight:600 }}>Quiz</h2>
+
+  {/* Attempt pill */}
+  <Pill label={`Attempt #${attemptNumber}`} />
+
+  {/* Clock pill */}
+  <Pill
+    label={formatTime(displayedTime)}
+    icon={<AccessTimeIcon sx={{ fontSize:16 }} />}
+  />
+
+  {/* Question-count pill – render only when we know the length */}
+  {generatedQuestions.length > 0 && (
+    <Pill label={`${generatedQuestions.length} questions`} />
+  )}
+ 
         </div>
 
         {/* ---------- Body => quiz or grading results ---------- */}
         <div style={styles.cardBody}>
-          {loading && <p style={{ color: "#fff" }}>Loading... {status}</p>}
-          {!loading && status && !error && (
-            <p style={{ color: "lightgreen" }}>{status}</p>
-          )}
-          {error && <p style={{ color: "red" }}>{error}</p>}
+          {/* NEW overlay replaces the old plain <p> */}
+  {loading && (
+    <LoadingOverlay text={status || "Generating questions…"} />
+  )}
+
+  {/* keep whatever you want to show when NOT loading */}
+  {!loading && status && !error && (
+    <p style={{ color: "lightgreen" }}>{status}</p>
+  )}
+  {error && <p style={{ color: "red" }}>{error}</p>}
 
 
 
@@ -988,13 +1048,13 @@ const styles = {
     boxSizing: "border-box",
     overflow: "hidden",
   },
-  cardHeader: {
+    cardHeader: {
     background: "#222",
     padding: "12px 16px",
     borderBottom: "1px solid #333",
     display: "flex",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: 12            // puts space between the pills
   },
   clockWrapper: {
     marginLeft: "16px",
@@ -1051,11 +1111,12 @@ const styles = {
     fontWeight: "bold",
   },
   questionContainer: {
-    backgroundColor: "#333",
-    padding: "8px",
-    borderRadius: "4px",
-    marginBottom: "1rem",
-  },
+  background: "#181818",
+  border: "1px solid #444",
+  borderRadius: 8,
+  padding: "1rem",
+  marginBottom: "1.2rem",
+},
   gradingContainer: {
     marginTop: "1rem",
     backgroundColor: "#222",

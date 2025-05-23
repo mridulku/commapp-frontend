@@ -175,17 +175,36 @@ ${quizHistoryText || "  – no previous attempts on record"}
 3. **Return each paragraph as a single string** inside the notes
    array.  (e.g. notes ["<paragraph text>"])  
 4. Do **NOT** add markdown, bullets, or code-blocks; plain text only.  
-5. Respond **only** with valid JSON in **this exact structure**:
+5. **EVERY concept MUST include an example object** exactly as shown below.
+    If you omit it the response is invalid.
 
+You must return **valid JSON only** – no markdown fences, no extra prose –
+and follow *exactly* this schema:
 {
-  "title": "<Catchy revision title>",
+  "title": "Short Title",
   "concepts": [
     {
-      "conceptName": "<Concept>",
-      "notes": ["<bullet 1>", "<bullet 2>", "…"]
-    }
+      "conceptName": "Concept A",
+      "explanation": "A clear, conversational paragraph (≈120–180 words) that
+                     teaches the idea in plain language, referencing the
+                     learner’s typical error(s) where relevant.",
+      "example": {
+        "prompt":  "A realistic exam-style question or scenario",
+        "solution":"Step-by-step working that applies the concept and highlights
+                    the common pitfall the learner previously fell into."
+      }
+    },
+    ...
   ]
 }
+
+**Guidelines for each concept**
+• *explanation* should feel like a tutor speaking directly to the learner  
+• *example.prompt* must be novel (don’t reuse a past quiz item)  
+• *example.solution* must reference the concept explicitly and point out the
+  misconception you observed in the quiz-history.  
+
+Return the JSON, nothing else.
 `.trim();
 
   // 5) Call GPT
