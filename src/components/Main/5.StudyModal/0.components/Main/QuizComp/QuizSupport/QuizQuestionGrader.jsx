@@ -205,23 +205,29 @@ export async function gradeOpenEndedBatch({ openAiKey, subchapterSummary, items 
   }
 
   // Build the GPT prompt
+    /* ---------- Build the GPT prompt (wrap answer in triple quotes) ---------- */
   let promptBlock = "";
   items.forEach((item, i) => {
     const { qObj, userAns } = item;
+    const safeAns = userAns ?? "";   // accept whatever the learner type
+
     promptBlock += `
 Q#${i + 1}:
 Question: ${qObj.question}
 Expected Answer: ${qObj.expectedAnswer || qObj.answerGuidance || "(none provided)"}
-User's Answer: ${userAns}
+User's Answer: """${safeAns}"""
 `;
   });
+
+  // Optional: peek at the exact prompt in the browser console
+  console.log("GPT-grading prompt ↓↓↓", promptBlock);
 
   const userPrompt = `
 You are a grading assistant. 
 Context (subchapter summary): "${subchapterSummary}"
 
-For each question, compare the "Expected Answer" to the "User's Answer."
-Score it from 0.0 to 1.0, then give 1-2 sentences of feedback.
+ For each question, compare Expected vs User’s Answer.
+ If it is just very short, grade it normally and give constructive feedback.Score it from 0.0 to 1.0, then give 1-2 sentences of feedback.
 
 Return exactly JSON in the format:
 {

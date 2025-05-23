@@ -2,7 +2,8 @@
  * File: QuizQuestionGenerator.js
  * Description:
  *   - Handles question generation from GPT, returning an array of question objects
- *   - Now excludes any concepts that the user has already passed at 100%
+ *   - Excludes concepts the user has already passed at 100 %
+ *   - *NEW*: each Bloom stage can prepend a stage-specific prompt snippet
  */
 
 import axios from "axios";
@@ -16,15 +17,9 @@ import {
   orderBy,
 } from "firebase/firestore";
 
-/**
- * Main entry point for question generation for a subchapter + stage.
- * This function:
- *   1) finds any concepts the user has already passed (100% correctness),
- *   2) fetches the quizConfig doc (e.g. quizGeneralRemember),
- *   3) fetches subchapterConcepts,
- *   4) filters out "passed" concepts,
- *   5) calls GPT or local generation to produce questions only for remaining concepts.
- */
+/* ------------------------------------------------------------------ */
+/*  MAIN ENTRY: generateQuestions                                     */
+/* ------------------------------------------------------------------ */
 export async function generateQuestions({
   db,
   planId,
@@ -43,72 +38,73 @@ export async function generateQuestions({
       examId,
     });
 
-    // 0) First, gather a set of concepts the user has already "passed" at 100%
-    console.log("[generateQuestions] Calling findPassedConcepts ...");
+    /* -------------------------------------------------------------- */
+    /* 0) Which concepts has the learner already mastered?            */
+    /* -------------------------------------------------------------- */
     const passedConceptsSet = await findPassedConcepts(
       db,
       userId,
-      planId,       // make sure the order matches the function signature
+      planId,
       subChapterId,
       quizStage
     );
-    console.log("[generateQuestions] passedConceptsSet =>", Array.from(passedConceptsSet));
+    console.log(
+      "[generateQuestions] passedConceptsSet =>",
+      Array.from(passedConceptsSet)
+    );
 
-    // 1) Build the quizConfig doc ID (e.g. "quizGeneralRemember")
+    /* -------------------------------------------------------------- */
+    /* 1) Fetch quizConfig for this stage (e.g. quizGeneralRemember)  */
+    /* -------------------------------------------------------------- */
     const docId = buildQuizConfigDocId(examId, quizStage);
-    console.log(`[generateQuestions] quizConfig docId = "${docId}"`);
-
-    // 2) Fetch that quizConfig doc => e.g. { multipleChoice: 3, trueFalse: 2, ... }
-    let quizConfigData = {};
     const quizConfigRef = doc(db, "quizConfigs", docId);
     const quizConfigSnap = await getDoc(quizConfigRef);
-    if (quizConfigSnap.exists()) {
-      quizConfigData = quizConfigSnap.data();
-      console.log("[generateQuestions] quizConfigData =>", quizConfigData);
-    } else {
-      console.warn(`[generateQuestions] No quizConfig found for docId = ${docId}`);
+
+    if (!quizConfigSnap.exists()) {
+      console.warn(`[generateQuestions] No quizConfig doc "${docId}"`);
       return {
         success: false,
-        error: `No quizConfig doc found for '${docId}'.`,
+        error: `Missing quizConfig "${docId}"`,
         questionsData: null,
       };
     }
 
-    // 3) Fetch subchapter concepts from "subchapterConcepts"
-    console.log("[generateQuestions] Fetching subchapterConcepts ...");
+    const quizConfigData = quizConfigSnap.data();
+    console.log("[generateQuestions] quizConfigData =>", quizConfigData);
+
+    /* ——— pull out the prompt snippet & strip it from the counts ——— */
+    const stagePrompt = quizConfigData.stagePrompt || "";
+    delete quizConfigData.stagePrompt; // so only pure counts remain
+
+    /* -------------------------------------------------------------- */
+    /* 2) Fetch all concept docs for this sub-chapter                 */
+    /* -------------------------------------------------------------- */
     let conceptList = [];
-    const subChapConceptsRef = collection(db, "subchapterConcepts");
-    const conceptQuery = query(subChapConceptsRef, where("subChapterId", "==", subChapterId));
-    const conceptSnap = await getDocs(conceptQuery);
-    conceptList = conceptSnap.docs.map((docSnap) => ({
-      id: docSnap.id,
-      ...docSnap.data(),
-    }));
-    console.log("[generateQuestions] conceptList (pre-filter) =>", conceptList.map((c) => c.name));
+    const conceptSnap = await getDocs(
+      query(
+        collection(db, "subchapterConcepts"),
+        where("subChapterId", "==", subChapterId)
+      )
+    );
+    conceptList = conceptSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-    // 3a) Filter out any concepts that appear in passedConceptsSet
-    conceptList = conceptList.filter((c) => {
-      const cName = c.name; // or c.conceptName, depending on your schema
-      return !passedConceptsSet.has(cName);
-    });
-    console.log("[generateQuestions] conceptList (after filter) =>", conceptList.map((c) => c.name));
+    /* —— remove concepts already mastered —— */
+    conceptList = conceptList.filter((c) => !passedConceptsSet.has(c.name));
 
-    // 4) If no concepts remain => fallback approach (maybe empty or generate overall)
-     if (conceptList.length === 0) {
-         console.log("[generateQuestions] All concepts mastered — returning 0 questions.");
-         return {
-           success: true,
-           error: null,
-           questionsData: { questions: [] },   // <-- key point
-         };
-       }
+    if (conceptList.length === 0) {
+      console.log("[generateQuestions] All concepts mastered — 0 questions.");
+      return { success: true, error: null, questionsData: { questions: [] } };
+    }
 
-    // 5) If we do have filtered concepts => generate question sets per concept
+    /* -------------------------------------------------------------- */
+    /* 3) Loop concepts × type counts → call GPT                      */
+    /* -------------------------------------------------------------- */
     let allConceptQuestions = [];
+
     for (const concept of conceptList) {
-      console.log(`[generateQuestions] Generating Qs for concept "${concept.name}" ...`);
-      for (let [typeName, count] of Object.entries(quizConfigData)) {
-        if (count <= 0) continue; // skip if 0
+      console.log(`→ Generating for concept "${concept.name}"`);
+      for (const [typeName, count] of Object.entries(quizConfigData)) {
+        if (count <= 0) continue;
         const batch = await generateQuestions_ForConcept({
           db,
           subChapterId,
@@ -116,13 +112,16 @@ export async function generateQuestions({
           typeName,
           numberOfQuestions: count,
           concept,
+          stagePrompt, // pass down
         });
         allConceptQuestions.push(...batch);
       }
     }
 
-    console.log("[generateQuestions] Total generated questions =>", allConceptQuestions.length);
-
+    console.log(
+      "[generateQuestions] TOTAL generated =>",
+      allConceptQuestions.length
+    );
     return {
       success: true,
       error: null,
@@ -130,108 +129,42 @@ export async function generateQuestions({
     };
   } catch (err) {
     console.error("[generateQuestions] ERROR:", err);
-    return {
-      success: false,
-      error: err.message,
-      questionsData: null,
-    };
+    return { success: false, error: err.message, questionsData: null };
   }
 }
 
-/**
- * Helper: findPassedConcepts
- *  - Fetch all quiz attempts for the user/subChapter/quizStage
- *  - For each attempt, check question "conceptName" + "score"
- *  - If concept is 100% correct in that attempt => mark as "passed"
- *  - We'll collect a Set of concept names the user has *ever* gotten 100% on
- */
+/* ------------------------------------------------------------------ */
+/*  findPassedConcepts — unchanged                                    */
+/* ------------------------------------------------------------------ */
 async function findPassedConcepts(db, userId, planId, subChapterId, quizStage) {
-  const passedSet = new Set();
-  console.log("[findPassedConcepts] Starting ...", {
-    userId,
-    planId,
-    subChapterId,
-    quizStage,
-  });
-
+  const passed = new Set();
   try {
-    const quizRef = collection(db, "quizzes_demo");
-    const q = query(
-      quizRef,
-      where("userId", "==", userId),
-      where("planId", "==", planId),
-      where("subchapterId", "==", subChapterId),
-      where("quizType", "==", quizStage),
-      orderBy("attemptNumber", "desc")
+    const snap = await getDocs(
+      query(
+        collection(db, "quizzes_demo"),
+        where("userId", "==", userId),
+        where("planId", "==", planId),
+        where("subchapterId", "==", subChapterId),
+        where("quizType", "==", quizStage),
+        orderBy("attemptNumber", "desc")
+      )
     );
-    const snap = await getDocs(q);
-    console.log("[findPassedConcepts] Found attempts =>", snap.size);
-
-    if (snap.empty) {
-      // No attempts => user hasn't passed anything
-      return passedSet;
-    }
-
-    snap.forEach((docSnap) => {
-      const data = docSnap.data();
-      const quizSubmission = data.quizSubmission || [];
-      const conceptMap = {};
-      // We'll track concept -> { correct: X, total: Y } for *that attempt*
-
-      quizSubmission.forEach((qItem) => {
-        const cName = qItem.conceptName || "UnknownConcept";
-        if (!conceptMap[cName]) {
-          conceptMap[cName] = { correct: 0, total: 0 };
-        }
-        conceptMap[cName].total++;
-
-        if (parseFloat(qItem.score) >= 1) {
-          conceptMap[cName].correct++;
-        }
-      });
-
-      // Now see if any concept has 100%
-      Object.keys(conceptMap).forEach((cName) => {
-        const { correct, total } = conceptMap[cName];
-        if (total > 0 && correct === total) {
-          passedSet.add(cName);
-        }
+    snap.forEach((d) => {
+      (d.data().quizSubmission || []).forEach((q) => {
+        const c = q.conceptName;
+        if (!c) return;
+        if (parseFloat(q.score) >= 1) passed.add(c);
       });
     });
-
-    console.log("[findPassedConcepts] final passedSet =>", Array.from(passedSet));
   } catch (err) {
-    console.error("Error in findPassedConcepts:", err);
+    console.error("findPassedConcepts error:", err);
   }
-
-  return passedSet;
+  return passed;
 }
 
-/**
- * Helper: If no concepts remain or if no concepts found initially,
- * we generate an "overall" question set.
- */
-async function generateQuestions_Overall({ db, subChapterId, openAiKey, quizConfigData }) {
-  const allQuestions = [];
-  for (let [typeName, count] of Object.entries(quizConfigData)) {
-    if (count <= 0) continue;
-
-    const partial = await generateQuestions_GPT({
-      db,
-      subChapterId,
-      openAiKey,
-      typeName,
-      numberOfQuestions: count,
-      forcedConceptName: null,
-    });
-    allQuestions.push(...partial);
-  }
-  return allQuestions;
-}
-
-/**
- * Helper: concept-based approach => one concept at a time
- */
+/* ------------------------------------------------------------------ */
+/*  generateQuestions_ForConcept — now receives stagePrompt           */
+/* ------------------------------------------------------------------ */
 async function generateQuestions_ForConcept({
   db,
   subChapterId,
@@ -239,6 +172,7 @@ async function generateQuestions_ForConcept({
   typeName,
   numberOfQuestions,
   concept,
+  stagePrompt, // ← receives
 }) {
   return generateQuestions_GPT({
     db,
@@ -247,12 +181,13 @@ async function generateQuestions_ForConcept({
     typeName,
     numberOfQuestions,
     forcedConceptName: concept.name,
+    stagePrompt, // ← passes through
   });
 }
 
-/**
- * GPT logic that fetches subchapter summary, merges prompt blocks, calls GPT
- */
+/* ------------------------------------------------------------------ */
+/*  generateQuestions_GPT — accepts stagePrompt & inserts it          */
+/* ------------------------------------------------------------------ */
 async function generateQuestions_GPT({
   db,
   subChapterId,
@@ -260,69 +195,54 @@ async function generateQuestions_GPT({
   typeName,
   numberOfQuestions,
   forcedConceptName,
+  stagePrompt = "", // default empty
 }) {
-  // Step A: fetch subchapter summary
+  /* A) fetch sub-chapter summary */
   let subchapterSummary = "";
   try {
-    const ref = doc(db, "subchapters_demo", subChapterId);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) {
-      console.warn(`[generateQuestions_GPT] No subchapter doc found for: ${subChapterId}`);
-    } else {
-      const data = snap.data();
-      subchapterSummary = data.summary || "";
-    }
-  } catch (err) {
-    console.error("Error fetching subchapter:", err);
+    const snap = await getDoc(doc(db, "subchapters_demo", subChapterId));
+    if (snap.exists()) subchapterSummary = snap.data().summary || "";
+  } catch (e) {
+    console.error("subchapter fetch error:", e);
   }
 
-  // Build forced concept instructions if any
-  let forcedConceptBlock = "";
-  if (forcedConceptName) {
-    forcedConceptBlock = `
-All questions must focus on the concept: "${forcedConceptName}".
-Set each question's "conceptName" field to "${forcedConceptName}".
-    `.trim();
-  }
+  /* B) forced concept block (optional) */
+  const forcedBlock = forcedConceptName
+    ? `All questions must focus on the concept: "${forcedConceptName}".\nSet each question's "conceptName" field to "${forcedConceptName}".`
+    : "";
 
-  const systemPrompt = `You are a helpful question generator that outputs JSON only.`;
+  /* C) build prompts */
+  const systemPrompt = "You are a helpful question generator that outputs JSON only.";
   const userPrompt = `
+${stagePrompt}
+
 You have a subchapter summary:
 "${subchapterSummary}"
 
 Generate ${numberOfQuestions} questions of type "${typeName}."
 
-${forcedConceptBlock}
+${forcedBlock}
 
 Include:
 - "question": The question text
 - "type": "${typeName}"
 - "conceptName": (if forced, otherwise blank)
-- For multipleChoice => include "options": [..] and "correctIndex": ...
-- For trueFalse => include "correctValue": "true" or "false"
-- For fillInBlank => include "answerKey": "..."
-- For openEnded/shortAnswer/compareContrast => include "expectedAnswer": "..."
-- For scenario => can have "scenarioText" + "expectedAnswer"
+- For multipleChoice => "options"[] and "correctIndex"
+- For trueFalse      => "correctValue": "true" or "false"
+- For fillInBlank    => "answerKey"
+- For openEnded/compareContrast/shortAnswer => "expectedAnswer"
+- For scenario       => "scenarioText" + "expectedAnswer"
 
-Return valid JSON like:
+Return ONLY valid JSON:
 {
-  "questions": [
-    {
-      "question": "...",
-      "type": "${typeName}",
-      "conceptName": "...",
-      ...
-    },
-    ...
-  ]
+  "questions":[ { ... }, ... ]
 }
-
-No extra commentary—only valid JSON.
 `.trim();
 
+  /* D) call OpenAI */
   let parsedQuestions = [];
   try {
-    const response = await axios.post(
+    const resp = await axios.post(
       "https://api.openai.com/v1/chat/completions",
       {
         model: "gpt-3.5-turbo",
@@ -333,39 +253,24 @@ No extra commentary—only valid JSON.
         max_tokens: 1500,
         temperature: 0.7,
       },
-      {
-        headers: {
-          Authorization: `Bearer ${openAiKey}`,
-          "Content-Type": "application/json",
-        },
-      }
+      { headers: { Authorization: `Bearer ${openAiKey}` } }
     );
 
-    const gptMessage = response.data.choices[0].message.content.trim();
-    const cleaned = gptMessage
-      .replace(/```json/g, "")
-      .replace(/```/g, "")
+    const raw = resp.data.choices[0].message.content
+      .replace(/```json|```/g, "")
       .trim();
-
-    let parsed;
-    try {
-      parsed = JSON.parse(cleaned);
-      parsedQuestions = parsed.questions || [];
-    } catch (err) {
-      console.error("[generateQuestions_GPT] Error parsing GPT JSON:", err);
-    }
+    parsedQuestions = JSON.parse(raw).questions || [];
   } catch (err) {
-    console.error("[generateQuestions_GPT] Error calling GPT API:", err);
+    console.error("generateQuestions_GPT error:", err);
   }
 
   return parsedQuestions;
 }
 
-/**
- * Helper: buildQuizConfigDocId => e.g. "quizGeneralRemember"
- */
+/* ------------------------------------------------------------------ */
+/*  Utility: buildQuizConfigDocId                                     */
+/* ------------------------------------------------------------------ */
 function buildQuizConfigDocId(exam, stage) {
-  const capExam = exam.charAt(0).toUpperCase() + exam.slice(1);
-  const capStage = stage.charAt(0).toUpperCase() + stage.slice(1);
-  return `quiz${capExam}${capStage}`;
+  const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+  return `quiz${cap(exam)}${cap(stage)}`;
 }

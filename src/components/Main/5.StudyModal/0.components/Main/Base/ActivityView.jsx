@@ -4,6 +4,7 @@ import { useSelector, useDispatch } from "react-redux";
 import { setCurrentIndex } from "../../../../../../store/planSlice";
 
 import QuizComponent from "../QuizComp/QuizComponent";
+import LastAttemptPanel from "../QuizComp/QuizSupport/LastAttemptPanel";
 import ReviseComponent from "../RevComp/ReviseComponent";
 
 /**
@@ -55,6 +56,7 @@ export default function ActivityView({
           examId={examId}
           subChapterId={subChapterId}
           attemptNumber={1}
+          readOnly
           onQuizComplete={onQuizComplete}
           onQuizFail={onQuizFail}
         />
@@ -73,6 +75,8 @@ export default function ActivityView({
           >
             Go to Next Activity
           </button>
+
+          <LastAttemptPanel attempt={lastQuizAttempt} />
         </div>
       )}
 

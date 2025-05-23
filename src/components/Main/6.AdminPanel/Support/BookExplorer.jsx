@@ -1,374 +1,268 @@
 /* ──────────────────────────────────────────────────────────────────────────
    src/components/BookExplorer.jsx
-   • shows Book → Chapter → Sub-chapter → Concept tree
-   • previews imageLinks for each sub-chapter
-   • lets an admin **inline-edit** the raw summary of
-       – any sub-chapter   (col: subchapters_demo)
-       – any concept       (col: subchapterConcepts)
-   • writes edits straight to Firestore + patches local state
+   Book ➜ Subject ➜ Group ➜ Chapter ➜ Sub-chapter ➜ Concept admin tool
+   – real / filler tagging + filter
+   – inline summary edit
+   – concept list + “Generate concepts” triggers
    ─────────────────────────────────────────────────────────────────────────*/
 
-   import React, { useEffect, useState, useCallback } from "react";
-   import {
-     collection,
-     query,
-     where,
-     getDocs,
-     updateDoc,
-     doc,
-   } from "firebase/firestore";
-   import { db } from "../../../../firebase";          // ← adjust the path if needed
-   
-   /** ----------  tiny helpers  ---------- **/
-   
-   // Pull the leading “7.” or “3.2.”  →  7  /  3.2  (for proper sorting)
-   const numericPrefix = (name = "") => {
-     const m = name.match(/^\s*([\d.]+)/);      // digits + optional dots
-     return m ? parseFloat(m[1]) : Infinity;    // un-numbered items sink to bottom
-   };
-   const byPrefix = (a, b) => numericPrefix(a.name) - numericPrefix(b.name);
-   
-   /**
-    * processHtmlSummary
-    * Cleans the raw summary the same way ReadingView does
-    * but returns ONE combined HTML string (no paging needed here).
-    */
-   function processHtmlSummary(htmlString = "") {
-     let sanitized = htmlString.replace(/\\n/g, "\n").replace(/\r?\n/g, " ");
-     const paragraphs = sanitized
-       .split(/<\/p>/i)
-       .map((p) => p.trim())
-       .filter(Boolean)
-       .map((p) => p + "</p>");
-     return paragraphs.join("");
-   }
-   
-   /* ════════════════════════════════
-      Re-usable “edit-in-place” panel
-      ════════════════════════════════ */
-   function EditableSummary({ label, value, onSave }) {
-     const [editing, setEditing] = useState(false);
-     const [draft,   setDraft]   = useState(value || "");
-   
-     // keep textarea in sync if parent updates the field elsewhere
-     useEffect(() => {
-       if (!editing) setDraft(value || "");
-     }, [value, editing]);
-   
-     return (
-       <details open={editing} style={{ marginLeft: "1rem", marginTop: "0.4rem" }}>
-         <summary style={{ fontWeight: 500 }}>
-           {label}{" "}
-           {!editing && (
-             <button
-               type="button"
-               onClick={() => setEditing(true)}
-               style={{ marginLeft: 8 }}
-             >
-               ✏️ Edit
-             </button>
-           )}
-         </summary>
-   
-         {editing ? (
-           <div style={{ marginLeft: "1rem" }}>
-             <textarea
-               rows={6}
-               style={{ width: "100%", fontFamily: "monospace" }}
-               value={draft}
-               onChange={(e) => setDraft(e.target.value)}
-             />
-             <div style={{ marginTop: 4 }}>
-               <button
-                 type="button"
-                 onClick={async () => {
-                   await onSave(draft);
-                   setEditing(false);
-                 }}
-               >
-                 💾 Save
-               </button>
-               <button
-                 type="button"
-                 onClick={() => {
-                   setDraft(value || "");
-                   setEditing(false);
-                 }}
-                 style={{ marginLeft: 8 }}
-               >
-                 ✖️ Cancel
-               </button>
-             </div>
-           </div>
-         ) : (
-           <pre
-             style={{
-               marginLeft: "1rem",
-               whiteSpace: "pre-wrap",
-               fontFamily: "monospace",
-             }}
-           >
-             {value}
-           </pre>
-         )}
-       </details>
-     );
-   }
-   
-   /** ----------  The component  ---------- **/
-   
-   export default function BookExplorer({ userId }) {
-     const [books,        setBooks]        = useState([]);
-     const [selectedBookId, setSelectedBookId] = useState("");
-     const [chapters,     setChapters]     = useState([]);
-     const [subchapters,  setSubchapters]  = useState([]);
-     const [concepts,     setConcepts]     = useState({});
-     const [loading,      setLoading]      = useState(false);
-   
-     /* -----------------------------------------------------------
-        Firestore + local-state updater for summaries
-     ----------------------------------------------------------- */
-     async function patchSummary(col, id, newSummary) {
-       await updateDoc(doc(db, col, id), { summary: newSummary });
-   
-       if (col === "subchapters_demo") {
-         setSubchapters((rows) =>
-           rows.map((r) => (r.id === id ? { ...r, summary: newSummary } : r))
-         );
-       } else {
-         setConcepts((dict) => {
-           const next = { ...dict };
-           Object.keys(next).forEach((key) => {
-             next[key] = next[key].map((c) =>
-               c.id === id ? { ...c, summary: newSummary } : c
-             );
-           });
-           return next;
-         });
-       }
-     }
-   
-     /* 1️⃣  fetch all books that belong to the user */
-     useEffect(() => {
-       if (!userId) return;
-       (async () => {
-         const q = query(
-           collection(db, "books_demo"),
-           where("userId", "==", userId)
-         );
-         const snap = await getDocs(q);
-         const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-         rows.sort(byPrefix);
-         setBooks(rows);
-         if (rows.length && !selectedBookId) setSelectedBookId(rows[0].id);
-       })();
-     }, [userId]);
-   
-     /* 2️⃣  when book changes → load chapters + subchapters + concepts  */
-     const loadBook = useCallback(async (bookId) => {
-       setLoading(true);
-   
-       // ---- CHAPTERS
-       const chapQ = query(
-         collection(db, "chapters_demo"),
-         where("bookId", "==", bookId)
-       );
-       const chapSnap = await getDocs(chapQ);
-       const chapRows = chapSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-       chapRows.sort(byPrefix);
-   
-       // ---- SUB-CHAPTERS
-       const subQ = query(
-         collection(db, "subchapters_demo"),
-         where("bookId", "==", bookId)
-       );
-       const subSnap = await getDocs(subQ);
-       const subRows = subSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-       subRows.sort(byPrefix);
-   
-       // ---- CONCEPTS
-       const conQ = query(
-         collection(db, "subchapterConcepts"),
-         where("bookId", "==", bookId)
-       );
-       const conSnap = await getDocs(conQ);
-       const conceptDict = {};
-       conSnap.docs.forEach((d) => {
-         const rec = { id: d.id, ...d.data() };
-         if (!conceptDict[rec.subChapterId]) conceptDict[rec.subChapterId] = [];
-         conceptDict[rec.subChapterId].push(rec);
-       });
-   
-       setChapters(chapRows);
-       setSubchapters(subRows);
-       setConcepts(conceptDict);
-       setLoading(false);
-     }, []);
-   
-     useEffect(() => {
-       if (selectedBookId) loadBook(selectedBookId);
-     }, [selectedBookId, loadBook]);
-   
-     /* ---------- RENDER ---------- */
-   
-     if (!userId) return <p>Please supply a userId prop.</p>;
-   
-     return (
-       <div style={{ padding: "1rem", fontFamily: "sans-serif" }}>
-         <h2>📚 Book Explorer (admin)</h2>
-   
-         {/* Book selector */}
-         <label>
-           Select book&nbsp;
-           <select
-             value={selectedBookId}
-             onChange={(e) => setSelectedBookId(e.target.value)}
-           >
-             {books.map((b) => (
-               <option key={b.id} value={b.id}>
-                 {b.name}
-               </option>
-             ))}
-           </select>
-         </label>
-   
-         {loading && <p>Loading…</p>}
-   
-         {/* Chapter tree */}
-         {!loading &&
-           chapters.map((chap) => (
-             <details key={chap.id} style={{ marginTop: "1rem" }}>
-               <summary style={{ fontWeight: 700 }}>{chap.name}</summary>
-   
-               {/* ---- sub-chapters inside this chapter ---- */}
-               {subchapters
-                 .filter((s) => s.chapterId === chap.id)
-                 .map((sub) => (
-                   <details
-                     key={sub.id}
-                     style={{ marginLeft: "1rem", marginTop: "0.5rem" }}
-                   >
-                     <summary style={{ fontWeight: 600 }}>{sub.name}</summary>
-   
-                     {/* 🖼️  Image previews */}
-                     {sub.imageLinks &&
-                       (Array.isArray(sub.imageLinks)
-                         ? sub.imageLinks.length
-                         : typeof sub.imageLinks === "string") && (
-                         <details
-                           style={{ marginLeft: "1rem", marginTop: "0.4rem" }}
-                         >
-                           <summary style={{ fontWeight: 500 }}>
-                             🖼️ Image links (
-                             {Array.isArray(sub.imageLinks)
-                               ? sub.imageLinks.length
-                               : 1}
-                             )
-                           </summary>
-                           <div
-                             style={{
-                               display: "flex",
-                               flexWrap: "wrap",
-                               gap: "0.5rem",
-                               marginLeft: "1rem",
-                             }}
-                           >
-                             {(Array.isArray(sub.imageLinks)
-                               ? sub.imageLinks
-                               : [sub.imageLinks]
-                             ).map((url, i) => (
-                               <a
-                                 key={i}
-                                 href={url}
-                                 target="_blank"
-                                 rel="noopener noreferrer"
-                                 style={{ display: "inline-block" }}
-                               >
-                                 <img
-                                   src={url}
-                                   alt={`slice-${i}`}
-                                   style={{
-                                     maxWidth: 160,
-                                     borderRadius: 4,
-                                     boxShadow: "0 1px 4px rgba(0,0,0,.12)",
-                                   }}
-                                 />
-                               </a>
-                             ))}
-                           </div>
-                         </details>
-                       )}
-   
-                     {/* ---------- Raw  +  Processed Summary ---------- */}
-                     <EditableSummary
-                       label="🔧 Raw summary"
-                       value={sub.summary}
-                       onSave={(txt) =>
-                         patchSummary("subchapters_demo", sub.id, txt)
-                       }
-                     />
-   
-                     <details
-                       open
-                       style={{ marginLeft: "1rem", marginTop: "0.4rem" }}
-                     >
-                       <summary style={{ fontWeight: 500 }}>
-                         ✨ Processed summary
-                       </summary>
-                       <div
-                         style={{ marginLeft: "1rem" }}
-                         dangerouslySetInnerHTML={{
-                           __html: processHtmlSummary(sub.summary),
-                         }}
-                       />
-                     </details>
-   
-                     {/* ---------- concepts ---------- */}
-                     {(concepts[sub.id] || []).map((c) => (
-                       <details
-                         key={c.id}
-                         style={{ marginLeft: "2rem", marginTop: "0.25rem" }}
-                       >
-                         <summary style={{ fontWeight: 500 }}>🧩 {c.name}</summary>
-   
-                         {/* concept raw/processed sections */}
-                         <EditableSummary
-                           label="🔧 Raw summary"
-                           value={c.summary}
-                           onSave={(txt) =>
-                             patchSummary("subchapterConcepts", c.id, txt)
-                           }
-                         />
-   
-                         <details
-                           open
-                           style={{ marginLeft: "1rem", marginTop: "0.4rem" }}
-                         >
-                           <summary style={{ fontWeight: 500 }}>
-                             ✨ Processed summary
-                           </summary>
-                           <div
-                             style={{ marginLeft: "1rem" }}
-                             dangerouslySetInnerHTML={{
-                               __html: processHtmlSummary(c.summary),
-                             }}
-                           />
-                         </details>
-   
-                         {/* sub-points, if any */}
-                         {Array.isArray(c.subPoints) && c.subPoints.length > 0 && (
-                           <ul style={{ marginLeft: "2rem" }}>
-                             {c.subPoints.map((pt, idx) => (
-                               <li key={idx}>{pt}</li>
-                             ))}
-                           </ul>
-                         )}
-                       </details>
-                     ))}
-                   </details>
-                 ))}
-             </details>
-           ))}
-       </div>
-     );
-   }
+import React, { useEffect, useState, useCallback } from "react";
+import {
+  collection, query, where, getDocs,
+  updateDoc, doc, writeBatch,
+} from "firebase/firestore";
+import { db } from "../../../../firebase";            // ← adjust if needed
+
+/* ═════════ helpers ═════════ */
+const numPrefix = (t="") => { const m=t.match(/^(\d+(?:\.\d+)?)/); return m?+m[1]:1e9; };
+const byNum     = (a,b) => numPrefix(a.name)-numPrefix(b.name);
+const processHTML = (h="") => h.replace(/\\n/g,"\n").replace(/\r?\n/g," ")
+  .split(/<\/p>/i).map(p=>p.trim()).filter(Boolean).map(p=>p+"</p>").join("");
+const chip = (bg)=>({background:bg,color:"#fff",borderRadius:4,padding:"2px 6px",
+  fontSize:"0.7rem",fontWeight:600,cursor:"pointer"});
+
+/* ═════════ inline editor ═════════ */
+function EditableSummary({ label,value,onSave }) {
+  const[edit,setEdit]=useState(false);const[draft,set]=useState(value||"");
+  useEffect(()=>{if(!edit)set(value||"");},[value,edit]);
+  return(
+    <details open={edit} style={{marginLeft:"1rem",marginTop:"0.4rem"}}>
+      <summary style={{fontWeight:500}}>
+        {label}
+        {!edit&&<button type="button" onClick={()=>setEdit(true)} style={{marginLeft:8}}>✏️ Edit</button>}
+      </summary>
+      {edit?(
+        <div style={{marginLeft:"1rem"}}>
+          <textarea rows={6} style={{width:"100%",fontFamily:"monospace"}}
+                    value={draft} onChange={e=>set(e.target.value)}/>
+          <div style={{marginTop:4}}>
+            <button onClick={async()=>{await onSave(draft);setEdit(false);}}>💾 Save</button>
+            <button style={{marginLeft:8}} onClick={()=>{set(value||"");setEdit(false);}}>✖️ Cancel</button>
+          </div>
+        </div>
+      ):(
+        <pre style={{marginLeft:"1rem",whiteSpace:"pre-wrap",fontFamily:"monospace"}}>{value}</pre>
+      )}
+    </details>
+  );
+}
+
+/* ═════════ main component ═════════ */
+export default function BookExplorer({ userId }) {
+
+  /* state */
+  const [books,setBooks]           = useState([]);
+  const [bookId,setBookId]         = useState("");
+  const [tree,setTree]             = useState([]);     // subject→group→chapters
+  const [subs,setSubs]             = useState([]);     // flat sub-chapters
+  const [concepts,setConcepts]     = useState({});     // subId → concepts[]
+  const [loading,setLoading]       = useState(false);
+  const [filter,setFilter]         = useState("all");  // all | real | filler
+  const [pending,setPending]       = useState(new Set()); // subIds queued
+
+  /* arrow markers */
+  const arrowCSS=`details summary{cursor:pointer;}
+    details summary::-webkit-details-marker{display:none;}
+    details summary::marker{content:'';}
+    details summary::before{content:"▶";display:inline-block;width:1rem;
+      transition:transform .15s}
+    details[open]>summary::before{content:"▼";}`;
+
+  /* load books for user */
+  useEffect(()=>{ if(!userId) return;
+    (async()=>{
+      const snap=await getDocs(query(collection(db,"books_demo"),where("userId","==",userId)));
+      const rows=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>a.name.localeCompare(b.name));
+      setBooks(rows); if(rows.length&&!bookId) setBookId(rows[0].id);
+    })();
+  },[userId]);
+
+  /* load single book */
+  const loadBook=useCallback(async(id)=>{
+    setLoading(true);
+
+    const chapSnap=await getDocs(query(collection(db,"chapters_demo"),where("bookId","==",id)));
+    const chapters=chapSnap.docs.map(d=>({id:d.id,...d.data()}));
+
+    const subSnap=await getDocs(query(collection(db,"subchapters_demo"),where("bookId","==",id)));
+    const subRows=subSnap.docs.map(d=>({id:d.id,...d.data()})).sort(byNum);
+    setSubs(subRows);
+
+    const conSnap=await getDocs(query(collection(db,"subchapterConcepts"),where("bookId","==",id)));
+    const conDict={}; conSnap.docs.forEach(d=>{const r={id:d.id,...d.data()};(conDict[r.subChapterId]??=[]).push(r);});
+    setConcepts(conDict);
+
+    /* build subject→group→chapters tree */
+    const subjMap={};
+    chapters.forEach(c=>{
+      const subj=c.subject||"Uncategorised", grp=c.grouping||"Other";
+      (subjMap[subj]??={}); (subjMap[subj][grp]??=[]).push(c);
+    });
+    const t=Object.entries(subjMap).sort((a,b)=>a[0].localeCompare(b[0]))
+      .map(([subject,gObj])=>({subject,
+        groups:Object.entries(gObj).sort((a,b)=>a[0].localeCompare(b[0]))
+          .map(([grouping,chs])=>({grouping,chapters:chs.sort(byNum)}))
+      }));
+    setTree(t); setLoading(false);
+  },[]);
+
+  useEffect(()=>{ if(bookId) loadBook(bookId); },[bookId,loadBook]);
+
+  /* util: visible sub-chapter? */
+  const visible = s => filter==="all" ? true
+                     : filter==="real" ? !!s.realContentAdded : !s.realContentAdded;
+
+  /* toggle real/filler */
+  const flipReal = async (id,val)=>{ await updateDoc(doc(db,"subchapters_demo",id),{realContentAdded:val});
+    setSubs(rows=>rows.map(r=>r.id===id?{...r,realContentAdded:val}:r)); };
+
+  /* bulk mark real */
+  const bulkReal = async ids=>{ if(!ids.length) return;
+    const batch=writeBatch(db); ids.forEach(id=>batch.update(doc(db,"subchapters_demo",id),{realContentAdded:true}));
+    await batch.commit(); setSubs(rows=>rows.map(r=>ids.includes(r.id)?{...r,realContentAdded:true}:r)); };
+
+  /* queue concept extraction */
+  const queueOne = async id=>{
+    if(pending.has(id)) return;
+    setPending(p=>new Set([...p,id]));
+    await updateDoc(doc(db,"subchapters_demo",id),{conceptExtractionRequested:true});
+    setPending(p=>{const n=new Set(p);n.delete(id);return n;});
+  };
+  const queueMany = async ids=>{
+    if(!ids.length) return;
+    setPending(p=>new Set([...p,...ids]));
+    const batch=writeBatch(db); ids.forEach(id=>batch.update(doc(db,"subchapters_demo",id),{conceptExtractionRequested:true}));
+    await batch.commit();
+    setPending(p=>{const n=new Set(p);ids.forEach(i=>n.delete(i));return n;});
+  };
+
+  /* render */
+  return (
+    <div style={{padding:"1rem",fontFamily:"sans-serif"}}>
+      <style>{arrowCSS}</style>
+      <h2>📚 Book Explorer (admin)</h2>
+
+      {/* top-bar */}
+      <div style={{marginBottom:"0.6rem"}}>
+        <label>Book&nbsp;
+          <select value={bookId} onChange={e=>setBookId(e.target.value)}>
+            {books.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+        </label>
+        {tree.length>0&&(
+          <span style={{marginLeft:12,...chip(
+            filter==="all"?"#888":filter==="real"?"#2e7d32":"#c62828")}}
+            onClick={()=>setFilter(f=>f==="all"?"real":f==="real"?"filler":"all")}>
+            {filter==="all"?"All":filter==="real"?"Real only":"Filler only"}
+          </span>
+        )}
+      </div>
+
+      {loading&&<p>Loading…</p>}
+
+       {!loading && tree
+   /* 1️⃣  skip a whole SUBJECT if every group inside is empty after filtering */
+   .filter(subj => subj.groups.some(grp =>
+       grp.chapters.some(chap =>
+         subs.some(s => s.chapterId===chap.id && visible(s))
+       )
+     )
+   )
+   .map(subj=>(
+     <details key={subj.subject} open>
+       <summary style={{fontSize:"1.1rem",fontWeight:700}}>
+         {subj.subject}
+       </summary>
+
+       {subj.groups
+         /* 2️⃣  skip a GROUP if every chapter ends up empty */
+         .filter(grp =>
+           grp.chapters.some(chap =>
+             subs.some(s => s.chapterId===chap.id && visible(s))
+           )
+         )
+         .map(grp=>(
+         <details key={grp.grouping}
+                  open
+                  style={{marginLeft:"1rem",marginTop:"0.4rem"}}>
+           <summary style={{fontWeight:650}}>{grp.grouping}</summary>
+
+              {grp.chapters.map(chap=>{
+                const subRows=subs.filter(s=>s.chapterId===chap.id&&visible(s));
+                if(subRows.length===0) return null;
+
+                const notReal=subRows.filter(s=>!s.realContentAdded).map(s=>s.id);
+                const zeroConcept=subRows.filter(s=>(concepts[s.id]||[]).length===0).map(s=>s.id);
+
+                return(
+                  <details key={chap.id} style={{marginLeft:"1rem",marginTop:"0.4rem"}}>
+                    <summary style={{fontWeight:600}}>
+                      {chap.name}
+                      {notReal.length>0&&(
+                        <button style={{marginLeft:8,...chip("#2e7d32")}}
+                                onClick={e=>{e.stopPropagation();bulkReal(notReal);}}>
+                          ✅ Mark all real
+                        </button>)}
+                      {zeroConcept.length>0&&(
+                        <button style={{marginLeft:8,...chip("#1976d2")}}
+                                onClick={e=>{e.stopPropagation();queueMany(zeroConcept);}}>
+                          ⚡ Generate all concepts
+                        </button>)}
+                    </summary>
+
+                    {/* sub-chapters */}
+                    {subRows.map(sub=>{
+                      const list=concepts[sub.id]||[];
+                      const queued=pending.has(sub.id);
+                      return(
+                        <details key={sub.id} style={{marginLeft:"1rem",marginTop:"0.3rem"}}>
+                          <summary style={{fontWeight:600}}>
+                            {sub.name}
+                            <span onClick={e=>{e.stopPropagation();flipReal(sub.id,!sub.realContentAdded);}}
+                                  style={{marginLeft:6,...chip(sub.realContentAdded?"#2e7d32":"#c62828")}}>
+                              {sub.realContentAdded?"Real":"Filler"}
+                            </span>
+                            {list.length===0?(
+                              <button style={{marginLeft:6,...chip(queued?"#888":"#1976d2")}}
+                                      disabled={queued}
+                                      onClick={e=>{e.stopPropagation();queueOne(sub.id);}}>
+                                {queued?"⏳":"⚡ Generate concepts"}
+                              </button>
+                            ):(
+                              <span style={{marginLeft:6,...chip("#4caf50")}}>
+                                {list.length} concepts
+                              </span>
+                            )}
+                          </summary>
+
+                          {/* concept names */}
+                          {list.length>0&&(
+                            <ul style={{marginLeft:"1.5rem",marginTop:"0.2rem"}}>
+                              {list.map(c=><li key={c.id}>🧩 {c.name}</li>)}
+                            </ul>
+                          )}
+
+                          {/* summaries */}
+                          <EditableSummary
+                            label="🔧 Raw summary"
+                            value={sub.summary}
+                            onSave={txt=>updateDoc(doc(db,"subchapters_demo",sub.id),{summary:txt})}
+                          />
+                          <details open style={{marginLeft:"1rem",marginTop:"0.4rem"}}>
+                            <summary style={{fontWeight:500}}>✨ Processed summary</summary>
+                            <div style={{marginLeft:"1rem"}}
+                                 dangerouslySetInnerHTML={{__html:processHTML(sub.summary)}}/>
+                          </details>
+                        </details>
+                      );
+                    })}
+                  </details>
+                );
+              })}
+            </details>
+          ))}
+        </details>
+      ))}
+    </div>
+  );
+}

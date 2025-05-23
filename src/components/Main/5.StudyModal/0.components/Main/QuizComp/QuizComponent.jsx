@@ -8,8 +8,14 @@ import { fetchQuizTime, incrementQuizTime } from "../../../../../../store/quizTi
 import { setCurrentIndex, fetchPlan } from "../../../../../../store/planSlice";
 import { refreshSubchapter } from "../../../../../../store/aggregatorSlice";
 
+import {
+  gradeOpenEndedBatch as gradeOpenEndedBatchREAL
+} from "./QuizSupport/QuizQuestionGrader";
+
 // Render each question
 import QuizQuestionRenderer from "./QuizSupport/QuizQuestionRenderer";
+
+import LastAttemptPanel from "./QuizSupport/LastAttemptPanel";
 
 // GPT generation logic
 import { generateQuestions } from "./QuizSupport/QuizQuestionGenerator";
@@ -81,6 +87,10 @@ export default function QuizView({
   const [inProgressCount, setInProgressCount] = useState(0);
   const [notTestedCount, setNotTestedCount] = useState(0);
   const [conceptStatuses, setConceptStatuses] = useState([]);
+
+  // ─── Recent-attempt accordion ────────────────────────────────
+const [lastAttempt, setLastAttempt]   = useState(null);   // { questions, results, score, passed }
+const [showLastAttempt, setShowLastAttempt] = useState(false);
 
   // ---------- Quiz State ----------
   const [questionTypes, setQuestionTypes] = useState([]);
@@ -247,13 +257,8 @@ export default function QuizView({
 if (allQs.length === 0) {
     setGeneratedQuestions([]);   // make sure state is clean
     setPages([]);                // no pagination
-    setShowGradingResults(true); // show the summary panel
-    setQuizPassed(true);         // toggles the “Finish” button
-    setFinalPercentage("100%");  // cosmetic
-    setStatus("All concepts mastered – no quiz needed.");   // <— add this
-    setLoading(false);     
-          // stop any spinners
-    return;                      // skip normal quiz flow
+    
+    
   }
 
 
@@ -398,7 +403,8 @@ if (allQs.length === 0) {
       if (isLocallyGradableType(qObj.type)) {
         localItems.push({ qObj, userAnswer: uAns, originalIndex: i });
       } else {
-        openEndedItems.push({ qObj, userAnswer: uAns, originalIndex: i });
+                // IMPORTANT: property **must be called userAns** so the grader can see it
+        openEndedItems.push({ qObj, userAns: uAns, originalIndex: i });
       }
     });
 
@@ -419,7 +425,7 @@ if (allQs.length === 0) {
           };
         });
       } else {
-        const { success, gradingArray, error: gptErr } = await gradeOpenEndedBatch({
+        const { success, gradingArray, error: gptErr } = await gradeOpenEndedBatchREAL({
           openAiKey,
           subchapterSummary,
           items: openEndedItems,
@@ -518,6 +524,19 @@ if (allQs.length === 0) {
 
     // E) Show grading results => user sees pass/fail screen
     setGradingResults(overallResults);
+
+    // remember the full attempt so we can show it later
+setLastAttempt({
+  questions : generatedQuestions,
+  results   : overallResults,
+  score     : percentageString,
+  passed    : isPassed,
+});
+setShowLastAttempt(false);          // start collapsed
+
+
+
+
     setShowGradingResults(true);
     setLoading(false);
     setStatus("Grading complete.");
@@ -641,6 +660,8 @@ if (allQs.length === 0) {
           )}
           {error && <p style={{ color: "red" }}>{error}</p>}
 
+
+
           {/* QUIZ QUESTIONS => if not yet submitted */}
           {!showGradingResults && hasQuestions && (
             <div>
@@ -664,19 +685,28 @@ if (allQs.length === 0) {
           )}
 
           {/* GRADING RESULTS => if showGradingResults == true */}
-          {showGradingResults && (
-            <div style={styles.gradingContainer}>
-              <h3>Overall Summary</h3>
-              <p>
-                Your final score: <b>{finalPercentage}</b>
-              </p>
-              {quizPassed ? (
-                <p style={{ color: "lightgreen" }}>You passed!</p>
-              ) : (
-                <p style={{ color: "red" }}>You did not pass.</p>
-              )}
-            </div>
-          )}
+         {showGradingResults && (
+  <div style={styles.gradingContainer}>
+    <h3>Overall Summary</h3>
+    <p>
+      Your final score: <b>{finalPercentage}</b>
+    </p>
+    {quizPassed ? (
+      <p style={{ color: "lightgreen" }}>You passed!</p>
+    ) : (
+      <p style={{ color: "red" }}>You did not pass.</p>
+    )}
+
+    {/* ← the accordion now lives INSIDE the summary box */}
+    <LastAttemptPanel
+      attempt={lastAttempt}
+      show={showLastAttempt}
+      onToggle={() => setShowLastAttempt((p) => !p)}
+    />
+  </div>
+)}
+
+          
         </div>
 
         {/* ---------- Footer => pagination or pass/fail flows ---------- */}
@@ -827,11 +857,7 @@ function localGradeQuestion(qObj, userAnswer) {
   return { score, feedback };
 }
 
-async function gradeOpenEndedBatch({ openAiKey, subchapterSummary, items }) {
-  // your GPT-based grading code unchanged
-  // return { success: true/false, gradingArray: [...], error: ... }
-  return { success: true, gradingArray: items.map(() => ({ score: 1.0, feedback: "Dummy GPT pass" })) };
-}
+
 
 // --------------------------------------------------------------------
 // Collapsible MasterySummaryPanel (top-right corner)
@@ -910,6 +936,9 @@ function MasterySummaryPanel({
     </div>
   );
 }
+
+
+
 
 // Simple horizontal progress bar
 function ProgressBar({ pct }) {
@@ -1105,6 +1134,21 @@ const styles = {
     maxHeight: "120px",
     overflowY: "auto",
   },
+  lastAttemptWrapper: { marginBottom: "1rem" },
+collapseBtn:       {
+  backgroundColor: "#444",
+  color: "#fff",
+  border: "none",
+  padding: "6px 10px",
+  borderRadius: "4px",
+  cursor: "pointer",
+  marginBottom: "6px",
+},
+lastAttemptInner:  {
+  backgroundColor: "#222",
+  padding: "8px",
+  borderRadius: "4px",
+},
 };
 
 // --------------------------------------------------------------------

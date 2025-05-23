@@ -235,6 +235,10 @@ useEffect(() => {
   };
 
   function computeMode(quizArr, revArr, conceptArr, quizStage) {
+
+    
+
+    
     if (!quizArr.length) {
       setMode("NO_QUIZ_YET");
       setLastQuizAttempt(null);

@@ -24,6 +24,7 @@ export async function generateRevisionContent({
   revisionConfig,
   userId,
   quizStage,
+  maxHistoryAttempts = 10,
 }) {
   if (!db || !subChapterId || !openAiKey || !userId || !quizStage) {
     return {
@@ -33,8 +34,14 @@ export async function generateRevisionContent({
     };
   }
 
-  // 1) Identify the user's *latest* quiz attempt => find failing concepts
+  /* ────────────────────────────────────────────────
+   * 1) Grab the user’s MOST-RECENT quiz attempts
+   *    (up to maxHistoryAttempts) so we can:
+   *      • work out failed concepts          (as before)
+   *      • embed a history block in the prompt
+  * ────────────────────────────────────────────── */
   let failedConcepts = [];
+  let historyBlock   = "";
   try {
     const quizRef = collection(db, "quizzes_demo");
     const q = query(
@@ -45,14 +52,28 @@ export async function generateRevisionContent({
       orderBy("attemptNumber", "desc")
     );
     const snap = await getDocs(q);
-    if (snap.empty) {
-      // No attempts => no fails => generic revision
-      console.log("No quiz attempts found => providing a generic revision.");
+        if (snap.empty) {
+      console.log("No quiz attempts found ➜ generic revision.");
     } else {
-      // The first doc in the descending order is the latest attempt
-      const latestDoc = snap.docs[0];
-      const data = latestDoc.data();
-      const quizSubmission = data.quizSubmission || [];
+      /* ── a) slice the most-recent N docs ── */
+      const recentDocs = snap.docs.slice(0, maxHistoryAttempts);
+
+      /* ── b) build a human-readable *history* string ── */
+      historyBlock = recentDocs
+        .map((d) => {
+          const { attemptNumber, quizSubmission = [] } = d.data();
+          const lines = quizSubmission.map((q, idx) => {
+            const isCorrect = parseFloat(q.score) >= 1 ? "✅" : "❌";
+            return `    • Q${idx + 1} (${q.conceptName}): ${isCorrect}`;
+          });
+          return `Attempt #${attemptNumber}\n${lines.join("\n")}`;
+        })
+        .join("\n\n");
+
+      /* ── c) compute failedConcepts *from the latest attempt only* (unchanged) ── */
+      const latestDoc = recentDocs[0];
+      const latestData = latestDoc.data();
+      const quizSubmission = latestData.quizSubmission || [];
 
       // Build a concept map => { conceptName: { correct, total } }
       const conceptMap = {};
@@ -113,33 +134,58 @@ export async function generateRevisionContent({
     failedConceptsText = `These concepts were failed:\n - ${failedConcepts.join("\n - ")}`;
   }
 
-  const userPrompt = `
-You are a helpful tutor. The user has a subchapter summary and some concepts they struggled with.
+    /* 👇 NEW – only added if we actually have history */
+  const quizHistoryText = historyBlock
+    ? `\n\nQuiz History (most recent ${maxHistoryAttempts}):\n${historyBlock}`
+    : "";
 
-Subchapter Summary:
-"${subchapterSummary}"
+ 
+  
+    const userPrompt = `
+You are an expert tutor creating a **personal revision brief** for one
+learner.  Use the information below to write *conversational*,
+*detailed* explanations that target the learner’s specific mistakes.
 
-${failedConceptsText}
+────────────────────────  CONTEXT  ────────────────────────
+• **Sub-chapter summary**  
+"""${subchapterSummary}"""
 
-Revision Configuration:
-${configJson}
+• **Concepts the learner still struggles with**  
+${failedConcepts.length
+    ? failedConcepts.map((c) => `  – ${c}`).join("\\n")
+    : "  – none (give a concise general recap of all key ideas)"}  
 
-Return valid JSON in this exact structure:
+• **Recent quiz history** (✅ correct, ❌ incorrect)  
+${quizHistoryText || "  – no previous attempts on record"}  
+
+• **Authoring guidelines from my CMS**  
+"""${configJson}"""
+
+──────────────────────  HOW TO WRITE  ─────────────────────
+1. For **each concept** output **1-2 full paragraphs** (≈ 120–200 words
+   total).  Use a conversational tone (“you…”) and weave in:
+   • A one-sentence recap of the idea.  
+   • A plain-language deep-dive that fixes *this learner’s* exact
+     misconceptions (mention how many times they missed it if >1).  
+   • An analogy, mini-story, or real-life application to aid memory.  
+   • A short actionable tip or mnemonic to try next time.  
+2. If the learner already mastered the concept (no errors), still give
+   a concise *reinforcement* paragraph (~80–120 words) that cements the
+   knowledge and suggests an extension or challenge question.  
+3. **Return each paragraph as a single string** inside the notes
+   array.  (e.g. notes ["<paragraph text>"])  
+4. Do **NOT** add markdown, bullets, or code-blocks; plain text only.  
+5. Respond **only** with valid JSON in **this exact structure**:
+
 {
-  "title": "Short Title",
+  "title": "<Catchy revision title>",
   "concepts": [
     {
-      "conceptName": "Concept A",
-      "notes": ["Point 1", "Point 2"]
-    },
-    {
-      "conceptName": "Concept B",
-      "notes": ["..."]
+      "conceptName": "<Concept>",
+      "notes": ["<bullet 1>", "<bullet 2>", "…"]
     }
   ]
 }
-
-No extra commentary—only that JSON.
 `.trim();
 
   // 5) Call GPT
