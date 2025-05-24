@@ -220,11 +220,9 @@ export default function PlanFetcher({
           </div>
         )}
 
-        <BottomBar
-          stepPercent={stepPercent}
-          currentIndex={currentIndex}
-          totalSteps={totalSteps}
-        />
+        
+
+       
       </div>
     </PlanModalCtx.Provider>
   );

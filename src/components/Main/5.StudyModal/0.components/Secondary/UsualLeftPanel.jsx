@@ -18,9 +18,9 @@ import {
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 
-import useTaskModel       from "./shared/useTaskModel";   // builds Task objects
-import TaskCard           from "./shared/TaskCard";
-import DayProgressCircle  from "./shared/DayProgressCircle";
+import useTaskModel      from "./shared/useTaskModel";   // builds Task objects
+import TaskCard          from "./shared/TaskCard";
+import DayProgressCircle from "./shared/DayProgressCircle";
 
 /* ---------- constants ---------- */
 const CARD_PAGE_SIZE = 2;
@@ -29,7 +29,7 @@ const CARD_PAGE_SIZE = 2;
 const containerSx = {
   height: "100%",
   bgcolor: "#1A1A1A",
-  color:   "#fff",
+  color: "#fff",
   display: "flex",
   flexDirection: "column",
   p: 1,
@@ -41,7 +41,7 @@ const columnSx = {
   flex: 1,
   overflowY: "auto",
   overflowX: "hidden",
-  "&::-webkit-scrollbar":       { width: "6px" },
+  "&::-webkit-scrollbar": { width: "6px" },
   "&::-webkit-scrollbar-track": { background: "transparent" },
   "&::-webkit-scrollbar-thumb": { background: "#555", borderRadius: 3 },
   scrollbarWidth: "thin",
@@ -59,34 +59,30 @@ export default function LeftPanel({ isCollapsed = false, onToggleCollapse }) {
     status: planStatus,
   } = useSelector((s) => s.plan);
 
-  const timeMap        = useSelector((s) => s.aggregator.timeMap);
-  const subchapterMap  = useSelector((s) => s.aggregator.subchapterMap);
+  const timeMap       = useSelector((s) => s.aggregator.timeMap);
+  const subchapterMap = useSelector((s) => s.aggregator.subchapterMap);
 
-  /* ---- early guard ---- */
-  if (planStatus !== "succeeded" || !planDoc) {
-    return (
-      <Box sx={containerSx}>
-        <Typography>No plan loaded yet.</Typography>
-      </Box>
-    );
-  }
-
-  /* ---------- local UI state ---------- */
-  const [dayIdx, setDayIdx]     = useState(0);        // only for adaptive plans
-  const [page, setPage]         = useState(1);        // pagination (1-based)
+  /* ---------- local UI state (must be unconditional) ---------- */
+  const [dayIdx, setDayIdx]     = useState(0); // adaptive-plan only
+  const [page, setPage]         = useState(1); // 1-based pagination
   const [autoSync, setAutoSync] = useState(true);
 
-  /* ---------- plan fields ---------- */
-  const { planType = "adaptive", sessions = [] } = planDoc;
-  const rawSession = planType === "book"
-    ? sessions[0]
-    : sessions[dayIdx] || {};
-  const rawActs    = rawSession.activities || [];
+  /* ---------- plan helpers (safe even while loading) ---------- */
+  const planType = planDoc?.planType || "adaptive";
+  const sessions = planDoc?.sessions || [];
+
+  const rawSession =
+    planType === "book"
+      ? sessions[0] || {}
+      : sessions[dayIdx] || {};
+  const rawActs = rawSession.activities || [];
 
   /* ---------- FETCH aggregator for this day if missing ---------- */
   useEffect(() => {
-    dispatch(fetchAggregatorForDay({ dayIndex: dayIdx }));
-  }, [dayIdx, dispatch]);
+    if (planStatus === "succeeded") {
+      dispatch(fetchAggregatorForDay({ dayIndex: dayIdx }));
+    }
+  }, [dispatch, dayIdx, planStatus]);
 
   /* ---------- build task models ---------- */
   const tasks = useTaskModel(rawActs, subchapterMap, timeMap);
@@ -142,8 +138,9 @@ export default function LeftPanel({ isCollapsed = false, onToggleCollapse }) {
           t={t}
           selected={currentIndex === t.flatIndex}
           onOpen={() => {
-            setAutoSync(true);
-            dispatch(setCurrentIndex(t.flatIndex));
+                
+    setAutoSync(true);
+    dispatch(setCurrentIndex(t.flatIndex));
           }}
         />
       ))}
@@ -173,9 +170,9 @@ export default function LeftPanel({ isCollapsed = false, onToggleCollapse }) {
               "& .MuiPaginationItem-root": { color: "#fff" },
               "& .MuiPaginationItem-icon": { color: "#fff" },
               "& .MuiPaginationItem-root.Mui-selected": {
-                color: "#000",
-                bgcolor: "#FFD700",
-                "&:hover": { bgcolor: "#ffcc32" },
+                     color: "#fff",                   // white text on grey
+     bgcolor: "#555555",              // muted grey
+     "&:hover": { bgcolor: "#666666" } // slightly lighter on hover
               },
             }}
           />
@@ -185,18 +182,26 @@ export default function LeftPanel({ isCollapsed = false, onToggleCollapse }) {
   );
 
   /* ---------- render ---------- */
+  const showLoading = planStatus !== "succeeded" || !planDoc;
+
   return (
     <Box sx={containerSx}>
-      <HeaderRow
-        isCollapsed={isCollapsed}
-        onToggleCollapse={onToggleCollapse}
-        planType={planType}
-        sessions={sessions}
-        dayIdx={dayIdx}
-        handleDayChange={handleDayChange}
-        progressPct={progressPct}
-      />
-      {!isCollapsed && <CardColumn />}
+      {showLoading ? (
+        <Typography>No plan loaded yet.</Typography>
+      ) : (
+        <>
+          <HeaderRow
+            isCollapsed={isCollapsed}
+            onToggleCollapse={onToggleCollapse}
+            planType={planType}
+            sessions={sessions}
+            dayIdx={dayIdx}
+            handleDayChange={handleDayChange}
+            progressPct={progressPct}
+          />
+          {!isCollapsed && <CardColumn />}
+        </>
+      )}
     </Box>
   );
 }

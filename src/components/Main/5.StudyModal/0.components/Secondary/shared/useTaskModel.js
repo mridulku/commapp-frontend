@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 
-/* ---------- stage meta ---------- */
+/* ------------------------------------------------------------------ */
+/*  1.  CONSTANTS — per-stage icons / colours / labels                 */
+/* ------------------------------------------------------------------ */
 const STAGE_META = {
   READ:       { icon: "📖", color: "#BB86FC", label: "Read" },
   REMEMBER:   { icon: "🧠", color: "#80DEEA", label: "Remember" },
@@ -11,12 +13,15 @@ const STAGE_META = {
   CUMULATIVEREVISION: { icon: "🔁", color: "#64B5F6", label: "Cumulative Rev." },
 };
 
-/* ---------- utilities ---------- */
+/* ------------------------------------------------------------------ */
+/*  2.  SMALL HELPERS                                                  */
+/* ------------------------------------------------------------------ */
 const tsMs = (t) =>
   t?._seconds ? t._seconds * 1e3 :
   t?.seconds  ? t.seconds  * 1e3 :
   0;
 
+/* merge concept stats from all attempts – keep first PASS            */
 function buildConceptStats(arr = []) {
   const map = new Map();
   arr.forEach((att) =>
@@ -29,42 +34,43 @@ function buildConceptStats(arr = []) {
   return map;
 }
 
-/* ===================================================================
-   useTaskModel
-   • Converts raw activities + aggregator maps into render-ready objects
-   • A task is "loading" until both:
-       1) subchapterMap[subChapterId] exists   AND
-       2) timeMap[activityId] is not undefined
-=================================================================== */
+/* ------------------------------------------------------------------ */
+/*  3.  HOOK  –  useTaskModel                                          */
+/* ------------------------------------------------------------------ */
 export default function useTaskModel(
-  activities = [],
-  subchapterStatusMap = {},
-  timeMap = {},
-  sessionDateISO = null
+  activities          = [],     // raw session.activities
+  subchapterStatusMap = {},     // aggregator slice
+  timeMap             = {},     // activityId => seconds
+  sessionDateISO      = null    // e.g. "2024-05-24"
 ) {
   return useMemo(
     () =>
       activities.map((act, idx) => {
-        /* ---------- stage meta ---------- */
-        let stageKey;
-        if ((act.type || "").toLowerCase() === "read") {
-          stageKey = "read";
-        } else {
-          stageKey = (act.quizStage || "")
-            .replace(/[\s_]+/g, "")
-            .toLowerCase(); // e.g. "cumulativequiz"
-        }
-        const meta =
-          STAGE_META[(stageKey || "").toUpperCase()] || {
-            icon: "❓",
-            color: "#888",
-            label: stageKey,
-          };
+        /* 3-A.  STAGE META & FLAGS ----------------------------------- */
+        let stageKey =
+          (act.type || "").toLowerCase() === "read"
+            ? "read"
+            : (act.quizStage || "").replace(/[\s_]+/g, "").toLowerCase();
+
+        const meta = STAGE_META[stageKey.toUpperCase()] ?? {
+          icon: "❓", color: "#888", label: stageKey,
+        };
 
         const isCum =
           stageKey === "cumulativequiz" || stageKey === "cumulativerevision";
 
-        /* ---------- aggregator slices ---------- */
+        /* --- LOCKED?  (via aggregator.taskInfo) --------------------- */
+        let lockedFlag = false;
+        if (!isCum) {
+          const tiArr = subchapterStatusMap?.[act.subChapterId]?.taskInfo || [];
+          const needLabel = stageKey === "read" ? "Reading" : meta.label;
+          const hit = tiArr.find(
+            (t) => (t.stageLabel || "").toLowerCase() === needLabel.toLowerCase()
+          );
+          lockedFlag = hit?.locked === true;
+        }
+
+        /* 3-B.  AGGREGATOR SLICES ------------------------------------ */
         let subObj   = null;
         let stageObj = {};
         let statsArr = [];
@@ -75,84 +81,78 @@ export default function useTaskModel(
           statsArr = stageObj.allAttemptsConceptStats ?? [];
         }
 
-        /* ---------- concept mastery ---------- */
+        /* 3-C.  CONCEPT MASTERY & PROGRESS --------------------------- */
         const conceptMap   = isCum ? new Map() : buildConceptStats(statsArr);
         const totalConcept = conceptMap.size;
-        const mastered     = isCum
-          ? 0
-          : [...conceptMap.values()].filter((v) => v === "PASS").length;
-        const quizPct      = totalConcept
-          ? Math.round((mastered / totalConcept) * 100)
-          : 0;
+        const mastered     = [...conceptMap.values()].filter((v) => v === "PASS").length;
+        const quizPct      = totalConcept ? Math.round((mastered / totalConcept) * 100) : 0;
 
-        /* ---------- reading progress ---------- */
-        const readSum   = subObj?.readingSummary || {};
-        const readingPct = act.completed
-          ? 100
-          : typeof readSum.percent === "number"
-          ? Math.round(readSum.percent)
-          : 0;
+        const readPct = (() => {
+          if (act.completed) return 100;
+          const v = subObj?.readingSummary?.percent;
+          return typeof v === "number" ? Math.round(v) : 0;
+        })();
 
-        let pct;
-        if (meta.label === "Read")            pct = readingPct;
-        else if (isCum)                       pct = act.completed ? 100 : 0;
-        else                                   pct = quizPct;
+        const pct =
+          meta.label === "Read"
+            ? readPct
+            : isCum
+            ? act.completed ? 100 : 0
+            : quizPct;
 
-        /* ---------- attempts & buckets (quiz only) ---------- */
+        /* 3-D.  ATTEMPTS / NEXT-TASK / DATE BUCKETS ------------------ */
+        const spentMin = Math.round((timeMap[act.activityId] || 0) / 60);
+
         let attemptsSoFar = [];
         let nextActivity  = null;
-        let attBefore = [],
-            attToday  = [],
-            attAfter  = [];
+        let attBefore = [], attToday = [], attAfter = [];
 
         if (!isCum && meta.label !== "Read") {
-          const q   = stageObj.quizAttempts     ?? [];
-          const r   = stageObj.revisionAttempts ?? [];
+          const quizzes   = stageObj.quizAttempts     ?? [];
+          const revisions = stageObj.revisionAttempts ?? [];
           const all = [
-            ...q.map((o) => ({ ...o, type: "quiz" })),
-            ...r.map((o) => ({ ...o, type: "revision" })),
+            ...quizzes  .map((o) => ({ ...o, type: "quiz"     })),
+            ...revisions.map((o) => ({ ...o, type: "revision" })),
           ].sort((a, b) => tsMs(a.timestamp) - tsMs(b.timestamp));
 
-          const tag = (at) =>
-            `${at.type === "quiz" ? "Q" : "R"}${at.attemptNumber || at.revisionNumber || 1}`;
+          const tag = (o) =>
+            `${o.type === "quiz" ? "Q" : "R"}${o.attemptNumber || o.revisionNumber || 1}`;
           attemptsSoFar = all.map(tag);
 
-          /* next-activity recommendation (normal quizzes only) */
           if (pct < 100) {
-            const qCnt = q.length,
-                  rCnt = r.length;
+            const qCnt = quizzes.length, rCnt = revisions.length;
             if (qCnt === 0 && rCnt === 0) nextActivity = "Q1";
             else if (qCnt === rCnt)       nextActivity = `Q${qCnt + 1}`;
             else if (qCnt === rCnt + 1)   nextActivity = `R${qCnt}`;
           }
 
-          /* date buckets */
           if (sessionDateISO) {
-            all.forEach((at) => {
-              const dISO = new Date(tsMs(at.timestamp)).toISOString().slice(0, 10);
-              const lb   = tag(at);
-              if (dISO < sessionDateISO)         attBefore.push(lb);
-              else if (dISO === sessionDateISO)  attToday .push(lb);
-              else                               attAfter .push(lb);
+            all.forEach((o) => {
+              const dISO = new Date(tsMs(o.timestamp)).toISOString().slice(0, 10);
+              const lb   = tag(o);
+              if (dISO <  sessionDateISO) attBefore.push(lb);
+              if (dISO === sessionDateISO) attToday .push(lb);
+              if (dISO >  sessionDateISO) attAfter .push(lb);
             });
           }
         }
 
-        /* ---------- overall status ---------- */
-        const hasAgg =
-          isCum
-            ? true                                      // cumulative tasks need no aggregator
-            : meta.label === "Read"
-            ? true
-            : !!subObj && timeMap[act.activityId] !== undefined;
+        /* 3-E.  STATUS CLASSIFICATION (single source of truth) ------- */
+          /* ---------- overall status ---------- */
+  const hasAgg =
+    isCum
+      ? true                                 // cumulative tasks need no aggregator
+      : meta.label === "Read"
+      ? true                                 // reading needs only readingSummary
+      : !!subObj && timeMap[act.activityId] !== undefined;
 
-        let status;
-        if (!hasAgg)            status = "loading";
-        else if (pct === 100)   status = "completed";
-        else if (pct > 0)       status = "partial";
-        else                    status = "notstarted";
+  let status;
+  if (!hasAgg)          status = "loading";   // waiting for aggregator/time
+  else if (lockedFlag)  status = "locked";    // RED  ← highest priority
+  else if (pct === 100) status = "completed"; // GREEN
+  else                  status = "active";    // YELLOW – every unlocked, incomplete stage
 
-        /* ---------- return render-ready object ---------- */
+        /* 3-F.  RETURN RENDER-READY OBJECT --------------------------- */
         return {
           /* navigation */
           flatIndex: act.flatIndex ?? idx,
@@ -160,9 +160,9 @@ export default function useTaskModel(
 
           /* flags */
           meta,
-          status,
+          status,                // "loading" | "completed" | "active" | "notstarted"
           isCumulative : isCum,
-          locked       : (act.aggregatorStatus || "").toLowerCase() === "locked",
+          locked       : lockedFlag,
           deferred     : !!act.deferred,
 
           /* labels */
@@ -171,16 +171,15 @@ export default function useTaskModel(
           chapter: act.chapterName    || "—",
 
           /* timing */
-          spentMin: Math.round((timeMap[act.activityId] || 0) / 60),
+          spentMin,
           expMin  : act.timeNeeded || (isCum ? 5 : 0),
 
           /* progress & concepts */
           pct,
           mastered,
-          total: totalConcept,
+          total      : totalConcept,
           conceptList: [...conceptMap.entries()].map(([name, res]) => ({
-            name,
-            ok: res === "PASS",
+            name, ok: res === "PASS",
           })),
 
           /* attempts */

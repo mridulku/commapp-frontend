@@ -61,7 +61,6 @@ function RevisionCard() {
 
       {/* BODY */}
       <div style={styles.cardBody}>
-        <p style={{ color: "lightgreen" }}>Revision content generated.</p>
 
         <h4>Revision Focus</h4>
         <div style={styles.contentBlock}>

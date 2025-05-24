@@ -143,8 +143,14 @@ export default function AskAIChat({ contextText, selection, mode, onModeChange }
       {/* inline history */}
       <Collapse in={showHist} unmountOnExit
                 sx={{mb:1,maxHeight:140,overflowY:"auto"}}>
-        {history.length===0
-          ? <Box sx={{p:1,fontSize:13,opacity:.6}}>No past chats.</Box>
+         {history.length===0
+    ? (
+        <Box sx={{p:1,fontSize:13,opacity:.6}}>
+          <strong>History (WIP)</strong><br/>
+          Chat history isn’t saved yet – each new page or browser
+          session starts fresh. Persistence coming soon!
+        </Box>
+      )
           : history.map(h=>(
               <Paper key={h.ts} variant="outlined" onClick={()=>loadChat(h)}
                      sx={{p:1,mb:1,bgcolor:"#1d1d1d",cursor:"pointer",

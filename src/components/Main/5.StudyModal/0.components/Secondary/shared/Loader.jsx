@@ -104,7 +104,15 @@ export default function Loader({
   return (
     <Wrapper>
       {type === "spinner" ? (
-        <CircularProgress sx={{ color: accent }} />
+          <CircularProgress
+    size={36}           // ← bigger ring
+    thickness={4}       // ← thicker stroke
+    disableShrink            // ← keeps a single, solid arc
+    sx={{
+      color: accent,
+      animationDuration: "1200ms",   // smooth but not too fast
+    }}
+  />
       ) : (
         <Box sx={{ width: 260 }}>
           <LinearProgress

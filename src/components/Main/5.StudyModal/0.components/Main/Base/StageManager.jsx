@@ -5,6 +5,9 @@ import { useSelector, useDispatch } from "react-redux";
 import { fetchAggregatorForSubchapter } from "../../../../../../store/aggregatorSlice";
 import { fetchQuizStage, invalidateQuizStage } from "../../../../../../store/quizSlice";
 
+import LockIcon from "@mui/icons-material/Lock";   // ← keep with other MUI imports
+
+
 import { Box } from "@mui/material";
 // Child Components
 import ReadingView from "./ReadingView";
@@ -33,13 +36,57 @@ function getStageNumber(stageKey) {
   }
 }
 
+function LockedStageInfo({ stage }) {
+  const nice = stage ? stage[0].toUpperCase() + stage.slice(1) : "this stage";
+
+  return (
+    <Box
+      sx={{
+        mt: 6,
+        mx: "auto",
+        maxWidth: 420,
+        textAlign: "center",
+        p: 3,
+        bgcolor: "#1e1e1e",
+        border: "1px solid #444",
+        borderRadius: 2,
+        boxShadow: "0 0 6px rgba(0,0,0,.5)",
+      }}
+    >
+      <LockIcon sx={{ fontSize: 48, color: "#FFD700", mb: 1 }} />
+
+      <Box sx={{ fontSize: 22, fontWeight: 700, mb: 1 }}>
+        {nice} is locked
+      </Box>
+
+      <Box sx={{ fontSize: 14, lineHeight: 1.6, color: "#ccc" }}>
+        You’ll unlock <strong>{nice}</strong> after you finish the previous
+        stage(s).<br />
+        Follow the sequence → Read → Remember → Understand → Apply → Analyze —
+        that’s how the mastery ladder works.
+      </Box>
+    </Box>
+  );
+}
+
 /** Convert aggregator’s "status" => short label => "LOCKED","DONE","WIP","" */
+/** Convert aggregator’s record into a short pill label.
+ *  New rule ➜  UNLOCKED + ("not-started" 𝘰𝘳 "in-progress")  ⇒  "WIP"
+ */
 function getStatusShortLabel(item) {
   if (!item) return "";
-  // aggregator => item.status => "done"/"in-progress"/"not-started"
+
+  /* 1) Still locked on the server */
   if (item.locked) return "LOCKED";
-  if ((item.status || "").toLowerCase() === "done") return "DONE";
-  if ((item.status || "").toLowerCase() === "in-progress") return "WIP";
+
+  /* 2) Explicit server flags */
+  const s = (item.status || "").toLowerCase();
+  if (s === "done")         return "DONE";
+  if (s === "in-progress")  return "Active";
+
+  /* 3) NEW: unlocked but not-started → treat as Work-In-Progress */
+  if (s === "not-started")  return "Active";
+
   return "";
 }
 
@@ -76,6 +123,23 @@ export default function StageManager({ examId, activity, userId }) {
   const activityType = (activity?.type || "").toLowerCase(); // "read" or "quiz"
   const possibleQuizStage = (activity?.quizStage || "").toLowerCase();
   const completionStatus = (activity?.completionStatus || "").toLowerCase();
+
+  /* ---------- context labels for breadcrumb pills ---------- */
+const chapterLabel    = activity?.chapterName    || "Chapter";
+const subChapterLabel = activity?.subChapterName || "Sub-chapter";
+const groupingLabel   = activity?.grouping;
+
+function renderContextPill(text, key) {
+  return (
+    <div
+      key={key}
+      style={styles.contextPill}
+      title={text}          // ← idea D: shows full name on hover
+    >
+      {text}
+    </div>
+  );
+}
 
   // The stage that the user arrived on from left panel
   const selectedStage =
@@ -335,20 +399,32 @@ useEffect(() => {
 
   return (
     <div style={styles.container}>
-      {/* 1) Our pill row => reading + quiz stages */}
-      <div style={styles.stageRow}>
-        {renderStagePill("reading")}
-        {QUIZ_STAGES.map((st) => renderStagePill(st))}
-      </div>
+  {/* 0) Breadcrumb / context row ─────────────── */}
+ <div style={styles.contextRow}
+     title={`${groupingLabel} • ${chapterLabel} • ${subChapterLabel}`}>
+  {groupingLabel && (
+    <>
+      <div style={styles.crumbBox}>{groupingLabel}</div>
+      <span style={styles.chevron}>▸</span>
+    </>
+  )}
+  <div style={styles.crumbBox}>{chapterLabel}</div>
+  <span style={styles.chevron}>▸</span>
+  <div style={styles.crumbBox}>{subChapterLabel}</div>
+</div>
+
+  {/* 1) Stage-pill row ───────────────────────── */}
+  <div style={styles.stageRow}>
+    {renderStagePill("reading")}
+    {QUIZ_STAGES.map((st) => renderStagePill(st))}
+  </div>
 
       {/* 2) The main content => locked if aggregator says locked or if not the user's chosen stage */}
       <div style={styles.mainContent}>
         {isTabAllowedAndUnlocked(activeTab) ? (
           renderTabContent(activeTab)
         ) : (
-          <div style={{ fontSize: "1.1rem", color: "#f00" }}>
-            This stage is not currently accessible.
-          </div>
+          <LockedStageInfo stage={activeTab} />
         )}
       </div>
     </div>
@@ -443,7 +519,7 @@ useEffect(() => {
       if (loading) {
                 return (
                   <Box sx={{ mt: 4, display: "flex", justifyContent: "center" }}>
-                    <Loader type="bar" accent="#FFD700" determinate={false} />
+                    <Loader type="spinner" accent="#FFD700" />
                   </Box>
                 );
               }
@@ -590,7 +666,7 @@ function getDynamicPillStyle(shortLabel, isCurrentTab, canClick) {
       pillStyle.backgroundColor = "#2e7d32"; // green
       pillStyle.color = "#fff";
       break;
-    case "WIP":
+    case "Active":
       pillStyle.backgroundColor = "#f9a825"; // yellow
       pillStyle.color = "#000";
       break;
@@ -632,9 +708,12 @@ const styles = {
     display: "flex",
     flexDirection: "row",
     gap: "8px",
-    backgroundColor: "#111",
+   backgroundColor: "transparent", // no strip
+  padding: "4px 8px 8px",         // align nicely under breadcrumb"#111",
     padding: "8px",
     alignItems: "center",
+      width: "100%",              // keep it full-width
+  justifyContent: "center",// explicit left alignment
   },
   stagePill: {
     position: "relative",
@@ -679,6 +758,17 @@ const styles = {
     overflowX: "hidden", 
     boxSizing: "border-box",
   },
+  contextPill: {
+   backgroundColor: "#424242",
+   color: "#fff",
+   fontSize: "0.75rem",
+   padding: "4px 10px",
+   borderRadius: 12,
+   maxWidth: 160,
+   whiteSpace: "nowrap",
+   overflow: "hidden",
+   textOverflow: "ellipsis",
+ },
   quizContainer: {
     display: "flex",
     flexDirection: "column",
@@ -712,5 +802,29 @@ const styles = {
     color: "#fff",
     backgroundColor: "#111",
     textAlign: "center",
+  },
+    /* ── NEW breadcrumb row ──────────────────── */
+  contextRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+       backgroundColor: "transparent",
+  padding: "6px 8px 2px",
+  justifyContent: "center",   // NEW – center horizontally
+  width: "100%",              // ensure the flex-box spans full row
+  },
+   crumbBox: {
+   backgroundColor: "#2d2d2d",
+   color: "#fff",
+   fontSize: "0.78rem",
+   padding: "4px 12px",
+   borderRadius: 6,
+   whiteSpace: "nowrap",   // keep each crumb on one line
+   lineHeight: 1.1,
+   flexShrink: 0,
+ },
+  chevron: {
+    color: "#777",
+    fontSize: "0.8rem",
   },
 };

@@ -8,11 +8,20 @@ import {
 } from "@mui/material";
 import ArrowRightAltIcon from "@mui/icons-material/ArrowRightAlt";
 import Loader from "./Loader";                  // still used elsewhere
+import { memo } from "react";  
+import LockIcon from "@mui/icons-material/Lock";   // NEW
+
 
 /* ---------- common colours ---------- */
 const CLR_COMPLETE = "#4CAF50";
 const CLR_PARTIAL  = "#FFB300";
 const CLR_NONE     = "#E53935";
+
+const CLR_SUBCH_HEADER = "#E0E0E0";   // light-grey on dark background
+
+const CLR_STAGE_LABEL  = "#F5C64D";   // stage name (“Read”, “Remember”…)
+
+const CLR_STATUS_TEXT = "#CCCCCC";  
 
 /* ---------- helper row ---------- */
 function Row({ icon, label, bold = false, color = "#fff", center = false }) {
@@ -55,19 +64,44 @@ function Locked() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        pointerEvents: "none",
+        pointerEvents: "none",      // overlay does NOT block clicks
         color: "#fff",
-        fontWeight: 700,
         borderRadius: 2,
       }}
     >
-      LOCKED
+      <LockIcon sx={{ fontSize: 36 }} />
     </Box>
   );
 }
 
 export default function TaskCard({ t, onOpen, selected = false }) {
   const { meta, status, deferred } = t;
+
+  /* ─── 1. If status === "loading" → show one minimal card with spinner ─── */
+  /* ------------------------------------------------------------------ */
+/*  EARLY EXIT  – plain loading placeholder                           */
+/* ------------------------------------------------------------------ */
+if (status === "loading") {
+  return (
+    <Box
+      sx={{
+        p: 2,
+        bgcolor: "#121212",
+        border: "1px solid #444",
+        borderRadius: 2,
+        width: "100%",
+        minHeight: 160,          // same footprint as a normal card
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <Typography sx={{ color: "#cccccc", fontSize: 14 }}>
+        Loading…
+      </Typography>
+    </Box>
+  );
+}
 
   /* ---------- detect cumulative ---------- */
   const isCum =
@@ -77,7 +111,7 @@ export default function TaskCard({ t, onOpen, selected = false }) {
   const accent    = isCum ? "#AB47BC" : meta.color;
   const borderClr =
     status === "completed" ? CLR_COMPLETE :
-    status === "partial"   ? CLR_PARTIAL  :
+    status === "active"    ? CLR_PARTIAL  :
     status === "loading"   ? "#555"       :
                              CLR_NONE;
   const bgClr =
@@ -87,10 +121,10 @@ export default function TaskCard({ t, onOpen, selected = false }) {
                              "rgba(229,57,53,.15)";
 
   const badge =
-    status === "completed" ? "Completed" :
-    status === "partial"   ? "Partially done" :
-    status === "loading"   ? "Loading…" :
-                             "Not started";
+  status === "completed" ? "Completed" :
+  status === "active"    ? "Active"    :   // NEW
+  status === "loading"   ? "Loading…" :
+                           "Not started";
 
   const conceptTip = t.total
     ? (
@@ -182,7 +216,7 @@ export default function TaskCard({ t, onOpen, selected = false }) {
             </Typography>
 
             {/* status badge */}
-            <Typography sx={{ fontSize: 11, fontWeight: 700, color: borderClr, mt: 0.4 }}>
+            <Typography sx={{ fontSize: 11, fontWeight: 700, color: CLR_STATUS_TEXT, mt: 0.4 }}>
               {badge}
             </Typography>
 
@@ -216,7 +250,7 @@ export default function TaskCard({ t, onOpen, selected = false }) {
               sx={{
                 fontWeight: 700,
                 fontSize: ".88rem",
-                color: meta.color,
+                 color: CLR_SUBCH_HEADER,
                 whiteSpace: "nowrap",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
@@ -228,7 +262,7 @@ export default function TaskCard({ t, onOpen, selected = false }) {
           </Tooltip>
 
           {/* ---------- status badge ---------- */}
-          <Typography sx={{ fontSize: 11, fontWeight: 700, color: borderClr }}>
+          <Typography sx={{ fontSize: 11, fontWeight: 700, color: CLR_STATUS_TEXT, }}>
             {badge}
           </Typography>
           {deferred && (
@@ -238,7 +272,7 @@ export default function TaskCard({ t, onOpen, selected = false }) {
           )}
 
           {/* ---------- common rows ---------- */}
-          <Row icon={meta.icon} label={meta.label} bold color={meta.color} />
+          <Row icon={meta.icon} label={meta.label} bold color={CLR_STAGE_LABEL}  />
           <Row icon="📚" label={t.book} />
           <Row icon="📄" label={t.chapter} />
           <Row icon="⏱" label={`${t.spentMin}/${t.expMin} min`} />
