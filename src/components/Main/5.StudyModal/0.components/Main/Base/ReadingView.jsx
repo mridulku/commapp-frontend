@@ -92,6 +92,11 @@ function chunkHtmlByParagraphs(htmlString, chunkSize = 180) {
   return pages;
 }
 
+/* ---------- who can see debug / time-details ---------- */
+const ADMIN_UIDS = [
+  "acbhbtiODoPPcks2CP6Z",   // ← add real admin UIDs here
+];
+
 /* ---------------- format time ---------------- */
 function formatTime(totalSeconds) {
   const m = Math.floor(totalSeconds / 60);
@@ -127,6 +132,7 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
 
   // ---- Redux & dispatch ----
   const userId       = useSelector((state) => state.auth?.userId || "demoUser");
+  const isAdmin      = ADMIN_UIDS.includes(userId);   // NEW
   const planId       = useSelector((state) => state.plan?.planDoc?.id);
   const currentIndex = useSelector((state) => state.plan?.currentIndex);
   const dispatch     = useDispatch();
@@ -139,6 +145,8 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
 
   const [pages, setPages] = useState([]);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
+
+
 
   // track reading start for final data
   const readingStartRef = useRef(null);
@@ -164,6 +172,8 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
 
   // debug overlay toggle
   const [showDebug, setShowDebug] = useState(false);
+
+
 
   function handleGotoNext() {
     /*  We don’t need to ping the backend again – the chapter is
@@ -439,6 +449,9 @@ const backendURL = import.meta.env.VITE_BACKEND_URL;
     /*  after a style switch the cache might not be ready yet —
       fallback to original pages until rewrite is finished     */
   const VIEW = cache.current[style] || pages;
+      // --- pagination helpers (NEW) ---
+const totalPages        = VIEW.length;
+const pageLabel         = `${currentPageIndex + 1} / ${totalPages}`;
 
 
   const currentPageHtml = VIEW[currentPageIndex] || "";
@@ -490,9 +503,11 @@ const backendURL = import.meta.env.VITE_BACKEND_URL;
                       label={STYLES.find((s) => s.key === style)?.label}
                       size="small"
                       sx={{
-                        bgcolor: "primary.main", color: "#fff",
-                        fontSize: 11
-                      }}
+  bgcolor: "#424242",          // graphite 700
+  color:  "#fff",
+  fontSize: 11,
+  "& .MuiChip-label": { px: 0.75 }  // (optional) tighten padding
+}}
                     />
                   )}
                   <IconButton
@@ -541,7 +556,7 @@ const backendURL = import.meta.env.VITE_BACKEND_URL;
               🕒 {formatTime(displayedTime)}
             </Box>
             {/* day-by-day overlay toggle if complete */}
-            {isComplete && (
+            {isAdmin && isComplete && (
               <Button
                 variant="text"
                 size="small"
@@ -552,6 +567,7 @@ const backendURL = import.meta.env.VITE_BACKEND_URL;
               </Button>
             )}
             {/* debug info toggle */}
+            {isAdmin && (
             <Button
               variant="text"
               size="small"
@@ -560,6 +576,7 @@ const backendURL = import.meta.env.VITE_BACKEND_URL;
             >
               debug
             </Button>
+            )}
           </Box>
         </Box>
 
@@ -609,46 +626,66 @@ const backendURL = import.meta.env.VITE_BACKEND_URL;
           )}
         </Box>
 
-        {/* footer nav (only for "read" tab) */}
-        {tab === "read" && (
-          <Box
-            sx={{
-              p: 1, borderTop: "1px solid #333",
-              display: "flex", justifyContent: "space-between"
-            }}
-          >
-            <Button
-              size="small"
-              variant="outlined"
-              disabled={currentPageIndex === 0}
-              onClick={handlePrevPage}
-            >
-              Previous
-            </Button>
-            {currentPageIndex < VIEW.length - 1 && (
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={handleNextPage}
-              >
-                Next
-              </Button>
-            )}
-                       {/* last-page action button */}
-            {currentPageIndex === VIEW.length - 1 && (
-              <Button
-                size="small"
-                variant="contained"
-                color="success"
-                onClick={isComplete ? handleGotoNext : handleFinishReading}
-              >
-                {isComplete ? "Next Task" : "Finish Reading"}
-              </Button>
-            )}
+{/* footer nav (only for "read" tab) */}
+{tab === "read" && (
+  <Box
+    sx={{
+      p: 1,
+      borderTop: "1px solid #333",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 1        // nicer spacing
+    }}
+  >
+    {/* PREVIOUS */}
+    <Button
+  size="small"
+  variant="contained"
+  sx={{
+    bgcolor: "#545454",            // ← graphite
+    "&:hover": { bgcolor: "#616161" }
+  }}
+  onClick={handlePrevPage}
+>
+  Previous
+</Button>
 
+    {/* PAGE COUNTER (NEW) */}
+    <Typography
+      sx={{ flexShrink: 0, fontSize: 14, opacity: 0.8 }}
+    >
+      Page&nbsp;{pageLabel}
+    </Typography>
 
-          </Box>
-        )}
+    {/* NEXT  |  FINISH */}
+    {currentPageIndex < totalPages - 1 ? (
+      <Button
+  size="small"
+  variant="contained"
+  sx={{
+    bgcolor: "#5e35b1",            // ← indigo
+    "&:hover": { bgcolor: "#512da8" }
+  }}
+  onClick={handleNextPage}
+>
+  Next
+</Button>
+    ) : (
+      <Button
+  size="small"
+  variant="contained"
+  sx={{
+    bgcolor: "#26a69a",            // ← teal
+    "&:hover": { bgcolor: "#1e8e86" }
+  }}
+  onClick={isComplete ? handleGotoNext : handleFinishReading}
+>
+  {isComplete ? "Next Task" : "Finish Reading"}
+</Button>
+    )}
+  </Box>
+)}
       </Box>
 
       {/* Day-by-day overlay */}

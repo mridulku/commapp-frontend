@@ -10,11 +10,14 @@ import OnboardingWizard from "./Support/OnboardingWizard";
 
 import ReadingViewDummy from "./Support/ReadingViewDummy";
 
+import MetricsDashboard from "./Support/MetricsDashboard";
+
 import AggregatorBootloader from "./Support/AggregatorBootloader";
 import AggregatorDebugPanel from "./Support/AggregatorDebugPanel";
 
 import ConceptExtractionPage from "./Support/ConceptExtractionPage";
 
+import CostDashboard from "./Support/CostDashboard"; // ← add this line
 
 // Add more admin tools here later and extend the enum ↓
 const TOOLS = {
@@ -27,6 +30,8 @@ const TOOLS = {
   AggregatorBootloader: "Aggregator Bootloader",
   AggregatorDebugPanel: "Aggregator Debug Panel",
   ConceptExtractionPage: "Concept Extraction Page",
+  CostDashboard: "Cost Dashboard",
+  MetricsDashboard: "Metrics Dashboard",
 };
 
 function AdminPanel({ userId }) {
@@ -89,6 +94,10 @@ function AdminPanel({ userId }) {
             return <AggregatorDebugPanel   userId={userId} />;
             case "ConceptExtractionPage":
             return <ConceptExtractionPage   userId={userId} />;
+            case "CostDashboard":
+            return <CostDashboard   userId={userId} />;
+            case "MetricsDashboard":
+            return <MetricsDashboard   userId={userId} />;
       default:
         return null;
     }

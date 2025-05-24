@@ -1,12 +1,15 @@
 /**
  * File: QuizQuestionGenerator.js
- * Description:
- *   - Handles question generation from GPT, returning an array of question objects
- *   - Excludes concepts the user has already passed at 100 %
- *   - *NEW*: each Bloom stage can prepend a stage-specific prompt snippet
+ * ------------------------------------------------------------------
+ *  ▸ Generates quiz questions with GPT
+ *  ▸ Excludes concepts already mastered at 100 %
+ *  ▸ Each Bloom-stage can prepend a stage-specific prompt snippet
+ *  ▸ All OpenAI calls go through chatCompletionTracked() so you get
+ *    prompt / completion token usage, cost and latency in Firestore.
  */
 
-import axios from "axios";
+import { chatCompletionTracked } from "./aiClient";
+
 import {
   doc,
   getDoc,
@@ -17,16 +20,15 @@ import {
   orderBy,
 } from "firebase/firestore";
 
-/* ------------------------------------------------------------------ */
-/*  MAIN ENTRY: generateQuestions                                     */
-/* ------------------------------------------------------------------ */
+/* ────────────────────────────────────────────────────────────────────
+ *  MAIN ENTRY
+ * ────────────────────────────────────────────────────────────────── */
 export async function generateQuestions({
   db,
   planId,
   subChapterId,
   examId = "general",
   quizStage = "remember",
-  openAiKey,
   userId,
 }) {
   try {
@@ -38,9 +40,7 @@ export async function generateQuestions({
       examId,
     });
 
-    /* -------------------------------------------------------------- */
-    /* 0) Which concepts has the learner already mastered?            */
-    /* -------------------------------------------------------------- */
+    /* ── 0) Which concepts has the learner already mastered? ── */
     const passedConceptsSet = await findPassedConcepts(
       db,
       userId,
@@ -49,46 +49,46 @@ export async function generateQuestions({
       quizStage
     );
     console.log(
-      "[generateQuestions] passedConceptsSet =>",
+      "[generateQuestions] passedConceptsSet ➜",
       Array.from(passedConceptsSet)
     );
 
-    /* -------------------------------------------------------------- */
-    /* 1) Fetch quizConfig for this stage (e.g. quizGeneralRemember)  */
-    /* -------------------------------------------------------------- */
+    /* ── 1) Fetch quizConfig for this stage (e.g. quizGeneralRemember) ── */
     const docId = buildQuizConfigDocId(examId, quizStage);
     const quizConfigRef = doc(db, "quizConfigs", docId);
     const quizConfigSnap = await getDoc(quizConfigRef);
 
     if (!quizConfigSnap.exists()) {
-      console.warn(`[generateQuestions] No quizConfig doc "${docId}"`);
+      console.warn(`[generateQuestions] No quizConfig doc “${docId}”`);
       return {
         success: false,
-        error: `Missing quizConfig "${docId}"`,
+        error: `Missing quizConfig “${docId}”`,
         questionsData: null,
       };
     }
 
+    /** quizConfig = { multipleChoice: 2, trueFalse: 1, … , stagePrompt } */
     const quizConfigData = quizConfigSnap.data();
-    console.log("[generateQuestions] quizConfigData =>", quizConfigData);
+    console.log("[generateQuestions] quizConfigData ➜", quizConfigData);
 
-    /* ——— pull out the prompt snippet & strip it from the counts ——— */
+    /* pull out the stagePrompt then delete so only counts remain */
     const stagePrompt = quizConfigData.stagePrompt || "";
-    delete quizConfigData.stagePrompt; // so only pure counts remain
+    delete quizConfigData.stagePrompt;
 
-    /* -------------------------------------------------------------- */
-    /* 2) Fetch all concept docs for this sub-chapter                 */
-    /* -------------------------------------------------------------- */
-    let conceptList = [];
+    /* ── 2) Fetch all concept docs for this sub-chapter ── */
     const conceptSnap = await getDocs(
       query(
         collection(db, "subchapterConcepts"),
         where("subChapterId", "==", subChapterId)
       )
     );
-    conceptList = conceptSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-    /* —— remove concepts already mastered —— */
+    let conceptList = conceptSnap.docs.map((d) => ({
+      id: d.id,
+      ...d.data(),
+    }));
+
+    /* remove already-mastered concepts */
     conceptList = conceptList.filter((c) => !passedConceptsSet.has(c.name));
 
     if (conceptList.length === 0) {
@@ -96,32 +96,34 @@ export async function generateQuestions({
       return { success: true, error: null, questionsData: { questions: [] } };
     }
 
-    /* -------------------------------------------------------------- */
-    /* 3) Loop concepts × type counts → call GPT                      */
-    /* -------------------------------------------------------------- */
-    let allConceptQuestions = [];
+    /* ── 3) Loop (concept × typeName × count) → GPT ── */
+    const allConceptQuestions = [];
 
     for (const concept of conceptList) {
-      console.log(`→ Generating for concept "${concept.name}"`);
+      console.log(`→ Generating for concept “${concept.name}”`);
       for (const [typeName, count] of Object.entries(quizConfigData)) {
         if (count <= 0) continue;
+
         const batch = await generateQuestions_ForConcept({
           db,
           subChapterId,
-          openAiKey,
           typeName,
           numberOfQuestions: count,
           concept,
-          stagePrompt, // pass down
+          userId,
+          quizStage,
+          stagePrompt,
         });
+
         allConceptQuestions.push(...batch);
       }
     }
 
     console.log(
-      "[generateQuestions] TOTAL generated =>",
+      "[generateQuestions] TOTAL generated ➜",
       allConceptQuestions.length
     );
+
     return {
       success: true,
       error: null,
@@ -133,9 +135,9 @@ export async function generateQuestions({
   }
 }
 
-/* ------------------------------------------------------------------ */
-/*  findPassedConcepts — unchanged                                    */
-/* ------------------------------------------------------------------ */
+/* ────────────────────────────────────────────────────────────────────
+ *  Helper: findPassedConcepts
+ * ────────────────────────────────────────────────────────────────── */
 async function findPassedConcepts(db, userId, planId, subChapterId, quizStage) {
   const passed = new Set();
   try {
@@ -149,11 +151,11 @@ async function findPassedConcepts(db, userId, planId, subChapterId, quizStage) {
         orderBy("attemptNumber", "desc")
       )
     );
+
     snap.forEach((d) => {
       (d.data().quizSubmission || []).forEach((q) => {
         const c = q.conceptName;
-        if (!c) return;
-        if (parseFloat(q.score) >= 1) passed.add(c);
+        if (c && parseFloat(q.score) >= 1) passed.add(c);
       });
     });
   } catch (err) {
@@ -162,40 +164,43 @@ async function findPassedConcepts(db, userId, planId, subChapterId, quizStage) {
   return passed;
 }
 
-/* ------------------------------------------------------------------ */
-/*  generateQuestions_ForConcept — now receives stagePrompt           */
-/* ------------------------------------------------------------------ */
+/* ────────────────────────────────────────────────────────────────────
+ *  Helper: generateQuestions_ForConcept
+ * ────────────────────────────────────────────────────────────────── */
 async function generateQuestions_ForConcept({
   db,
   subChapterId,
-  openAiKey,
   typeName,
   numberOfQuestions,
   concept,
-  stagePrompt, // ← receives
+  userId,
+  quizStage,
+  stagePrompt,
 }) {
   return generateQuestions_GPT({
     db,
     subChapterId,
-    openAiKey,
     typeName,
     numberOfQuestions,
     forcedConceptName: concept.name,
-    stagePrompt, // ← passes through
+    userId,
+    quizStage,
+    stagePrompt,
   });
 }
 
-/* ------------------------------------------------------------------ */
-/*  generateQuestions_GPT — accepts stagePrompt & inserts it          */
-/* ------------------------------------------------------------------ */
+/* ────────────────────────────────────────────────────────────────────
+ *  Helper: generateQuestions_GPT
+ * ────────────────────────────────────────────────────────────────── */
 async function generateQuestions_GPT({
   db,
   subChapterId,
-  openAiKey,
   typeName,
   numberOfQuestions,
   forcedConceptName,
-  stagePrompt = "", // default empty
+  userId,
+  quizStage,
+  stagePrompt = "",
 }) {
   /* A) fetch sub-chapter summary */
   let subchapterSummary = "";
@@ -208,15 +213,17 @@ async function generateQuestions_GPT({
 
   /* B) forced concept block (optional) */
   const forcedBlock = forcedConceptName
-    ? `All questions must focus on the concept: "${forcedConceptName}".\nSet each question's "conceptName" field to "${forcedConceptName}".`
+    ? `All questions must focus on the concept “${forcedConceptName}”.\n` +
+      `Set each question's "conceptName" field to "${forcedConceptName}".`
     : "";
 
-  /* C) build prompts */
-  const systemPrompt = "You are a helpful question generator that outputs JSON only.";
+  /* C) build prompt */
+  const systemPrompt =
+    "You are a helpful question generator that outputs JSON only.";
   const userPrompt = `
 ${stagePrompt}
 
-You have a subchapter summary:
+You have a sub-chapter summary:
 "${subchapterSummary}"
 
 Generate ${numberOfQuestions} questions of type "${typeName}."
@@ -235,15 +242,13 @@ Include:
 
 Return ONLY valid JSON:
 {
-  "questions":[ { ... }, ... ]
+  "questions":[ { … }, … ]
 }
 `.trim();
 
-  /* D) call OpenAI */
-  let parsedQuestions = [];
+  /* D) call OpenAI (via tracked helper) */
   try {
-    const resp = await axios.post(
-      "https://api.openai.com/v1/chat/completions",
+    const resp = await chatCompletionTracked(
       {
         model: "gpt-3.5-turbo",
         messages: [
@@ -253,23 +258,29 @@ Return ONLY valid JSON:
         max_tokens: 1500,
         temperature: 0.7,
       },
-      { headers: { Authorization: `Bearer ${openAiKey}` } }
+      {
+        userId,
+        subChapterId,
+        quizStage,
+        concept: forcedConceptName || "mixed",
+        questionType: typeName,
+      }
     );
 
-    const raw = resp.data.choices[0].message.content
+    const raw = resp.choices[0].message.content
       .replace(/```json|```/g, "")
       .trim();
-    parsedQuestions = JSON.parse(raw).questions || [];
+    const parsed = JSON.parse(raw);
+    return parsed.questions || [];
   } catch (err) {
     console.error("generateQuestions_GPT error:", err);
+    return [];
   }
-
-  return parsedQuestions;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Utility: buildQuizConfigDocId                                     */
-/* ------------------------------------------------------------------ */
+/* ────────────────────────────────────────────────────────────────────
+ *  Utility: buildQuizConfigDocId
+ * ────────────────────────────────────────────────────────────────── */
 function buildQuizConfigDocId(exam, stage) {
   const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
   return `quiz${cap(exam)}${cap(stage)}`;

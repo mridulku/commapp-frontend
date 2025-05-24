@@ -676,6 +676,8 @@ const styles = {
     flex: 1,
     overflowY: "auto",
     padding: "8px",
+    overflowX: "hidden", 
+    boxSizing: "border-box",
   },
   quizContainer: {
     display: "flex",

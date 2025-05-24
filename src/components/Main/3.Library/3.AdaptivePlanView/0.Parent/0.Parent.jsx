@@ -164,7 +164,7 @@ export default function Child2({
   ================================================================== */
   return (
     <div style={containerStyle}>
-      {/* plan-specific header strip */}
+      {/* plan-specific header strip 
       <StatsPanel
         db={db}
         userId={userId}
@@ -173,6 +173,7 @@ export default function Child2({
         colorScheme={colorScheme}
         onResume={openFetcher} 
       />
+      */}
 
       {/* global tab strip + in-tab day-picker */}
       <Box sx={{ display:"flex", alignItems:"center", mb:1 }}>

@@ -3,6 +3,13 @@
 // -------------------------------------------------------------
 import React, { useEffect, useState } from "react";
 import { useSelector, useDispatch }   from "react-redux";
+import DashboardHeader from "./DashboardHeader";   // ⬅️ NE
+
+import usePlans     from "./usePlans";
+import PlanDropdown from "./PlanDropdown";
+
+import { Dialog, DialogContent } from "@mui/material";
+import PlanFetcher from "../../5.StudyModal/StudyModal";   // ← tweak the path if your folders differ
 /* axios import kept in case you use it elsewhere in this file */
 // import axios                        from "axios";
 
@@ -51,6 +58,17 @@ export default function MaterialsDashboard({
   /* ---------- exam type from global store ---------- */
   const examType = useSelector((s) => s.exam?.examType);
 
+    /* ---------- resume-player dialog state ---------- */
+  const [showPlayer, setShowPlayer] = useState(false);
+  const [playerPlan, setPlayerPlan] = useState(null);
+
+  const handleResume = () => {
+    if (selectedPlanId) {
+      setPlayerPlan(selectedPlanId);
+      setShowPlayer(true);
+    }
+  };
+
   /* ---------- 1) look up bookId in users/{uid} ---------- */
   const [bookId,      setBookId]      = useState(null);
   const [bookErr,     setBookErr]     = useState(null);
@@ -79,50 +97,45 @@ export default function MaterialsDashboard({
       }
     })();
   }, [userId, examType]);
-
-  /* ---------- 2) live plan-ID listener ---------- */
-  const [planIds,        setPlanIds]        = useState([]);
-  const [selectedPlanId, setSelectedPlanId] = useState("");
-  const [loadingPlans,   setLoadingPlans]   = useState(true);
-
-  useEffect(() => {
-    if (!userId || !bookId) return;
-
-    /* collection that holds adaptive plans – adjust if yours differs */
-    const col = collection(db, "adaptive_demo");
-
-    /* query: this user's plans for this book, newest first */
-    const q = query(
-      col,
-      where("userId", "==", userId),
-      where("bookId", "==", bookId),
-      orderBy("createdAt", "desc")          // needs composite index
-    );
-
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const ids = snap.docs.map((d) => d.id);
-        setPlanIds(ids);
-
-        /* keep current selection if still present; else pick newest */
-        setSelectedPlanId((curr) =>
-          curr && ids.includes(curr) ? curr : ids[0] || ""
-        );
-        setLoadingPlans(false);
-      },
-      (err) => {
-        console.error("planId listener:", err);
-        setPlanIds([]); setSelectedPlanId(""); setLoadingPlans(false);
-      }
-    );
-
-    return () => unsub();           // clean up on unmount / dep change
-  }, [userId, bookId]);
-
-  const handlePlanSelect = (pid) => setSelectedPlanId(pid);
+  
+    /* ---------- use shared hook ------------ */
+  const {
+    planIds,
+    metaMap,
+    selected: selectedPlanId,
+    setSelected: setSelectedPlanId,
+    loading: loadingPlans
+  } = usePlans({ userId, bookId });
 
   /* ---------- loading / error UI ---------- */
+
+    /* ───────────────────────────────────────────────
+     OPTIONAL: pull *subjects* for header chip list
+     (If your usePlans hook already puts .subjects
+     inside metaMap, you can delete this block.)
+  ─────────────────────────────────────────────── */
+
+  const [subjects, setSubjects] = useState([]);
+
+  useEffect(() => {
+    if (!selectedPlanId) { setSubjects([]); return; }
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, "adaptive_demo", selectedPlanId));
+        const data = snap.exists() ? snap.data() : {};
+        const subjArr =
+          (data.subjects || []).map((s) => s.title || s.name || String(s));
+        setSubjects(subjArr);
+      } catch (e) {
+        console.warn("failed to fetch subjects →", e);
+        setSubjects([]);
+      }
+    })();
+  }, [selectedPlanId]);
+
+  /* ---------- loading / error UI ---------- */
+
+
   if (loadingBook || loadingPlans) {
     return (
       <Loader
@@ -143,30 +156,50 @@ export default function MaterialsDashboard({
     );
   }
 
+  /* If you kept the effect above, prefer its list;
+     otherwise fall back to metaMap (from usePlans). */
+  const currentMeta    = metaMap?.[selectedPlanId] || {};
+  const subjectList    = subjects.length ? subjects
+                                         : currentMeta.subjects || [];
+ 
+
   /* ---------- MAIN RENDER ---------- */
   return (
     <Box sx={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}>
 
       {/* ─── STATS STRIP ACROSS THE TOP ─── */}
-      <Box sx={{ px: 2, pt: 2 }}>
-        <StatsPanel userId={userId} />
-      </Box>
+            {/* ─── PAGE HEADER / HERO ─── */}
+      <DashboardHeader
+               /* Replace hard-coded title with dropdown */
+        planName={ <PlanDropdown
+                     selectedId={selectedPlanId}
+                     planIds={planIds}
+                     metaMap={metaMap}
+                     onSelect={setSelectedPlanId}
+                   /> }
+        subjects={subjectList}
+        onResume={handleResume} 
+        kpis={[
+          { icon: "⏱️", label: "Time Studied Today", value: "7 h 6 m" },
+          { icon: "🎯", label: "Today’s Target",       value: "60 %"   },
+          { icon: "📈", label: "Total Time Studied",   value: "195 h"  },
+          { icon: "🔥", label: "Current Streak",       value: "2 days"},
+        ]}
+      />
+ 
+      {/* (optional) keep StatsPanel below if you still want it) */}
+      {/* <Box sx={{ px: 2, pt: 2 }}>
+           <StatsPanel userId={userId} />
+         </Box> */}
 
       {/* ─── TWO-COLUMN LAYOUT BELOW ─── */}
       <Grid container sx={{ flex: 1 }}>
 
         {/* LEFT column — My Plans */}
-        <Grid item xs={12} md={4} lg={3}>
-          <PlanSelector
-            planIds={planIds}
-            selectedPlanId={selectedPlanId}
-            onPlanSelect={handlePlanSelect}
-            onOpenOnboarding={onOpenOnboarding}
-          />
-        </Grid>
+        
 
         {/* RIGHT column — adaptive plan viewer */}
-        <Grid item xs={12} md={8} lg={9}>
+        <Grid item xs={12} >
           <Box sx={{ p: 0, height: "100%", display: "flex", flexDirection: "column" }}>
             <Box sx={{ flexGrow: 1, overflowY: "auto" }}>
               <Child2
@@ -186,8 +219,22 @@ export default function MaterialsDashboard({
               />
             </Box>
           </Box>
+           <Dialog open={showPlayer} onClose={()=>setShowPlayer(false)} fullScreen>
+      <DialogContent sx={{ p:0, bgcolor:"#000" }}>
+        {playerPlan && (
+          <PlanFetcher
+            planId={playerPlan}
+            initialActivityContext={null}  /* null ⇒ resume last */
+            userId={userId}
+            onClose={()=>setShowPlayer(false)}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
         </Grid>
       </Grid>
     </Box>
+
+   
   );
 }
