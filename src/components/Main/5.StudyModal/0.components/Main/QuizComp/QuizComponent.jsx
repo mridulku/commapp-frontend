@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { doc, getDoc, collection, getDocs } from "firebase/firestore";
+import { doc, getDoc, collection, getDocs, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../../../../../firebase"; // Adjust path if needed
 import axios from "axios";
 import { useSelector, useDispatch } from "react-redux";
@@ -99,6 +99,32 @@ function computeConceptStatuses(allAtts) {
   });
 
   return { conceptSet, conceptStatusMap };
+}
+
+
+const QUIZ_CACHE_COLL = "quizCache";
+
+/** Build a *stable* doc-id: (no date component!) */
+function buildQuizCacheId(userId, planId, subChapterId, stage, attempt) {
+  return `${userId}_${planId}_${subChapterId}_${stage}_q${attempt}`;
+}
+
+/** try → read cached quiz (returns questions[] | null) */
+async function fetchQuizCache(db, cacheId) {
+  const snap = await getDoc(doc(db, QUIZ_CACHE_COLL, cacheId));
+  return snap.exists() ? snap.data().questions ?? null : null;
+}
+
+/** write fresh quiz to cache */
+async function saveQuizCache(db, cacheId, questions) {
+  await setDoc(
+    doc(db, QUIZ_CACHE_COLL, cacheId),
+    {
+      questions,
+      created: serverTimestamp(),
+    },
+    { merge: false }          // overwrite only on new attempt #
+  );
 }
 
 /**
@@ -277,76 +303,63 @@ const [showLastAttempt, setShowLastAttempt] = useState(false);
     }
 
     // B) Generate quiz
-    async function doGenerateQuestions() {
-      try {
-        const result = await generateQuestions({
-          userId,
-          planId,
-          db,
-          subChapterId,
-          examId,
-          quizStage,
-          openAiKey,
-        });
+/* B) 1️⃣  Try cache  →  2️⃣  GPT fallback  →  3️⃣  save to cache */
+async function doGenerateQuestions() {
+  try {
+    const cacheId = buildQuizCacheId(
+      userId,
+      planId,
+      subChapterId,
+      quizStage,
+      attemptNumber            // attempt increments ⇒ new cache doc
+    );
 
-        if (!result.success) {
-          console.error("generateQuestions => error:", result.error);
-          setStatus(`Generation error: ${result.error}`);
-          setLoading(false);
-          return;
-        }
-
-        const allQs = result.questionsData?.questions || [];
-
-        // ————— NEW: if nothing to test, jump straight to the pass summary —————
-if (allQs.length === 0) {
-    setGeneratedQuestions([]);   // make sure state is clean
-    setPages([]);                // no pagination
-    
-    
-  }
-
-
-        
-
-
-        
-
-        // fetch subchapter summary for GPT grading context
-        let summary = "";
-        try {
-          const ref = doc(db, "subchapters_demo", subChapterId);
-          const snap = await getDoc(ref);
-          if (snap.exists()) {
-            summary = snap.data().summary || "";
-          }
-        } catch (err) {
-          console.error("Error fetching subchapter summary:", err);
-        }
-
-        setGeneratedQuestions(allQs);
-        setUserAnswers(allQs.map(() => "")); // one answer slot per question
-        setSubchapterSummary(summary);
-
-        // Build pagination pages
-        const newPages = [];
-        const QUESTIONS_PER_PAGE = 3;
-        for (let i = 0; i < allQs.length; i += QUESTIONS_PER_PAGE) {
-          const slice = [];
-          for (let j = i; j < i + QUESTIONS_PER_PAGE && j < allQs.length; j++) {
-            slice.push(j);
-          }
-          newPages.push(slice);
-        }
-        setPages(newPages);
-        setCurrentPageIndex(0);
-      } catch (err) {
-        console.error("Error in doGenerateQuestions:", err);
-        setStatus("Error: " + err.message);
-      } finally {
-        setLoading(false);
-      }
+    // 1️⃣  look in Firestore
+    const cachedQs = await fetchQuizCache(db, cacheId);
+    if (cachedQs && cachedQs.length) {
+      console.log("[Quiz] hit cache", cacheId);
+      return useQuestions(cachedQs);
     }
+
+    // 2️⃣  call GPT generator
+    const result = await generateQuestions({
+      userId,
+      planId,
+      db,
+      subChapterId,
+      examId,
+      quizStage,
+      openAiKey,
+    });
+
+    if (!result.success) throw new Error(result.error || "GPT error");
+    const freshQs = result.questionsData?.questions || [];
+
+    // 3️⃣  persist for the rest of this attempt
+    await saveQuizCache(db, cacheId, freshQs);
+    console.log("[Quiz] saved new cache", cacheId);
+
+    return useQuestions(freshQs);
+  } catch (err) {
+    console.error("doGenerateQuestions()", err);
+    setStatus("Error: " + err.message);
+  } finally {
+    setLoading(false);
+  }
+}
+
+/* helper: push questions into state exactly once */
+function useQuestions(allQs) {
+  setGeneratedQuestions(allQs);
+  setUserAnswers(allQs.map(() => ""));
+  /* (everything that paginates & sets pages/currentPageIndex is unchanged) */
+  const newPages = [];
+  for (let i = 0; i < allQs.length; i += QUESTIONS_PER_PAGE) {
+    newPages.push(allQs.slice(i, i + QUESTIONS_PER_PAGE).map((_, j) => i + j));
+  }
+  setPages(newPages);
+  setCurrentPageIndex(0);
+}
 
     fetchQuizSubActivityTime();
     doGenerateQuestions();

@@ -1,9 +1,12 @@
 // ReviseView.jsx  – drop-in replacement
 import React, { useEffect, useState, useRef } from "react";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../../../../../firebase";
 import axios from "axios";
 import { useSelector, useDispatch } from "react-redux";
+
+
+
 
 import {
   fetchReviseTime,
@@ -63,6 +66,17 @@ function chunkHtmlByParagraphs(html = "", chunkSize = 180) {
   });
   if (curHTML.trim()) pages.push(curHTML);
   return pages;
+}
+
+
+const CACHE_COLL = "revisionCache";
+
+/**
+ * Build a *stable* cache-document ID for one specific revision run.
+ * (No date-stamp → the same revision opens instantly next time.)
+ */
+function buildCacheId(userId, planId, subChapterId, stage, revNum) {
+  return `${userId}_${planId}_${subChapterId}_${stage}_rev${revNum}`;
 }
 
 /* Firestore doc-id helper */
@@ -267,31 +281,62 @@ export default function ReviseView({
     });
 
     /* 1B – GPT content */
-    (async()=>{
-      try{
-        const cfgId = buildRevisionConfigDocId(examId, quizStage);
-        const cfgSnap = await getDoc(doc(db,"revisionConfigs",cfgId));
-        if(!cfgSnap.exists()) throw new Error(`No revisionConfig '${cfgId}'`);
+   /* 1B – GPT content (+ simple Firestore cache) */
+(async () => {
+  try {
+    // ---------- 2-line cache lookup ----------
+    const cacheId   = buildCacheId(userId, planId, subChapterId, quizStage, revisionNumber);
+    const cacheRef  = doc(db, CACHE_COLL, cacheId);
+    const cacheSnap = await getDoc(cacheRef);
 
-        const { success, revisionData, error:errMsg } =
-          await generateRevisionContent({
-            db,
-            subChapterId,
-            openAiKey: import.meta.env.VITE_OPENAI_KEY,
-            revisionConfig: cfgSnap.data(),
-            userId,
-            quizStage,
-          });
+    let finalHtml;
 
-        if(!success) throw new Error(errMsg||"GPT error");
+    if (cacheSnap.exists()) {
+      console.log("[Revision] cache HIT →", cacheId);
+      finalHtml = cacheSnap.data().html || "";
+    } else {
+      console.log("[Revision] cache MISS →", cacheId);
 
-        const html   = createHtmlFromGPTData(revisionData);
-        const chunks = chunkHtmlByParagraphs(html,180);
-        setPages(chunks);
-        setStatus("");
-      }catch(e){ console.error(e); setError(e.message); }
-      finally{ setLoading(false); }
-    })();
+      const cfgId   = buildRevisionConfigDocId(examId, quizStage);
+      const cfgSnap = await getDoc(doc(db, "revisionConfigs", cfgId));
+      if (!cfgSnap.exists()) throw new Error(`No revisionConfig '${cfgId}'`);
+
+      const { success, revisionData, error: errMsg } =
+        await generateRevisionContent({
+          db,
+          subChapterId,
+          openAiKey: import.meta.env.VITE_OPENAI_KEY,
+          revisionConfig: cfgSnap.data(),
+          userId,
+          quizStage,
+        });
+
+      if (!success) throw new Error(errMsg || "GPT error");
+
+      finalHtml = createHtmlFromGPTData(revisionData);
+
+      // ---------- write to cache so next open is instant ----------
+      await setDoc(cacheRef, {
+        html           : finalHtml,
+        createdAt      : serverTimestamp(),
+        userId,
+        planId,
+        subChapterId,
+        stage          : quizStage,
+        revisionNumber,
+      });
+    }
+
+    const chunks = chunkHtmlByParagraphs(finalHtml, 180);
+    setPages(chunks);
+    setStatus("");
+  } catch (e) {
+    console.error(e);
+    setError(e.message || "Error generating revision");
+  } finally {
+    setLoading(false);
+  }
+})();
 
   },[userId,subChapterId,quizStage,revisionNumber,planId,dispatch]);
 
