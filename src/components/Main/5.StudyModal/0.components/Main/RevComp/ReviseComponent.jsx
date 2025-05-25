@@ -6,6 +6,7 @@ import axios from "axios";
 import { useSelector, useDispatch } from "react-redux";
 
 
+import useConceptMastery from "../QuizComp/QuizSupport/useConceptMastery";
 
 
 import {
@@ -15,7 +16,7 @@ import {
 import { setCurrentIndex, fetchPlan } from "../../../../../../store/planSlice";
 import { refreshSubchapter } from "../../../../../../store/aggregatorSlice";
 
-import { Chip, CircularProgress, Fade } from "@mui/material";
+import { Chip, CircularProgress, Fade, Tooltip } from "@mui/material";
 import AccessTimeIcon from "@mui/icons-material/AccessTimeRounded";
 
 import { generateRevisionContent } from "./RevSupport/RevisionContentGenerator";
@@ -155,6 +156,46 @@ const ProgressBar = ({ pct }) => (
   </div>
 );
 
+
+
+/* -------------------------------------------------------------
+   Compact concept bar  ✓ 2 / 3  (tooltip shows individual names)
+-------------------------------------------------------------*/
+/* ── compact pill identical to QuizView ───────────────────── */
+function ConceptInlineBar({ conceptStatuses = [] }) {
+  if (!conceptStatuses.length) return null;             // hide if nothing to show
+
+  const pass = conceptStatuses.filter(c => c.status === "PASS").length;
+  const tot  = conceptStatuses.length;
+
+  /* one ✓ / ✗ line per concept – keep the \n, Tooltip handles it */
+    const tooltip = (
+    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      {conceptStatuses.map(c => (
+        <span key={c.conceptName}>
+          {c.status === "PASS" ? "✓" : "✗"} {c.conceptName}
+        </span>
+      ))}
+    </div>
+  );
+
+  return (
+    <div style={{ marginLeft:"auto", display:"inline-flex", alignItems:"center" }}>
+      <Tooltip title={tooltip} arrow placement="bottom-start">
+        <span
+          style={{
+            background:"#37474f", color:"#e0f7fa",
+            padding:"2px 8px", borderRadius:4, userSelect:"none",
+            whiteSpace:"nowrap", cursor:"default"
+          }}
+        >
+          {pass === tot ? "✓" : "✗"}&nbsp;{pass}&nbsp;/&nbsp;{tot}
+        </span>
+      </Tooltip>
+    </div>
+  );
+}
+
 const LoadingOverlay = ({ text }) => (
   <Fade in>
     <div style={{
@@ -257,11 +298,14 @@ export default function ReviseView({
   const [pageIx  , setPageIx  ] = useState(0);
 
   /* mastery widget */
-  const [loadingConceptData, setLCD] = useState(true);
-  const [mastered , setMst] = useState(0);
-  const [inProg   , setInpr]= useState(0);
-  const [notTested, setNot ] = useState(0);
-  const [conceptStatuses,setCS]=useState([]);
+  // one-liner now:
+const {
+  loading     : loadingConceptData,
+  masteredCount,
+  inProgressCount,
+  notTestedCount,
+  conceptStatuses
+} = useConceptMastery(subChapterId, quizStage);
 
   /* ── 1. Generate / fetch on mount ───────────────────────── */
   useEffect(()=>{
@@ -435,26 +479,23 @@ export default function ReviseView({
     }
   };
 
+  const pageLabel = `Page ${pageIx + 1} / ${pages.length || 1}`;
+
   /* ────────────────────────────────────────────────────────── */
   return (
     <div style={styles.outer}>
       <div style={styles.card}>
         {loading && <LoadingOverlay text={status||"Generating revision…"}/>}
 
-        {/* mastery panel */}
-        <MasterySummaryPanel
-          loadingConceptData={loadingConceptData}
-          masteredCount={mastered}
-          inProgressCount={inProg}
-          notTestedCount={notTested}
-          conceptStatuses={conceptStatuses}
-        />
+        
 
         {/* header */}
         <div style={styles.header}>
           <h2 style={{margin:0,fontWeight:600}}>Revision</h2>
           <Pill label={`Round #${revisionNumber}`}/>
           <Pill label={fmt(total)} icon={<AccessTimeIcon sx={{fontSize:16}}/>}/>
+
+          <ConceptInlineBar conceptStatuses={conceptStatuses} />
         </div>
 
         {/* body */}
@@ -465,24 +506,36 @@ export default function ReviseView({
         </div>
 
         {/* footer */}
-        <div style={styles.footer}>
-          <div style={styles.nav}>
-            {pageIx>0 && <button style={styles.btn} onClick={prev}>Previous</button>}
-            {pageIx < pages.length-1 && (
-              <button style={styles.btn} onClick={next}>Next</button>
-            )}
-            {pageIx === pages.length-1 && (
-              <>
-                <button style={styles.btnMain} onClick={handleQuizNow}>
-                  Take Quiz Now
-                </button>
-                <button style={styles.btn} onClick={handleQuizLater}>
-                  Take Quiz Later
-                </button>
-              </>
-            )}
-          </div>
-        </div>
+<div style={styles.footer}>
+  <div style={styles.navRow}>
+    {/* left chunk */}
+    <div style={{ flex: "0 0 auto" }}>
+      {pageIx > 0 && (
+        <button style={styles.btn} onClick={prev}>Previous</button>
+      )}
+    </div>
+
+    {/* middle = page counter */}
+    <div style={styles.pageLabel}>{pageLabel}</div>
+
+    {/* right chunk */}
+    <div style={{ flex: "0 0 auto", display: "flex", gap: 8 }}>
+      {pageIx < pages.length - 1 && (
+        <button style={styles.btn} onClick={next}>Next</button>
+      )}
+      {pageIx === pages.length - 1 && (
+        <>
+          <button style={styles.btnMain} onClick={handleQuizNow}>
+            Take Quiz Now
+          </button>
+          <button style={styles.btn} onClick={handleQuizLater}>
+            Take Quiz Later
+          </button>
+        </>
+      )}
+    </div>
+  </div>
+</div>
       </div>
     </div>
   );
@@ -514,4 +567,6 @@ const styles = {
   expandBtn:{background:"#444",color:"#fff",border:"none",borderRadius:4,
              padding:"2px 6px",cursor:"pointer",fontSize:".8rem",lineHeight:1},
   conceptList:{margin:0,paddingLeft:16,maxHeight:120,overflowY:"auto"},
+  navRow:   { display: "flex", alignItems: "center", justifyContent: "space-between" },
+pageLabel:{ fontSize: 14, opacity: 0.85, userSelect: "none" },
 };

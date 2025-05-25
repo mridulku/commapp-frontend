@@ -12,6 +12,9 @@ import { CircularProgress, Fade, Chip } from "@mui/material";
 
 import AccessTimeIcon from "@mui/icons-material/AccessTimeRounded";
 
+import Tooltip from "@mui/material/Tooltip";
+
+
 function Pill({ label, icon }) {
   return (
     <Chip
@@ -32,6 +35,10 @@ function Pill({ label, icon }) {
 import {
   gradeOpenEndedBatch as gradeOpenEndedBatchREAL
 } from "./QuizSupport/QuizQuestionGrader";
+
+import useConceptMastery from "./QuizSupport/useConceptMastery";
+
+
 
 // Render each question
 import QuizQuestionRenderer from "./QuizSupport/QuizQuestionRenderer";
@@ -104,6 +111,10 @@ function computeConceptStatuses(allAtts) {
 
 const QUIZ_CACHE_COLL = "quizCache";
 
+
+
+
+
 /** Build a *stable* doc-id: (no date component!) */
 function buildQuizCacheId(userId, planId, subChapterId, stage, attempt) {
   return `${userId}_${planId}_${subChapterId}_${stage}_q${attempt}`;
@@ -127,6 +138,51 @@ async function saveQuizCache(db, cacheId, questions) {
   );
 }
 
+/* ------------------------------------------------------------------
+   ConceptInlineBar
+   - summary chip  :   “✓ 2 / 5”
+   - on hover      :   tooltip with one ✓ / ✕ / – per concept
+-------------------------------------------------------------------*/
+
+/* ------------------------------------------------------------------
+   ConceptInlineBar  (fixed)
+   - summary chip  : “✓ 2 / 5”
+   - on hover      : shows one ✓ / ✕ / – per concept
+-------------------------------------------------------------------*/
+/* -------------------------------------------------------------
+   Compact concept bar  ✓ 2 / 3  (tooltip shows individual names)
+----------------------------------------------------------------*/
+function ConceptInlineBar({ conceptStatuses = [] }) {
+  const passCount = conceptStatuses.filter(c => c.status === "PASS").length;
+  const total     = conceptStatuses.length;
+
+  /* build “✓ Concept A”, “✗ Concept B” … one per line */
+  const tooltipText = conceptStatuses
+    .map(c => `${c.status === "PASS" ? "✓" : "✗"} ${c.conceptName}`)
+    .join("\n");
+
+  return (
+    <Tooltip title={<pre style={{ margin: 0 }}>{tooltipText}</pre>} arrow>
+      {/* the <span> is what users hover */}
+      <span
+        style={{
+          marginLeft: "auto",
+          background: "#37474f",     /* blue-grey 800 */
+          color: "#e0f7fa",          /* cyan-50       */
+          padding: "2px 8px",
+          borderRadius: 4,
+          fontSize: 13,
+          userSelect: "none",
+          cursor: "default",         /* makes it obvious it's hoverable */
+          display: "inline-block"
+        }}
+      >
+        {passCount === total ? "✓" : "✗"} {passCount} / {total}
+      </span>
+    </Tooltip>
+  );
+}
+
 /**
  * QuizView
  * --------
@@ -134,6 +190,8 @@ async function saveQuizCache(db, cacheId, questions) {
  *  - Aggregator-based concept mastery widget (top-right).
  *  - Generates questions via GPT, times user in lumps of 15s.
  *  - On submit => local/GPT grading => pass/fail => aggregator updates.
+ * 
+ * 
  */
 export default function QuizView({
   activity,
@@ -150,15 +208,24 @@ export default function QuizView({
   const dispatch = useDispatch();
   const [showDebug, setShowDebug] = useState(false);
 
+
+  
+
   // Extract activityId & replicaIndex from the activity
   const { activityId, replicaIndex } = activity || {};
 
   // ---------- Aggregator states for concept mastery ----------
-  const [loadingConceptData, setLoadingConceptData] = useState(true);
-  const [masteredCount, setMasteredCount] = useState(0);
-  const [inProgressCount, setInProgressCount] = useState(0);
-  const [notTestedCount, setNotTestedCount] = useState(0);
-  const [conceptStatuses, setConceptStatuses] = useState([]);
+ // one-liner now:
+const {
+  loading     : loadingConceptData,
+  masteredCount,
+  inProgressCount,
+  notTestedCount,
+  conceptStatuses
+} = useConceptMastery(subChapterId, quizStage);
+
+const [viewState, setViewState] = useState("DECIDING");
+
 
   // ─── Recent-attempt accordion ────────────────────────────────
 const [lastAttempt, setLastAttempt]   = useState(null);   // { questions, results, score, passed }
@@ -169,8 +236,15 @@ const [showLastAttempt, setShowLastAttempt] = useState(false);
   const [generatedQuestions, setGeneratedQuestions] = useState([]);
   const [userAnswers, setUserAnswers] = useState([]);
   const [gradingResults, setGradingResults] = useState([]);
+  
   const [showGradingResults, setShowGradingResults] = useState(false);
-  const [quizPassed, setQuizPassed] = useState(false);
+  const [quizPassed,         setQuizPassed]         = useState(false);
+  const [noQuestions,        setNoQuestions]        = useState(false); // NEW
+
+
+  const [stageMastered,   setStageMastered]    = useState(null);   // NEW
+const [quizFinished, setQuizFinished] = useState(false);
+
   const [finalPercentage, setFinalPercentage] = useState("");
 
   // Additional info
@@ -194,17 +268,16 @@ const [showLastAttempt, setShowLastAttempt] = useState(false);
   // For environment-based OpenAI key
   const openAiKey = import.meta.env.VITE_OPENAI_KEY || "";
 
+
+
   // ============================================================
   //  1) Fetch aggregator mastery data for this quizStage
   // ============================================================
   useEffect(() => {
-    if (!userId || !planId || !subChapterId) {
-      setLoadingConceptData(false);
-      return;
-    }
+  // run once we have the IDs – regardless of stageMastered value
+  if (!userId || !planId || !subChapterId) return;
     async function fetchAggregator() {
       try {
-        setLoadingConceptData(true);
         const resp = await axios.get(
           `${import.meta.env.VITE_BACKEND_URL}/subchapter-status`, {
           params: { userId, planId, subchapterId: subChapterId },
@@ -218,6 +291,18 @@ const [showLastAttempt, setShowLastAttempt] = useState(false);
           const passCount = [...conceptStatusMap.values()].filter((v) => v === "PASS").length;
           const failCount = [...conceptStatusMap.values()].filter((v) => v === "FAIL").length;
           const notTested = totalConcepts - passCount - failCount;
+
+           // ✔︎ everything mastered?  (and there is at least one concept)
+   // mastered only when every concept has at least one PASS and zero FAILs
+const mastered =
+  totalConcepts > 0 &&          // there are concepts in this stage
+  failCount     === 0 &&        // none have ever failed
+  notTested     === 0 &&        // all were tested
+  passCount     === totalConcepts; // and all of them passed
+
+setStageMastered(mastered);
+
+setViewState(mastered ? "MASTERED" : "GENERATING");
 
           setMasteredCount(passCount);
           setInProgressCount(failCount);
@@ -235,11 +320,12 @@ const [showLastAttempt, setShowLastAttempt] = useState(false);
       } catch (err) {
         console.error("Error fetching aggregator subchapter data:", err);
       } finally {
-        setLoadingConceptData(false);
       }
     }
     fetchAggregator();
   }, [userId, planId, subChapterId, quizStage]);
+
+
 
   // ============================================================
   //  2) On mount => fetch questionTypes from Firestore
@@ -260,11 +346,16 @@ const [showLastAttempt, setShowLastAttempt] = useState(false);
     fetchQuestionTypes();
   }, []);
 
+  useEffect(() => {
+  if (stageMastered === true) setNoQuestions(true);
+}, [stageMastered]);
+
   // ============================================================
   //  3) On mount => build docId, fetch usage, generate quiz
   // ============================================================
   useEffect(() => {
-    if (!userId || !subChapterId || !planId) {
+  /* don’t even enter until we know mastery == false */
+  if (!userId || !subChapterId || !planId || stageMastered !== false) {
       console.log("QuizView: userId or subChapterId missing => skip generation.");
       return;
     }
@@ -305,6 +396,9 @@ const [showLastAttempt, setShowLastAttempt] = useState(false);
     // B) Generate quiz
 /* B) 1️⃣  Try cache  →  2️⃣  GPT fallback  →  3️⃣  save to cache */
 async function doGenerateQuestions() {
+                    // no quiz generation / no cache read
+ 
+
   try {
     const cacheId = buildQuizCacheId(
       userId,
@@ -335,6 +429,36 @@ async function doGenerateQuestions() {
     if (!result.success) throw new Error(result.error || "GPT error");
     const freshQs = result.questionsData?.questions || [];
 
+        /* ─── NEW: nothing left to test ─── */
+    if (freshQs.length === 0) {
+     
+      try {
+        if (activityId) {
+          await axios.post(
+            `${import.meta.env.VITE_BACKEND_URL}/api/markActivityCompletion`,
+            {
+              userId,
+              planId,
+              activityId,
+              completed: true,
+              replicaIndex,
+            }
+          );
+        }
+        dispatch(refreshSubchapter(subChapterId));
+      } catch (err) {
+        console.error("auto-complete markActivityCompletion:", err);
+      }
+
+           /* 2. Stay on this component, show ‘continue’ UI */
+      setStatus("");          // clear loader text
+      setLoading(false);
+      setNoQuestions(true);   // ← flag picked up in render()
+      return;                 // nothing else to set up
+
+
+    }
+
     // 3️⃣  persist for the rest of this attempt
     await saveQuizCache(db, cacheId, freshQs);
     console.log("[Quiz] saved new cache", cacheId);
@@ -362,24 +486,35 @@ function useQuestions(allQs) {
 }
 
     fetchQuizSubActivityTime();
-    doGenerateQuestions();
-    // eslint-disable-next-line
-  }, [userId, subChapterId, quizStage, attemptNumber, planId]);
+  if (!stageMastered) {
+    doGenerateQuestions();       // only if we still need a quiz
+  } else {
+    setLoading(false);           // stop the spinner
+    setNoQuestions(true);        // reuse the same stub-UI path
+  }    // eslint-disable-next-line
+  }, [userId, subChapterId, quizStage, attemptNumber, planId, stageMastered]);
 
   // ============================================================
   //  4) local second timer => leftover++
   // ============================================================
-  useEffect(() => {
-    const timerId = setInterval(() => {
-      setLocalLeftover((prev) => prev + 1);
-    }, 1000);
-    return () => clearInterval(timerId);
-  }, []);
+ useEffect(() => {
+   if (!ready) return;            // run only while quiz is visible
+  const t = setInterval(() => setLocalLeftover(p => p + 1), 1000);
+  return () => clearInterval(t);
+}, [noQuestions]);
+
+useEffect(() => {
+  if (quizPassed) {
+    setStageMastered(true);
+    setNoQuestions(true);      // also stops timer & heartbeat
+  }
+}, [quizPassed]);              // ← runs exactly when quizPassed flips to true
 
   // ============================================================
   //  5) Heartbeat => lumps of 15 => increment aggregator doc
   // ============================================================
   useEffect(() => {
+  if (noQuestions) return; 
     if (!lastSnapMs) return;
     const heartbeatId = setInterval(() => {
       const nowMs = Date.now();
@@ -418,6 +553,7 @@ function useQuestions(allQs) {
     return () => clearInterval(heartbeatId);
   }, [
     lastSnapMs,
+    noQuestions,
     localLeftover,
     serverTotal,
     dispatch,
@@ -547,6 +683,13 @@ function useQuestions(allQs) {
 
     // D) If passed => mark aggregator doc + re-fetch plan => remain on oldIndex
     if (isPassed) {
+
+       const cacheId = buildQuizCacheId(
+   userId, planId, subChapterId, quizStage, attemptNumber);
+ try {
+   await setDoc(doc(db, QUIZ_CACHE_COLL, cacheId),
+                { questions: [] }, { merge: true });
+ } catch(e) { console.warn("Could not clear quiz cache:", e); }
       try {
         const oldIndex = currentIndex;
 
@@ -597,6 +740,12 @@ setShowLastAttempt(false);          // start collapsed
     setShowGradingResults(true);
     setLoading(false);
     setStatus("Grading complete.");
+
+     if (isPassed) {
+   setStageMastered(true);   // <- hide quiz immediately
+   setNoQuestions(true);     // (optional) stops timer / heartbeat useEffects
+   setQuizFinished(true);          // ← NEW
+ }
   }
 
   // ============================================================
@@ -670,9 +819,26 @@ setShowLastAttempt(false);          // start collapsed
   // ============================================================
   //  8) Pagination & Rendering
   // ============================================================
-  const hasQuestions = generatedQuestions.length > 0 && pages.length > 0;
-  const isOnLastPage = currentPageIndex === pages.length - 1;
-  const currentQuestions = pages[currentPageIndex] || [];
+   const hasQuestions =
+   stageMastered === false &&
+   !noQuestions &&
+   generatedQuestions.length > 0 &&
+   pages.length > 0;
+
+// ── derived UI flags ─────────────────────────
+const deciding   = stageMastered === null;             // waiting for aggregator
+const generating = loading && !showGradingResults;     // cache / GPT
+const grading    = loading &&  showGradingResults;     // after Submit
+const ready      = !loading && !showGradingResults &&  // questions visible
+                   stageMastered === false;           
+ 
+
+
+    const isOnLastPage   = currentPageIndex === pages.length - 1;
+const currentQuestions = pages[currentPageIndex] || [];
+
+const pageLabel = `${currentPageIndex + 1} / ${pages.length}`;
+
 
   function handleNextPage() {
     if (currentPageIndex < pages.length - 1) {
@@ -689,43 +855,59 @@ setShowLastAttempt(false);          // start collapsed
     <div style={styles.outerContainer}>
       <div style={styles.card}>
 
-        {/* ---------- MASTERY PANEL (TOP-RIGHT) ---------- */}
-        <MasterySummaryPanel
-          loadingConceptData={loadingConceptData}
-          masteredCount={masteredCount}
-          inProgressCount={inProgressCount}
-          notTestedCount={notTestedCount}
-          conceptStatuses={conceptStatuses}
-        />
+             {/* FULL-CARD LOADER */}
+     {(generating || deciding) && (
+       <LoadingOverlay
+         text={
+           deciding
+             ? "Checking prerequisites…"
+             : "Generating questions…"
+         }
+       />
+     )}
+
+         {/* ====== All-mastered stub ====== */}
+ {stageMastered && (
+   <div style={styles.gradingContainer}>
+     <h3>All concepts mastered 🎉</h3>
+     <p>You don’t need a quiz for this stage.</p>
+     <button
+       style={styles.finishButton}
+       onClick={handleQuizSuccess}   // same path as a 100 % pass
+     >
+       Continue
+     </button>
+   </div>
+ )}
+
+     
 
         {/* ---------- Top Header => "Quiz" + clock ---------- */}
-        <div style={styles.cardHeader}>
-         
-  {/* Title */}
-  <h2 style={{ margin: 0, fontWeight:600 }}>Quiz</h2>
+       {/* HEADER — show only when questions are on screen */}
+{ready && (
+  <div style={{ ...styles.cardHeader, padding: "8px 16px" }}>
+    {/* title – remove default <h2> margins so bar stays slim */}
+    <h2 style={{ margin: 0, fontWeight: 600 }}>Quiz</h2>
 
-  {/* Attempt pill */}
-  <Pill label={`Attempt #${attemptNumber}`} />
-
-  {/* Clock pill */}
-  <Pill
-    label={formatTime(displayedTime)}
-    icon={<AccessTimeIcon sx={{ fontSize:16 }} />}
-  />
-
-  {/* Question-count pill – render only when we know the length */}
-  {generatedQuestions.length > 0 && (
+    <Pill label={`Attempt #${attemptNumber}`} />
+    <Pill
+      label={formatTime(displayedTime)}
+      icon={<AccessTimeIcon sx={{ fontSize: 16 }} />}
+    />
     <Pill label={`${generatedQuestions.length} questions`} />
-  )}
- 
-        </div>
+
+    {/* compact concept widget */}
+    <ConceptInlineBar conceptStatuses={conceptStatuses} />
+  </div>
+)}
+
+{/* FULL-SCREEN LOADERS */}
+{deciding   && <LoadingOverlay text="Checking prerequisites…" />}
+{generating && <LoadingOverlay text="Generating questions…"  />}
+{grading    && <LoadingOverlay text="Grading quiz…"          />}
 
         {/* ---------- Body => quiz or grading results ---------- */}
         <div style={styles.cardBody}>
-          {/* NEW overlay replaces the old plain <p> */}
-  {loading && (
-    <LoadingOverlay text={status || "Generating questions…"} />
-  )}
 
   {/* keep whatever you want to show when NOT loading */}
   {!loading && status && !error && (
@@ -782,48 +964,55 @@ setShowLastAttempt(false);          // start collapsed
           
         </div>
 
-        {/* ---------- Footer => pagination or pass/fail flows ---------- */}
-        <div style={styles.cardFooter}>
-          <div style={styles.navButtons}>
-            {/* If not graded => show pagination + last page => Submit */}
-            {!showGradingResults && hasQuestions && (
-              <>
-                {currentPageIndex > 0 && (
-                  <button style={styles.button} onClick={handlePrevPage}>
-                    Previous
-                  </button>
-                )}
-                {!isOnLastPage && (
-                  <button style={styles.button} onClick={handleNextPage}>
-                    Next
-                  </button>
-                )}
-                {isOnLastPage && (
-                  <button style={styles.submitButton} onClick={handleQuizSubmit}>
-                    Submit Quiz
-                  </button>
-                )}
-              </>
-            )}
+       {/* ---------- Footer => pagination / submit ---------- */}
+{!noQuestions && (
+  <div style={styles.cardFooter}>
+    <div style={styles.navRow /* ← now a grid */}>
+      {/* col-1  ─────────────────────────── */}
+      {currentPageIndex > 0 ? (
+        <button style={styles.button} onClick={handlePrevPage}>
+          Previous
+        </button>
+      ) : (
+        <span />   /* empty cell keeps layout */
+      )}
 
-            {/* If showGradingResults => pass/fail flows */}
-            {showGradingResults && quizPassed && (
-              <button style={styles.finishButton} onClick={handleQuizSuccess}>
-                Finish
-              </button>
-            )}
-            {showGradingResults && !quizPassed && (
-              <>
-                <button style={styles.button} onClick={handleTakeRevisionNow}>
-                  Take Revision Now
-                </button>
-                <button style={styles.button} onClick={handleTakeRevisionLater}>
-                  Take Revision Later
-                </button>
-              </>
-            )}
-          </div>
-        </div>
+      {/* col-2  (always centred) ─────────*/}
+      <span style={styles.pageLabel}>
+        Page&nbsp;{currentPageIndex + 1}&nbsp;/&nbsp;{pages.length}
+      </span>
+
+      {/* col-3  ─────────────────────────── */}
+      {!showGradingResults && hasQuestions && (
+        isOnLastPage ? (
+          <button style={styles.submitButton} onClick={handleQuizSubmit}>
+            Submit&nbsp;Quiz
+          </button>
+        ) : (
+          <button style={styles.button} onClick={handleNextPage}>
+            Next
+          </button>
+        )
+      )}
+
+      {showGradingResults && quizPassed && (
+        <button style={styles.finishButton} onClick={handleQuizSuccess}>
+          Finish
+        </button>
+      )}
+      {showGradingResults && !quizPassed && (
+        <>
+          <button style={styles.button} onClick={handleTakeRevisionNow}>
+            Take&nbsp;Revision&nbsp;Now
+          </button>
+          <button style={styles.button} onClick={handleTakeRevisionLater}>
+            Take&nbsp;Revision&nbsp;Later
+          </button>
+        </>
+      )}
+    </div>
+  </div>
+)}
       </div>
 
       {/* Debug Overlay (optional) */}
@@ -1054,6 +1243,7 @@ const styles = {
     width: "80%",
     maxWidth: "700px",
     backgroundColor: "#111",
+    minHeight: "280px", 
     borderRadius: "8px",
     border: "1px solid #333",
     display: "flex",
@@ -1068,6 +1258,7 @@ const styles = {
     display: "flex",
     alignItems: "center",
     gap: 12            // puts space between the pills
+    
   },
   clockWrapper: {
     marginLeft: "16px",
@@ -1083,19 +1274,22 @@ const styles = {
   clockIcon: {
     fontSize: "1rem",
   },
-  cardBody: {
-    flex: 1,
-    padding: "16px",
-    overflowY: "auto",
-  },
+ cardBody: {
+  flex: 1,
+  padding: "24px 16px 0",     // <- 24px top, 16px sides, 0 bottom
+  overflowY: "auto",
+},
   cardFooter: {
-    borderTop: "1px solid #333",
-    padding: "12px 16px",
-  },
+  /* Seamless footer – looks like part of the page */
+  padding: "16px",
+  borderTop: "none",          // ← removes the line
+  display: "flex",
+  justifyContent: "flex-end",
+},
   navButtons: {
     display: "flex",
     justifyContent: "flex-end",
-    gap: "8px",
+    gap: "10px",        // was 8px
   },
   button: {
     backgroundColor: "#444",
@@ -1124,11 +1318,11 @@ const styles = {
     fontWeight: "bold",
   },
   questionContainer: {
-  background: "#181818",
-  border: "1px solid #444",
-  borderRadius: 8,
-  padding: "1rem",
-  marginBottom: "1.2rem",
+  /* No box – just a little vertical rhythm */
+  padding: "0 0 24px 0",     // space below each Q
+  border: "none",
+  background: "transparent",
+  borderRadius: 0,
 },
   gradingContainer: {
     marginTop: "1rem",
@@ -1223,6 +1417,18 @@ lastAttemptInner:  {
   padding: "8px",
   borderRadius: "4px",
 },
+navRow: {
+  display: "grid",
+  gridTemplateColumns: "1fr auto 1fr",   // three equal tracks
+  alignItems: "center",
+  gap: 8
+},
+pageLabel: {
+  justifySelf: "center",                 // centres within its column
+  fontSize: 14,
+  opacity: 0.85,
+  userSelect: "none"
+}
 };
 
 // --------------------------------------------------------------------

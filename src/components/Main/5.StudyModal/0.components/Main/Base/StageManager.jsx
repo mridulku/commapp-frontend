@@ -7,6 +7,10 @@ import { fetchQuizStage, invalidateQuizStage } from "../../../../../../store/qui
 
 import LockIcon from "@mui/icons-material/Lock";   // ← keep with other MUI imports
 
+// StageManager.jsx  (top, with the other MUI icons)
+import ListAltIcon      from "@mui/icons-material/ListAltOutlined";
+import HistoryIcon      from "@mui/icons-material/HistoryEduOutlined";
+
 
 import { Box } from "@mui/material";
 // Child Components
@@ -100,6 +104,10 @@ function getStatusTooltip(item) {
   return "Not Started";
 }
 
+
+
+
+
 /** Capitalize helper */
 function capitalize(str) {
   if (!str) return "";
@@ -153,6 +161,28 @@ function renderContextPill(text, key) {
   // We'll keep `activeTab` but default to the stage from the left-panel activity
   const [activeTab, setActiveTab] = useState(selectedStage);
   const [subView, setSubView] = useState("activity");
+
+  const renderToggleRow = () => (
+  <div style={styles.subButtonRow}>
+    <button
+      style={subView === "activity" ? styles.subBtnActive : styles.subBtn}
+      onClick={() => setSubView("activity")}
+      title="Work on the current task"
+    >
+      <ListAltIcon sx={{ fontSize: 18, mr: .5 }} />
+      Activity
+    </button>
+
+    <button
+      style={subView === "history" ? styles.subBtnActive : styles.subBtn}
+      onClick={() => setSubView("history")}
+      title="See all previous attempts"
+    >
+      <HistoryIcon sx={{ fontSize: 18, mr: .5 }} />
+      History
+    </button>
+  </div>
+);
 
   // Whenever `activity` changes => reset tab & subView
   useEffect(() => {
@@ -528,21 +558,11 @@ useEffect(() => {
       }
       return (
         <div style={styles.quizContainer}>
-          {/* Sub-buttons => "Activity" / "History" */}
-          <div style={styles.subButtonRow}>
-            <button
-              style={subView === "activity" ? styles.subBtnActive : styles.subBtn}
-              onClick={() => setSubView("activity")}
-            >
-              Activity
-            </button>
-            <button
-              style={subView === "history" ? styles.subBtnActive : styles.subBtn}
-              onClick={() => setSubView("history")}
-            >
-              History
-            </button>
-          </div>
+
+
+        {renderToggleRow()}  
+
+
 
           {subView === "activity" && (
             <ActivityView
@@ -774,28 +794,9 @@ const styles = {
     flexDirection: "column",
     gap: "12px",
   },
-  subButtonRow: {
-    display: "flex",
-    gap: "8px",
-    marginBottom: "8px",
-  },
-  subBtn: {
-    backgroundColor: "#222",
-    color: "#ccc",
-    border: "none",
-    borderRadius: "4px",
-    padding: "5px 12px",
-    cursor: "pointer",
-    fontWeight: 500,
-  },
-  subBtnActive: {
-    backgroundColor: "#666",
-    color: "#fff",
-    borderRadius: "4px",
-    padding: "5px 12px",
-    cursor: "pointer",
-    fontWeight: "bold",
-  },
+  /* Toggle row */
+ 
+  
   messageBox: {
     padding: "24px",
     fontSize: "1.1rem",
@@ -827,4 +828,42 @@ const styles = {
     color: "#777",
     fontSize: "0.8rem",
   },
+  
+  /* ONE clean definition is enough */
+  subButtonRow: {
+    display:        "flex",
+    justifyContent: "center",
+    gap:            "16px",
+    margin:         "12px 0 20px"
+  },
+
+  subBtn: {
+    display:        "inline-flex",
+    alignItems:     "center",
+    gap:            "4px",
+    background:     "#424242",
+    color:          "#e0e0e0",
+    border:         "1px solid #616161",
+    borderRadius:   "20px",
+    padding:        "6px 16px",
+    fontSize:       "0.85rem",
+    cursor:         "pointer",
+    transition:     "background 180ms"
+  },
+
+  subBtnActive: {
+    /* copy-&-override manually (cannot spread while defining) */
+    display:        "inline-flex",
+    alignItems:     "center",
+    gap:            "4px",
+    background:     "#9c27b0",
+    color:          "#fff",
+    border:         "1px solid #ab47bc",
+    borderRadius:   "20px",
+    padding:        "6px 16px",
+    fontSize:       "0.85rem",
+    cursor:         "pointer",
+    transition:     "background 180ms"
+  },
+
 };

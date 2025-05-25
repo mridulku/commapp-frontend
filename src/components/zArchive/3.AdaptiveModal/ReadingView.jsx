@@ -41,6 +41,8 @@ export default function ReadingView({
   const [readingSeconds, setReadingSeconds] = useState(0);
   const [finalReadingTime, setFinalReadingTime] = useState(null);
 
+  const [saving, setSaving] = useState(false);
+
   // ==================== A) Fetch subchapter ====================
   useEffect(() => {
     if (!subChapterId) return;
@@ -147,6 +149,7 @@ export default function ReadingView({
   }
 
   async function handleStartReading() {
+    setSaving(true);
     setLocalProficiency("reading");
     setIsExpanded(true);
     const nowMs = Date.now();
@@ -161,15 +164,18 @@ export default function ReadingView({
       });
       await postUserActivity("startReading");
       onRefreshData && onRefreshData();
+      setSaving(false);
     } catch (error) {
       console.error("Error starting reading:", error);
       setLocalProficiency("empty");
       setIsExpanded(false);
       setLocalStartMs(null);
+      setSaving(false);
     }
   }
 
   async function handleStopReading() {
+    setSaving(true);
     setLocalProficiency("read");
     setIsExpanded(true);
     const nowMs = Date.now();
@@ -183,11 +189,13 @@ export default function ReadingView({
       });
       await postUserActivity("stopReading");
       onRefreshData && onRefreshData();
+      setSaving(false);
     } catch (error) {
       console.error("Error stopping reading:", error);
       setLocalProficiency("reading");
       setIsExpanded(true);
       setLocalEndMs(null);
+      setSaving(false);
     }
   }
 
@@ -252,7 +260,16 @@ export default function ReadingView({
   );
 
   function renderActionButtons(prof) {
-    switch (prof) {
+     if (saving) {
+    return (
+      <button style={{ ...btnStyle, opacity: 0.6, cursor: "default" }} disabled>
+        <span className="spinner" style={{ marginRight: 6 }}>⏳</span>
+        Saving…
+      </button>
+    );
+  }
+
+  switch (prof) {
       case "empty":
         return (
           <button style={btnStyle} onClick={handleStartReading}>

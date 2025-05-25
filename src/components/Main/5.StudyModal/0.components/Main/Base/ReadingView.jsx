@@ -147,6 +147,8 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
 
 
+  const [isFinishing, setIsFinishing] = useState(false);
+
 
   // track reading start for final data
   const readingStartRef = useRef(null);
@@ -355,6 +357,8 @@ const resp = await axios.get(
 
   // ---- finish reading => mark complete, re-fetch plan (legacy) ----
   async function handleFinishReading() {
+  // 1) give immediate feedback
+  setIsFinishing(true);
     const readingEndTime = new Date();
     try {
       const oldIndex = currentIndex;
@@ -411,6 +415,10 @@ const backendURL = import.meta.env.VITE_BACKEND_URL;
       console.error("Error finishing reading:", err);
       dispatch(setCurrentIndex(currentIndex + 1));
     }
+    finally {
+    /* ➋ safety-net: hide the overlay even if something failed */
+    setIsFinishing(false);
+    }
   }
 
   // ---- derived time to display ----
@@ -433,6 +441,20 @@ const backendURL = import.meta.env.VITE_BACKEND_URL;
           />
         );
       }
+
+      /* ------------------------------------------------------------
+   FINISHING OVERLAY  (NEW)
+   – appears the moment the user presses “Finish Reading”
+------------------------------------------------------------ */
+if (isFinishing) {
+  return (
+    <Loader
+      type="bar"
+      fullScreen
+      message="Saving your progress…"
+    />
+  );
+}
 
 
 
@@ -672,16 +694,27 @@ const pageLabel         = `${currentPageIndex + 1} / ${totalPages}`;
   Next
 </Button>
     ) : (
-      <Button
+     <Button
   size="small"
   variant="contained"
   sx={{
-    bgcolor: "#26a69a",            // ← teal
+    bgcolor: "#26a69a",              // teal
     "&:hover": { bgcolor: "#1e8e86" }
   }}
   onClick={isComplete ? handleGotoNext : handleFinishReading}
+  disabled={isFinishing}
 >
-  {isComplete ? "Next Task" : "Finish Reading"}
+  {isFinishing && (
+    <CircularProgress
+      size={14}
+      sx={{ color: "#fff", mr: 1 }}
+    />
+  )}
+  {isComplete
+    ? "Next Task"
+    : isFinishing
+      ? "Saving…"
+      : "Finish Reading"}
 </Button>
     )}
   </Box>
