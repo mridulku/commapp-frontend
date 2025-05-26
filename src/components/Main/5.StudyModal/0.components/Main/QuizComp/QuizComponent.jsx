@@ -15,6 +15,35 @@ import AccessTimeIcon from "@mui/icons-material/AccessTimeRounded";
 
 import Tooltip from "@mui/material/Tooltip";
 
+import { IconButton } from "@mui/material";
+import HelpOutline   from "@mui/icons-material/HelpOutlineRounded";
+
+import { Dialog, DialogTitle, DialogContent } from "@mui/material";
+
+/* ---- put with other MUI imports ---- */
+import { List, ListItem, ListItemIcon, ListItemText } from "@mui/material";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import ReplayIcon             from "@mui/icons-material/Replay";
+import AutoGraphIcon          from "@mui/icons-material/AutoGraph";
+
+/* ---- mapping from stage → copy ---- */
+const stageCopy = {
+  remember: {
+    goal: "We’re testing your ability to **recall key facts** for every concept.",
+  },
+  understand: {
+    goal: "We’re testing whether you can **explain ideas in your own words** and link them together.",
+  },
+  apply: {
+    goal: "We’re testing how well you can **use each concept to solve problems**.",
+  },
+  analyze: {
+    goal: "We’re testing your ability to **break down, compare, and critique** complex scenarios.",
+  },
+};
+
+
+
 
 function Pill({ label, icon }) {
   return (
@@ -54,6 +83,14 @@ function formatTime(totalSeconds) {
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function formatBand(totalSec) {
+  if (totalSec < 60)      return "< 1 min";
+  if (totalSec < 120)     return "< 2 min";
+  if (totalSec < 180)     return "< 3 min";
+  if (totalSec < 300)     return "< 5 min";
+  return `${Math.floor(totalSec / 60)} min`;
 }
 
 /**
@@ -132,6 +169,7 @@ async function saveQuizCache(db, cacheId, questions) {
     { merge: false }          // overwrite only on new attempt #
   );
 }
+
 
 /* ------------------------------------------------------------------
    ConceptInlineBar
@@ -271,10 +309,12 @@ const [quizFinished, setQuizFinished] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
-  // ---------- Timer / lumps ----------
-  const [serverTotal, setServerTotal] = useState(0);
-  const [localLeftover, setLocalLeftover] = useState(0);
-  const [lastSnapMs, setLastSnapMs] = useState(null);
+/* ---------- Timer refs ---------- */
+const serverTotalSeconds = useRef(0);    // what’s already in Firestore
+const lastPostMs         = useRef(Date.now());   // last successful POST
+const sessionStartMs     = useRef(null);         // set when questions appear
+
+ 
 
   const docIdRef = useRef("");
 
@@ -282,6 +322,17 @@ const [quizFinished, setQuizFinished] = useState(false);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [pages, setPages] = useState([]);
   const QUESTIONS_PER_PAGE = 3;
+
+  const [showInfo, setShowInfo] = useState(false);
+
+  /* -----------------------------------------------------------
+ * 0️⃣  put this near your other state hooks
+ * --------------------------------------------------------- */
+const [, forceTick] = useState(0);   // value is unused – only the setter matters
+
+/* -----------------------------------------------------------
+ * 1️⃣  one-second interval that fires only when `ready` is true
+ * --------------------------------------------------------- */
 
   // For environment-based OpenAI key
   const openAiKey = import.meta.env.VITE_OPENAI_KEY || "";
@@ -330,9 +381,7 @@ const [quizFinished, setQuizFinished] = useState(false);
     docIdRef.current = docId;
 
     // Reset local states
-    setServerTotal(0);
-    setLocalLeftover(0);
-    setLastSnapMs(null);
+ serverTotalSeconds.current = 0;
     setGeneratedQuestions([]);
     setUserAnswers([]);
     setGradingResults([]);
@@ -348,10 +397,8 @@ const [quizFinished, setQuizFinished] = useState(false);
       try {
         const resultAction = await dispatch(fetchQuizTime({ docId }));
         if (fetchQuizTime.fulfilled.match(resultAction)) {
-          const existingSec = resultAction.payload || 0;
-          setServerTotal(existingSec);
-          setLocalLeftover(0);
-          setLastSnapMs(Date.now());
+          serverTotalSeconds.current = resultAction.payload || 0;
+     
         }
       } catch (err) {
         console.error("fetchQuizTime error:", err);
@@ -487,11 +534,10 @@ function useQuestions(allQs) {
   // ============================================================
   //  4) local second timer => leftover++
   // ============================================================
- useEffect(() => {
-   if (!ready) return;            // run only while quiz is visible
-  const t = setInterval(() => setLocalLeftover(p => p + 1), 1000);
-  return () => clearInterval(t);
-}, [noQuestions]);
+
+const ready      = !loading && !showGradingResults &&  // questions visible
+                   stageMastered === false;    
+
 
 useEffect(() => {
   if (quizPassed) {
@@ -500,67 +546,90 @@ useEffect(() => {
   }
 }, [quizPassed]);              // ← runs exactly when quizPassed flips to true
 
-  // ============================================================
-  //  5) Heartbeat => lumps of 15 => increment aggregator doc
-  // ============================================================
-  useEffect(() => {
-  if (noQuestions) return; 
-    if (!lastSnapMs) return;
-    const heartbeatId = setInterval(() => {
-      const nowMs = Date.now();
-      let diffMs = nowMs - lastSnapMs;
+ 
 
-      while (diffMs >= 15000 && localLeftover >= 15) {
-        const lumps = Math.floor(localLeftover / 15);
-        if (lumps <= 0) break;
+useEffect(() => {
+  if (!ready) return;                // pause when quiz not visible
+  const id = setInterval(() => forceTick(x => x + 1), 1000);
+  return () => clearInterval(id);    // clean up on unmount / pause
+}, [ready]);
 
-        const toPost = lumps * 15;
-        dispatch(
-          incrementQuizTime({
-            docId: docIdRef.current,
-            increment: toPost,
-            activityId,
-            userId,
-            planId,
-            subChapterId,
-            quizStage,
-            dateStr: new Date().toISOString().substring(0, 10),
-            attemptNumber,
-          })
-        ).then((action) => {
-          if (incrementQuizTime.fulfilled.match(action)) {
-            const newTotal = action.payload || serverTotal + toPost;
-            setServerTotal(newTotal);
-          }
-        });
 
-        const remainder = localLeftover % 15;
-        setLocalLeftover(remainder);
-        setLastSnapMs((prev) => (prev ? prev + lumps * 15000 : nowMs));
-        diffMs -= lumps * 15000;
-      }
-    }, 1000);
-    return () => clearInterval(heartbeatId);
-  }, [
-    lastSnapMs,
-    noQuestions,
-    localLeftover,
-    serverTotal,
-    dispatch,
-    userId,
-    planId,
-    subChapterId,
-    quizStage,
-    attemptNumber,
-    activityId,
-  ]);
+/* run once each time questions are visible */
+useEffect(() => {
+  if (!ready) return;
+  sessionStartMs.current = Date.now();
+}, [ready]);
+
+
+useEffect(() => {
+  if (noQuestions) return;            // stop once quiz ends
+
+  const id = setInterval(() => {
+    const now      = Date.now();
+    const diffSec  = Math.floor((now - lastPostMs.current) / 1000);
+    const lumps    = Math.floor(diffSec / 15);    // whole 15-s blocks
+
+    if (lumps > 0) {
+      const secondsToPost = lumps * 15;
+
+      dispatch(incrementQuizTime({
+        docId:        docIdRef.current,
+        increment:    secondsToPost,
+        activityId,
+        userId, planId, subChapterId, quizStage,
+        dateStr:      new Date().toISOString().slice(0,10),
+        attemptNumber,
+      })).then(a => {
+        if (incrementQuizTime.fulfilled.match(a)) {
+           serverTotalSeconds.current += secondsToPost;
+ lastPostMs.current         += secondsToPost * 1000;
+ sessionStartMs.current    += secondsToPost * 1000;
+        }
+      });
+    }
+  }, 1000);
+
+  /*  ←―――――――― cleanup ――――――――→  */
+  return () => {
+    clearInterval(id);
+
+    /* flush any 1-14 s remainder immediately */
+    const remainder = Math.floor((Date.now() - lastPostMs.current) / 1000);
+    if (remainder > 0) {
+      dispatch(incrementQuizTime({
+        docId:     docIdRef.current,
+        increment: remainder,
+        activityId,
+        userId, planId, subChapterId, quizStage,
+        dateStr:   new Date().toISOString().slice(0,10),
+        attemptNumber,
+      })).then(a => {
+        if (incrementQuizTime.fulfilled.match(a)) {
+           serverTotalSeconds.current += remainder;
+ lastPostMs.current         += remainder * 1000;
+        }
+      });
+    }
+  };
+}, [noQuestions, dispatch, userId, planId,
+    subChapterId, quizStage, activityId, attemptNumber]);
+
+
+
+
 
   // displayedTime => sum lumps + leftover
-  const displayedTime = serverTotal + localLeftover;
-
+const displayedTime = serverTotalSeconds.current +
+  (sessionStartMs.current
+      ? Math.floor((Date.now() - sessionStartMs.current) / 1000)
+      : 0);
   // ============================================================
   //  6) Quiz logic: handle user answers, grading, submission
   // ============================================================
+
+// helper runs on every render
+const pulsing = ready && displayedTime % 2 === 1;   // pulse only if timer is running
 
   function handleAnswerChange(qIndex, newVal) {
     const updated = [...userAnswers];
@@ -858,8 +927,7 @@ dispatch(invalidateQuizStage(quizKey));
 const deciding   = stageMastered === null;             // waiting for aggregator
 const generating = loading && !showGradingResults;     // cache / GPT
 const grading    = loading &&  showGradingResults;     // after Submit
-const ready      = !loading && !showGradingResults &&  // questions visible
-                   stageMastered === false;           
+       
  
 
 
@@ -879,6 +947,14 @@ const pageLabel = `${currentPageIndex + 1} / ${pages.length}`;
       setCurrentPageIndex(currentPageIndex - 1);
     }
   }
+
+  const niceStage = quizStage.charAt(0).toUpperCase() + quizStage.slice(1);
+
+  const iconStyle = {
+  fontSize : 16,
+  transform : pulsing ? 'scale(1.25)' : 'scale(1)',   // bigger difference = clearer blink
+  transition: 'transform 0.25s ease-out'
+};
 
   return (
     <div style={styles.outerContainer}>
@@ -909,6 +985,8 @@ const pageLabel = `${currentPageIndex + 1} / ${pages.length}`;
    </div>
  )}
 
+ 
+
      
 
         {/* ---------- Top Header => "Quiz" + clock ---------- */}
@@ -920,15 +998,98 @@ const pageLabel = `${currentPageIndex + 1} / ${pages.length}`;
 
     <Pill label={`Attempt #${attemptNumber}`} />
     <Pill
-      label={formatTime(displayedTime)}
-      icon={<AccessTimeIcon sx={{ fontSize: 16 }} />}
-    />
+  label={formatBand(displayedTime)}   // you already swapped in formatBand
+  icon={
+   <AccessTimeIcon
+  sx={{
+    ...iconStyle,                              // spread FIRST
+    transform : pulsing ? 'scale(1.15)' : 'scale(1)',
+    transition: 'transform 0.25s ease-out',
+  }}
+/>
+  }
+/>
     <Pill label={`${generatedQuestions.length} questions`} />
 
-    {/* compact concept widget */}
+       {/* help icon sits BEFORE the concept bar */}
+    <IconButton
+      size="small"
+      onClick={() => setShowInfo(true)}
+      title="How this quiz works"
+      sx={{ color: "#fff", ml: 1 }}
+    >
+      <HelpOutline sx={{ fontSize: 20 }} />
+    </IconButton>
+
+    {/* compact concept widget becomes the right-most element */}
     <ConceptInlineBar conceptStatuses={conceptStatuses} />
   </div>
 )}
+
+
+<Dialog open={showInfo} onClose={() => setShowInfo(false)} maxWidth="sm" fullWidth>
+  <DialogTitle>{`How the ${niceStage} stage works`}</DialogTitle>
+
+  <DialogContent dividers sx={{ lineHeight: 1.6, p: 2 }}>
+    <List dense disablePadding>
+
+      {/* stage-specific learning goal */}
+      <ListItem>
+        <ListItemIcon sx={{ minWidth: 32 }}>
+          <AutoGraphIcon fontSize="small" />
+        </ListItemIcon>
+        <ListItemText
+          primary={stageCopy[quizStage]?.goal ?? ""}
+        />
+      </ListItem>
+
+      {/* always true – 1 Q per concept */}
+      <ListItem>
+        <ListItemIcon sx={{ minWidth: 32 }}>
+          <CheckCircleOutlineIcon fontSize="small" />
+        </ListItemIcon>
+        <ListItemText
+          primary="Each attempt asks **one question per concept** in this sub-chapter."
+        />
+      </ListItem>
+
+      {/* loop explanation */}
+      <ListItem>
+        <ListItemIcon sx={{ minWidth: 32 }}>
+          <ReplayIcon fontSize="small" />
+        </ListItemIcon>
+        <ListItemText
+          primary={
+            "Missed a question? You’ll study a quick revision card, then face " +
+            "a new question on that concept. The quiz ↔ revision cycle repeats " +
+            "until you pass them all."
+          }
+        />
+      </ListItem>
+
+      {/* pass criterion */}
+      <ListItem>
+        <ListItemIcon sx={{ minWidth: 32 }}>
+          <CheckCircleOutlineIcon fontSize="small" />
+        </ListItemIcon>
+        <ListItemText
+          primary="Once all concepts are marked ✓ in this stage, the next stage unlocks."
+        />
+      </ListItem>
+
+      {/* analytics / later use */}
+      <ListItem>
+        <ListItemIcon sx={{ minWidth: 32 }}>
+          <AutoGraphIcon fontSize="small" />
+        </ListItemIcon>
+        <ListItemText
+          primary="Your answers feed later stages, tailoring practice to what you still need."
+        />
+      </ListItem>
+
+    </List>
+  </DialogContent>
+</Dialog>
 
 {/* FULL-SCREEN LOADERS */}
 {deciding   && <LoadingOverlay text="Checking prerequisites…" />}
@@ -1089,8 +1250,7 @@ const pageLabel = `${currentPageIndex + 1} / ${pages.length}`;
                   subChapterId,
                   quizStage,
                   attemptNumber,
-                  serverTotal,
-                  localLeftover,
+                  serverTotal: serverTotalSeconds.current,
                   pages: pages.map((p) => p.join(",")),
                   currentPageIndex,
                   showGradingResults,
