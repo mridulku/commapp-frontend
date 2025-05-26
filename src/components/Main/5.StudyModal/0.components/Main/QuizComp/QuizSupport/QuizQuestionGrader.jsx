@@ -1,299 +1,189 @@
-/**
- * File: QuizQuestionGrader.js
- * Description:
- *   - A helper library for grading quiz questions, both local and GPT-based.
- *   - Exports functions you can use inside QuizComponent (or elsewhere).
+/***********************************************************************
+ *  QuizQuestionGrader.js      (v3 – passRatio & rubric are now data)
  *
- * NOTE: If you already integrated local/GPT grading directly in QuizComponent,
- *       you can optionally remove/trim this file. 
- */
-
+ *  Exports:
+ *    • gradeAllQuestions() – one-shot helper used by QuizView
+ *    • isLocallyGradableType(), localGradeQuestion()
+ *    • gradeOpenEndedBatch() – single GPT call for open-ended items
+ *
+ *  –  Local grading rules stay hard-coded (fast, deterministic)
+ *  –  Caller decides pass/fail using the stage’s passRatio field that
+ *     lives in Firestore -> quizConfigs/<quizDoc>. This module simply
+ *     returns an array  [{ score, feedback }, … ] (0 … 1 per question)
+ **********************************************************************/
+// ─── imports ─────────────────────────────────────────────────────────
 import axios from "axios";
 
-/**
- * Given an array of question items, split into local vs. GPT-gradable, 
- * then produce a final "gradingResults" array, each with { score, feedback }.
- * 
- * @param {Object} params
- * @param {string} params.openAiKey - Your GPT API key
- * @param {string} params.subchapterSummary - Additional context for GPT
- * @param {Array}  params.questions - The full array of question objects
- * @param {Array}  params.userAnswers - The user's parallel array of answers
- * @returns {Promise<{ success:boolean, results:Array, error:string }>}
- *
- * Example usage:
- *   const { success, results, error } = await gradeAllQuestions({
- *     openAiKey, subchapterSummary, questions, userAnswers
- *   });
- */
+// ─── tiny util ───────────────────────────────────────────────────────
+const clamp01 = n => Math.max(0, Math.min(1, Number(n) || 0));
+
+// ─── API 1 – master helper (local + GPT) ─────────────────────────────
 export async function gradeAllQuestions({
-  openAiKey,
-  subchapterSummary,
-  questions,
-  userAnswers,
+  openAiKey         = "",
+  subchapterSummary = "",
+  questions         = [],
+  userAnswers       = [],
+  rubric            = "Grade on completeness and correctness. "
+                      + "Return score (0-1) and 1-2 sentences of feedback."
 }) {
-  if (!questions || !userAnswers || questions.length !== userAnswers.length) {
-    return {
-      success: false,
-      results: [],
-      error: "Mismatch in questions vs. userAnswers length.",
-    };
+  if (questions.length !== userAnswers.length) {
+    return { success:false, results:[], error:"questions vs answers length mismatch" };
   }
 
-  // We'll store final results in an array parallel to `questions`
-  const gradingResults = new Array(questions.length).fill(null);
+  const results = new Array(questions.length).fill(null);
 
-  // 1) Separate local vs GPT
-  const localItems = [];
-  const openEndedItems = [];
-  questions.forEach((qObj, idx) => {
-    const userAns = userAnswers[idx] || "";
-    if (isLocallyGradableType(qObj.type)) {
-      localItems.push({ qObj, userAns, originalIndex: idx });
-    } else {
-      openEndedItems.push({ qObj, userAns, originalIndex: idx });
-    }
+  // split
+  const local   = [];
+  const openEnd = [];
+  questions.forEach((q, i) => {
+    const ans = userAnswers[i] ?? "";
+    (isLocallyGradableType(q.type) ? local : openEnd)
+      .push({ qObj:q, userAns:ans, index:i });
   });
 
-  // 2) Handle local grading
-  localItems.forEach((item) => {
-    const { score, feedback } = localGradeQuestion(item.qObj, item.userAns);
-    gradingResults[item.originalIndex] = { score, feedback };
+  // 1) local grading
+  local.forEach(item => {
+    results[item.index] = localGradeQuestion(item.qObj, item.userAns);
   });
 
-  // 3) Handle GPT-based grading
-  if (openEndedItems.length > 0) {
+  // 2) GPT grading
+  if (openEnd.length) {
     if (!openAiKey) {
-      // If there's no GPT key, set them all to 0 
-      openEndedItems.forEach((item) => {
-        gradingResults[item.originalIndex] = {
-          score: 0,
-          feedback: "No OpenAI key; cannot GPT-grade open-ended question.",
-        };
-      });
+      openEnd.forEach(item =>
+        results[item.index] = { score:0, feedback:"No OpenAI key for GPT grading." });
     } else {
-      // Attempt GPT grading
       const { success, gradingArray, error } = await gradeOpenEndedBatch({
-        openAiKey,
-        subchapterSummary,
-        items: openEndedItems,
+        openAiKey, subchapterSummary, items:openEnd, rubric
       });
+
       if (!success) {
-        // If GPT call fails, fill them with 0
-        console.error("GPT grading error:", error);
-        openEndedItems.forEach((item) => {
-          gradingResults[item.originalIndex] = {
-            score: 0,
-            feedback: "GPT grading error: " + error,
-          };
-        });
+        console.error("GPT grading:", error);
+        openEnd.forEach(item =>
+          results[item.index] = { score:0, feedback:`GPT error: ${error}` });
       } else {
-        // Insert each result in the correct slot
-        gradingArray.forEach((res, i) => {
-          const origIdx = openEndedItems[i].originalIndex;
-          gradingResults[origIdx] = res;
-        });
+        gradingArray.forEach((r, k) => results[openEnd[k].index] = r);
       }
     }
   }
 
-  return {
-    success: true,
-    results: gradingResults,
-    error: "",
-  };
+  return { success:true, results, error:"" };
 }
 
-/**
- * Helper: Decide if a question type is "locally gradable."
- * Adjust as needed if you add new question types.
- */
-export function isLocallyGradableType(qType) {
-  switch (qType) {
-    case "multipleChoice":
-    case "trueFalse":
-    case "fillInBlank":
-    case "ranking": // if you have a correct order, you can do local grading
-      return true;
-    default:
-      return false;
-  }
+// ─── API 2 – local vs GPT decision helper ───────────────────────────
+export function isLocallyGradableType(type){
+  return ["multipleChoice","trueFalse","fillInBlank","ranking"].includes(type);
 }
 
-/**
- * Local grading function for those question types that have
- * an explicit correct answer in the question object:
- *   - multipleChoice => questionObj.correctIndex
- *   - trueFalse => questionObj.correctValue
- *   - fillInBlank => questionObj.answerKey
- *   - ranking => questionObj.correctOrder (if you store it)
- *
- * Return { score: 0..1, feedback: string }
- */
-export function localGradeQuestion(questionObj, userAnswer) {
-  let score = 0;
-  let feedback = "";
+// ─── API 3 – local grading rules (unchanged) ────────────────────────
+export function localGradeQuestion(q, userAns){
+  let score=0, fb="";
 
-  switch (questionObj.type) {
-    case "multipleChoice": {
-      // e.g. questionObj.correctIndex
-      const correctIndex = questionObj.correctIndex;
-      const userIdx = parseInt(userAnswer, 10);
-      if (!isNaN(userIdx) && userIdx === correctIndex) {
-        score = 1.0;
-        feedback = "Correct!";
-      } else {
-        score = 0.0;
-        if (Array.isArray(questionObj.options) && questionObj.options[correctIndex]) {
-          feedback = `Incorrect. Correct is: ${questionObj.options[correctIndex]}`;
-        } else {
-          feedback = "Incorrect.";
-        }
-      }
+  switch(q.type){
+    case "multipleChoice":{
+      const ok = q.correctIndex === Number(userAns);
+      score = ok?1:0;
+      fb    = ok? "Correct!" : `Incorrect. Correct: ${q.options?.[q.correctIndex]??"—"}`;
       break;
     }
-    case "trueFalse": {
-      // e.g. questionObj.correctValue is "true" or "false"
-      if (userAnswer === questionObj.correctValue) {
-        score = 1.0;
-        feedback = "Correct (T/F).";
-      } else {
-        score = 0.0;
-        feedback = `Incorrect. Correct answer was "${questionObj.correctValue}".`;
-      }
+    case "trueFalse":{
+      const ok = (userAns||"").toString().toLowerCase() ===
+                 (q.correctValue||"").toString().toLowerCase();
+      score = ok?1:0;
+      fb    = ok? "Correct!" : `Incorrect. Correct answer was "${q.correctValue}".`;
       break;
     }
-    case "fillInBlank": {
-      // e.g. questionObj.answerKey
-      const correctAnswerKey = (questionObj.answerKey || "").trim().toLowerCase();
-      const userAns = (userAnswer || "").trim().toLowerCase();
-      score = userAns === correctAnswerKey ? 1.0 : 0.0;
-      feedback = score === 1.0
-        ? "Correct fill-in!"
-        : `Incorrect. Expected "${questionObj.answerKey}".`;
+    case "fillInBlank":{
+      const ok = (userAns||"").trim().toLowerCase() ===
+                 (q.answerKey||"").trim().toLowerCase();
+      score = ok?1:0;
+      fb    = ok? "Correct!" : `Incorrect. Expected "${q.answerKey}".`;
       break;
     }
-    case "ranking": {
-      // If you store a correct order array in questionObj.correctOrder 
-      // vs. userAnswer = user’s chosen order
-      // Implement your logic. For now, we default to 0. 
-      score = 0.0;
-      feedback = "Ranking local grading not implemented here.";
+    case "ranking":{
+      // placeholder – implement your own logic
+      score = 0;
+      fb    = "Ranking grading not implemented.";
       break;
     }
-    default:
-      score = 0.0;
-      feedback = "Not recognized for local grading.";
+    default:{
+      score = 0;
+      fb    = "Unrecognized type for local grading.";
+    }
   }
-
-  return { score, feedback };
+  return { score:clamp01(score), feedback:fb };
 }
 
-/**
- * Single GPT call to grade open-ended questions. 
- * items[] = { qObj, userAns, originalIndex }
- * 
- * The question object should contain something like "expectedAnswer" or "answerGuidance."
- * GPT returns an array of { score: 0..1, feedback: "..." }, in the same order as `items`.
+// ─── API 4 – GPT batch grading for open-ended items ──────────────────
+/*  items[] = { qObj, userAns, index }
+ *  rubric  = short string injected into GPT prompt
  */
-export async function gradeOpenEndedBatch({ openAiKey, subchapterSummary, items }) {
-  if (!openAiKey) {
-    return { success: false, gradingArray: [], error: "Missing openAiKey" };
-  }
-  if (!items || !items.length) {
-    return { success: true, gradingArray: [], error: "" };
-  }
+export async function gradeOpenEndedBatch({
+  openAiKey, subchapterSummary="", items=[], rubric=""
+}){
+  if (!openAiKey) return { success:false, gradingArray:[], error:"Missing API key" };
+  if (!items.length)    return { success:true , gradingArray:[], error:"" };
 
-  // Build the GPT prompt
-    /* ---------- Build the GPT prompt (wrap answer in triple quotes) ---------- */
-  let promptBlock = "";
-  items.forEach((item, i) => {
-    const { qObj, userAns } = item;
-    const safeAns = userAns ?? "";   // accept whatever the learner type
-
-    promptBlock += `
-Q#${i + 1}:
-Question: ${qObj.question}
-Expected Answer: ${qObj.expectedAnswer || qObj.answerGuidance || "(none provided)"}
-User's Answer: """${safeAns}"""
-`;
+  /* build prompt ----------------------------------------------------*/
+  let block = "";
+  items.forEach((it,i)=>{
+    const q  = it.qObj;
+    block += `
+Q#${i+1}
+Question: ${q.question}
+Expected: ${q.expectedAnswer ?? q.answerGuidance ?? "(none)"}
+Learner : """${it.userAns}"""`.trim()+"\n";
   });
-
-  // Optional: peek at the exact prompt in the browser console
-  console.log("GPT-grading prompt ↓↓↓", promptBlock);
 
   const userPrompt = `
-You are a grading assistant. 
-Context (subchapter summary): "${subchapterSummary}"
+You are a strict grading assistant.
+Rubric: "${rubric}"
+Context (sub-chapter summary): "${subchapterSummary}"
 
- For each question, compare Expected vs User’s Answer.
- If it is just very short, grade it normally and give constructive feedback.Score it from 0.0 to 1.0, then give 1-2 sentences of feedback.
+For every Q#: compare Expected vs Learner, decide a score between 0 and 1
+(1 = fully correct, 0 = totally wrong) and give concise feedback.
 
-Return exactly JSON in the format:
+Return JSON ONLY:
 {
-  "results": [
-    { "score": 0.0, "feedback": "..." },
-    { "score": 1.0, "feedback": "..." }
+  "results":[
+    { "score":0.75, "feedback":"…" },
+    …
   ]
 }
-No extra commentary—only this JSON.
+${block}`.trim();
 
-${promptBlock}
-`.trim();
-
-  try {
-    const response = await axios.post(
+  /* call OpenAI -----------------------------------------------------*/
+  try{
+    const resp = await axios.post(
       "https://api.openai.com/v1/chat/completions",
       {
-        model: "gpt-3.5-turbo",
-        messages: [
-          { role: "system", content: "You are a strict grading assistant. Return JSON only." },
-          { role: "user", content: userPrompt },
+        model:"gpt-3.5-turbo",
+        messages:[
+          { role:"system", content:"Return JSON only, no extra text."},
+          { role:"user",   content:userPrompt }
         ],
-        max_tokens: 1000,
-        temperature: 0.0,
+        max_tokens:1000,
+        temperature:0.0
       },
-      {
-        headers: {
-          Authorization: `Bearer ${openAiKey}`,
-          "Content-Type": "application/json",
-        },
-      }
+      { headers:{ Authorization:`Bearer ${openAiKey}` } }
     );
 
-    const raw = response.data.choices[0].message.content.trim();
-    let parsed;
-    try {
-      const cleaned = raw.replace(/```json/g, "").replace(/```/g, "").trim();
-      parsed = JSON.parse(cleaned);
-    } catch (err) {
-      return {
-        success: false,
-        gradingArray: [],
-        error: "Error parsing JSON from GPT: " + err.message,
-      };
-    }
+    const raw    = resp.data.choices[0].message.content
+                     .replace(/```json|```/g,"").trim();
+    const parsed = JSON.parse(raw);
 
-    if (!parsed.results || !Array.isArray(parsed.results)) {
-      return {
-        success: false,
-        gradingArray: [],
-        error: "Invalid response: 'results' array not found in GPT output.",
-      };
-    }
+    if(!Array.isArray(parsed.results))
+      throw new Error("Missing results[] array in GPT reply");
 
-    // Return them
-    const gradingArray = parsed.results.map((r) => ({
-      score: r.score ?? 0.0,
-      feedback: r.feedback || "",
+    const gradingArray = parsed.results.map(r=>({
+      score   : clamp01(r.score),
+      feedback: r.feedback ?? ""
     }));
 
-    return { success: true, gradingArray, error: "" };
-  } catch (err) {
-    return {
-      success: false,
-      gradingArray: [],
-      error: "GPT call failed: " + err.message,
-    };
+    // pad / trim to match items.length just in case
+    while(gradingArray.length < items.length) gradingArray.push({score:0,feedback:""});
+    return { success:true, gradingArray, error:"" };
+
+  }catch(err){
+    return { success:false, gradingArray:[], error:err.message };
   }
 }

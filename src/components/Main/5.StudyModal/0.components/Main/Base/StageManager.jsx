@@ -11,6 +11,9 @@ import LockIcon from "@mui/icons-material/Lock";   // ← keep with other MUI im
 import ListAltIcon      from "@mui/icons-material/ListAltOutlined";
 import HistoryIcon      from "@mui/icons-material/HistoryEduOutlined";
 
+ import { doc, getDoc } from "firebase/firestore";
+import { db } from "../../../../../../firebase";   // ← adjust if path differs
+
 
 import { Box } from "@mui/material";
 // Child Components
@@ -162,6 +165,9 @@ function renderContextPill(text, key) {
   const [activeTab, setActiveTab] = useState(selectedStage);
   const [subView, setSubView] = useState("activity");
 
+
+  const [promptCfg, setPromptCfg] = useState(null);   // holds { passRatio, … }
+
   const renderToggleRow = () => (
   <div style={styles.subButtonRow}>
     <button
@@ -302,6 +308,18 @@ useEffect(() => {
           dispatch(
               fetchQuizStage({ userId, planId, subChapterId, stage: activeTab })
             );
+
+            + // NEW ➜ fetch quizPrompts/<examId>_<stage> for passRatio / future fields
+  (async () => {
+    try {
+      const docId = `${effectiveExamId}_${activeTab}`;   // e.g. "general_remember"
+      const snap  = await getDoc(doc(db, "quizPrompts", docId));
+      setPromptCfg(snap.exists() ? snap.data() : null);
+    } catch (e) {
+      console.error("prompt fetch error:", e);
+      setPromptCfg(null);
+    }
+  })();
     } else {
       // Not a quiz => clear data
       setMode("LOADING");
@@ -387,7 +405,10 @@ useEffect(() => {
   );   setLastQuizAttempt(latestQuiz);
 
     const ratio = parseScoreForRatio(latestQuiz.score);
-    const passRatio = stagePassRatios[quizStage] || 0.6;
+    const passRatio =
+   typeof promptCfg?.passRatio === "number"
+     ? promptCfg.passRatio                 // Firestore wins
+     : stagePassRatios[quizStage] ?? 0.6;  // fallback → old table → 0.6                                     // hard default
     if (isNaN(ratio)) {
       setMode("NEED_REVISION");
     } else {
@@ -637,7 +658,11 @@ useEffect(() => {
               lastQuizAttempt={lastQuizAttempt}
               latestConceptStats={latestConceptStats}
               allAttemptsConceptStats={allAttemptsConceptStats}
-              passRatio={stagePassRatios[tabKey] || 1}
+                passRatio={
+    typeof promptCfg?.passRatio === "number"
+      ? promptCfg.passRatio
+      : stagePassRatios[tabKey] || 1
+  }
             />
           )}
         </div>

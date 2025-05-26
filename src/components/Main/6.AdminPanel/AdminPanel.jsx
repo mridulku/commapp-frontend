@@ -19,6 +19,8 @@ import ConceptExtractionPage from "./Support/ConceptExtractionPage";
 
 import CostDashboard from "./Support/CostDashboard"; // ← add this line
 
+import { QuizPromptEditor } from "./Support/QuizPrompEditor";
+
 // Add more admin tools here later and extend the enum ↓
 const TOOLS = {
   uploader: "Slice Uploader",
@@ -32,6 +34,7 @@ const TOOLS = {
   ConceptExtractionPage: "Concept Extraction Page",
   CostDashboard: "Cost Dashboard",
   MetricsDashboard: "Metrics Dashboard",
+  QuizPromptEditor: "Quiz Prompt Editor",
 };
 
 function AdminPanel({ userId }) {
@@ -98,6 +101,8 @@ function AdminPanel({ userId }) {
             return <CostDashboard   userId={userId} />;
             case "MetricsDashboard":
             return <MetricsDashboard   userId={userId} />;
+      case "QuizPromptEditor":
+        return <QuizPromptEditor userId={userId} />;
       default:
         return null;
     }

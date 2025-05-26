@@ -84,30 +84,6 @@ function LoadingOverlay({ text = "Loading…" }) {
 }
 
 
-function computeConceptStatuses(allAtts) {
-  const conceptStatusMap = new Map();
-  const conceptSet = new Set();
-
-  const sorted = [...allAtts].sort((a, b) => a.attemptNumber - b.attemptNumber);
-  sorted.forEach((attempt) => {
-    (attempt.conceptStats || []).forEach((cs) => {
-      conceptSet.add(cs.conceptName);
-      if (!conceptStatusMap.has(cs.conceptName)) {
-        conceptStatusMap.set(cs.conceptName, "NOT_TESTED");
-      }
-      if (cs.passOrFail === "PASS") {
-        conceptStatusMap.set(cs.conceptName, "PASS");
-      } else if (cs.passOrFail === "FAIL") {
-        // Only mark FAIL if not already PASS
-        if (conceptStatusMap.get(cs.conceptName) !== "PASS") {
-          conceptStatusMap.set(cs.conceptName, "FAIL");
-        }
-      }
-    });
-  });
-
-  return { conceptSet, conceptStatusMap };
-}
 
 
 const QUIZ_CACHE_COLL = "quizCache";
@@ -245,6 +221,29 @@ const {
 
 const [viewState, setViewState] = useState("DECIDING");
 
+/* ============================================================
+ *  1-bis)  Derive stageMastered + viewState from hook data
+ * ------------------------------------------------------------ */
+useEffect(() => {
+  if (loadingConceptData) return;               // still fetching
+  const totalConcepts = masteredCount + inProgressCount + notTestedCount;
+  if (totalConcepts === 0) return;              // nothing loaded yet
+
+  const mastered = totalConcepts > 0 &&
+                   inProgressCount === 0 &&
+                   notTestedCount === 0;
+
+  setStageMastered(mastered);
+  setViewState(mastered ? "MASTERED" : "GENERATING");
+}, [
+  loadingConceptData,
+  masteredCount,
+  inProgressCount,
+  notTestedCount
+]);
+
+
+
 
   // ─── Recent-attempt accordion ────────────────────────────────
 const [lastAttempt, setLastAttempt]   = useState(null);   // { questions, results, score, passed }
@@ -289,60 +288,7 @@ const [quizFinished, setQuizFinished] = useState(false);
 
 
 
-  // ============================================================
-  //  1) Fetch aggregator mastery data for this quizStage
-  // ============================================================
-  useEffect(() => {
-  // run once we have the IDs – regardless of stageMastered value
-  if (!userId || !planId || !subChapterId) return;
-    async function fetchAggregator() {
-      try {
-        const resp = await axios.get(
-          `${import.meta.env.VITE_BACKEND_URL}/subchapter-status`, {
-          params: { userId, planId, subchapterId: subChapterId },
-        });
-        if (resp.data) {
-          const stageObj = resp.data.quizStagesData?.[quizStage] || {};
-          const allStats = stageObj.allAttemptsConceptStats || [];
-          const { conceptSet, conceptStatusMap } = computeConceptStatuses(allStats);
-          const totalConcepts = conceptSet.size;
 
-          const passCount = [...conceptStatusMap.values()].filter((v) => v === "PASS").length;
-          const failCount = [...conceptStatusMap.values()].filter((v) => v === "FAIL").length;
-          const notTested = totalConcepts - passCount - failCount;
-
-           // ✔︎ everything mastered?  (and there is at least one concept)
-   // mastered only when every concept has at least one PASS and zero FAILs
-const mastered =
-  totalConcepts > 0 &&          // there are concepts in this stage
-  failCount     === 0 &&        // none have ever failed
-  notTested     === 0 &&        // all were tested
-  passCount     === totalConcepts; // and all of them passed
-
-setStageMastered(mastered);
-
-setViewState(mastered ? "MASTERED" : "GENERATING");
-
-          setMasteredCount(passCount);
-          setInProgressCount(failCount);
-          setNotTestedCount(notTested);
-
-          // Build array for expanded display
-          const statusesArr = [];
-          conceptSet.forEach((cName) => {
-            const finalStat = conceptStatusMap.get(cName) || "NOT_TESTED";
-            statusesArr.push({ conceptName: cName, status: finalStat });
-          });
-          statusesArr.sort((a, b) => a.conceptName.localeCompare(b.conceptName));
-          setConceptStatuses(statusesArr);
-        }
-      } catch (err) {
-        console.error("Error fetching aggregator subchapter data:", err);
-      } finally {
-      }
-    }
-    fetchAggregator();
-  }, [userId, planId, subChapterId, quizStage]);
 
 
 
