@@ -41,18 +41,29 @@ export default function QuizQuestionRenderer({
     <div style={styles.container}>
       <p style={styles.questionPrompt}>Q{index + 1}: {questionText}</p>
 
-      {conceptName && (
-  <Chip
-    label={conceptName}
-    size="small"
-    sx={{
-      bgcolor: "#263238",
-      color: "#80cbc4",
-      fontStyle: "normal",
-      mb: .5
-    }}
-  />
-)}
+  {conceptName && (
+    <Chip
+      label={conceptName}
+      size="small"
+      sx={{
+        bgcolor: "#263238",
+        color: "#80cbc4",
+        fontStyle: "normal",
+        mb: .5
+      }}
+    />
+  )}
+
+  {readOnly &&
+    (!questionObj.options || questionObj.options.length === 0) && (
+      <p style={{ fontStyle: "italic",
+                  color:      "#ccc",
+                  margin:     "8px 0" }}>
+        <b>Your answer:</b>{" "}
+        {userAnswer?.trim() ? userAnswer : "(blank)"}
+      </p>
+    )}
+
 
       {renderByType(qType, questionObj, userAnswer, onUserAnswerChange, readOnly)}
     </div>

@@ -48,9 +48,7 @@ export default function ActivityView({
           All concepts mastered&nbsp;🎉
         </h3>
 
-        <p style={{ margin: 0, marginBottom: 6 }}>
-          Your final score: <b>{pct}</b>
-        </p>
+      
 
         <p style={{ color: "#4caf50", margin: 0, marginBottom: 10 }}>
           You passed the <b>{quizStage}</b> stage.

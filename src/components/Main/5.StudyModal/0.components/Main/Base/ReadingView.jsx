@@ -3,7 +3,13 @@ import { useSelector, useDispatch } from "react-redux";
 import axios from "axios";
 
 import Loader from "./Loader";
+
+import { db } from "../../../../../../firebase"; // Adjust path if needed
  
+import { Fade } from "@mui/material";          // <-- already in bundle? add if not
+
+
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 
 import {
   Box,
@@ -28,6 +34,17 @@ import { fetchReadingTime, incrementReadingTime } from "../../../../../../store/
 import { fetchPlan, setCurrentIndex }            from "../../../../../../store/planSlice";
 import { refreshSubchapter }                     from "../../../../../../store/aggregatorSlice";  // ⬅️ add this
 
+
+// -------------- persistent rewrite-cache --------------
+import { doc, getDoc, setDoc, serverTimestamp  } from "firebase/firestore";   // ⬅︎ already used elsewhere in the repo
+
+const RW_CACHE_COLL = "readingRewriteCache";
+
+function buildRewriteCacheId(userId, planId, subChapterId, style) {
+  // no date-stamp here → the same request will always get the same doc
+  return `${userId}_${planId}_${subChapterId}_${style}`;
+}
+
 /* ---------------- rewrite styles ---------------- */
 const STYLES = [
   { key: "original", label: "Original" },
@@ -35,6 +52,26 @@ const STYLES = [
   { key: "bullets",  label: "Bullet-points" },
   { key: "story",    label: "Story form" },
 ];
+
+const RewriteOverlay = ({ text = "Transforming text…" }) => (
+  <Fade in>
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        background: "rgba(0,0,0,.70)",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 40
+      }}
+    >
+      <CircularProgress size={48} sx={{ color: "#FFD700" }} />
+      <span style={{ marginTop: 12, color: "#eee" }}>{text}</span>
+    </div>
+  </Fade>
+);
 
 /* ---------------- local fallback when GPT is offline ---------------- */
 const mockRewrite = (html, style) => {
@@ -229,16 +266,12 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
   useEffect(() => {
     if (!subChapter?.summary) return;
     const chunked = chunkHtmlByParagraphs(subChapter.summary, 180);
-    cache.current.original = chunked;
+   cache.current = { original: chunked };       // ✨ flush everything else
+   setStyle("original");                  // always start from Original
     setPages(chunked);
-     // If the activity is complete, open on the last page so the
- // disabled “Reading Already Complete” button is visible.
- if (completed === true) {
-   setCurrentPageIndex(chunked.length - 1);
- } else {
-   setCurrentPageIndex(0);
- }
-  }, [subChapter]);
+      /* Always begin on the first page, no matter the status */
+  setCurrentPageIndex(0);
+}, [subChapter]);
 
   // ---- lumps-of-15 to aggregator (legacy) ----
   useEffect(() => {
@@ -316,26 +349,58 @@ const resp = await axios.get(
     fetchTimeDetails();
   }, [activityId]);
 
+
+// whenever the sub-chapter itself changes → ensure the tiny flag is reset
+useEffect(() => { setLS(false); }, [subChapterId]);
+
   // ---- GPT rewriting effect (from prototype) ----
-  useEffect(() => {
-    if (!pages || style === "original" || cache.current[style]) return;
-    setLS(true);
-    (async () => {
-      try {
-        // run requests in parallel
-        const rewritten = await Promise.all(
-          pages.map((html) => gptRewrite(html, style))
-        );
-        cache.current[style] = rewritten;
-        // TODO persistence
-      } catch (err) {
-        console.warn("GPT failed, using mock:", err);
-        cache.current[style] = pages.map((html) => mockRewrite(html, style));
-      } finally {
-        setLS(false);
+  // ---- GPT rewriting effect  ✧ with Firestore cache ✧ ----
+useEffect(() => {
+  if (!pages || style === "original" || cache.current[style]) return;
+
+  setLS(true);                               // show tiny spinner in the tab
+
+  (async () => {
+    try {
+      /* 1️⃣  look in Firestore */
+      const cacheId   = buildRewriteCacheId(userId, planId, subChapterId, style);
+      const snap      = await getDoc(doc(db, RW_CACHE_COLL, cacheId));
+
+      if (snap.exists()) {
+        console.log("[ReadingView] rewrite cache HIT →", cacheId);
+        cache.current[style] = snap.data().pages || [];   // ← stored as array
+        return;
       }
-    })();
-  }, [style, pages]);
+
+      /* 2️⃣  GPT fallback */
+          /* 1) ask GPT page-by-page → we now get {html,usage} */
+    /* 2️⃣  GPT fallback */
+// AFTER
+const results = await Promise.all(
+  pages.map(p =>
+    gptRewrite(p, style, { userId, planId, subChapterId })
+  )
+);
+cache.current[style] = results.map(r => r.html);
+
+
+
+
+      /* 3️⃣  persist so the next click is instant */
+      await setDoc(
+  doc(db, RW_CACHE_COLL, cacheId),
+  { pages: cache.current[style], createdAt: serverTimestamp() },
+  { merge: false }
+);
+      console.log("[ReadingView] rewrite cache SAVED →", cacheId);
+    } catch (err) {
+      console.warn("GPT or cache failed – using mock:", err);
+      cache.current[style] = pages.map((html) => mockRewrite(html, style));
+    } finally {
+      setLS(false);
+    }
+  })();
+}, [style, pages, userId, planId, subChapterId]);
 
   // ---- selection text for "Ask AI" tab (from prototype) ----
   const handleMouseUp = () => {
@@ -476,6 +541,13 @@ const totalPages        = VIEW.length;
 const pageLabel         = `${currentPageIndex + 1} / ${totalPages}`;
 
 
+
+/* ✧ NEW — true only while we’re waiting for a rewrite ✧ */
+const waitingForRewrite =
+  style !== "original" &&          // a transformed style
+  !cache.current[style];           // cache not filled yet
+
+
   const currentPageHtml = VIEW[currentPageIndex] || "";
 
   // ---- render ----
@@ -492,7 +564,8 @@ const pageLabel         = `${currentPageIndex + 1} / ${totalPages}`;
         sx={{
           width: "85%", maxWidth: 700, height: "92%",
           bgcolor: "#111", border: "1px solid #333", borderRadius: 2,
-          display: "flex", flexDirection: "column", overflow: "hidden"
+           display: "flex", flexDirection: "column", overflow: "hidden",
+           position: "relative"            // <-- NEW
         }}
       >
         {/* header */}
@@ -502,6 +575,25 @@ const pageLabel         = `${currentPageIndex + 1} / ${totalPages}`;
             p: 1.2, display: "flex", alignItems: "center"
           }}
         >
+
+          {/* ───────────────── full-card overlay ─────────────── */}
+{waitingForRewrite && (
+  <Box
+    sx={{
+      position: "absolute",
+      inset: 0,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      bgcolor: "rgba(0,0,0,.68)",
+      zIndex: 50             /* stays above the page text */
+    }}
+  >
+    <CircularProgress size={46} sx={{ color: "#FFD700" }} />
+  </Box>
+)}
+
+
           {/* tabs */}
           <Tabs
             value={tab}
@@ -518,9 +610,7 @@ const pageLabel         = `${currentPageIndex + 1} / ${totalPages}`;
               label={
                 <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
                   Read
-                  {loadingStyle ? (
-                    <CircularProgress size={12} sx={{ color: "#FFD700" }} />
-                  ) : (
+                  
                     <Chip
                       label={STYLES.find((s) => s.key === style)?.label}
                       size="small"
@@ -531,7 +621,7 @@ const pageLabel         = `${currentPageIndex + 1} / ${totalPages}`;
   "& .MuiChip-label": { px: 0.75 }  // (optional) tighten padding
 }}
                     />
-                  )}
+                  
                   <IconButton
                     size="small"
                     sx={{ p: 0, color: "#bbb" }}
@@ -569,14 +659,31 @@ const pageLabel         = `${currentPageIndex + 1} / ${totalPages}`;
               ml: "auto", display: "flex", alignItems: "center", gap: 1
             }}
           >
-            <Box
-              sx={{
-                fontSize: 14, bgcolor: "#333", px: 1, py: 0.5,
-                borderRadius: 1, display: "inline-flex", alignItems: "center"
-              }}
-            >
-              🕒 {formatTime(displayedTime)}
-            </Box>
+            {/*  either “completed” chip  ─or─  live timer  */}
+{isComplete ? (
+  <Chip
+  icon={<CheckCircleIcon sx={{ fontSize: 18, color: "#4caf50" }} />}
+  label={`Completed • ${
+    new Date(activity.completedAt ?? Date.now()).toLocaleDateString()
+  } • ${formatTime(displayedTime)}`}   // ← now includes total time
+  size="small"
+  sx={{
+    bgcolor: "#1b5e20",
+    color:  "#c8e6c9",
+    fontSize: 13,
+    "& .MuiChip-icon": { mr: -.4 }
+  }}
+/>
+) : (
+  <Box
+    sx={{
+      fontSize: 14, bgcolor: "#333", px: 1, py: 0.5,
+      borderRadius: 1, display: "inline-flex", alignItems: "center"
+    }}
+  >
+    🕒 {formatTime(displayedTime)}
+  </Box>
+)}
             {/* day-by-day overlay toggle if complete */}
             {isAdmin && isComplete && (
               <Button
@@ -626,15 +733,25 @@ const pageLabel         = `${currentPageIndex + 1} / ${totalPages}`;
 
         {/* main body */}
         <Box
-          sx={{ flex: 1, p: 2, overflowY: "auto" }}
+          sx={{ flex: 1, p: 2, overflowY: "auto",  position: "relative" }}
           onMouseUp={handleMouseUp}
         >
+
+          
+
+
+
           {tab === "read" ? (
-            <div
-              dangerouslySetInnerHTML={{ __html: currentPageHtml }}
-              style={{ fontSize: "1.1rem", lineHeight: 1.6 }}
-            />
-          ) : (
+    waitingForRewrite ? (
+      /* ⬅️ loader covers the page while we wait */
+      <RewriteOverlay />
+    ) : (
+      <div
+        dangerouslySetInnerHTML={{ __html: currentPageHtml }}
+        style={{ fontSize: "1.1rem", lineHeight: 1.6 }}
+      />
+    )
+  ) : (
             <AskAIChat
               contextText={
                 mode === "page"
@@ -644,6 +761,7 @@ const pageLabel         = `${currentPageIndex + 1} / ${totalPages}`;
               mode={mode}
               onModeChange={setMode}
               selection={selText}
+              subChapterId={subChapterId}   // ← add this line
             />
           )}
         </Box>

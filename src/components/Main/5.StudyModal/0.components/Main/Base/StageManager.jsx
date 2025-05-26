@@ -194,6 +194,8 @@ function renderContextPill(text, key) {
     setSubView("activity");
   }, [activity, selectedStage]);
 
+ 
+
   // ----------------- Refresh Key for aggregator re-fetch -----------------
   const [refreshKey, setRefreshKey] = useState(0);
   function handleNeedsRefreshStatus() {
@@ -202,6 +204,45 @@ function renderContextPill(text, key) {
 
   // ----------------- aggregator data – from Redux -----------------
 const dispatch = useDispatch();
+
+
+ /* -----------------------------------------------------------
+ * Whenever the learner lands **back** on the “Activity” view of a
+ * quiz stage, wipe the cached Redux slice entry and refetch the
+ * latest attempts.  Prevents the old quiz from re-appearing when
+ * the user hops away and returns without a hard refresh.
+ * --------------------------------------------------------- */
+useEffect(() => {
+  // 1) Only for quiz tabs (“remember”, “understand”, …)
+  if (!QUIZ_STAGES.includes(activeTab)) return;
+  // 2) Only when the visible sub-view is the Activity pane
+  if (subView !== "activity")           return;
+  // 3) Need valid IDs
+  if (!subChapterId || !userId)         return;
+
+  const sliceKey = `${subChapterId}|${activeTab}`;
+
+  /* 1️⃣  Throw away stale data in the Redux quiz slice */
+  dispatch(invalidateQuizStage(sliceKey));
+
+  /* 2️⃣  Immediately pull fresh data from the backend */
+  dispatch(
+    fetchQuizStage({
+      userId,
+      planId,
+      subChapterId,
+      stage: activeTab,
+    })
+  );
+}, [
+  activeTab,        // fires when user changes quiz stage pill
+  subView,          // fires when toggling History ⇄ Activity
+  subChapterId,
+  userId,
+  planId,
+  dispatch,
+]);
+
 const subchapterData = useSelector(
   (state) => state.aggregator.subchapterMap[subChapterId]
 );
@@ -339,8 +380,11 @@ useEffect(() => {
       setLatestConceptStats(null);
       return;
     }
-    const [latestQuiz] = quizArr;
-    setLastQuizAttempt(latestQuiz);
+   const latestQuiz = quizArr.reduce(
+    (best, q) =>
+      (q.attemptNumber ?? 0) > (best.attemptNumber ?? 0) ? q : best,
+    quizArr[0]
+  );   setLastQuizAttempt(latestQuiz);
 
     const ratio = parseScoreForRatio(latestQuiz.score);
     const passRatio = stagePassRatios[quizStage] || 0.6;

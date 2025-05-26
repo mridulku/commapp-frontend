@@ -126,6 +126,24 @@ async function fetchQuizCache(db, cacheId) {
   return snap.exists() ? snap.data().questions ?? null : null;
 }
 
+/* ---------- tiny helpers for completed-attempt info ---------- */
+async function fetchQuizMeta(db, cacheId) {
+  const snap = await getDoc(doc(db, QUIZ_CACHE_COLL, cacheId));
+  return snap.exists() ? snap.data() : {};
+}
+function markAttemptDone(db, cacheId, passed, pct) {
+  return setDoc(
+    doc(db, QUIZ_CACHE_COLL, cacheId),
+    {
+      attemptCompleted : true,
+      passed,
+      scoredPercentage : pct,
+      gradedAt         : serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
 /** write fresh quiz to cache */
 async function saveQuizCache(db, cacheId, questions) {
   await setDoc(
@@ -408,6 +426,31 @@ async function doGenerateQuestions() {
       attemptNumber            // attempt increments ⇒ new cache doc
     );
 
+    // NEW ➜ did we already finish this attempt earlier?
+fetchQuizMeta(db, cacheId).then(meta => {
+  if (meta.attemptCompleted) {
+    if (meta.passed) {
+      /* —— the learner PASSED last time —— */
+      // just show the summary – no quiz, no revision
+      setLastAttempt({
+        score     : meta.scoredPercentage,
+        passed    : true,
+        questions : [],       // you could fetch them if you stored them
+        results   : [],
+      });
+      setShowGradingResults(true);
+      setLoading(false);
+      return;                       // ⬅ stop the rest of the effect
+    } else {
+      /* —— the learner FAILED last time —— */
+      if (typeof onQuizFail === "function") onQuizFail();   // auto-jump to Revision
+      return;                       // ⬅ stop quiz generation
+    }
+  }
+
+  
+});
+
     // 1️⃣  look in Firestore
     const cachedQs = await fetchQuizCache(db, cacheId);
     if (cachedQs && cachedQs.length) {
@@ -584,7 +627,6 @@ useEffect(() => {
       return;
     }
     setLoading(true);
-    setStatus("Grading quiz...");
     setError("");
 
     const overallResults = new Array(generatedQuestions.length).fill(null);
@@ -642,6 +684,13 @@ useEffect(() => {
       }
     }
 
+     const gradedQuestions = generatedQuestions.map((qObj, idx) => ({
+   ...qObj,
+   userAnswer : userAnswers[idx],
+   score      : overallResults[idx]?.score ?? 0,
+   feedback   : overallResults[idx]?.feedback ?? "",
+ }));
+
     // compute final numeric
     const totalScore = overallResults.reduce((acc, r) => acc + (r?.score || 0), 0);
     const qCount = overallResults.length;
@@ -654,6 +703,8 @@ useEffect(() => {
     const isPassed = avgFloat >= passThreshold;
     setQuizPassed(isPassed);
 
+     
+
     // C) Submit to your server => /api/submitQuiz
     try {
       const payload = {
@@ -661,12 +712,7 @@ useEffect(() => {
         activityId,
         subchapterId: subChapterId,
         quizType: quizStage,
-        quizSubmission: generatedQuestions.map((qObj, idx) => ({
-          ...qObj,
-          userAnswer: userAnswers[idx],
-          score: overallResults[idx]?.score ?? 0,
-          feedback: overallResults[idx]?.feedback ?? "",
-        })),
+        quizSubmission: gradedQuestions,
         score: percentageString,
         totalQuestions: qCount,
         attemptNumber,
@@ -676,10 +722,44 @@ useEffect(() => {
         `${import.meta.env.VITE_BACKEND_URL}/api/submitQuiz`,payload);
       console.log("Quiz submission saved on server!");
       dispatch(refreshSubchapter(subChapterId));
+
+         /* ▶︎ tell StageManager the slice is stale so it will re-fetch
+      next time we land on this stage */
+   
     } catch (err) {
       console.error("Error submitting quiz:", err);
       setError("Error submitting quiz: " + err.message);
     }
+
+     const cacheId = buildQuizCacheId(
+   userId, planId, subChapterId, quizStage, attemptNumber
+ );
+ 
+
+  // ─── EARLY EXIT: did we already finish this attempt? ───
+ (async () => {
+   const meta = await fetchQuizMeta(db, cacheId);
+   if (meta.attemptCompleted) {
+     if (meta.passed) {
+       // They passed last time → just show the summary screen
+       setLastAttempt({
+         score     : meta.scoredPercentage,
+         passed    : true,
+         questions : [],   // you can fetch/store them if you wish
+         results   : [],
+       });
+       setShowGradingResults(true);   // shows the pass screen
+     } else {
+       // They failed last time → jump straight to Revision stage
+       if (typeof onQuizFail === "function") onQuizFail();
+     }
+     setLoading(false);      // stop any spinner
+     return;                 // 💥 stop the rest of this effect
+   }
+
+   // If we reach here, no completed attempt exists → make/restore quiz
+ })();
+ 
 
     // D) If passed => mark aggregator doc + re-fetch plan => remain on oldIndex
     if (isPassed) {
@@ -727,10 +807,10 @@ useEffect(() => {
 
     // remember the full attempt so we can show it later
 setLastAttempt({
-  questions : generatedQuestions,
-  results   : overallResults,
-  score     : percentageString,
-  passed    : isPassed,
+    questions : gradedQuestions,   // 👈 now each q carries userAnswer
+   results   : overallResults,
+   score     : percentageString,
+   passed    : isPassed,
 });
 setShowLastAttempt(false);          // start collapsed
 
@@ -739,7 +819,6 @@ setShowLastAttempt(false);          // start collapsed
 
     setShowGradingResults(true);
     setLoading(false);
-    setStatus("Grading complete.");
 
      if (isPassed) {
    setStageMastered(true);   // <- hide quiz immediately
@@ -752,6 +831,7 @@ setShowLastAttempt(false);          // start collapsed
   //  7) Pass/Fail flows
   // ============================================================
   async function handleQuizSuccess() {
+    dispatch(invalidateQuizStage({ userId, planId, subChapterId, stage: quizStage }));
     try {
       if (activityId) {
         const payload = {
@@ -779,12 +859,14 @@ setShowLastAttempt(false);          // start collapsed
   }
 
   function handleTakeRevisionNow() {
+    dispatch(invalidateQuizStage({ userId, planId, subChapterId, stage: quizStage }));
     if (onQuizFail) {
       onQuizFail();
     }
   }
 
   async function handleTakeRevisionLater() {
+    dispatch(invalidateQuizStage({ userId, planId, subChapterId, stage: quizStage }));
     try {
       const oldIndex = currentIndex;
       if (activityId) {
@@ -943,9 +1025,7 @@ const pageLabel = `${currentPageIndex + 1} / ${pages.length}`;
          {showGradingResults && (
   <div style={styles.gradingContainer}>
     <h3>Overall Summary</h3>
-    <p>
-      Your final score: <b>{finalPercentage}</b>
-    </p>
+    
     {quizPassed ? (
       <p style={{ color: "lightgreen" }}>You passed!</p>
     ) : (
