@@ -5,8 +5,9 @@ import axios from "axios";
 import { useSelector, useDispatch } from "react-redux";
 
 import { fetchQuizTime, incrementQuizTime } from "../../../../../../store/quizTimeSlice";
-import { setCurrentIndex, fetchPlan } from "../../../../../../store/planSlice";
-import { refreshSubchapter } from "../../../../../../store/aggregatorSlice";
+import { setCurrentIndex, fetchPlan }          from "../../../../../../store/planSlice";
+import { refreshSubchapter }                   from "../../../../../../store/aggregatorSlice";
+import { invalidateQuizStage }                 from "../../../../../../store/quizSlice";   // 🔗 NEW
 
 import { CircularProgress, Fade, Chip } from "@mui/material";
 
@@ -226,7 +227,7 @@ export default function QuizView({
   const dispatch = useDispatch();
   const [showDebug, setShowDebug] = useState(false);
 
-
+const quizKey = `${subChapterId}|${quizStage}`;   // same pattern StageManager uses
   
 
   // Extract activityId & replicaIndex from the activity
@@ -831,7 +832,7 @@ setShowLastAttempt(false);          // start collapsed
   //  7) Pass/Fail flows
   // ============================================================
   async function handleQuizSuccess() {
-    dispatch(invalidateQuizStage({ userId, planId, subChapterId, stage: quizStage }));
+dispatch(invalidateQuizStage(quizKey));
     try {
       if (activityId) {
         const payload = {
@@ -859,14 +860,14 @@ setShowLastAttempt(false);          // start collapsed
   }
 
   function handleTakeRevisionNow() {
-    dispatch(invalidateQuizStage({ userId, planId, subChapterId, stage: quizStage }));
+dispatch(invalidateQuizStage(quizKey));
     if (onQuizFail) {
       onQuizFail();
     }
   }
 
   async function handleTakeRevisionLater() {
-    dispatch(invalidateQuizStage({ userId, planId, subChapterId, stage: quizStage }));
+dispatch(invalidateQuizStage(quizKey));
     try {
       const oldIndex = currentIndex;
       if (activityId) {
@@ -1024,20 +1025,46 @@ const pageLabel = `${currentPageIndex + 1} / ${pages.length}`;
           {/* GRADING RESULTS => if showGradingResults == true */}
          {showGradingResults && (
   <div style={styles.gradingContainer}>
-    <h3>Overall Summary</h3>
-    
-    {quizPassed ? (
-      <p style={{ color: "lightgreen" }}>You passed!</p>
-    ) : (
-      <p style={{ color: "red" }}>You did not pass.</p>
-    )}
 
-    {/* ← the accordion now lives INSIDE the summary box */}
-    <LastAttemptPanel
-      attempt={lastAttempt}
-      show={showLastAttempt}
-      onToggle={() => setShowLastAttempt((p) => !p)}
-    />
+   {/* headline strip */}
+   <div style={styles.resultBanner}>
+     <span style={quizPassed ? styles.passIcon : styles.failIcon}>
+       {quizPassed ? "🎉" : "💡"}
+     </span>
+     <span style={styles.resultText}>
+       {quizPassed ? "You passed!" : "You did not pass"}
+     </span>
+   </div>
+
+   {/* quick stats row */}
+   <div style={styles.resultStats}>
+     <span style={styles.statBlock}>
+       <b>Score&nbsp;•&nbsp;</b>{finalPercentage}
+    </span>
+     <span style={styles.statBlock}>
+       <b>Correct&nbsp;•&nbsp;</b>
+       {gradingResults.filter(r => (r?.score ?? 0) >= 1).length}
+       &nbsp;/&nbsp;{gradingResults.length}
+     </span>
+
+     {/* accordion toggle */}
+     <button
+       onClick={() => setShowLastAttempt(p => !p)}
+       style={styles.accordionBtn}
+     >
+       {showLastAttempt ? "▲ Hide details" : "▼ Show details"}
+     </button>
+   </div>
+
+   {/* collapsible details */}
+   {showLastAttempt && (
+     <LastAttemptPanel
+  attempt={lastAttempt}
+  show={showLastAttempt}                       // ← your real flag
+  onToggle={() => setShowLastAttempt(p => !p)} // ← toggle handler
+  hideToggle                                   // ← hides the panel’s own button
+/>
+   )}
   </div>
 )}
 
@@ -1045,52 +1072,55 @@ const pageLabel = `${currentPageIndex + 1} / ${pages.length}`;
         </div>
 
        {/* ---------- Footer => pagination / submit ---------- */}
-{!noQuestions && (
+{/* ---------- Footer ---------- */}
+{/* 1) normal quiz navigation (only while answering) */}
+{!showGradingResults && !noQuestions && (
   <div style={styles.cardFooter}>
-    <div style={styles.navRow /* ← now a grid */}>
-      {/* col-1  ─────────────────────────── */}
+    <div style={styles.navRow}>
+      {/* Prev / page / Next or Submit */}
       {currentPageIndex > 0 ? (
         <button style={styles.button} onClick={handlePrevPage}>
           Previous
         </button>
       ) : (
-        <span />   /* empty cell keeps layout */
+        <span /> /* keeps grid aligned */
       )}
 
-      {/* col-2  (always centred) ─────────*/}
       <span style={styles.pageLabel}>
         Page&nbsp;{currentPageIndex + 1}&nbsp;/&nbsp;{pages.length}
       </span>
 
-      {/* col-3  ─────────────────────────── */}
-      {!showGradingResults && hasQuestions && (
-        isOnLastPage ? (
-          <button style={styles.submitButton} onClick={handleQuizSubmit}>
-            Submit&nbsp;Quiz
-          </button>
-        ) : (
-          <button style={styles.button} onClick={handleNextPage}>
-            Next
-          </button>
-        )
-      )}
-
-      {showGradingResults && quizPassed && (
-        <button style={styles.finishButton} onClick={handleQuizSuccess}>
-          Finish
+      {isOnLastPage ? (
+        <button style={styles.submitButton} onClick={handleQuizSubmit}>
+          Submit&nbsp;Quiz
+        </button>
+      ) : (
+        <button style={styles.button} onClick={handleNextPage}>
+          Next
         </button>
       )}
-      {showGradingResults && !quizPassed && (
-        <>
-          <button style={styles.button} onClick={handleTakeRevisionNow}>
-            Take&nbsp;Revision&nbsp;Now
-          </button>
-          <button style={styles.button} onClick={handleTakeRevisionLater}>
-            Take&nbsp;Revision&nbsp;Later
-          </button>
-        </>
-      )}
     </div>
+  </div>
+)}
+
+{/* 2) result -- quiz PASSED */}
+{showGradingResults && quizPassed && (
+  <div style={styles.resultRow}>
+    <button style={styles.primaryBtn} onClick={handleQuizSuccess}>
+      Continue
+    </button>
+  </div>
+)}
+
+{/* 3) result -- quiz FAILED */}
+{showGradingResults && !quizPassed && (
+  <div style={styles.resultRow}>
+    <button style={styles.primaryBtn} onClick={handleTakeRevisionNow}>
+      Take Revision Now
+    </button>
+    <button style={styles.secondaryBtn} onClick={handleTakeRevisionLater}>
+      Do It Later
+    </button>
   </div>
 )}
       </div>
@@ -1357,7 +1387,7 @@ const styles = {
  cardBody: {
   flex: 1,
   padding: "24px 16px 0",     // <- 24px top, 16px sides, 0 bottom
-  overflowY: "auto",
+  overflowY: "hidden"
 },
   cardFooter: {
   /* Seamless footer – looks like part of the page */
@@ -1404,11 +1434,11 @@ const styles = {
   background: "transparent",
   borderRadius: 0,
 },
-  gradingContainer: {
-    marginTop: "1rem",
-    backgroundColor: "#222",
-    padding: "1rem",
-    borderRadius: "4px",
+    gradingContainer: {
+    marginTop      : "1rem",
+    background     : "transparent",   // ⬅ blend with parent
+    padding        : 0,               // no inner inset box-shadow
+    borderRadius   : 0,               // keep corners uniform
   },
 
   // Debug overlay
@@ -1508,7 +1538,77 @@ pageLabel: {
   fontSize: 14,
   opacity: 0.85,
   userSelect: "none"
-}
+},
+resultRow: {
+  display: "flex",
+  justifyContent: "center",
+  gap: 16,
+  padding: "24px 0",
+},
+
+primaryBtn: {
+  background: "#9c27b0",
+  color: "#fff",
+  border: "none",
+  padding: "10px 20px",
+  borderRadius: 6,
+  fontWeight: 600,
+  cursor: "pointer",
+},
+
+secondaryBtn: {
+  background: "#555",
+  color: "#fff",
+  border: "none",
+  padding: "10px 20px",
+  borderRadius: 6,
+  cursor: "pointer",
+},
+resultBanner: {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  gap: 4,
+  marginBottom: 12,
+},
+
+passIcon:  { fontSize: 48, color: "#64dd17", lineHeight: 1 },
+failIcon:  { fontSize: 48, color: "#ff5252", lineHeight: 1 },
+
+resultText: {
+  fontSize: 24,
+  fontWeight: 700,
+  textAlign: "center",
+  color: "#fff",
+},
+
+resultStats: {
+  display: "flex",
+  flexWrap: "wrap",
+  justifyContent: "center",
+  alignItems: "center",
+  gap: 16,
+  marginBottom: 12,
+},
+
+statBlock: {
+  background: "#263238",
+  color: "#e0f2f1",
+  padding: "4px 10px",
+  borderRadius: 14,
+  fontSize: 14,
+},
+
+accordionBtn: {
+  background: "#37474f",
+  color: "#fff",
+  border: "none",
+  borderRadius: 14,
+  padding: "4px 12px",
+  cursor: "pointer",
+  fontSize: 13,
+  whiteSpace: "nowrap",
+},
 };
 
 // --------------------------------------------------------------------

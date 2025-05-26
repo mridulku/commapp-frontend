@@ -1,247 +1,267 @@
-/*  LastAttemptPanel.jsx  – read-only quiz review (v3)
-    • always highlights the learner’s pick
-    • correct / wrong colours per spec
-*/
+/*  LastAttemptPanel.jsx  – modernised review panel (v4)  */
 
-import React, { useState } from "react";
+import React from "react";
 
-/* ───── helpers ───── */
+/* helpers --------------------------------------------------- */
 const pick = (obj, ...keys) => {
   for (const k of keys) if (obj?.[k] !== undefined) return obj[k];
   return null;
 };
 
 /* palette */
-const CLR_USER_CORRECT = "#2e7d32";
-const CLR_CORRECT      = "#4caf50";
-const CLR_WRONG        = "#c62828";
-const CLR_OTHER        = "#424242";
+const CLR_BG              = "#1b1b1b";
+const CLR_BORDER          = "#303030";
+const CLR_TEXT            = "#e0e0e0";
+const CLR_USER_CORRECT    = "#2e7d32";
+const CLR_CORRECT         = "#4caf50";
+const CLR_WRONG           = "#c62828";
+const CLR_INACTIVE        = "#424242";
+const CLR_FEEDBACK        = "#ffb74d";
 
-/* render one option line */
-function OptionLine({ text, chosen, correct }) {
-  let bg   = CLR_OTHER;
-  let icon = "";
-
-  if (chosen && correct) { bg = CLR_USER_CORRECT; icon = "✓"; }
-  else if (correct)      { bg = CLR_CORRECT;      icon = "✓"; }
-  else if (chosen)       { bg = CLR_WRONG;        icon = "✗"; }
-
-  return (
-    <li style={{
-      listStyle:"none", margin:"4px 0", padding:"8px 10px",
-      display:"flex", gap:6, fontSize:14, borderRadius:4,
-      background:bg, color:"#fff",
-      opacity: correct||chosen ? 1 : 0.45
-    }}>
-      {icon && <span style={{fontWeight:700,width:14}}>{icon}</span>}
-      <span style={{flex:1}} dangerouslySetInnerHTML={{__html:text}}/>
-    </li>
-  );
-}
-
-/* render a single question card */
-/* ——— QuestionCard (drop-in replacement) ——— */
-function QuestionCard({ qObj, idx, userAns, correctAns, feedback }) {
-  const qText   = pick(
-    qObj, "questionText", "stem", "prompt", "text", "content", "question"
-  ) ?? "";
-
+/* ---------- QuestionCard ---------------------------------- */
+/* ---------- QuestionCard ---------------------------------- */
+function QuestionCard({ qObj, idx, result = {} }) {
+  /* 1. basic text / meta ----------------------------------- */
+  const qText   =
+    pick(qObj, "question", "questionText", "prompt", "stem") ?? "";
   const concept = pick(qObj, "conceptName", "concept", "topic") ?? "";
 
-  /* ---------- 1.  normalise strings  ---------- */
-const clean = str =>
-  String(str ?? "")
-    .replace(/<[^>]*>/g, "")   // strip tags
-    .replace(/\s+/g, " ")      // collapse whitespace
+  /* 2. normalise helpers ----------------------------------- */
+  const clean = str =>
+    String(str ?? "")
+      .replace(/<[^>]*>/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const rawOpts = qObj.options || qObj.answers || [];
+  const opts    = rawOpts.map(o =>
+    typeof o === "string"
+      ? clean(o)
+      : clean(pick(o, "text", "label", "option") ?? "")
+  );
+
+  /* 3. indexes & typed answer ------------------------------ */
+  const userIdx    = Number.isFinite(qObj.userAnswer)
+    ? parseInt(qObj.userAnswer, 10)
+    : -1;
+
+  const correctIdx = Number.isFinite(qObj.correctIndex)
+    ? parseInt(qObj.correctIndex, 10)
+    : -1;
+
+  const typedAnswer = (
+    qObj.userAnswer        ??
+    qObj.userAns           ??
+    qObj.learnerResponse   ??
+    qObj.freeText          ??
+    ""
+  )
+    .toString()
     .trim();
 
-/* ---------- 2.  canonical options array ---------- */
-const rawOpts = qObj.options || qObj.answers || qObj.choices || [];
-const opts = rawOpts.map(o =>
-  typeof o === "string" ? clean(o) :
-  clean(pick(o, "text", "label", "option", "content") ?? "")
-);
+  /* 4. per-item score / colours ---------------------------- */
+  const gotPoint = result?.score === 1;
+  const scorePill = gotPoint ? "✓ 1 / 1" : "✗ 0 / 1";
 
-/* ---------- 3.  work out selected / correct ---------- */
-let userIdx    = -1;
-let correctIdx = -1;
-
-if (Number.isFinite(qObj.userAnswer)) {
-  userIdx = parseInt(qObj.userAnswer, 10);
-} else {
-  const ua = clean(qObj.userAnswer ?? qObj.userAns ?? "");
-  userIdx = opts.findIndex(o => o === ua);
-}
-
-if (Number.isFinite(qObj.correctIndex)) {
-  correctIdx = parseInt(qObj.correctIndex, 10);
-} else {
-  const ca = clean(qObj.correctAnswer ?? "");
-  correctIdx = opts.findIndex(o => o === ca);
-}
-
-    /* ── 4. what did the learner actually type? ─────────────────────── */
-  const typedAnswer = (
-    userAns
-    ?? qObj.userAnswer
-    ?? qObj.userAns
-    ?? qObj.answer
-    ?? qObj.learnerResponse
-    ?? qObj.freeText
-    ?? ""
-  ).toString().trim();
-
-  /* 👇  NEW: inspect everything that could hold the answer */
-console.log("QA-debug",
-  { idx,
-    userAnsProp : userAns,
-    qObjUA      : qObj.userAnswer,
-    learnerResp : qObj.learnerResponse,
-    typedAnswer });
-
-console.log("full-qObj-dump", qObj);   //  👈  add this
-
+  /* 5. render ---------------------------------------------- */
   return (
     <div style={styles.card}>
-      {/* header */}
-      <div style={styles.qHeader}>
-        <span style={{ fontWeight: 600 }}>Q{idx + 1}.</span>&nbsp;
-        <span dangerouslySetInnerHTML={{ __html: qText }} />
+      {/* header row */}
+      <div style={styles.headerRow}>
+        <span style={styles.qNumber}>Q{idx + 1}</span>
+        <span
+          style={{ flex: 1 }}
+          dangerouslySetInnerHTML={{ __html: qText }}
+        />
         {concept && <span style={styles.chip}>{concept}</span>}
+        <span
+          style={{
+            ...styles.scorePill,
+            background: gotPoint ? CLR_USER_CORRECT : CLR_WRONG,
+          }}
+        >
+          {scorePill}
+        </span>
       </div>
 
-     
+      {/* MCQ choices (if any) */}
+      {opts.length > 0 && (
+        <ul style={styles.optList}>
+          {opts.map((text, i) => {
+            const chosen  = i === userIdx;
+            const correct = i === correctIdx;
 
-      {/* options */}
-      <ul style={{ margin: 0, padding: 0 }}>
-        {opts.map((opt, i) => {
-          const chosen  = i === userIdx;
-          const correct = i === correctIdx;
+            let bg = CLR_INACTIVE;
+            if (chosen && correct) bg = CLR_USER_CORRECT;
+            else if (correct)      bg = CLR_CORRECT;
+            else if (chosen)       bg = CLR_WRONG;
 
-          /* colour rules (same as HistoryView) */
-          let bg = "#424242";
-          if (chosen && correct) bg = "#2e7d32";      // user picked & correct
-          else if (correct)      bg = "#4caf50";      // correct (but not chosen)
-          else if (chosen)       bg = "#c62828";      // chosen but wrong
-
-          return (
-            <li key={i}
+            return (
+              <li
+                key={i}
                 style={{
-                  listStyle: "none",
-                  margin: "4px 0",
-                  padding: "8px 10px",
-                  borderRadius: 4,
+                  ...styles.optItem,
                   background: bg,
-                  color: "#fff",
-                  display: "flex",
-                  gap: 6,
-                  fontSize: 14,
-                  opacity: correct || chosen ? 1 : 0.45,
-                }}>
-              {(chosen || correct) && (
-                <span style={{ fontWeight: 700, width: 14 }}>
-                  {correct ? "✓" : "✗"}
-                </span>
-              )}
-              <span style={{ flex: 1 }} dangerouslySetInnerHTML={{ __html: opt }} />
-            </li>
-          );
-        })}
-      </ul>
+                  opacity: correct || chosen ? 1 : 0.38,
+                }}
+              >
+                {(chosen || correct) && (
+                  <span style={styles.icon}>
+                    {correct ? "✓" : "✗"}
+                  </span>
+                )}
+                <span
+                  dangerouslySetInnerHTML={{ __html: text }}
+                  style={{ flex: 1 }}
+                />
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
-            {/* typed response for non-MCQ items */}
-      {opts.length === 0 && (
-        <div style={{
-          marginTop : 6,
-          padding   : "8px 10px",
-          borderRadius: 4,
-          background  : "#37474f",
-          color       : "#eceff1",
-          fontSize    : 14,
-          whiteSpace  : "pre-wrap",
-        }}>
-          <b>Your answer:</b>{" "}
-          {typedAnswer || "(blank)"}
+      {/* typed (open-ended) answer or blank MCQ */}
+      {typedAnswer && (
+        <div style={styles.typedBlock}>
+          <b>Your answer:</b> {typedAnswer || "(blank)"}
         </div>
-     )}
+      )}
 
-      {feedback && <div style={styles.feedback}>{feedback}</div>}
+      {result?.feedback && (
+        <div
+          style={styles.feedback}
+          dangerouslySetInnerHTML={{ __html: result.feedback }}
+        />
+      )}
     </div>
   );
 }
 
-/* ───── main component ───── */
-export default function LastAttemptPanel({ attempt }) {
+/* ---------- LastAttemptPanel ------------------------------- */
+export default function LastAttemptPanel({
+  attempt,
+  show = false,
+  onToggle,
+  hideToggle = false,
+}) {
   if (!attempt) return null;
 
   const questions = attempt.questions || attempt.quizSubmission || [];
-  const results   = attempt.results   ||
-    questions.map(q => ({ score:pick(q,"score"), feedback:pick(q,"feedback") }));
-
   if (!questions.length) return null;
 
-  const [open,setOpen] = useState(false);
+  /* RESULTS array falls back gracefully if missing */
+  const results =
+    attempt.results ||
+    questions.map(q => ({ score: pick(q, "score"), feedback: pick(q, "feedback") }));
 
   return (
     <div style={styles.wrapper}>
-      <button style={styles.toggleBtn} onClick={()=>setOpen(o=>!o)}>
-        {open ? "▼  Hide last quiz" : "▲  Show last quiz"}
-      </button>
+      {!hideToggle && (
+        <button style={styles.toggleBtn} onClick={onToggle}>
+          {show ? "▲ Hide details" : "▼ Show details"}
+        </button>
+      )}
 
-      {open && (
+      {show && (
         <div style={styles.inner}>
-          <p style={{margin:"4px 0 16px 0",fontSize:15}}>
-            <b>Last quiz score:</b> {attempt.score ?? "N/A"}{" "}
-            
-          </p>
-
-          {questions.map((q,i)=>(
-            <QuestionCard
-              key={i}
-              qObj={q}
-              idx={i}
-               userAns={pick(
-   q,
-   "userAnswer",            // frontend field
-   "userAns",               // alt. frontend field
-   "selected",              // sometimes used in older data
-   "givenAnswer",           // ""
-   "answer",                // ✨ backend (open-ended)
-   "learnerResponse",       // ✨ backend (open-ended)
-   "learnerAnswer",
-   "studentAnswer",
-   "freeText"
- )}
-              correctAns={pick(q,"correctAnswer","answer","key","rightOption")}
-              feedback={results[i]?.feedback}
-            />
-          ))}
+          {questions.map((q, i) => (
+  <QuestionCard
+    key={i}
+    qObj={q}
+    idx={i}
+    result={results[i]}   
+  />
+))}
         </div>
       )}
     </div>
   );
 }
 
-/* ───── styles ───── */
+/* ---------- styles ----------------------------------------- */
 const styles = {
-  wrapper:{ marginBottom:"1.5rem" },
-  toggleBtn:{
-    background:"#444", color:"#fff", border:"none",
-    padding:"6px 12px", borderRadius:4, cursor:"pointer",
-    fontSize:14, fontWeight:500,
+  wrapper: { marginBottom: "1.5rem" },
+
+  toggleBtn: {
+    background: "#263238",
+    color: "#e0f7fa",
+    border: "none",
+    padding: "6px 14px",
+    borderRadius: 18,
+    cursor: "pointer",
+    fontSize: 13,
+    fontWeight: 600,
   },
-  inner:{ marginTop:8 },
-  card:{ background:"#222", border:"1px solid #333",
-         borderRadius:6, padding:"10px 12px", marginBottom:14 },
-  qHeader:{
-    display:"flex", alignItems:"center", gap:6,
-    marginBottom:8, fontSize:15,
+
+  inner: { marginTop: 16 },
+
+  /* card */
+  card: {
+    background: CLR_BG,
+    border: `1px solid ${CLR_BORDER}`,
+    borderRadius: 8,
+    padding: "14px 16px",
+    marginBottom: 18,
+    color: CLR_TEXT,
+    fontSize: 15,
   },
-  chip:{
-    marginLeft:"auto",
-    background:"#004d5b", color:"#b2ebf2",
-    fontSize:11, padding:"2px 8px", borderRadius:12,
-    whiteSpace:"nowrap",
+
+  headerRow: {
+    display: "flex",
+    alignItems: "baseline",
+    gap: 8,
+    marginBottom: 10,
   },
-  feedback:{ marginTop:6, fontSize:13, color:"#ffb74d" },
+
+  qNumber: { fontWeight: 700 },
+
+  chip: {
+    marginLeft: "auto",
+    background: "#004d5b",
+    color: "#b2ebf2",
+    fontSize: 11,
+    padding: "2px 8px",
+    borderRadius: 12,
+    whiteSpace: "nowrap",
+  },
+
+  scorePill: {
+    marginLeft: 10,
+    fontSize: 11,
+    padding: "2px 8px",
+    borderRadius: 12,
+    color: "#fff",
+    whiteSpace: "nowrap",
+  },
+
+  /* option list */
+  optList: { margin: 0, padding: 0, listStyle: "none" },
+
+  optItem: {
+    display: "flex",
+    gap: 6,
+    padding: "6px 10px",
+    borderRadius: 4,
+    marginBottom: 4,
+    color: "#fff",
+    fontSize: 14,
+  },
+
+  icon: { fontWeight: 700, width: 14 },
+
+  /* feedback */
+  feedback: {
+    marginTop: 8,
+    fontSize: 13,
+    color: CLR_FEEDBACK,
+  },
+  typedBlock: {
+  marginTop: 6,
+  padding: "6px 10px",
+  borderRadius: 4,
+  background: "#37474f",
+  color: "#eceff1",
+  fontSize: 14,
+  whiteSpace: "pre-wrap",
+},
 };

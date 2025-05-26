@@ -14,7 +14,22 @@ const styles = {
   conceptLabel   : { fontStyle: "italic", fontSize: "0.9rem", color: "#aaa", margin: "0.5rem 0" },
   optionLabel    : { display: "block", marginLeft: "1.5rem" },
   input          : { width: "100%", padding: "8px", borderRadius: "4px", boxSizing: "border-box" },
-  textarea       : { width: "100%", padding: "8px", minHeight: "60px", borderRadius: "4px" },
+    textarea : {
+    width          : "100%",
+    minHeight      : 100,
+    padding        : "10px 14px",
+    color          : "#e0f7fa",                       // light-cyan text
+    background     : "rgba(255,255,255,0.05)",        // translucent panel
+    border         : "1px solid rgba(255,255,255,0.12)",
+    borderRadius   : 8,
+    backdropFilter : "blur(3px)",                     // glass effect
+    boxShadow      : "inset 0 1px 3px rgba(0,0,0,0.4)",
+    fontSize       : 15,
+    lineHeight     : 1.45,
+    resize         : "vertical",
+    boxSizing      : "border-box",
+    transition     : "border-color 120ms, box-shadow 120ms"
+  },
   scenarioBox    : { backgroundColor: "#444", padding: "8px", borderRadius: "4px", marginBottom: "0.5rem" },
 };
 
@@ -166,13 +181,23 @@ function renderFillInBlank(qObj, userAnswer, onUserAnswerChange, readOnly) {
 }
 
 function renderShortAnswer(qObj, userAnswer, onUserAnswerChange, readOnly) {
+    const [focused, setFocused] = React.useState(false);
+  const focusStyle = focused
+    ? {                                            // purple glow
+        borderColor: "#7c4dff",
+        boxShadow:
+          "inset 0 1px 3px rgba(0,0,0,0.4), 0 0 6px 1px rgba(124,77,255,0.5)",
+      }
+    : {};
   return (
-    <textarea
+       <textarea
       disabled={readOnly}
-      style={styles.textarea}
+      style={{ ...styles.textarea, ...focusStyle }}
       value={userAnswer}
       onChange={(e) => onUserAnswerChange(e.target.value)}
-      placeholder="Enter your response..."
+      onFocus={() => setFocused(true)}
+      onBlur ={() => setFocused(false)}
+      placeholder="Enter your response…"
     />
   );
 }
