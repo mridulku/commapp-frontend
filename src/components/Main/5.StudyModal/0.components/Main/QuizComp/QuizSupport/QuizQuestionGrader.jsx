@@ -46,6 +46,11 @@ export async function gradeAllQuestions({
     results[item.index] = localGradeQuestion(item.qObj, item.userAns);
   });
 
+  const effectiveRubric =
+  promptCfg?.rubric        // <-- comes from quizPrompts/<examId>_<stage>
+  || DEFAULT_RUBRIC;       // <-- a local fallback constant
+
+
   // 2) GPT grading
   if (openEnd.length) {
     if (!openAiKey) {
@@ -53,7 +58,7 @@ export async function gradeAllQuestions({
         results[item.index] = { score:0, feedback:"No OpenAI key for GPT grading." });
     } else {
       const { success, gradingArray, error } = await gradeOpenEndedBatch({
-        openAiKey, subchapterSummary, items:openEnd, rubric
+        openAiKey, subchapterSummary, items:openEnd, rubric: effectiveRubric,
       });
 
       if (!success) {
@@ -134,21 +139,33 @@ Expected: ${q.expectedAnswer ?? q.answerGuidance ?? "(none)"}
 Learner : """${it.userAns}"""`.trim()+"\n";
   });
 
-  const userPrompt = `
-You are a strict grading assistant.
-Rubric: "${rubric}"
+const userPrompt = `
+You are a strict but encouraging grading assistant.
+
+Rubric:
+${rubric}
+/* make sure the rubric includes the tone bullet */
+
 Context (sub-chapter summary): "${subchapterSummary}"
 
-For every Q#: compare Expected vs Learner, decide a score between 0 and 1
-(1 = fully correct, 0 = totally wrong) and give concise feedback.
+For every Q#:
+• Compare Expected vs Learner
+• Decide a score 0 – 1
+• Give brief feedback addressed directly to the learner
+• End with a new line that begins exactly with "Ideal answer:" followed by
+  the ideal 1-sentence answer that would earn full marks.
 
-Return JSON ONLY:
+Return JSON ONLY in this shape:
+
 {
   "results":[
-    { "score":0.75, "feedback":"…" },
-    …
+    {
+      "score":1.0,
+      "feedback":"Great explanation – you named the key cause-effect.\\nIdeal answer: In a homogeneous mixture the composition is uniform throughout, whereas a heterogeneous mixture has visibly different parts."
+    }
   ]
 }
+
 ${block}`.trim();
 
   /* call OpenAI -----------------------------------------------------*/

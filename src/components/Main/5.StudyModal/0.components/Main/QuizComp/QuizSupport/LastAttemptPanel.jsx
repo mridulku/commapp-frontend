@@ -40,10 +40,29 @@ function QuestionCard({ qObj, idx, result = {} }) {
       : clean(pick(o, "text", "label", "option") ?? "")
   );
 
-  /* 3. indexes & typed answer ------------------------------ */
-  const userIdx    = Number.isFinite(qObj.userAnswer)
-    ? parseInt(qObj.userAnswer, 10)
-    : -1;
+
+
+  /* which option did the learner actually choose? */
+const userIdx = (() => {
+  // grab whatever field your backend uses
+  const raw = qObj.userAnswer ?? qObj.userAns ?? qObj.learnerResponse ?? "";
+
+  if (raw === null || raw === undefined || raw === "") return -1;
+
+  /* #1 numeric index – 0, 1, "2" … */
+  if (!isNaN(raw)) return parseInt(raw, 10);
+
+  /* #2 letter – "A"/"b" …  */
+  if (/^[A-Z]$/i.test(raw.trim()))
+    return raw.trim().toUpperCase().charCodeAt(0) - 65;
+
+  /* #3 the option text itself */
+  const cleaned = raw.toString().trim().replace(/\s+/g, " ");
+  const byText  = opts.findIndex(o => o === cleaned);
+  if (byText !== -1) return byText;
+
+  return -1;           // couldn’t match
+})();
 
   const correctIdx = Number.isFinite(qObj.correctIndex)
     ? parseInt(qObj.correctIndex, 10)
@@ -120,19 +139,20 @@ function QuestionCard({ qObj, idx, result = {} }) {
         </ul>
       )}
 
-      {/* typed (open-ended) answer or blank MCQ */}
-      {typedAnswer && (
+            {/* free-text answers only (no options means not MCQ) */}
+      {opts.length === 0 && typedAnswer && (
         <div style={styles.typedBlock}>
           <b>Your answer:</b> {typedAnswer || "(blank)"}
         </div>
       )}
 
-      {result?.feedback && (
-        <div
-          style={styles.feedback}
-          dangerouslySetInnerHTML={{ __html: result.feedback }}
-        />
-      )}
+      {/* Show feedback only for NON-MCQ questions */}
+{opts.length === 0 && result?.feedback && (
+  <div
+    style={styles.feedback}
+    dangerouslySetInnerHTML={{ __html: result.feedback }}
+  />
+)}
     </div>
   );
 }

@@ -20,6 +20,8 @@ import HelpOutline   from "@mui/icons-material/HelpOutlineRounded";
 
 import { Dialog, DialogTitle, DialogContent } from "@mui/material";
 
+import ResultSummary from "./QuizSupport/ResultSummary";
+
 /* ---- put with other MUI imports ---- */
 import { List, ListItem, ListItemIcon, ListItemText } from "@mui/material";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
@@ -426,13 +428,21 @@ fetchQuizMeta(db, cacheId).then(meta => {
     if (meta.passed) {
       /* —— the learner PASSED last time —— */
       // just show the summary – no quiz, no revision
-      setLastAttempt({
-        score     : meta.scoredPercentage,
-        passed    : true,
-        questions : [],       // you could fetch them if you stored them
-        results   : [],
-      });
-      setShowGradingResults(true);
+        /* make the normal pass panel work */
+  const qs        = meta.questions        ?? [];   // if you stored them
+  const res       = meta.results          ?? [];
+  const pct       = meta.scoredPercentage ?? "100%";
+
+  setFinalPercentage(pct);   // Score pill
+  setGradingResults(res);    // Correct-count pill
+
+  setLastAttempt({
+    score     : pct,
+    passed    : true,
+    questions : qs,
+    results   : res,
+  });
+  setShowGradingResults(true);   // 🔥 now shows full panel
       setLoading(false);
       return;                       // ⬅ stop the rest of the effect
     } else {
@@ -642,8 +652,8 @@ const pulsing = ready && displayedTime % 2 === 1;   // pulse only if timer is ru
       alert("No questions to submit.");
       return;
     }
-    setLoading(true);
-    setError("");
+  setLoading(true);
+  setShowGradingResults(true); // so the loader knows we’re grading    setError("");
 
     const overallResults = new Array(generatedQuestions.length).fill(null);
     const localItems = [];
@@ -758,13 +768,21 @@ const pulsing = ready && displayedTime % 2 === 1;   // pulse only if timer is ru
    if (meta.attemptCompleted) {
      if (meta.passed) {
        // They passed last time → just show the summary screen
-       setLastAttempt({
-         score     : meta.scoredPercentage,
-         passed    : true,
-         questions : [],   // you can fetch/store them if you wish
-         results   : [],
-       });
-       setShowGradingResults(true);   // shows the pass screen
+         /* make the normal pass panel work */
+  const qs        = meta.questions        ?? [];   // if you stored them
+  const res       = meta.results          ?? [];
+  const pct       = meta.scoredPercentage ?? "100%";
+
+  setFinalPercentage(pct);   // Score pill
+  setGradingResults(res);    // Correct-count pill
+
+  setLastAttempt({
+    score     : pct,
+    passed    : true,
+    questions : qs,
+    results   : res,
+  });
+  setShowGradingResults(true);   // 🔥 now shows full panel
      } else {
        // They failed last time → jump straight to Revision stage
        if (typeof onQuizFail === "function") onQuizFail();
@@ -972,19 +990,15 @@ const pageLabel = `${currentPageIndex + 1} / ${pages.length}`;
      )}
 
          {/* ====== All-mastered stub ====== */}
- {stageMastered && (
-   <div style={styles.gradingContainer}>
-     <h3>All concepts mastered 🎉</h3>
-     <p>You don’t need a quiz for this stage.</p>
-     <button
-       style={styles.finishButton}
-       onClick={handleQuizSuccess}   // same path as a 100 % pass
-     >
-       Continue
-     </button>
-   </div>
- )}
-
+ {stageMastered && !lastAttempt && !showGradingResults && (
+  <div style={styles.gradingContainer}>
+    <h3>All concepts mastered 🎉</h3>
+    <p>You don’t need a quiz for this stage.</p>
+    <button style={styles.finishButton} onClick={handleQuizSuccess}>
+      Continue
+    </button>
+  </div>
+)}
  
 
      
@@ -1134,34 +1148,15 @@ const pageLabel = `${currentPageIndex + 1} / ${pages.length}`;
   <div style={styles.gradingContainer}>
 
    {/* headline strip */}
-   <div style={styles.resultBanner}>
-     <span style={quizPassed ? styles.passIcon : styles.failIcon}>
-       {quizPassed ? "🎉" : "💡"}
-     </span>
-     <span style={styles.resultText}>
-       {quizPassed ? "You passed!" : "You did not pass"}
-     </span>
-   </div>
+   <ResultSummary
+  passed={quizPassed}
+  percentage={finalPercentage}
+  gradingResults={gradingResults}
+  lastAttempt={lastAttempt}
+  stage={quizStage}
+/>
 
-   {/* quick stats row */}
-   <div style={styles.resultStats}>
-     <span style={styles.statBlock}>
-       <b>Score&nbsp;•&nbsp;</b>{finalPercentage}
-    </span>
-     <span style={styles.statBlock}>
-       <b>Correct&nbsp;•&nbsp;</b>
-       {gradingResults.filter(r => (r?.score ?? 0) >= 1).length}
-       &nbsp;/&nbsp;{gradingResults.length}
-     </span>
-
-     {/* accordion toggle */}
-     <button
-       onClick={() => setShowLastAttempt(p => !p)}
-       style={styles.accordionBtn}
-     >
-       {showLastAttempt ? "▲ Hide details" : "▼ Show details"}
-     </button>
-   </div>
+  
 
    {/* collapsible details */}
    {showLastAttempt && (

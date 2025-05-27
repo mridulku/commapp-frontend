@@ -7,6 +7,8 @@ import QuizComponent from "../QuizComp/QuizComponent";
 import LastAttemptPanel from "../QuizComp/QuizSupport/LastAttemptPanel";
 import ReviseComponent from "../RevComp/ReviseComponent";
 
+import ResultSummary from "../QuizComp/QuizSupport/ResultSummary";
+
 /**
  * ActivityView
  * ------------
@@ -41,31 +43,24 @@ export default function ActivityView({
      Helper: renders a success / pass-screen identical to QuizView's
   ---------------------------------------------------------------- */
   function renderSuccessBox() {
-    const pct = lastQuizAttempt?.score ?? "";
-    return (
-      <div style={styles.successBox}>
-        <h3 style={{ margin: 0, marginBottom: 6 }}>
-          All concepts mastered&nbsp;🎉
-        </h3>
+  // build fake gradingResults from the last attempt so the “Correct” pill works
+  const gradingResults =
+    lastQuizAttempt?.quizSubmission?.map(q => ({ score:q.score })) || [];
 
-      
-
-        <p style={{ color: "#4caf50", margin: 0, marginBottom: 10 }}>
-          You passed the <b>{quizStage}</b> stage.
-        </p>
-
-        {/* accordion with last submission */}
-        <LastAttemptPanel attempt={lastQuizAttempt} />
-
-        <button
-          style={styles.continueBtn}
-          onClick={() => dispatch(setCurrentIndex(currentIndex + 1))}
-        >
-          Go to Next Activity
-        </button>
-      </div>
-    );
-  }
+  return (
+    <div style={styles.successBox}>
+      <ResultSummary
+        passed          // always true here
+        percentage={lastQuizAttempt?.score ?? "100%"}
+        gradingResults={gradingResults}
+        lastAttempt={lastQuizAttempt}
+        onContinue={()=>dispatch(setCurrentIndex(currentIndex+1))}
+        continueLabel="Go to Next Activity"
+        stage={quizStage}
+      />
+    </div>
+  );
+}
 
   /* ----------------------------------------------------------------
      Render branches
