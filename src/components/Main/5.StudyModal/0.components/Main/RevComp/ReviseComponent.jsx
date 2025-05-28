@@ -1,5 +1,14 @@
 // ReviseView.jsx  – drop-in replacement
-import React, { useEffect, useState, useRef } from "react";
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  createContext,
+  useContext,
+} from "react";
+
+// ─── live-seconds context used by ClockPill ───
+export const DisplayTimeCtx = createContext(0);
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../../../../../firebase";
 import axios from "axios";
@@ -31,6 +40,15 @@ const safeStr = (v) => (typeof v === "string" ? v : "");
 const tsMs = (t) =>
   t?._seconds ? t._seconds * 1e3 :
   t?.seconds  ? t.seconds  * 1e3 : 0;
+
+  /** banded version identical to QuizView */
+function formatBand(sec) {
+  if (sec < 60)   return "< 1 min";
+  if (sec < 120)  return "< 2 min";
+  if (sec < 180)  return "< 3 min";
+  if (sec < 300)  return "< 5 min";
+  return `${Math.floor(sec / 60)} min`;
+}
 
 // human-readable mm:ss
 const fmt = (sec) => {
@@ -131,7 +149,45 @@ function computeConceptStatuses(allAttempts = []) {
   return { conceptSet, statusMap };
 }
 
+
+function ClockPill() {
+  /* context value comes from the Provider we’ll add in step 4 */
+  const seconds  = useContext(DisplayTimeCtx);
+  const pulsing  = seconds % 2 === 1;              // blink every odd second
+
+  /* extra 1-s tick → smooth pulse even if nothing else re-renders */
+  const [, force] = useState(0);
+  useEffect(()=>{
+    const id = setInterval(()=>force(v=>v+1),1000);
+    return ()=>clearInterval(id);
+  },[]);
+
+  return (
+    <Chip
+      icon={
+        <AccessTimeIcon
+          sx={{
+            fontSize : 16,
+            transform: pulsing ? "scale(1.25)" : "scale(1)",
+            transition:"transform 250ms ease-out",
+          }}
+        />
+      }
+      label={formatBand(seconds)}
+      size="small"
+      sx={{
+        bgcolor: "#263238",         // identical to QuizView
+        color  : "#e0f2f1",
+        fontSize: 13,
+        "& .MuiChip-icon": { ml: -0.4 },
+        border: "none",
+      }}
+    />
+  );
+}
+
 /* ───────────────────── reusable UI bits ───────────────────── */
+/** tiny chip identical to QuizView */
 function Pill({ label, icon = null }) {
   return (
     <Chip
@@ -142,11 +198,12 @@ function Pill({ label, icon = null }) {
         bgcolor: "#263238",
         color:  "#eceff1",
         fontWeight: 500,
-        ".MuiChip-icon": { color: "#eceff1", ml: -.4 },
+        ".MuiChip-icon": { color: "#eceff1", ml: -0.4 }
       }}
     />
   );
 }
+
 
 const ProgressBar = ({ pct }) => (
   <div style={{
@@ -288,8 +345,9 @@ export default function ReviseView({
   const docIdRef             = useRef("");
   const [serverSec , setServ] = useState(0);
   const [localSec  , setLoc ] = useState(0);
-  const [lastSnapMs, setSnap] = useState(null);
-
+const [lastSnapMs, setSnap] = useState(null);        // left as is
+// NEW: remember the exact moment we started the current local session
+const sessionStartMs        = useRef(Date.now());
   /* GPT / UI state */
   const [loading , setLoading ] = useState(false);
   const [status  , setStatus  ] = useState("");
@@ -312,16 +370,18 @@ const {
     if(!userId || !subChapterId) return;
 
     const dateStr = new Date().toISOString().slice(0,10);
-    const docId   = `${userId}_${planId}_${subChapterId}_${quizStage}_rev${revisionNumber}_${dateStr}`;
-    docIdRef.current = docId;
+    const docId = `${userId}_${planId}_${subChapterId}_${quizStage}`
+            + `_rev${revisionNumber}`;        // ← NO date → stable ID
+docIdRef.current = docId;
 
     // reset UI
     setLoading(true); setStatus("Generating revision…"); setError("");
-    setPages([]); setPageIx(0); setServ(0); setLoc(0); setSnap(Date.now());
+    setPages([]); setPageIx(0); setSnap(Date.now());
 
     /* 1A – time spent so far */
     dispatch(fetchReviseTime({docId})).then(a=>{
       if(fetchReviseTime.fulfilled.match(a)) setServ(a.payload||0);
+      sessionStartMs.current = Date.now();   // NEW – start this session’s stopwatch
     });
 
     /* 1B – GPT content */
@@ -417,8 +477,23 @@ const {
 
   /* ── 3. Local second tick ───────────────────────── */
   useEffect(()=>{
-    const t = setInterval(()=>setLoc(sec=>sec+1),1000);
-    return ()=>clearInterval(t);
+      const id = setInterval(() => setLoc(sec => sec + 1), 1000);
+
+  /*  ⬇︎ CLEANUP — fires once when the component un-mounts  */
+  return () => {
+    clearInterval(id);
+
+    /* how much time since the last successful POST? */
+    const remainder = Math.floor(
+      (Date.now() - sessionStartMs.current) / 1000
+    );
+    if (remainder > 0) {
+      dispatch(
+        incrementReviseTime({ docId: docIdRef.current, increment: remainder })
+      );
+      setServ(sec => sec + remainder);         // keep local view consistent
+    }
+  };
   },[]);
 
   /* ── 4. Lumps-of-15 uploader ─────────────────────── */
@@ -484,8 +559,11 @@ const {
   /* ────────────────────────────────────────────────────────── */
   return (
     <div style={styles.outer}>
+    <DisplayTimeCtx.Provider
+      value={serverSec + localSec /* live seconds */}
+    >
       <div style={styles.card}>
-        {loading && <LoadingOverlay text={status||"Generating revision…"}/>}
+          {loading && <LoadingOverlay text={status||"Generating revision…"}/>}
 
         
 
@@ -493,8 +571,7 @@ const {
         <div style={styles.header}>
           <h2 style={{margin:0,fontWeight:600}}>Revision</h2>
           <Pill label={`Round #${revisionNumber}`}/>
-          <Pill label={fmt(total)} icon={<AccessTimeIcon sx={{fontSize:16}}/>}/>
-
+<ClockPill />
           <ConceptInlineBar conceptStatuses={conceptStatuses} />
         </div>
 
@@ -536,7 +613,8 @@ const {
     </div>
   </div>
 </div>
-      </div>
+            </div>
+    </DisplayTimeCtx.Provider>
     </div>
   );
 }
