@@ -1,5 +1,10 @@
-import React, { useEffect, useState, useRef } from "react";
-import { useSelector, useDispatch } from "react-redux";
+ import React, {
+   useEffect,
+   useState,
+   useRef,
+   createContext,
+   useContext,
+ } from "react";import { useSelector, useDispatch } from "react-redux";
 import axios from "axios";
 
 import Loader from "./Loader";
@@ -10,6 +15,29 @@ import { Fade } from "@mui/material";          // <-- already in bundle? add if 
 
 
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+
+ import AccessTimeIcon from "@mui/icons-material/AccessTimeRounded";
+
+ // 👇 helpers copied verbatim from QuizView
+ function formatBand(sec) {
+   if (sec < 60)      return "< 1 min";
+   if (sec < 120)     return "< 2 min";
+   if (sec < 180)     return "< 3 min";
+   if (sec < 300)     return "< 5 min";
+   return `${Math.floor(sec / 60)} min`;
+ }
+
+ const pillSx = {
+   bgcolor : "#333",
+   color   : "#fff",
+   fontSize: 13,
+   px      : 1,
+   py      : 0.5,
+   borderRadius: 1,
+   display : "inline-flex",
+   alignItems: "center",
+   gap     : .5
+ };
 
 import {
   Box,
@@ -35,6 +63,10 @@ import { fetchPlan, setCurrentIndex }            from "../../../../../../store/p
 import { refreshSubchapter }                     from "../../../../../../store/aggregatorSlice";  // ⬅️ add this
 
 
+
+// ─── shared context: holds the seconds we want to display ───
+ // ─── shared context: holds the live-seconds we want to show in the clock ───
+ export const DisplayTimeCtx = createContext(0);
 // -------------- persistent rewrite-cache --------------
 import { doc, getDoc, setDoc, serverTimestamp  } from "firebase/firestore";   // ⬅︎ already used elsewhere in the repo
 
@@ -44,6 +76,41 @@ function buildRewriteCacheId(userId, planId, subChapterId, style) {
   // no date-stamp here → the same request will always get the same doc
   return `${userId}_${planId}_${subChapterId}_${style}`;
 }
+
+/* ───────────────────────────────────────────
+   ClockPill – live timer that blinks once/s
+   • relies on `displayedTime` already computed
+   • uses the same AccessTimeIcon + pulsing scale
+──────────────────────────────────────────── */
+function ClockPill() {
+  const seconds = useContext(DisplayTimeCtx);       // ← read from context
+  const pulsing = seconds % 2 === 1;                // blink every odd second
+
+  return (
+    <Chip
+      icon={
+        <AccessTimeIcon
+          sx={{
+            fontSize : 16,
+            transform: pulsing ? "scale(1.25)" : "scale(1)",
+            transition:"transform 250ms ease-out",
+          }}
+        />
+      }
+      label={formatBand(seconds)}                   // "< 1 min", "8 min", …
+      size="small"
+      sx={{
+        bgcolor: "#263238",                         // same pill colours as QuizView
+        color  : "#e0f2f1",
+        fontSize: 13,
+        "& .MuiChip-icon": { ml: -0.4 },
+        border: "none",
+      }}
+    />
+  );
+}
+
+
 
 /* ---------------- rewrite styles ---------------- */
 const STYLES = [
@@ -167,6 +234,7 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
   const { subChapterId, activityId, completed } = activity;
   const isComplete = completed === true;
 
+
   // ---- Redux & dispatch ----
   const userId       = useSelector((state) => state.auth?.userId || "demoUser");
   const isAdmin      = ADMIN_UIDS.includes(userId);   // NEW
@@ -177,7 +245,6 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
   // ---- subchapter & usage states (legacy) ----
   const [subChapter, setSubChapter] = useState(null);
   const [serverTime, setServerTime] = useState(0);
-  const [leftoverSec, setLeftoverSec] = useState(0);
   const [lastSnapMs, setLastSnapMs] = useState(null);
 
   const [pages, setPages] = useState([]);
@@ -185,6 +252,14 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
 
 
   const [isFinishing, setIsFinishing] = useState(false);
+
+  // ─── unified timer (copied from QuizView) ──────────────────────────
+const serverTotalSeconds = useRef(0);
+const lastPostMs         = useRef(Date.now());
+const sessionStartMs     = useRef(null);
+const [leftoverSec, setLeftoverSec] = useState(0);
+
+const [, forceTick] = useState(0);   // triggers a re-render every second
 
 
   // track reading start for final data
@@ -246,9 +321,15 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
         const actionRes = await dispatch(
           fetchReadingTime({ userId, planId, subChapterId })
         );
+
+        lastPostMs.current   = Date.now();
+sessionStartMs.current = Date.now();   // start local session timer
+
+
         if (fetchReadingTime.fulfilled.match(actionRes)) {
           const existingSec = actionRes.payload || 0;
           setServerTime(existingSec);
+          serverTotalSeconds.current = existingSec;   // keep helpers in sync//  ← keep helpers in sync
           setLeftoverSec(0);
           setLastSnapMs(Date.now());
         }
@@ -261,6 +342,43 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
 
     fetchData();
   }, [subChapterId, dispatch, userId, planId]);
+
+  // — 1-s local counter, stops if the chapter is already complete —
+useEffect(() => {
+  if (isComplete) return;
+  const id = setInterval(() => {
+    setLeftoverSec(sec => sec + 1);
+    forceTick(t => t + 1);                 // heartbeat for the UI pulse
+  }, 1000);
+  return () => clearInterval(id);
+}, [isComplete]);
+
+// — post in 15-second lumps (identical to QuizView) —
+useEffect(() => {
+  if (isComplete) return;
+  const id = setInterval(() => {
+    const now   = Date.now();
+    const diff  = Math.floor((now - lastPostMs.current) / 1000);
+    const lumps = Math.floor(diff / 15);
+    if (lumps > 0) {
+      const sec = lumps * 15;
+      dispatch(incrementReadingTime({
+        activityId,
+        userId,
+        planId,
+        subChapterId,
+        increment: sec,
+      })).then(a => {
+        if (incrementReadingTime.fulfilled.match(a)) {
+          serverTotalSeconds.current += sec;
+        }
+      });
+      lastPostMs.current += sec * 1000;
+      setLeftoverSec(prev => prev - sec);        // subtract what we just sent
+    }
+  }, 1000);
+  return () => clearInterval(id);
+}, [dispatch, activityId, userId, planId, subChapterId, isComplete]);
 
   // ---- chunk subchapter once loaded (legacy) ----
   useEffect(() => {
@@ -319,14 +437,7 @@ export default function ReadingView({ activity, onNeedsRefreshStatus }) {
     activityId,
   ]);
 
-  // ---- local second-by-second reading time (legacy) ----
-  useEffect(() => {
-    if (isComplete) return;
-    const timerId = setInterval(() => {
-      setLeftoverSec((prev) => prev + 1);
-    }, 1000);
-    return () => clearInterval(timerId);
-  }, [isComplete]);
+ 
 
   // ---- fetch day-by-day breakdown (legacy) ----
   useEffect(() => {
@@ -550,8 +661,16 @@ const waitingForRewrite =
 
   const currentPageHtml = VIEW[currentPageIndex] || "";
 
+  const pulsing = !isComplete &&
+                ((serverTotalSeconds.current + leftoverSec) % 2 === 1);
+
+
+
   // ---- render ----
-  return (
+     return (
+     <DisplayTimeCtx.Provider
+       value={serverTotalSeconds.current + leftoverSec /* live seconds */}
+     >
     <Box
       sx={{
         width: "100%", height: "100%", bgcolor: "#000", color: "#fff",
@@ -661,28 +780,23 @@ const waitingForRewrite =
           >
             {/*  either “completed” chip  ─or─  live timer  */}
 {isComplete ? (
+  /* ✅ DONE-READING PILL  ─ shows completion date + banded time */
   <Chip
-  icon={<CheckCircleIcon sx={{ fontSize: 18, color: "#4caf50" }} />}
-  label={`Completed • ${
-    new Date(activity.completedAt ?? Date.now()).toLocaleDateString()
-  } • ${formatTime(displayedTime)}`}   // ← now includes total time
-  size="small"
-  sx={{
-    bgcolor: "#1b5e20",
-    color:  "#c8e6c9",
-    fontSize: 13,
-    "& .MuiChip-icon": { mr: -.4 }
-  }}
-/>
-) : (
-  <Box
+    icon={<CheckCircleIcon sx={{ fontSize: 18, color: "#4caf50" }} />}
+    label={`Completed • ${
+      new Date(activity.completedAt ?? Date.now()).toLocaleDateString()
+    } • ${formatBand(serverTotalSeconds.current)}`}
+    size="small"
     sx={{
-      fontSize: 14, bgcolor: "#333", px: 1, py: 0.5,
-      borderRadius: 1, display: "inline-flex", alignItems: "center"
+      bgcolor: "#1b5e20",
+      color:  "#c8e6c9",
+      fontSize: 13,
+      "& .MuiChip-icon": { mr: -.4 }
     }}
-  >
-    🕒 {formatTime(displayedTime)}
-  </Box>
+  />
+) : (
+  /* 🕒 LIVE TIMER PILL  ─ pulses once per second */
+  <ClockPill />
 )}
             {/* day-by-day overlay toggle if complete */}
             {isAdmin && isComplete && (
@@ -894,5 +1008,6 @@ const waitingForRewrite =
         </Box>
       )}
     </Box>
+    </DisplayTimeCtx.Provider>
   );
 }
