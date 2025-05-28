@@ -6,7 +6,8 @@
  *   - Returns a concept-by-concept breakdown
  */
 
-import axios from "axios";
+ import axios from "axios";
+ import { chatCompletionTracked } from "../../QuizComp/QuizSupport/aiClient"
 import {
   doc,
   getDoc,
@@ -20,13 +21,16 @@ import {
 export async function generateRevisionContent({
   db,
   subChapterId,
-  openAiKey,
+  openAiKey = "",            // ← default so it’s never undefined
   revisionConfig,
   userId,
+  revisionNumber,      // ←  add this
   quizStage,
   maxHistoryAttempts = 10,
 }) {
-  if (!db || !subChapterId || !openAiKey || !userId || !quizStage) {
+    
+
+  if (!db || !subChapterId || !userId || !quizStage) {  // ← openAiKey removed
     return {
       success: false,
       revisionData: null,
@@ -47,7 +51,7 @@ export async function generateRevisionContent({
     const q = query(
       quizRef,
       where("userId", "==", userId),
-      where("subchapterId", "==", subChapterId),
+      where("subchapterId", "==", subChapterId),    // Firestore query
       where("quizType", "==", quizStage),
       orderBy("attemptNumber", "desc")
     );
@@ -107,13 +111,13 @@ export async function generateRevisionContent({
   // 2) Fetch subchapter summary from "subchapters_demo"
   let subchapterSummary = "";
   try {
-    const ref = doc(db, "subchapters_demo", subChapterId);
+    const ref = doc(db, "subchapters_demo", subChapterId);   // summary fetch
     const snap = await getDoc(ref);
     if (!snap.exists()) {
       return {
         success: false,
         revisionData: null,
-        error: `No subchapter found with ID: ${subChapterId}`,
+        error: `No subchapter found with ID: ${subchapterId}`,
       };
     }
     subchapterSummary = snap.data().summary || "";
@@ -209,26 +213,27 @@ Return the JSON, nothing else.
 
   // 5) Call GPT
   try {
-    const response = await axios.post(
-      "https://api.openai.com/v1/chat/completions",
-      {
-        model: "gpt-3.5-turbo",
-        messages: [
-          { role: "system", content: "You are a helpful tutor. Return JSON only." },
-          { role: "user", content: userPrompt },
-        ],
-        max_tokens: 1600,
-        temperature: 0.7,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${openAiKey}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
+   const resp = await chatCompletionTracked(
+     {
+       model      : "gpt-3.5-turbo",
+       messages   : [
+         { role:"system", content:"You are a helpful tutor. Return JSON only."},
+         { role:"user",   content:userPrompt }
+       ],
+       max_tokens : 1600,
+       temperature: 0.7,
+     },
+     {
+       kind        : "revision",
+       subChapterId,      
+       quizStage,
+       revisionNumber,
+       userId,
+     }
+   );
 
-    const gptMessage = response.data.choices[0].message.content.trim();
+  const gptMessage = resp.choices[0].message.content.trim();
+
     const cleaned = gptMessage.replace(/```json/g, "").replace(/```/g, "").trim();
 
     let parsed;

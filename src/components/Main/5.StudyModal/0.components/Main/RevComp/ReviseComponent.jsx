@@ -405,15 +405,15 @@ docIdRef.current = docId;
       const cfgSnap = await getDoc(doc(db, "revisionConfigs", cfgId));
       if (!cfgSnap.exists()) throw new Error(`No revisionConfig '${cfgId}'`);
 
-      const { success, revisionData, error: errMsg } =
-        await generateRevisionContent({
-          db,
-          subChapterId,
-          openAiKey: import.meta.env.VITE_OPENAI_KEY,
-          revisionConfig: cfgSnap.data(),
-          userId,
-          quizStage,
-        });
+       const { success, revisionData, error: errMsg } =
+   await generateRevisionContent({
+     db,
+     subChapterId,
+     revisionConfig: cfgSnap.data(),
+     userId,
+     quizStage,
+     revisionNumber,
+   });        
 
       if (!success) throw new Error(errMsg || "GPT error");
 
