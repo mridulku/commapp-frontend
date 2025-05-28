@@ -799,7 +799,6 @@ const styles = {
     gap: "8px",
    backgroundColor: "transparent", // no strip
   padding: "4px 8px 8px",         // align nicely under breadcrumb"#111",
-    padding: "8px",
     alignItems: "center",
       width: "100%",              // keep it full-width
   justifyContent: "center",// explicit left alignment

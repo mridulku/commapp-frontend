@@ -691,6 +691,7 @@ const pulsing = ready && displayedTime % 2 === 1;   // pulse only if timer is ru
           openAiKey,
           subchapterSummary,
           items: openEndedItems,
+          quizStage, 
         });
 
         if (!success) {

@@ -1,206 +1,221 @@
 /***********************************************************************
- *  QuizQuestionGrader.js      (v3 – passRatio & rubric are now data)
+ *  QuizQuestionGrader.js  (v6 – *all* prompts are Firestore-driven)
  *
- *  Exports:
- *    • gradeAllQuestions() – one-shot helper used by QuizView
- *    • isLocallyGradableType(), localGradeQuestion()
- *    • gradeOpenEndedBatch() – single GPT call for open-ended items
- *
- *  –  Local grading rules stay hard-coded (fast, deterministic)
- *  –  Caller decides pass/fail using the stage’s passRatio field that
- *     lives in Firestore -> quizConfigs/<quizDoc>. This module simply
- *     returns an array  [{ score, feedback }, … ] (0 … 1 per question)
+ *  • Reads systemTemplate, rubric, and userTemplate from
+ *      collection  quizGradingPrompts / general_<stage>
+ *  • No local defaults – if anything is missing the call aborts
+ *    and an explicit error is surfaced to the caller.
+ *  • Still logs every GPT call through chatCompletionTracked().
  **********************************************************************/
-// ─── imports ─────────────────────────────────────────────────────────
-import axios from "axios";
 
-// ─── tiny util ───────────────────────────────────────────────────────
+/* ─── imports ──────────────────────────────────────────────────── */
+import { chatCompletionTracked }  from "./aiClient";
+import { doc, getDoc }           from "firebase/firestore";
+import { db }                    from "../../../../../../../firebase"; // ← adjust if needed
+
 const clamp01 = n => Math.max(0, Math.min(1, Number(n) || 0));
 
-// ─── API 1 – master helper (local + GPT) ─────────────────────────────
+/* ───────────────── helper – fetch Firestore prompt set ───────── */
+async function fetchPromptSet(stage = "understand") {
+  const snap = await getDoc(doc(db, "quizGradingPrompts", `general_${stage}`));
+
+  if (!snap.exists())
+    throw new Error(`[Grader] Firestore doc “general_${stage}” not found`);
+
+  const { systemTemplate, rubric, userTemplate } = snap.data() || {};
+
+  if (!systemTemplate?.trim()) throw new Error("Missing field: systemTemplate");
+  if (!rubric?.trim())         throw new Error("Missing field: rubric");
+  if (!userTemplate?.trim())   throw new Error("Missing field: userTemplate");
+
+  return {
+    systemTemplate: systemTemplate.trim(),
+    rubric        : rubric.trim(),
+    userTemplate  : userTemplate.trim(),
+  };
+}
+
+/* ───────────────── public API 1 – master helper ──────────────── */
 export async function gradeAllQuestions({
   openAiKey         = "",
   subchapterSummary = "",
+  quizStage         = "understand",
   questions         = [],
   userAnswers       = [],
-  rubric            = "Grade on completeness and correctness. "
-                      + "Return score (0-1) and 1-2 sentences of feedback."
 }) {
-  if (questions.length !== userAnswers.length) {
-    return { success:false, results:[], error:"questions vs answers length mismatch" };
+  /* basic guard */
+  if (questions.length !== userAnswers.length)
+    return { success: false, results: [], error: "questions vs answers length mismatch" };
+
+  /* pull templates from Firestore */
+  let promptSet;
+  try {
+    promptSet = await fetchPromptSet(quizStage);
+  } catch (err) {
+    return { success: false, results: [], error: err.message };
   }
 
   const results = new Array(questions.length).fill(null);
 
-  // split
+  /* split local vs GPT */
   const local   = [];
   const openEnd = [];
   questions.forEach((q, i) => {
-    const ans = userAnswers[i] ?? "";
-    (isLocallyGradableType(q.type) ? local : openEnd)
-      .push({ qObj:q, userAns:ans, index:i });
+    const item = { qObj: q, userAns: userAnswers[i] ?? "", index: i };
+    (isLocallyGradableType(q.type) ? local : openEnd).push(item);
   });
 
-  // 1) local grading
-  local.forEach(item => {
-    results[item.index] = localGradeQuestion(item.qObj, item.userAns);
+  /* local grading */
+  local.forEach(it => {
+    results[it.index] = localGradeQuestion(it.qObj, it.userAns);
   });
 
-  const effectiveRubric =
-  promptCfg?.rubric        // <-- comes from quizPrompts/<examId>_<stage>
-  || DEFAULT_RUBRIC;       // <-- a local fallback constant
-
-
-  // 2) GPT grading
+  /* GPT grading */
   if (openEnd.length) {
     if (!openAiKey) {
-      openEnd.forEach(item =>
-        results[item.index] = { score:0, feedback:"No OpenAI key for GPT grading." });
+      openEnd.forEach(it => {
+        results[it.index] = { score: 0, feedback: "No OpenAI key provided." };
+      });
     } else {
       const { success, gradingArray, error } = await gradeOpenEndedBatch({
-        openAiKey, subchapterSummary, items:openEnd, rubric: effectiveRubric,
+        openAiKey,
+        subchapterSummary,
+        items      : openEnd,
+        promptSet,
+        quizStage,
       });
 
       if (!success) {
-        console.error("GPT grading:", error);
-        openEnd.forEach(item =>
-          results[item.index] = { score:0, feedback:`GPT error: ${error}` });
+        openEnd.forEach(it =>
+          results[it.index] = { score: 0, feedback: `GPT error: ${error}` }
+        );
       } else {
-        gradingArray.forEach((r, k) => results[openEnd[k].index] = r);
+        gradingArray.forEach((g, k) =>
+          results[openEnd[k].index] = g
+        );
       }
     }
   }
 
-  return { success:true, results, error:"" };
+  return { success: true, results, error: "" };
 }
 
-// ─── API 2 – local vs GPT decision helper ───────────────────────────
-export function isLocallyGradableType(type){
-  return ["multipleChoice","trueFalse","fillInBlank","ranking"].includes(type);
+/* ───────────────── public API 2 – type helper ────────────────── */
+export function isLocallyGradableType(t) {
+  return ["multipleChoice", "trueFalse", "fillInBlank", "ranking"].includes(t);
 }
 
-// ─── API 3 – local grading rules (unchanged) ────────────────────────
-export function localGradeQuestion(q, userAns){
-  let score=0, fb="";
+/* ───────────────── public API 3 – local grading rules ────────── */
+export function localGradeQuestion(q, userAns) {
+  let score = 0, fb = "";
 
-  switch(q.type){
-    case "multipleChoice":{
+  switch (q.type) {
+    case "multipleChoice": {
       const ok = q.correctIndex === Number(userAns);
-      score = ok?1:0;
-      fb    = ok? "Correct!" : `Incorrect. Correct: ${q.options?.[q.correctIndex]??"—"}`;
+      score = ok ? 1 : 0;
+      fb    = ok ? "Correct!" :
+        `Incorrect. Correct: ${q.options?.[q.correctIndex] ?? "—"}`;
       break;
     }
-    case "trueFalse":{
+    case "trueFalse": {
       const ok = (userAns||"").toString().toLowerCase() ===
                  (q.correctValue||"").toString().toLowerCase();
-      score = ok?1:0;
-      fb    = ok? "Correct!" : `Incorrect. Correct answer was "${q.correctValue}".`;
+      score = ok ? 1 : 0;
+      fb    = ok ? "Correct!" :
+        `Incorrect. The correct answer was "${q.correctValue}".`;
       break;
     }
-    case "fillInBlank":{
+    case "fillInBlank": {
       const ok = (userAns||"").trim().toLowerCase() ===
                  (q.answerKey||"").trim().toLowerCase();
-      score = ok?1:0;
-      fb    = ok? "Correct!" : `Incorrect. Expected "${q.answerKey}".`;
+      score = ok ? 1 : 0;
+      fb    = ok ? "Correct!" : `Incorrect. Expected "${q.answerKey}".`;
       break;
     }
-    case "ranking":{
-      // placeholder – implement your own logic
-      score = 0;
-      fb    = "Ranking grading not implemented.";
-      break;
-    }
-    default:{
+    default: {
       score = 0;
       fb    = "Unrecognized type for local grading.";
     }
   }
-  return { score:clamp01(score), feedback:fb };
+  return { score: clamp01(score), feedback: fb };
 }
 
-// ─── API 4 – GPT batch grading for open-ended items ──────────────────
-/*  items[] = { qObj, userAns, index }
- *  rubric  = short string injected into GPT prompt
- */
+/* ───────────────── public API 4 – GPT batch grading ──────────── */
 export async function gradeOpenEndedBatch({
-  openAiKey, subchapterSummary="", items=[], rubric=""
-}){
-  if (!openAiKey) return { success:false, gradingArray:[], error:"Missing API key" };
-  if (!items.length)    return { success:true , gradingArray:[], error:"" };
+  openAiKey,
+  subchapterSummary = "",
+  items             = [],
+  promptSet         = {},
+  quizStage         = "(unknown)",
+}) {
+  if (!openAiKey)
+    return { success: false, gradingArray: [], error: "Missing API key" };
+  if (!items.length)
+    return { success: true, gradingArray: [], error: "" };
 
-  /* build prompt ----------------------------------------------------*/
-  let block = "";
-  items.forEach((it,i)=>{
-    const q  = it.qObj;
-    block += `
-Q#${i+1}
+  /* ── 1️⃣  ensure we HAVE a promptSet ─────────────────────── */
+  if (!promptSet.userTemplate || !promptSet.systemTemplate) {
+    promptSet = await fetchPromptSet(quizStage);   // ← uses helper already in file
+  }
+
+  const { rubric, systemTemplate, userTemplate } = promptSet;
+  /* build items block */
+  let itemBlock = "";
+  items.forEach((it, i) => {
+    const q = it.qObj;
+    itemBlock += `
+Q#${i + 1}
 Question: ${q.question}
 Expected: ${q.expectedAnswer ?? q.answerGuidance ?? "(none)"}
-Learner : """${it.userAns}"""`.trim()+"\n";
+Learner : """${it.userAns}"""`.trim() + "\n";
   });
 
-const userPrompt = `
-You are a strict but encouraging grading assistant.
+  /* substitute placeholders {{rubric}}, {{summary}}, {{items}} */
+  const userPrompt = userTemplate
+    .replace(/{{\s*rubric\s*}}/gi, rubric)
+    .replace(/{{\s*summary\s*}}/gi, subchapterSummary)
+    .replace(/{{\s*items\s*}}/gi, itemBlock.trim());
 
-Rubric:
-${rubric}
-/* make sure the rubric includes the tone bullet */
-
-Context (sub-chapter summary): "${subchapterSummary}"
-
-For every Q#:
-• Compare Expected vs Learner
-• Decide a score 0 – 1
-• Give brief feedback addressed directly to the learner
-• End with a new line that begins exactly with "Ideal answer:" followed by
-  the ideal 1-sentence answer that would earn full marks.
-
-Return JSON ONLY in this shape:
-
-{
-  "results":[
-    {
-      "score":1.0,
-      "feedback":"Great explanation – you named the key cause-effect.\\nIdeal answer: In a homogeneous mixture the composition is uniform throughout, whereas a heterogeneous mixture has visibly different parts."
-    }
-  ]
-}
-
-${block}`.trim();
-
-  /* call OpenAI -----------------------------------------------------*/
-  try{
-    const resp = await axios.post(
-      "https://api.openai.com/v1/chat/completions",
+  /* call OpenAI (logged) */
+  try {
+    const resp = await chatCompletionTracked(
       {
-        model:"gpt-3.5-turbo",
-        messages:[
-          { role:"system", content:"Return JSON only, no extra text."},
-          { role:"user",   content:userPrompt }
+        model      : "gpt-3.5-turbo",
+        messages   : [
+          { role: "system", content: systemTemplate },
+          { role: "user",   content: userPrompt    },
         ],
-        max_tokens:1000,
-        temperature:0.0
+        max_tokens : 1000,
+        temperature: 0.0,
       },
-      { headers:{ Authorization:`Bearer ${openAiKey}` } }
+      {
+        kind         : "grading",
+        quizStage,
+        questionCount: items.length,
+      }
     );
 
-    const raw    = resp.data.choices[0].message.content
-                     .replace(/```json|```/g,"").trim();
+    /* parse JSON */
+    const raw = resp.choices[0].message.content
+                   .replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(raw);
 
-    if(!Array.isArray(parsed.results))
-      throw new Error("Missing results[] array in GPT reply");
+    if (!Array.isArray(parsed.results))
+      throw new Error("Missing results[] array");
 
-    const gradingArray = parsed.results.map(r=>({
-      score   : clamp01(r.score),
-      feedback: r.feedback ?? ""
+        const gradingArray = parsed.results.map(r => ({
+      score       : clamp01(r.score),
+      feedback    : (r.feedback ?? "").trim(),
+      idealAnswer : (r.idealAnswer ?? "").trim()
     }));
 
-    // pad / trim to match items.length just in case
-    while(gradingArray.length < items.length) gradingArray.push({score:0,feedback:""});
-    return { success:true, gradingArray, error:"" };
+    /* pad / trim */
+    while (gradingArray.length < items.length)
+      gradingArray.push({ score:0, feedback:"", idealAnswer:"" });
+    gradingArray.length = items.length;
 
-  }catch(err){
-    return { success:false, gradingArray:[], error:err.message };
+    return { success:true, gradingArray, error:"" };
+  } catch (err) {
+    return { success:false, gradingArray:[], error: err.message };
   }
 }
