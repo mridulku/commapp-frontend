@@ -19,6 +19,8 @@ import ConceptExtractionPage from "./Support/ConceptExtractionPage";
 
 import CostDashboard from "./Support/CostDashboard"; // ← add this line
 
+import PromptPlayground from "./Support/PromptPlayground";
+
 import { QuizPromptEditor } from "./Support/QuizPrompEditor";
 
 // Add more admin tools here later and extend the enum ↓
@@ -35,6 +37,7 @@ const TOOLS = {
   CostDashboard: "Cost Dashboard",
   MetricsDashboard: "Metrics Dashboard",
   QuizPromptEditor: "Quiz Prompt Editor",
+  PromptPlayground : "PromptPlayground"  ,
 };
 
 function AdminPanel({ userId }) {
@@ -103,6 +106,8 @@ function AdminPanel({ userId }) {
             return <MetricsDashboard   userId={userId} />;
       case "QuizPromptEditor":
         return <QuizPromptEditor userId={userId} />;
+        case "PromptPlayground":
+        return <PromptPlayground userId={userId} />; 
       default:
         return null;
     }

@@ -185,7 +185,6 @@ async function gptBatch({
 
   /* B) handlebars-style replacements ------------------------- */
   const promptBody = template
-    .replace(/{{stageIntro}}/g, stageIntro)
     .replace(/{{subSummary}}/g, summary)
     .replace(/{{n}}/g, numberOfQuestions)
     .replace(/{{qType}}/g, typeName)

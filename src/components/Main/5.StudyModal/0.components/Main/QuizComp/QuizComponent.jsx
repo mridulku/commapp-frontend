@@ -9,7 +9,8 @@ import { setCurrentIndex, fetchPlan }          from "../../../../../../store/pla
 import { refreshSubchapter }                   from "../../../../../../store/aggregatorSlice";
 import { invalidateQuizStage }                 from "../../../../../../store/quizSlice";   // 🔗 NEW
 
-import { CircularProgress, Fade, Chip } from "@mui/material";
+import { CircularProgress, Fade, Chip, Divider,
+  Typography } from "@mui/material";
 
 import AccessTimeIcon from "@mui/icons-material/AccessTimeRounded";
 
@@ -966,6 +967,11 @@ const pageLabel = `${currentPageIndex + 1} / ${pages.length}`;
     }
   }
 
+  const perConceptLine =
+  quizStage === "remember"
+    ? "Each attempt asks **one multiple-choice question per concept** in this sub-chapter."
+    : "Each attempt asks **one short-answer question per concept** in this sub-chapter.";
+
   const niceStage = quizStage.charAt(0).toUpperCase() + quizStage.slice(1);
 
   const iconStyle = {
@@ -988,6 +994,7 @@ const pageLabel = `${currentPageIndex + 1} / ${pages.length}`;
          }
        />
      )}
+
 
          {/* ====== All-mastered stub ====== */}
  {stageMastered && !lastAttempt && !showGradingResults && (
@@ -1041,6 +1048,8 @@ const pageLabel = `${currentPageIndex + 1} / ${pages.length}`;
 )}
 
 
+
+
 <Dialog open={showInfo} onClose={() => setShowInfo(false)} maxWidth="sm" fullWidth>
   <DialogTitle>{`How the ${niceStage} stage works`}</DialogTitle>
 
@@ -1062,9 +1071,7 @@ const pageLabel = `${currentPageIndex + 1} / ${pages.length}`;
         <ListItemIcon sx={{ minWidth: 32 }}>
           <CheckCircleOutlineIcon fontSize="small" />
         </ListItemIcon>
-        <ListItemText
-          primary="Each attempt asks **one question per concept** in this sub-chapter."
-        />
+        <ListItemText primary={perConceptLine} />
       </ListItem>
 
       {/* loop explanation */}
@@ -1102,6 +1109,50 @@ const pageLabel = `${currentPageIndex + 1} / ${pages.length}`;
       </ListItem>
 
     </List>
+    <Divider sx={{ my: 2 }} />
+
+<Typography variant="subtitle1" gutterBottom>
+  How&nbsp;to&nbsp;answer
+</Typography>
+
+<List dense disablePadding sx={{ pl: 1 }}>
+  <ListItem>
+    <ListItemIcon sx={{ minWidth: 32 }}>
+      <CheckCircleOutlineIcon fontSize="small" />
+    </ListItemIcon>
+    <ListItemText primary={
+      quizStage === "remember"
+        ? "Select the correct option; one click is enough."
+        : "Write or speak your response in **1–2 clear sentences**."
+    } />
+  </ListItem>
+
+  {quizStage !== "remember" && (
+    <ListItem>
+      <ListItemIcon sx={{ minWidth: 32 }}>
+        <CheckCircleOutlineIcon fontSize="small" />
+      </ListItemIcon>
+      <ListItemText primary="Ideas matter more than grammar or spelling." />
+    </ListItem>
+  )}
+
+  {quizStage !== "remember" && (
+    <ListItem>
+      <ListItemIcon sx={{ minWidth: 32 }}>
+        <ReplayIcon fontSize="small" />
+      </ListItemIcon>
+      <ListItemText primary="Use the microphone if you prefer speaking—check the transcript before submitting." />
+    </ListItem>
+  )}
+
+  <ListItem>
+    <ListItemIcon sx={{ minWidth: 32 }}>
+      <AutoGraphIcon fontSize="small" />
+    </ListItemIcon>
+    <ListItemText primary="Press **Submit** when you’re done; the system grades content, not style." />
+  </ListItem>
+</List>
+
   </DialogContent>
 </Dialog>
 

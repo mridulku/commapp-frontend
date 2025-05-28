@@ -1,4 +1,9 @@
-/*  LastAttemptPanel.jsx  – modernised review panel (v4)  */
+/*  LastAttemptPanel.jsx  – modernised review panel (v5)
+    ▼  CHANGES
+    • Per-question pill now shows the actual fractional score (0 – 1)
+    • Green ≥ passCutoff (default 0.8) │ Amber for partial │ Red for zero
+    • All other behaviour remains identical
+*/
 
 import React from "react";
 
@@ -9,21 +14,22 @@ const pick = (obj, ...keys) => {
 };
 
 /* palette */
-const CLR_BG              = "#1b1b1b";
-const CLR_BORDER          = "#303030";
-const CLR_TEXT            = "#e0e0e0";
-const CLR_USER_CORRECT    = "#2e7d32";
-const CLR_CORRECT         = "#4caf50";
-const CLR_WRONG           = "#c62828";
-const CLR_INACTIVE        = "#424242";
-const CLR_FEEDBACK        = "#ffb74d";
+const CLR_BG           = "#1b1b1b";
+const CLR_BORDER       = "#303030";
+const CLR_TEXT         = "#e0e0e0";
+const CLR_PASS         = "#2e7d32";
+const CLR_FAIL         = "#c62828";
+const CLR_PARTIAL      = "#ffb300";
+const CLR_CORRECT      = "#4caf50";
+const CLR_INACTIVE     = "#424242";
+const CLR_FEEDBACK     = "#ffb74d";
 
-/* ---------- QuestionCard ---------------------------------- */
-/* ---------- QuestionCard ---------------------------------- */
+/* ===========================================================
+   QuestionCard
+   ----------------------------------------------------------- */
 function QuestionCard({ qObj, idx, result = {} }) {
   /* 1. basic text / meta ----------------------------------- */
-  const qText   =
-    pick(qObj, "question", "questionText", "prompt", "stem") ?? "";
+  const qText   = pick(qObj, "question", "questionText", "prompt", "stem") ?? "";
   const concept = pick(qObj, "conceptName", "concept", "topic") ?? "";
 
   /* 2. normalise helpers ----------------------------------- */
@@ -34,53 +40,46 @@ function QuestionCard({ qObj, idx, result = {} }) {
       .trim();
 
   const rawOpts = qObj.options || qObj.answers || [];
-  const opts    = rawOpts.map(o =>
+  const opts = rawOpts.map(o =>
     typeof o === "string"
       ? clean(o)
       : clean(pick(o, "text", "label", "option") ?? "")
   );
 
-
-
-  /* which option did the learner actually choose? */
-const userIdx = (() => {
-  // grab whatever field your backend uses
-  const raw = qObj.userAnswer ?? qObj.userAns ?? qObj.learnerResponse ?? "";
-
-  if (raw === null || raw === undefined || raw === "") return -1;
-
-  /* #1 numeric index – 0, 1, "2" … */
-  if (!isNaN(raw)) return parseInt(raw, 10);
-
-  /* #2 letter – "A"/"b" …  */
-  if (/^[A-Z]$/i.test(raw.trim()))
-    return raw.trim().toUpperCase().charCodeAt(0) - 65;
-
-  /* #3 the option text itself */
-  const cleaned = raw.toString().trim().replace(/\s+/g, " ");
-  const byText  = opts.findIndex(o => o === cleaned);
-  if (byText !== -1) return byText;
-
-  return -1;           // couldn’t match
-})();
+  /* 3. learner’s chosen option index ----------------------- */
+  const userIdx = (() => {
+    const raw = pick(qObj, "userAnswer", "userAns", "learnerResponse", "freeText") ?? "";
+    if (raw === "") return -1;
+    if (!isNaN(raw))         return parseInt(raw, 10);                 // numeric
+    if (/^[A-Z]$/i.test(raw))return raw.trim().toUpperCase().charCodeAt(0) - 65; // letter
+    const byText = opts.findIndex(o => o === clean(raw));
+    return byText !== -1 ? byText : -1;
+  })();
 
   const correctIdx = Number.isFinite(qObj.correctIndex)
     ? parseInt(qObj.correctIndex, 10)
     : -1;
 
-  const typedAnswer = (
-    qObj.userAnswer        ??
-    qObj.userAns           ??
-    qObj.learnerResponse   ??
-    qObj.freeText          ??
-    ""
-  )
-    .toString()
-    .trim();
+  const typedAnswer =
+    (pick(qObj,
+      "userAnswer",
+      "userAns",
+      "learnerResponse",
+      "freeText") ?? ""
+    ).toString().trim();
 
-  /* 4. per-item score / colours ---------------------------- */
-  const gotPoint = result?.score === 1;
-  const scorePill = gotPoint ? "✓ 1 / 1" : "✗ 0 / 1";
+  /* 4. score pill (fraction-aware) ------------------------- */
+  /* clamp, prettify */
+  const rawScore   = Number.isFinite(result?.score) ? result.score : parseFloat(result?.score);
+  const scoreNum   = Math.min(1, Math.max(0, isNaN(rawScore) ? 0 : rawScore));
+  const displayStr = scoreNum.toFixed(2).replace(/\.00$/, "").replace(/0$/, ""); // 1→1  0.80→0.8
+
+  const passCutoff = 0.8;                      // tweak if desired
+  let pillColour   = CLR_FAIL;
+  if (scoreNum >= passCutoff) pillColour = CLR_PASS;
+  else if (scoreNum > 0)      pillColour = CLR_PARTIAL;
+
+  const scorePill = `${displayStr} / 1`;
 
   /* 5. render ---------------------------------------------- */
   return (
@@ -88,17 +87,9 @@ const userIdx = (() => {
       {/* header row */}
       <div style={styles.headerRow}>
         <span style={styles.qNumber}>Q{idx + 1}</span>
-        <span
-          style={{ flex: 1 }}
-          dangerouslySetInnerHTML={{ __html: qText }}
-        />
+        <span style={{ flex: 1 }} dangerouslySetInnerHTML={{ __html: qText }} />
         {concept && <span style={styles.chip}>{concept}</span>}
-        <span
-          style={{
-            ...styles.scorePill,
-            background: gotPoint ? CLR_USER_CORRECT : CLR_WRONG,
-          }}
-        >
+        <span style={{ ...styles.scorePill, background: pillColour }}>
           {scorePill}
         </span>
       </div>
@@ -111,9 +102,9 @@ const userIdx = (() => {
             const correct = i === correctIdx;
 
             let bg = CLR_INACTIVE;
-            if (chosen && correct) bg = CLR_USER_CORRECT;
+            if (chosen && correct) bg = CLR_PASS;
             else if (correct)      bg = CLR_CORRECT;
-            else if (chosen)       bg = CLR_WRONG;
+            else if (chosen)       bg = CLR_FAIL;
 
             return (
               <li
@@ -125,13 +116,11 @@ const userIdx = (() => {
                 }}
               >
                 {(chosen || correct) && (
-                  <span style={styles.icon}>
-                    {correct ? "✓" : "✗"}
-                  </span>
+                  <span style={styles.icon}>{correct ? "✓" : "✗"}</span>
                 )}
                 <span
-                  dangerouslySetInnerHTML={{ __html: text }}
                   style={{ flex: 1 }}
+                  dangerouslySetInnerHTML={{ __html: text }}
                 />
               </li>
             );
@@ -139,25 +128,27 @@ const userIdx = (() => {
         </ul>
       )}
 
-            {/* free-text answers only (no options means not MCQ) */}
+      {/* free-text answers */}
       {opts.length === 0 && typedAnswer && (
         <div style={styles.typedBlock}>
           <b>Your answer:</b> {typedAnswer || "(blank)"}
         </div>
       )}
 
-      {/* Show feedback only for NON-MCQ questions */}
-{opts.length === 0 && result?.feedback && (
-  <div
-    style={styles.feedback}
-    dangerouslySetInnerHTML={{ __html: result.feedback }}
-  />
-)}
+      {/* feedback line */}
+      {opts.length === 0 && result?.feedback && (
+        <div
+          style={styles.feedback}
+          dangerouslySetInnerHTML={{ __html: result.feedback }}
+        />
+      )}
     </div>
   );
 }
 
-/* ---------- LastAttemptPanel ------------------------------- */
+/* ===========================================================
+   LastAttemptPanel
+   ----------------------------------------------------------- */
 export default function LastAttemptPanel({
   attempt,
   show = false,
@@ -169,10 +160,13 @@ export default function LastAttemptPanel({
   const questions = attempt.questions || attempt.quizSubmission || [];
   if (!questions.length) return null;
 
-  /* RESULTS array falls back gracefully if missing */
+  /* build results[] safely */
   const results =
     attempt.results ||
-    questions.map(q => ({ score: pick(q, "score"), feedback: pick(q, "feedback") }));
+    questions.map(q => ({
+      score:    pick(q, "score"),
+      feedback: pick(q, "feedback"),
+    }));
 
   return (
     <div style={styles.wrapper}>
@@ -185,20 +179,17 @@ export default function LastAttemptPanel({
       {show && (
         <div style={styles.inner}>
           {questions.map((q, i) => (
-  <QuestionCard
-    key={i}
-    qObj={q}
-    idx={i}
-    result={results[i]}   
-  />
-))}
+            <QuestionCard key={i} qObj={q} idx={i} result={results[i]} />
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-/* ---------- styles ----------------------------------------- */
+/* ===========================================================
+   Styles (unchanged except score pill colour additions)
+   ----------------------------------------------------------- */
 const styles = {
   wrapper: { marginBottom: "1.5rem" },
 
@@ -275,13 +266,14 @@ const styles = {
     fontSize: 13,
     color: CLR_FEEDBACK,
   },
+
   typedBlock: {
-  marginTop: 6,
-  padding: "6px 10px",
-  borderRadius: 4,
-  background: "#37474f",
-  color: "#eceff1",
-  fontSize: 14,
-  whiteSpace: "pre-wrap",
-},
+    marginTop: 6,
+    padding: "6px 10px",
+    borderRadius: 4,
+    background: "#37474f",
+    color: "#eceff1",
+    fontSize: 14,
+    whiteSpace: "pre-wrap",
+  },
 };
