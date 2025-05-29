@@ -8,6 +8,15 @@
 
  import axios from "axios";
  import { chatCompletionTracked } from "../../QuizComp/QuizSupport/aiClient"
+
+ // ─── tiny util:  {{VAR}} → value ───────────────────────────
+function replaceVars(str, map) {
+  return Object.keys(map).reduce(
+    (s, k) => s.replaceAll(`{{${k}}}`, map[k]),   // global replace
+    str
+  );
+}
+
 import {
   doc,
   getDoc,
@@ -20,6 +29,7 @@ import {
 
 export async function generateRevisionContent({
   db,
+  examId             = "general",   // ← NEW (defaults to “general”)
   subChapterId,
   openAiKey = "",            // ← default so it’s never undefined
   revisionConfig,
@@ -38,6 +48,17 @@ export async function generateRevisionContent({
     };
   }
 
+
+  /* 0) ─── load dynamic prompt from  revisionPrompts/{quizStage}  ─── */
+let promptTemplate = "";
+try {
+  const promptId = `${examId.toLowerCase()}_${quizStage.toLowerCase()}`;
+  const snap     = await getDoc(doc(db, "revisionPrompts", promptId));
+  if (snap.exists()) promptTemplate = snap.data().template || "";
+} catch (e) {
+  console.warn("revisionPrompts lookup failed:", e.message);
+}
+/* 1) Grab the user’s MOST-RECENT quiz attempts … */
   /* ────────────────────────────────────────────────
    * 1) Grab the user’s MOST-RECENT quiz attempts
    *    (up to maxHistoryAttempts) so we can:
@@ -145,71 +166,18 @@ export async function generateRevisionContent({
 
  
   
-    const userPrompt = `
-You are an expert tutor creating a **personal revision brief** for one
-learner.  Use the information below to write *conversational*,
-*detailed* explanations that target the learner’s specific mistakes.
-
-────────────────────────  CONTEXT  ────────────────────────
-• **Sub-chapter summary**  
-"""${subchapterSummary}"""
-
-• **Concepts the learner still struggles with**  
-${failedConcepts.length
-    ? failedConcepts.map((c) => `  – ${c}`).join("\\n")
-    : "  – none (give a concise general recap of all key ideas)"}  
-
-• **Recent quiz history** (✅ correct, ❌ incorrect)  
-${quizHistoryText || "  – no previous attempts on record"}  
-
-• **Authoring guidelines from my CMS**  
-"""${configJson}"""
-
-──────────────────────  HOW TO WRITE  ─────────────────────
-1. For **each concept** output **1-2 full paragraphs** (≈ 120–200 words
-   total).  Use a conversational tone (“you…”) and weave in:
-   • A one-sentence recap of the idea.  
-   • A plain-language deep-dive that fixes *this learner’s* exact
-     misconceptions (mention how many times they missed it if >1).  
-   • An analogy, mini-story, or real-life application to aid memory.  
-   • A short actionable tip or mnemonic to try next time.  
-2. If the learner already mastered the concept (no errors), still give
-   a concise *reinforcement* paragraph (~80–120 words) that cements the
-   knowledge and suggests an extension or challenge question.  
-3. **Return each paragraph as a single string** inside the notes
-   array.  (e.g. notes ["<paragraph text>"])  
-4. Do **NOT** add markdown, bullets, or code-blocks; plain text only.  
-5. **EVERY concept MUST include an example object** exactly as shown below.
-    If you omit it the response is invalid.
-
-You must return **valid JSON only** – no markdown fences, no extra prose –
-and follow *exactly* this schema:
-{
-  "title": "Short Title",
-  "concepts": [
-    {
-      "conceptName": "Concept A",
-      "explanation": "A clear, conversational paragraph (≈120–180 words) that
-                     teaches the idea in plain language, referencing the
-                     learner’s typical error(s) where relevant.",
-      "example": {
-        "prompt":  "A realistic exam-style question or scenario",
-        "solution":"Step-by-step working that applies the concept and highlights
-                    the common pitfall the learner previously fell into."
-      }
-    },
-    ...
-  ]
-}
-
-**Guidelines for each concept**
-• *explanation* should feel like a tutor speaking directly to the learner  
-• *example.prompt* must be novel (don’t reuse a past quiz item)  
-• *example.solution* must reference the concept explicitly and point out the
-  misconception you observed in the quiz-history.  
-
-Return the JSON, nothing else.
-`.trim();
+/* 5️⃣ build the final prompt — either from Firestore or fallback */
+const userPrompt = promptTemplate
+  ? replaceVars(promptTemplate, {
+      SUB_SUMMARY: subchapterSummary,
+      FAILED_CONCEPTS: failedConcepts.length
+        ? failedConcepts.map(c => "  – " + c).join("\n")
+        : "  – none (give a concise general recap of all key ideas)",
+      QUIZ_HISTORY: quizHistoryText || "  – no previous attempts on record",
+      CONFIG_JSON: configJson,
+    })
+  : `⚠️  revisionPrompts/${quizStage} is missing.
+      Please create it or paste your former hard-coded prompt here.`;
 
   // 5) Call GPT
   try {
