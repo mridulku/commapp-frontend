@@ -1,32 +1,26 @@
 // -------------------------------------------------------------
-// /src/components/MaterialsDashboard.jsx   (v3 – live plan list)
+// /src/components/MaterialsDashboard.jsx   (v4 – create-plan flow)
 // -------------------------------------------------------------
 import React, { useEffect, useState } from "react";
 import { useSelector, useDispatch }   from "react-redux";
-import DashboardHeader from "./DashboardHeader";   // ⬅️ NE
+import DashboardHeader     from "./DashboardHeader";
 
-import usePlans     from "./usePlans";
-import PlanDropdown from "./PlanDropdown";
+import usePlans            from "./usePlans";
+import PlanDropdown        from "./PlanDropdown";
 
 import { Dialog, DialogContent } from "@mui/material";
-import PlanFetcher from "../../5.StudyModal/StudyModal";   // ← tweak the path if your folders differ
-/* axios import kept in case you use it elsewhere in this file */
-// import axios                        from "axios";
+import PlanFetcher         from "../../5.StudyModal/StudyModal";
+import GuideOnboarding from "../../5.StudyModal/0.components/Main/Base/Guide/GuideOnboarding";
 
-import {
-  doc, getDoc,
-  collection, query, where, orderBy, onSnapshot   // ⬅️ new
-} from "firebase/firestore";
-import { db } from "../../../../firebase";        // adjust path if needed
+import { doc, getDoc }     from "firebase/firestore";
+import { db }              from "../../../../firebase";
 
-import { Grid, Box } from "@mui/material";
+import { Grid, Box }       from "@mui/material";
 
-import PlanSelector from "../1.PlanSelector/PlanSelector";
-import Child2       from "../3.AdaptivePlanView/0.Parent/0.Parent";
-import StatsPanel   from "../4.StatsPanel/StatsPanel";
-import Loader       from "./Loader";
+import Child2              from "../3.AdaptivePlanView/0.Parent/0.Parent";
+import Loader              from "./Loader";
 
-import { setAuth }  from "../../../../store/authSlice";
+import { setAuth }         from "../../../../store/authSlice";
 
 /* -------------------------------------------------------------
    Map exam → field in users/{uid} that stores the cloned book
@@ -58,7 +52,7 @@ export default function MaterialsDashboard({
   /* ---------- exam type from global store ---------- */
   const examType = useSelector((s) => s.exam?.examType);
 
-    /* ---------- resume-player dialog state ---------- */
+  /* ---------- Plan-player dialog state ---------- */
   const [showPlayer, setShowPlayer] = useState(false);
   const [playerPlan, setPlayerPlan] = useState(null);
 
@@ -67,6 +61,13 @@ export default function MaterialsDashboard({
       setPlayerPlan(selectedPlanId);
       setShowPlayer(true);
     }
+  };
+
+  /* ---------- New-plan wizard dialog state ---------- */
+  const [showOnboard, setShowOnboard] = useState(false);
+
+  const handleCreatePlan = () => {
+    setShowOnboard(true);
   };
 
   /* ---------- 1) look up bookId in users/{uid} ---------- */
@@ -97,24 +98,17 @@ export default function MaterialsDashboard({
       }
     })();
   }, [userId, examType]);
-  
-    /* ---------- use shared hook ------------ */
+
+  /* ---------- use shared hook ------------ */
   const {
     planIds,
     metaMap,
     selected: selectedPlanId,
     setSelected: setSelectedPlanId,
-    loading: loadingPlans
+    loading: loadingPlans,
   } = usePlans({ userId, bookId });
 
-  /* ---------- loading / error UI ---------- */
-
-    /* ───────────────────────────────────────────────
-     OPTIONAL: pull *subjects* for header chip list
-     (If your usePlans hook already puts .subjects
-     inside metaMap, you can delete this block.)
-  ─────────────────────────────────────────────── */
-
+  /* ---------- subject list for header chips ---------- */
   const [subjects, setSubjects] = useState([]);
 
   useEffect(() => {
@@ -134,8 +128,6 @@ export default function MaterialsDashboard({
   }, [selectedPlanId]);
 
   /* ---------- loading / error UI ---------- */
-
-
   if (loadingBook || loadingPlans) {
     return (
       <Loader
@@ -143,7 +135,7 @@ export default function MaterialsDashboard({
         fullScreen
         accent={themeColors.accent || "#BB86FC"}
         message="Loading your study plans…"
-        zIndex={1000}               /* one step below MUI modal (1300) */
+        zIndex={1000}
       />
     );
   }
@@ -156,50 +148,39 @@ export default function MaterialsDashboard({
     );
   }
 
-  /* If you kept the effect above, prefer its list;
-     otherwise fall back to metaMap (from usePlans). */
-  const currentMeta    = metaMap?.[selectedPlanId] || {};
-  const subjectList    = subjects.length ? subjects
-                                         : currentMeta.subjects || [];
- 
+  const currentMeta = metaMap?.[selectedPlanId] || {};
+  const subjectList = subjects.length ? subjects
+                                      : currentMeta.subjects || [];
 
   /* ---------- MAIN RENDER ---------- */
   return (
     <Box sx={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}>
 
-      {/* ─── STATS STRIP ACROSS THE TOP ─── */}
-            {/* ─── PAGE HEADER / HERO ─── */}
+      {/* ─── PAGE HEADER ─── */}
       <DashboardHeader
-               /* Replace hard-coded title with dropdown */
-        planName={ <PlanDropdown
-                     selectedId={selectedPlanId}
-                     planIds={planIds}
-                     metaMap={metaMap}
-                     onSelect={setSelectedPlanId}
-                   /> }
+        planName={
+          <PlanDropdown
+            selectedId={selectedPlanId}
+            planIds={planIds}
+            metaMap={metaMap}
+            onSelect={setSelectedPlanId}
+            onCreate={handleCreatePlan}          /* NEW */
+          />
+        }
         subjects={subjectList}
-        onResume={handleResume} 
+        onResume={handleResume}
         kpis={[
-          { icon: "⏱️", label: "Time Studied Today", value: "7 h 6 m" },
-          { icon: "🎯", label: "Today’s Target",       value: "60 %"   },
-          { icon: "📈", label: "Total Time Studied",   value: "195 h"  },
-          { icon: "🔥", label: "Current Streak",       value: "2 days"},
+          { icon: "⏱️", label: "Time Studied Today", value: "0 h 0 m" },
+          { icon: "🎯", label: "Today’s Target",     value: "0 %"    },
+          { icon: "📈", label: "Total Time Studied", value: "0 h"   },
+          { icon: "🔥", label: "Current Streak",     value: "1 day"  },
         ]}
       />
- 
-      {/* (optional) keep StatsPanel below if you still want it) */}
-      {/* <Box sx={{ px: 2, pt: 2 }}>
-           <StatsPanel userId={userId} />
-         </Box> */}
 
       {/* ─── TWO-COLUMN LAYOUT BELOW ─── */}
       <Grid container sx={{ flex: 1 }}>
-
-        {/* LEFT column — My Plans */}
-        
-
         {/* RIGHT column — adaptive plan viewer */}
-        <Grid item xs={12} >
+        <Grid item xs={12}>
           <Box sx={{ p: 0, height: "100%", display: "flex", flexDirection: "column" }}>
             <Box sx={{ flexGrow: 1, overflowY: "auto" }}>
               <Child2
@@ -219,22 +200,38 @@ export default function MaterialsDashboard({
               />
             </Box>
           </Box>
-           <Dialog open={showPlayer} onClose={()=>setShowPlayer(false)} fullScreen>
-      <DialogContent sx={{ p:0, bgcolor:"#000" }}>
-        {playerPlan && (
-          <PlanFetcher
-            planId={playerPlan}
-            initialActivityContext={null}  /* null ⇒ resume last */
-            userId={userId}
-            onClose={()=>setShowPlayer(false)}
-          />
-        )}
-      </DialogContent>
-    </Dialog>
+
+          {/* Existing Plan-player dialog */}
+          <Dialog open={showPlayer} onClose={() => setShowPlayer(false)} fullScreen>
+            <DialogContent sx={{ p: 0, bgcolor: "#000" }}>
+              {playerPlan && (
+                <PlanFetcher
+                  planId={playerPlan}
+                  initialActivityContext={null}  /* null ⇒ resume last */
+                  userId={userId}
+                  onClose={() => setShowPlayer(false)}
+                />
+              )}
+            </DialogContent>
+          </Dialog>
+
+          {/* NEW: GuideOnboarding dialog */}
+          <Dialog open={showOnboard} onClose={() => setShowOnboard(false)} fullScreen>
+            <DialogContent sx={{ p: 0, bgcolor: "#000" }}>
+              {showOnboard && (
+                <GuideOnboarding
+                  onClose={() => setShowOnboard(false)}
+                  onPlanCreated={(newId) => {
+                    if (newId) setSelectedPlanId(newId); // auto-select new plan
+                    setShowOnboard(false);
+                  }}
+                  showCloseBtn            // ⇠  we want the “×” in this context
+                />
+              )}
+            </DialogContent>
+          </Dialog>
         </Grid>
       </Grid>
     </Box>
-
-   
   );
 }

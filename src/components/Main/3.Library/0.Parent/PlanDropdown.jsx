@@ -1,8 +1,10 @@
 // -------------------------------------------------------------
-// PlanDropdown.jsx  – compact plan switcher for the top bar
-// (v7: fixed colour + tooltip for subject summary inside menu)
+// PlanDropdown.jsx – compact plan switcher for the top bar
+// (v8: adds “Create new plan” item at the bottom of the menu)
 // -------------------------------------------------------------
 import React, { useState } from "react";
+import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
+
 import {
   Button,
   Menu,
@@ -12,19 +14,22 @@ import {
   Chip,
   Box,
   Tooltip,
+  Divider,                 // <-- NEW
 } from "@mui/material";
 
 /**
  * @param {string}   selectedId
  * @param {string[]} planIds
  * @param {Object}   metaMap      – key = planId, value = meta object
- * @param {Function} onSelect(id)
+ * @param {Function} onSelect(id) – select an existing plan
+ * @param {Function} onCreate()   – open “new plan” wizard
  */
 export default function PlanDropdown({
   selectedId = "",
   planIds = [],
   metaMap = {},
   onSelect = () => {},
+  onCreate = () => {},             // <-- NEW
 }) {
   /* ---------- local menu state ---------- */
   const [anchorEl, setAnchorEl] = useState(null);
@@ -46,9 +51,9 @@ export default function PlanDropdown({
     };
   };
 
-  const selMeta       = metaMap[selectedId] || {};
-  const subjSummary   = makeSummary(selMeta.subjects);
-  const groupSummary  = makeSummary(selMeta.groupings);
+  const selMeta      = metaMap[selectedId] || {};
+  const subjSummary  = makeSummary(selMeta.subjects);
+  const groupSummary = makeSummary(selMeta.groupings); // kept for future use
 
   /* ---------- render ---------- */
   return (
@@ -98,10 +103,11 @@ export default function PlanDropdown({
           sx: { bgcolor: "#1e1e1e", color: "#fff", minWidth: 260 },
         }}
       >
+        {/* -------- existing plans -------- */}
         {planIds.map((pid) => {
-          const m            = metaMap[pid] || {};
-          const subj         = makeSummary(m.subjects);
-          const group        = makeSummary(m.groupings);
+          const m     = metaMap[pid] || {};
+          const subj  = makeSummary(m.subjects);
+          const group = makeSummary(m.groupings);
 
           const subjNode =
             subj.label && (
@@ -133,14 +139,12 @@ export default function PlanDropdown({
                 {m.emoji || "📘"}
               </ListItemIcon>
 
-              {/* main text */}
               <ListItemText
                 primary={m.name}
                 primaryTypographyProps={{ fontSize: 14 }}
                 secondary={subjNode || dailyNode}
               />
 
-              {/* grouping summary chip with tooltip */}
               {group.label && (
                 <Tooltip title={group.tooltip}>
                   <Chip
@@ -159,6 +163,26 @@ export default function PlanDropdown({
             </MenuItem>
           );
         })}
+
+        {/* -------- divider + create-new entry -------- */}
+        <Divider sx={{ my: 0.5, borderColor: "#444" }} />
+
+        <MenuItem
+          onClick={() => {
+            onCreate();
+            setAnchorEl(null);
+          }}
+          sx={{ gap: 1 }}
+        >
+          <ListItemIcon sx={{ minWidth: 26 }}>
+            <AddCircleOutlineIcon fontSize="small" />
+          </ListItemIcon>
+
+          <ListItemText
+            primary="Create new plan"
+            primaryTypographyProps={{ fontSize: 14 }}
+          />
+        </MenuItem>
       </Menu>
     </>
   );

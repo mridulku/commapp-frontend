@@ -65,7 +65,11 @@ const ALLOWED_GROUPS = {
 /* ════════════════════════════════════════════════════════════════
    1.  COMPONENT
 ═════════════════════════════════════════════════════════════════ */
-export default function GuideOnboarding() {
+export default function GuideOnboarding({
+  onClose = () => {},
+  onPlanCreated = () => {},
+  showCloseBtn  = false,       // ⇠  NEW explicit flag
+}) {
   /* ───── Redux selectors ───── */
   const userId   = useSelector((s) => s.auth?.userId);
   const examType = useSelector((s) => s.exam?.examType);
@@ -243,6 +247,9 @@ useEffect(() => {
       });
       setPlanDoc(data?.planDoc || null);             // ← save it
       setSuccess(true);
+      if (data?.planDoc?.planId) {
+  onPlanCreated(data.planDoc.planId);   // <<< STEP 6
+}
 
 
          /* ★★★  mark the learner as onboarded  ★★★ */
@@ -354,6 +361,9 @@ useEffect(() => {
 
 
               return (
+
+               
+
   <Chip
     key={grpLabel}
     label={grpLabel}
@@ -542,12 +552,15 @@ useEffect(() => {
     return (
       <SuccessPlanCreation
         planDoc={planDoc}
-        onClose={() => setSuccess(false)}
+          onClose={() => {
+    setSuccess(false);
+    if (typeof onClose === "function") onClose();  // invoke only if supplied
+  }}
       />
     );
   }
 
-  return (
+   return (
     <Box
       sx={{
         maxWidth: 760,
@@ -559,14 +572,42 @@ useEffect(() => {
         color: "#fff",
         border: `1px solid ${OFF_BG}`,
         borderRadius: 2,
+        position: "relative",      /* so the close btn is positioned */
       }}
     >
+      {/* ─── floating close icon ─── */}
+      {showCloseBtn && typeof onClose === "function" && (
+        <Button
+          aria-label="Close wizard"
+          onClick={onClose}
+          sx={{
+            position: "absolute",
+            top: 16,
+            right: 16,
+            minWidth: 0,
+            width: 36,
+            height: 36,
+            borderRadius: "50%",
+            bgcolor: "rgba(255,255,255,.08)",
+            color: "#fff",
+            fontSize: 22,
+            lineHeight: 1,
+            "&:hover": { bgcolor: "rgba(255,255,255,.18)" },
+            zIndex: 1,
+          }}
+        >
+          ×
+        </Button>
+      )}
+
+      {/* ─── header ─── */}
       <Typography variant="h5" sx={{ fontWeight: "bold", mb: 2 }}>
         {examType} Plan Setup
       </Typography>
       {bookErr && <Alert severity="error" sx={{ mb: 2 }}>{bookErr}</Alert>}
       {chapErr && <Alert severity="error" sx={{ mb: 2 }}>{chapErr}</Alert>}
 
+      {/* ─── wizard body ─── */}
       {step === 0 ? StepTopics : StepGoal}
     </Box>
   );
