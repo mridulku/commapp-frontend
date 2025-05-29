@@ -188,8 +188,20 @@ const planSlice = createSlice({
       state.planDoc = updatedPlanDoc;
       state.flattenedActivities = flattenedActivities;
       state.catalog = buildCatalogFromPlanDoc(updatedPlanDoc);
-      state.currentIndex = flattenedActivities.length ? 0 : -1;
-      state.examId = updatedPlanDoc.examId || "general";
+  const { initialActivityContext = null } = action.payload;
+
+  let start = 0;
+  if (initialActivityContext) {
+    if (typeof initialActivityContext.flatIndex === "number") {
+      start = initialActivityContext.flatIndex;
+    } else if (initialActivityContext.activityId) {
+      const idx = flattenedActivities.findIndex(
+        a => a.activityId === initialActivityContext.activityId
+      );
+      if (idx !== -1) start = idx;
+    }
+  }
+  state.currentIndex = flattenedActivities.length ? start : -1;      state.examId = updatedPlanDoc.examId || "general";
     },
 
     /* 3-c ▸ merge concepts fetched lazily for one sub-chapter
@@ -244,7 +256,7 @@ const planSlice = createSlice({
       .addCase(fetchPlan.fulfilled, (state, action) => {
         state.status = "succeeded";
 
-        const { planDoc } = action.payload;
+        const { planDoc, initialActivityContext } = action.payload;
         const { updatedPlanDoc, flattenedActivities } =
           addFlatIndexes(planDoc);
 
@@ -252,8 +264,25 @@ const planSlice = createSlice({
         state.flattenedActivities = flattenedActivities;
         state.catalog = buildCatalogFromPlanDoc(updatedPlanDoc);
         state.examId = updatedPlanDoc.examId || "general";
-        state.currentIndex = flattenedActivities.length ? 0 : -1;
-      })
+        /* ———————————————————————————————
+           choose starting slide
+           1) prefer flatIndex given explicitly
+           2) else search by activityId
+           3) else default to 0
+        ——————————————————————————————— */
+        let start = 0;
+        if (initialActivityContext) {
+          if (typeof initialActivityContext.flatIndex === "number") {
+            start = initialActivityContext.flatIndex;
+          } else if (initialActivityContext.activityId) {
+            const idx = flattenedActivities.findIndex(
+              a => a.activityId === initialActivityContext.activityId
+            );
+            if (idx !== -1) start = idx;
+          }
+        }
+        state.currentIndex =
+          flattenedActivities.length ? start : -1;      })
       .addCase(fetchPlan.rejected, (state, action) => {
         state.status = "failed";
         state.error = action.payload || action.error.message;

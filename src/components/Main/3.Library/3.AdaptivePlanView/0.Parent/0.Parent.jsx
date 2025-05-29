@@ -42,7 +42,7 @@ import PlanFetcher from "../../../5.StudyModal/StudyModal";
 import { db }      from "../../../../../firebase";
 
 /* ⬇️ NEW: Redux hooks / action */
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { setPlanDoc }  from "../../../../../store/planSlice"; // adjust path if needed
 
 /* ---------- tiny helpers just for counts on the chip ---------- */
@@ -72,6 +72,11 @@ export default function Child2({
 
   /* ⬇️ NEW: get a dispatch fn (used after fetch succeeds) */
   const dispatch = useDispatch();
+
+  // ⬇ NEW: grab the flattened list once from Redux
+const flatActs  = useSelector(
+  s => s.plan.flattenedActivities || []
+);
 
   useEffect(() => {
     if (!planId) { setPlan(null); return; }
@@ -129,10 +134,26 @@ export default function Child2({
   const [dlgPlan, setDlgPlan]       = useState("");
   const [dlgAct,  setDlgAct]        = useState(null);
 
-  const openFetcher = (pid, act=null) => {
+  const openFetcher = (pid, actOrId=null) => {
     console.trace("[DEBUG] PlanFetcher requested for", pid);
-    setDlgPlan(pid);
-    setDlgAct(act);
+       let ctx = null;
+
+   // 1) if we were given a raw activity object, get its ID
+   const aId = typeof actOrId === "object"
+       ? actOrId.activityId
+       : typeof actOrId === "string"
+         ? actOrId
+         : null;
+
+   if (aId) {
+     // 2) find matching flattened entry so we have both id & flatIndex
+     const flat = flatActs.find(f => f.activityId === aId);
+     if (flat) ctx = { activityId: aId, flatIndex: flat.flatIndex };
+     else      ctx = { activityId: aId };               // fall back to id only
+   }
+
+   setDlgPlan(pid);
+   setDlgAct(ctx);
     setShowDlg(true);
   };
 
@@ -271,7 +292,17 @@ export default function Child2({
   function renderTimeline()       { return <TimelinePanel   db={db} userId={userId} planId={planId} bookId={bookId}/>; }
   function renderAdmin()          { return <AdminPanel      db={db} plan={plan} planId={planId} bookId={bookId} userId={userId}/>; }
   function renderAdaptPG()        { return <AdaptPG         userId={userId} plan={plan} planId={planId}/>; }
-  function renderAdaptPG2()       { return <AdaptPG2        userId={userId} plan={plan} planId={planId} viewMode={viewMode}/>; }
+   function renderAdaptPG2()       {
+   return (
+     <AdaptPG2
+       userId={userId}
+       plan={plan}
+       planId={planId}
+       viewMode={viewMode}
+       onOpenPlanFetcher={openFetcher}   // ← NEW
+     />
+   );
+ }
   function renderAdaptPlayground(){ return <AdaptPlayground userId={userId} plan={plan} planId={planId}/>; }
   function renderAdapting()       { return <Adapting        userId={userId} plan={plan} planId={planId}/>; }
   function renderAggregator()     { return <AggregatorPanel db={db} userId={userId} planId={planId} bookId={bookId}/>; }

@@ -62,8 +62,9 @@ export default function DayActivities({
  );
 
   /* ---------- UI ---------- */
-  const openFetcher = (t) =>
-    onOpenPlanFetcher?.(planId, t._rawActivity);
+ const openFetcher = (task) => {
+   onOpenPlanFetcher?.(planId, task.id);   // send just the ID
+ };
     
 
   return (
