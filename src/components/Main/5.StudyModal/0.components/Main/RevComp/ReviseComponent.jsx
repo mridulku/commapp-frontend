@@ -1,3 +1,4 @@
+
 // ReviseView.jsx  – drop-in replacement
 import React, {
   useEffect,
@@ -58,37 +59,12 @@ const fmt = (sec) => {
 };
 
 /* split long HTML into ~`chunkSize`-word pages */
-function chunkHtmlByParagraphs(html = "", chunkSize = 180) {
-  const clean = html.replace(/\\n/g, "\n").replace(/\r?\n/g, " ");
-  const paras = clean
-    .split(/<\/p>/i)
-    .map((p) => p.trim())
-    .filter(Boolean)
-    .map((p) => p + "</p>");
 
-  const pages = [];
-  let curHTML = "";
-  let curWC   = 0;
-
-  paras.forEach((para) => {
-    const wc = para.replace(/<[^>]+>/g, "")
-                   .split(/\s+/).filter(Boolean).length;
-
-    if (curWC + wc <= chunkSize) {
-      curHTML += para;
-      curWC   += wc;
-    } else {
-      pages.push(curHTML);
-      curHTML = para;
-      curWC   = wc;
-    }
-  });
-  if (curHTML.trim()) pages.push(curHTML);
-  return pages;
-}
 
 
 const CACHE_COLL = "revisionCache";
+
+
 
 /**
  * Build a *stable* cache-document ID for one specific revision run.
@@ -104,27 +80,7 @@ const buildRevisionConfigDocId = (exam, stage) =>
   `${safeStr(stage).replace(/^\w/, (c) => c.toUpperCase())}`;
 
 /* GPT → nicely formatted HTML */
-function createHtmlFromGPTData(data) {
-  if (!data) return "";
-  let html = "";
 
-  if (data.title) html += `<h3>${data.title}</h3>`;
-
-  (data.concepts || []).forEach((c) => {
-    html += `<h4>${c.conceptName}</h4>`;
-    html += `<p>${c.explanation}</p>`;
-
-    const ex = c.example || c.examples || c.workedExample || null;
-    if (ex) {
-      html += `<blockquote>
-                 <strong>Example:</strong> ${safeStr(ex.prompt || ex.question)}
-                 <br/><em>Solution:</em> ${safeStr(ex.solution || ex.answer)}
-               </blockquote>`;
-    }
-  });
-
-  return html;
-}
 
 /* last-attempt synthesis (same logic you had in HistoryView) */
 function computeConceptStatuses(allAttempts = []) {
@@ -253,6 +209,49 @@ function ConceptInlineBar({ conceptStatuses = [] }) {
   );
 }
 
+// ─── cards for the new layout ─────────────────────────────────
+const ConceptPill = ({ name, status }) => (
+  <span
+    style={{
+      background: status==="PASS" ? "#2e7d32"
+               : status==="FAIL" ? "#c62828" : "#37474f",
+      color:"#e0f7fa", padding:"2px 8px", borderRadius:4,
+      fontWeight:600, marginRight:6, fontSize:13
+    }}
+  >
+    {name}
+  </span>
+);
+
+const ExplanationText = ({ text }) => (
+  <p style={{ margin:"8px 0 12px", lineHeight:1.55 }}>{text}</p>
+);
+
+const ExampleBlock = ({ prompt, solution }) => (
+  <div style={{
+    background:"#1e1e1e", border:"1px solid #333",
+    borderRadius:4, padding:10, fontSize:14, marginBottom:16
+  }}>
+    <strong>Example</strong><br/>
+    <em>{prompt}</em><br/>
+    {solution}
+  </div>
+);
+
+const ConceptCard = ({ concept, status }) => (
+  <div style={{
+    
+    padding:16, marginBottom:24
+  }}>
+    <ConceptPill name={concept.conceptName} status={status}/>
+    <ExplanationText text={concept.explanation}/>
+    <ExampleBlock
+      prompt={concept.example.prompt}
+      solution={concept.example.solution}
+    />
+  </div>
+);
+
 const LoadingOverlay = ({ text }) => (
   <Fade in>
     <div style={{
@@ -341,6 +340,9 @@ export default function ReviseView({
   const currentIndex = useSelector(s => s.plan?.currentIndex);
   const dispatch     = useDispatch();
 
+  const [concepts, setConcepts] = useState([]);  // ← replaces `pages`
+const CONCEPTS_PER_PAGE = 2;                   // pick the batch size you want
+
   /* timing refs */
   const docIdRef             = useRef("");
   const [serverSec , setServ] = useState(0);
@@ -352,8 +354,14 @@ const sessionStartMs        = useRef(Date.now());
   const [loading , setLoading ] = useState(false);
   const [status  , setStatus  ] = useState("");
   const [error   , setError   ] = useState("");
-  const [pages   , setPages   ] = useState([]);
   const [pageIx  , setPageIx  ] = useState(0);
+
+  // ── NEW : local state for the mastery side-panel ──────────────
+const [LCD , setLCD ] = useState(false);  // “loading concept data”
+const [mst , setMst ] = useState(0);      // masteredCount
+const [inpr, setInpr] = useState(0);      // in-progressCount
+const [not , setNot ] = useState(0);      // notTestedCount
+const [CS  , setCS  ] = useState([]);     // conceptStatuses (array)
 
   /* mastery widget */
   // one-liner now:
@@ -376,7 +384,7 @@ docIdRef.current = docId;
 
     // reset UI
     setLoading(true); setStatus("Generating revision…"); setError("");
-    setPages([]); setPageIx(0); setSnap(Date.now());
+     setPageIx(0); setSnap(Date.now());
 
     /* 1A – time spent so far */
     dispatch(fetchReviseTime({docId})).then(a=>{
@@ -391,14 +399,12 @@ docIdRef.current = docId;
     // ---------- 2-line cache lookup ----------
     const cacheId   = buildCacheId(userId, planId, subChapterId, quizStage, revisionNumber);
     const cacheRef  = doc(db, CACHE_COLL, cacheId);
-    const cacheSnap = await getDoc(cacheRef);
-
-    let finalHtml;
-
-    if (cacheSnap.exists()) {
-      console.log("[Revision] cache HIT →", cacheId);
-      finalHtml = cacheSnap.data().html || "";
-    } else {
+     const cacheSnap = await getDoc(cacheRef);
+ if (cacheSnap.exists()) {
+   console.log("[Revision] cache HIT →", cacheId);
+   const cached = cacheSnap.data().revisionData;
+   setConcepts(cached?.concepts || []);
+ } else {
       console.log("[Revision] cache MISS →", cacheId);
 
       const cfgId   = buildRevisionConfigDocId(examId, quizStage);
@@ -419,22 +425,18 @@ docIdRef.current = docId;
 
       if (!success) throw new Error(errMsg || "GPT error");
 
-      finalHtml = createHtmlFromGPTData(revisionData);
-
+setConcepts(revisionData.concepts || []);
       // ---------- write to cache so next open is instant ----------
-      await setDoc(cacheRef, {
-        html           : finalHtml,
-        createdAt      : serverTimestamp(),
-        userId,
-        planId,
-        subChapterId,
-        stage          : quizStage,
-        revisionNumber,
-      });
+       await setDoc(cacheRef, {
+   revisionData,                       //  ✅  store the raw JSON
+   createdAt     : serverTimestamp(),
+   userId, planId, subChapterId,
+   stage         : quizStage,
+   revisionNumber,
+ });
     }
 
-    const chunks = chunkHtmlByParagraphs(finalHtml, 180);
-    setPages(chunks);
+    
     setStatus("");
   } catch (e) {
     console.error(e);
@@ -513,11 +515,16 @@ docIdRef.current = docId;
     return ()=>clearInterval(h);
   },[localSec,lastSnapMs,dispatch]);
 
+const totalPages = Math.ceil(concepts.length / CONCEPTS_PER_PAGE);
+const pageConcepts = concepts.slice(
+  pageIx * CONCEPTS_PER_PAGE,
+  pageIx * CONCEPTS_PER_PAGE + CONCEPTS_PER_PAGE
+);
   /* helpers */
   const total = serverSec + localSec;
-  const html  = pages[pageIx] || "";
-  const next  = () => setPageIx(i=>Math.min(i+1,pages.length-1));
-  const prev  = () => setPageIx(i=>Math.max(i-1,0));
+ const next = () => setPageIx(i => Math.min(i + 1, totalPages - 1))
+ const prev = () => setPageIx(i => Math.max(i - 1, 0));
+
 
   /* record attempt then delegate */
   const submitRevisionAttempt = async()=>{
@@ -556,7 +563,6 @@ docIdRef.current = docId;
     }
   };
 
-  const pageLabel = `Page ${pageIx + 1} / ${pages.length || 1}`;
 
   /* ────────────────────────────────────────────────────────── */
   return (
@@ -580,29 +586,38 @@ docIdRef.current = docId;
         {/* body */}
         <div style={styles.body}>
           {error && <p style={{color:"red"}}>{error}</p>}
-          {/* eslint-disable-next-line react/no-danger */}
-          <div style={styles.page} dangerouslySetInnerHTML={{__html:html}}/>
+          {pageConcepts.map(c => {
+  const stat = conceptStatuses.find(s => s.conceptName === c.conceptName)?.status || "NOT_TESTED";
+  return <ConceptCard key={c.conceptName} concept={c} status={stat}/>;
+})}
         </div>
 
         {/* footer */}
+{/* footer */}
 <div style={styles.footer}>
   <div style={styles.navRow}>
-    {/* left chunk */}
+    {/* left chunk – Previous */}
     <div style={{ flex: "0 0 auto" }}>
       {pageIx > 0 && (
-        <button style={styles.btn} onClick={prev}>Previous</button>
+        <button style={styles.btn} onClick={prev}>
+          Previous
+        </button>
       )}
     </div>
 
-    {/* middle = page counter */}
-    <div style={styles.pageLabel}>{pageLabel}</div>
+    {/* centre chunk – page counter */}
+    <div style={styles.pageLabel}>
+      Page {pageIx + 1} / {totalPages || 1}
+    </div>
 
-    {/* right chunk */}
+    {/* right chunk – Next / Quiz */}
     <div style={{ flex: "0 0 auto", display: "flex", gap: 8 }}>
-      {pageIx < pages.length - 1 && (
-        <button style={styles.btn} onClick={next}>Next</button>
+      {pageIx < totalPages - 1 && (
+        <button style={styles.btn} onClick={next}>
+          Next
+        </button>
       )}
-      {pageIx === pages.length - 1 && (
+      {pageIx === totalPages - 1 && (
         <>
           <button style={styles.btnMain} onClick={handleQuizNow}>
             Take Quiz Now
@@ -648,5 +663,4 @@ const styles = {
              padding:"2px 6px",cursor:"pointer",fontSize:".8rem",lineHeight:1},
   conceptList:{margin:0,paddingLeft:16,maxHeight:120,overflowY:"auto"},
   navRow:   { display: "flex", alignItems: "center", justifyContent: "space-between" },
-pageLabel:{ fontSize: 14, opacity: 0.85, userSelect: "none" },
 };
