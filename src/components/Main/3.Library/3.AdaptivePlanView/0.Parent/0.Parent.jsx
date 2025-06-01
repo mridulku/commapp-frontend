@@ -170,7 +170,7 @@ const flatActs  = useSelector(
     { label:"Activity",     comp: renderTimeline },
     { label:"Progress",    admin:true, comp: renderProgress },
     { label:"Admin",       admin:true, comp: renderAdmin },
-    { label:"AdaptPlayground", admin:true, comp: renderAdaptPlayground },
+    { label:"AdaptPlayground", comp: renderAdaptPlayground },
     { label:"Daily Plan Dummy", admin:true, comp: renderDaily },
     { label:"Daily Overview", admin:true, comp: () =>
         <DailyOverviewDemo userId={userId} plan={plan} planId={planId} colorScheme={colorScheme}/> },
@@ -299,6 +299,7 @@ const flatActs  = useSelector(
        plan={plan}
        planId={planId}
        viewMode={viewMode}
+       showDevRebalance            // ← flag present means “true”
        onOpenPlanFetcher={openFetcher}   // ← NEW
      />
    );

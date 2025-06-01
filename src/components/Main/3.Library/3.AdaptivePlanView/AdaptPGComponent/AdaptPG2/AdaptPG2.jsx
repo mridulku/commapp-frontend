@@ -7,6 +7,9 @@ import React, {
   useEffect,
   useCallback,
 } from "react";
+
+
+import DevRebalanceTool from "./DevRebalanceTool";
 import {
   Box,
   Typography,
@@ -45,6 +48,7 @@ export default function AdaptPG2({
   planId,
   viewMode = "today",   // external controller
   onOpenPlanFetcher,
+  showDevRebalance = false      // ⇦ NEW
 }) {
   /* ── guards ── */
   if (!plan)                 return <Typography>No plan object provided.</Typography>;
@@ -416,6 +420,13 @@ export default function AdaptPG2({
           </Button>
         </DialogActions>
       </Dialog>
+      {showDevRebalance && (
+  <DevRebalanceTool
+    planId={planId}
+    userId={userId}
+    defaultTodayISO={new Date().toISOString().slice(0,10)}
+  />
+)}
     </Box>
   );
 }
