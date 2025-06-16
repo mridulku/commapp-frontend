@@ -9,6 +9,7 @@ import GuideApply from "./Guide/GuideApply";
 import GuideAnalyze from "./Guide/GuideAnalyze";
 import GuideOnboarding from "./Guide/GuideOnboarding";
 import GuideCarousel from "./Guide/GuideCarousel";
+import GuideProblemSelection from "../../../../0.BaseFiles/ProblemPicker";
 
 
 // OPTIONAL: a fallback, if you have one
@@ -39,6 +40,9 @@ export default function GuideView({ examId, activity, userId }) {
 
     case "carousel":
       return <GuideCarousel examId={examId} activity={activity} userId={userId} />;
+
+    case "problemselection":
+      return <GuideProblemSelection examId={examId} activity={activity} userId={userId} />;
 
     default:
       return <GuideGeneric examId={examId} activity={activity} userId={userId} />;

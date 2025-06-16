@@ -35,6 +35,8 @@ import Adapting             from "../PlanBalancer PLUS EXPERIMENTAL/Adapting";
 import AggregatorPanel      from "../PlanBalancer PLUS EXPERIMENTAL/AggregatorPanel";
 import DailyOverviewDemo    from "../PlanBalancer PLUS EXPERIMENTAL/DailyOverviewDemo";
 
+import Tools               from "../5.Tools/Tools";
+
 
 import ConceptProgressTableHeavy from "../ConceptProgressTable/ConceptProgressTableHeavy";
 
@@ -160,12 +162,14 @@ const flatActs  = useSelector(
   /* ---- tab config ------------------------------------------------ */
   const TAB_CONF = [
     { label:"Tasks",        comp: renderAdaptPG2 },
-    { label:"Concept Map",  comp: () =>
+    { label:"Concept Map", admin:true,  comp: () =>
         <ConceptProgressTable userId={userId} plan={plan} planId={planId} colorScheme={colorScheme}/> },
-    { label:"Concept Map Old", admin:true,  comp: () =>
+    { label:"Concept Map",  comp: () =>
           <ConceptProgressTableOld userId={userId} plan={plan} planId={planId} colorScheme={colorScheme}/> },
           { label:"Concept Map Heavy", admin:true,  comp: () =>
             <ConceptProgressTableHeavy userId={userId} plan={plan} planId={planId} colorScheme={colorScheme}/> },
+                      { label:"Tools",   comp: () =>
+            <Tools userId={userId} plan={plan} planId={planId} colorScheme={colorScheme}/> },
   
     { label:"Activity",     comp: renderTimeline },
     { label:"Progress",    admin:true, comp: renderProgress },

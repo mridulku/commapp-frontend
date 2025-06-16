@@ -32,6 +32,10 @@ import NEETUGLandingPage      from "./components/Main/0.PreLogin/LandingPages/NE
 import SATLandingPage         from "./components/Main/0.PreLogin/LandingPages/SAT";
 import UPSCLandingPage        from "./components/Main/0.PreLogin/LandingPages/UPSC";
 
+import ToolPage from "./components/Main/0.PreLogin/LandingPages/NEETUGSupport/ToolPage";   // ← add this line
+
+
+
 /* ---------- auth pages ---------- */
 import AuthLogin      from "./components/zArchive/AuthLogin";
 import AuthSignGoogle from "./components/zArchive/AuthSignGoogle";
@@ -112,6 +116,9 @@ function App() {
 <Route path="/landing"  element={<Navigate to="/neet" replace />} /> */}
         {/* Fallback general landing (if you still want it) */}
         <Route path="/landing"       element={<LandingPage />} />
+
+       {/* TOOL DEMO: /tools/chat, /tools/rapid-fire, etc. */}
+      <Route path="/tools/:slug"   element={<ToolPage />} />
 
         {/* AUTH pages (still public) */}
         <Route path="/authlogin"       element={<AuthLogin />} />

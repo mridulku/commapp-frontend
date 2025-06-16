@@ -8,6 +8,8 @@ import BookExplorer   from "./Support/BookExplorer";
 import CSVBookUploader from "./Support/CSVBookUploader";
 import OnboardingWizard from "./Support/OnboardingWizard";
 
+import QuickChapterClassifier from "./Support/QuickChapterClassifier";
+
 import ReadingViewDummy from "./Support/ReadingViewDummy";
 
 import MetricsDashboard from "./Support/MetricsDashboard";
@@ -22,6 +24,11 @@ import CostDashboard from "./Support/CostDashboard"; // ← add this line
 import PromptPlayground from "./Support/PromptPlayground";
 
 import { QuizPromptEditor } from "./Support/QuizPrompEditor";
+
+import DoubtChat from "./Support/DoubtChat";
+
+
+import BondVisualizer from "./Support/BondVisualizer";
 
 // Add more admin tools here later and extend the enum ↓
 const TOOLS = {
@@ -38,6 +45,9 @@ const TOOLS = {
   MetricsDashboard: "Metrics Dashboard",
   QuizPromptEditor: "Quiz Prompt Editor",
   PromptPlayground : "PromptPlayground"  ,
+  QuickChapterClassifier: "QuickChapterClassifier",
+  DoubtChat: "Doubt Chat",
+  BondVisualizer: "Bond Visualizer",
 };
 
 function AdminPanel({ userId }) {
@@ -108,6 +118,12 @@ function AdminPanel({ userId }) {
         return <QuizPromptEditor userId={userId} />;
         case "PromptPlayground":
         return <PromptPlayground userId={userId} />; 
+        case "QuickChapterClassifier":
+        return <QuickChapterClassifier userId={userId} />;
+        case "DoubtChat":
+        return <DoubtChat userId={userId} />;  
+      case "BondVisualizer":
+        return <BondVisualizer userId={userId} />;
       default:
         return null;
     }

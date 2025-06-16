@@ -11,10 +11,14 @@ import NewHome2 from "../8.NewHome2/NewHome2";
 
 import LoadingOnboarding from "./LoadingOnboarding";
 
+import OnboardingRouter from "./OnboardingRouter";
+
 
 const ADMIN_UIDS = [
   "acbhbtiODoPPcks2CP6Z",   // ← example
 ];
+
+
 
 // ADD THIS IMPORT if you haven't already:
 import axios from "axios";
@@ -83,6 +87,9 @@ function Dashboard() {
   /* 1)  EXAM TYPE MUST BE DECLARED *BEFORE* ANYONE READS IT            */
   /* ------------------------------------------------------------------ */
   const examType = useSelector((state) => state.exam.examType);
+
+    /* 0️⃣ choose mode: hard-code, get from feature flag, or derive from examType */
+const onboardingType = "plan";   // "plan" | "pain" | "toolkit"
 
   // 1) Controls whether onboarding is shown
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
@@ -227,11 +234,21 @@ useEffect(() => {
    *      • the user’s exam is in the “pre‑generated” list
    *      • onboarding UI is currently open
    *      • we have a logged‑in userId
+   * 
    */
+
+
+
+
+
+  
   const needsPolling =
-    PREGENERATED_EXAMS.includes(examType) &&
-    showOnboardingModal &&
-    userId;
+  onboardingType === "plan" &&
+  PREGENERATED_EXAMS.includes(examType) &&
+  showOnboardingModal &&
+  userId;
+
+
 
   if (needsPolling) {
     setIsCheckingPlanId(true);
@@ -269,7 +286,7 @@ useEffect(() => {
    *      or when any dependency (examType / modal state / userId) changes.
    */
   return () => clearInterval(intervalId);
-}, [examType, showOnboardingModal, userId]);
+}, [examType, showOnboardingModal, userId, onboardingType]);
 
 
 
@@ -321,7 +338,7 @@ useEffect(() => {
   }, [examType, isOnboarded]);
 
    // 🔒 1. Pause *all* dashboard data-fetching while onboarding modal is shown
- if (showOnboardingModal) {
+if (onboardingType === "plan" && showOnboardingModal) {
    return (
      <>
        {/* render only the modal chooser block ↓↓↓  (exact same JSX you already have) */}
@@ -594,77 +611,28 @@ useEffect(() => {
 
       
 
-      {/* Onboarding Modal */}
-      {/* ‑‑‑ Onboarding modal chooser  ---------------------------------- */}
-{["TOEFL","CBSE","JEEADVANCED","NEET","SAT","GATE","CAT","GRE","UPSC","FRM"].includes(examType) ? (
-  // ONBOARDING CHOOSER  --------------------------------------------------
-  showOnboardingModal && (
-    !examType ? (
-      /* 0️⃣  we don’t yet know which exam => stay on black loader */
-      <div style={{
-        position: "fixed",
-        inset: 0,
-        background: "#000",
-        color: "#fff",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 9999
-      }}>
-        <h2>Loading Onboarding…</h2>
-      </div>
-    ) : (
-      /* ✅  examType is present – now run your original logic */
-      isCheckingPlanId ? (
-        /* 1. still polling Firestore / Express */
-        <div style={{
-          position:"fixed",inset:0,
-          background:"#000",color:"#fff",display:"flex",
-          alignItems:"center",justifyContent:"center",zIndex:9999
-        }}>
-          <h2>Loading Onboarding…</h2>
-        </div>
-            ) : (
-               /* 2️⃣  we’re done polling – now EITHER show the onboarding player
-               OR the “no plan yet” placeholder.  NOTE we pass the
-               *locked* planId to prevent hot-swapping while open.        */
-        
-
-        lockedOnboardingPlanId
-          ? (
-              <PlanFetcher
-planId={lockedOnboardingPlanId}
-                userId={userId}
-                initialActivityContext={null}
-                backendURL={import.meta.env.VITE_BACKEND_URL}
-                fetchUrl="/api/adaptive-plan"
-                onClose={() => {
-                 /* hide modal + clear the lock for next time */
-                  setShowOnboardingModal(false);
-}}
-              /*  allowClose={isOnboarded} */ 
-             />
-            )
-          : (
-              <div style={{
-                position:"fixed",inset:0,
-                background:"#000",color:"#fff",display:"flex",
-                alignItems:"center",justifyContent:"center",zIndex:9999
-              }}>
-                <h2>No Onboarding Plan Found Yet.</h2>
-              </div>
-           
-      )
-    )
-  ))
-) : (
-  /* fallback: generic upload‑first onboarding */
-  <OnboardingModal
-    open={showOnboardingModal}
-    onClose={() => setShowOnboardingModal(false)}
-    onOpenPlanEditor={(bookId) => console.log("Open plan editor", bookId)}
+{/* Onboarding Modal – now handled by one router */}
+{showOnboardingModal && (
+  <OnboardingRouter
+    onboardingType={onboardingType}         // "plan" | "pain" | "toolkit"
+    userId={userId}
+    examType={examType}
+    planId={lockedOnboardingPlanId} // used only when onboardingType==="plan"
+    recommendedToolIds={["planner","quick-revise"]} // ← if using toolkit flow
+    onClose={() => {
+      setShowOnboardingModal(false);
+      setLockedOnboardingPlanId(null);
+    }}
+    onFinish={(tools) => {
+      /* save selected tools if using toolkit flow */
+      setShowOnboardingModal(false);
+    }}
   />
 )}
+
+
+
+
 
       {/* Plan Editor Modal (separate from onboarding) */}
       <EditAdaptivePlanModal

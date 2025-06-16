@@ -138,7 +138,7 @@ function UnifiedSidebar({
 
           
 
-          {/* 
+          
 <button
   style={toggleButtonStyle(viewMode === "newHome2")}
   onClick={() => switchMode("newHome2")}
@@ -146,7 +146,7 @@ function UnifiedSidebar({
 >
   {collapsed ? "📡" : <>📡 NewHome</>}
 </button>
-*/}
+
 
           <button
             style={toggleButtonStyle(viewMode === "admin")}
