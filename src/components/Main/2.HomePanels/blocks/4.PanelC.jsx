@@ -13,7 +13,7 @@ import {
   collection, getDocs,
   query, where, orderBy, limit
 } from "firebase/firestore";
-import { db } from "../../../firebase";                       // ← adjust
+import { db } from "../../../../firebase";                       // ← adjust
 
 /* MUI ---------------------------------------------------------- */
 import {
@@ -25,7 +25,7 @@ import AddIcon       from "@mui/icons-material/Add";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 
 /* Player modal ------------------------------------------------- */
-import PlanFetcher   from "../5.StudyModal/StudyModal";        // ← adjust
+import PlanFetcher   from "../../5.StudyModal/StudyModal";        // ← adjust
 
 /* — exam → cloned-book field map (same as GuideOnboarding) — */
 const FIELD_MAP = {

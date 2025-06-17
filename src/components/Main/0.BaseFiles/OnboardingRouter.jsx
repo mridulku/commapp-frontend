@@ -1,11 +1,10 @@
 import React from "react";
-import PlanFetcher        from "../../Main/5.StudyModal/StudyModal";
-import ProblemPicker      from "./ProblemPicker";      // new flow A
-import ToolSelectorModal  from "./ToolSelectorModal";  // new flow B
+import PlanFetcher   from "../../Main/5.StudyModal/StudyModal";
+import ProblemPicker from "./ProblemPicker";
 
 /**
  * props
- * ─ onboardingType  = "plan" | "pain" | "toolkit"
+ * ─ onboardingType  = "plan" | "pain"
  * ─ baseProps       = shared props (userId, examType …)
  * ─ onClose()       = parent callback
  */
@@ -20,18 +19,9 @@ export default function OnboardingRouter({
         <ProblemPicker
           {...baseProps}
           onContinue={(pains) => {
-            // save pains, then maybe open toolkit selector …
-            onClose();             // close for now
+            // TODO: persist pains[] then maybe open a next step later
+            onClose();          // close the modal for now
           }}
-        />
-      );
-
-    case "toolkit":
-      return (
-        <ToolSelectorModal
-          open={true}
-          {...baseProps}
-          onClose={() => onClose()}
         />
       );
 
@@ -40,7 +30,7 @@ export default function OnboardingRouter({
       return (
         <PlanFetcher
           {...baseProps}
-          planId={baseProps.planId}   /* required for legacy flow */
+          planId={baseProps.planId}      /* used only in plan flow */
           fetchUrl="/api/adaptive-plan"
           onClose={onClose}
         />

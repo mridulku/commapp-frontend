@@ -106,7 +106,7 @@ useEffect(() => {
   const [showTutorModal, setShowTutorModal] = useState(false);
 
   // The default viewMode is "adaptive"
-  const [viewMode, setViewMode] = useState("home");
+  const [viewMode, setViewMode] = useState("overview");
 
   // -------------------------- 4) Fetch Categories Immediately --------------------------
   useEffect(() => {

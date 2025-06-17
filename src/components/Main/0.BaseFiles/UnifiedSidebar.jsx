@@ -97,26 +97,38 @@ function UnifiedSidebar({
 
       {/* Mode toggle buttons stacked vertically */}
       <div style={modeToggleContainerStyle}>
+
+
+          <button
+           style={toggleButtonStyle(viewMode === "overview")}
+           onClick={() => switchMode("overview")}
+           title="Home"
+         >
+           {collapsed ? "🏠" : <>🏠 Home</>}
+         </button>
         
 
         {/* Home */}
         <button
           style={toggleButtonStyle(viewMode === "home")}
           onClick={() => switchMode("home")}
-          title="Home"
+          title="Study Plans"
         >
-          {collapsed ? "📚" : <>📚 Plans</>}
+          {collapsed ? "📚" : <>📚 Study Plans</>}
         </button>
+
+
+        <button
+  style={toggleButtonStyle(viewMode === "newHome2")}
+  onClick={() => switchMode("newHome2")}
+  title="Study Tools"
+>
+  {collapsed ? "🧰" : <>🧰 Study Tools</>}
+</button>
 
     
 
-        <button
-           style={toggleButtonStyle(viewMode === "overview")}
-           onClick={() => switchMode("overview")}
-           title="Overview"
-         >
-           {collapsed ? "🏠" : <>🏠 Overview</>}
-         </button>
+      
 
       
 
@@ -128,26 +140,20 @@ function UnifiedSidebar({
           onClick={() => switchMode("profile")}
           title="Profile"
         >
-          {collapsed ? "👤" : <>👤 Profile</>}
+          {collapsed ? "🧑‍💻" : <>🧑‍💻 Profile</>}
         </button>
 
              {/* Admin — show a wrench icon when collapsed */}
-                  {isAdmin && (
+                 
         <>
           
 
           
 
           
-<button
-  style={toggleButtonStyle(viewMode === "newHome2")}
-  onClick={() => switchMode("newHome2")}
-  title="NewHome2"
->
-  {collapsed ? "📡" : <>📡 NewHome</>}
-</button>
 
 
+{isAdmin && (
           <button
             style={toggleButtonStyle(viewMode === "admin")}
             onClick={() => switchMode("admin")}
@@ -156,35 +162,35 @@ function UnifiedSidebar({
             {collapsed ? "🛠️" : <>🛠️ Admin</>}
           </button>
 
-         
+         )} 
 
                  {/* Overview  (only visible to admins) */}
        {isAdmin && (
          <button
            style={toggleButtonStyle(viewMode === "overview")}
            onClick={() => switchMode("overview")}
-           title="Overview"
+           title="Home"
          >
-           {collapsed ? "🏠" : <>🏠 Overview</>}
+           {collapsed ? "🏠" : <>🏠 Home</>}
          </button>
        )}
 
 
-{isAdmin && (
+
         <button
             style={toggleButtonStyle(viewMode === "newHome")}
             onClick={() => switchMode("newHome")}
-            title="Roadmap"
+            title="Concept Graph"
           >
-{collapsed ? "📍" : <>📍 Roadmap</>}
+{collapsed ? "🌐" : <>🌐 Concept Graph</>}
           </button>
 
-)}
+
 
 
 
         </>
-      )}
+     
       </div>
 
       {/* 

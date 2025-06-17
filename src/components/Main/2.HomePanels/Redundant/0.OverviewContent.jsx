@@ -5,7 +5,7 @@ import {
   uploadBytesResumable,
   getDownloadURL,
 } from "firebase/storage";
-import { storage, auth } from "../../../firebase";
+import { storage, auth } from "../../../../firebase";
 
 const backendURL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
 

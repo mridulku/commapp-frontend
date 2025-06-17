@@ -20,6 +20,7 @@ const ADMIN_UIDS = [
 
 
 
+
 // ADD THIS IMPORT if you haven't already:
 import axios from "axios";
 
@@ -41,12 +42,16 @@ import ToursManager from "./ToursManager";
 import BookProgress from "../../zArchive/2.2Library/BookProgress";
 import SubchapterContent from "../../zArchive/4.Subchapter Content/0.SubchapterContent";
 import UserProfileAnalytics from "../4.Profile/UserProfileAnalytics";
-import PanelC from "../2.HomePanels/4.PanelC";
-import ProfilePanel from "../2.HomePanels/ProfilePanel";
-import PanelAdaptiveProcess from "../2.HomePanels/PanelAdaptiveProcess";
-import TOEFLAdaptiveProcess from "../2.HomePanels/TOEFLAdaptiveProcess";
-import PanelE from "../2.HomePanels/PanelE";
+import PanelC from "../2.HomePanels/blocks/4.PanelC";
+import ProfilePanel from "../2.HomePanels/blocks/ProfilePanel";
+import PanelAdaptiveProcess from "../2.HomePanels/Redundant/PanelAdaptiveProcess";
+import TOEFLAdaptiveProcess from "../2.HomePanels/Redundant/TOEFLAdaptiveProcess";
+import PanelE from "../2.HomePanels/Redundant/PanelE";
 import StatsPanel from "../2.HomePanels/TopStatsPanel";
+
+import HomeHub from "../2.HomePanels/HomeHub";
+
+
 import BookSummary from "../../zArchive/2.2Library/BookSummary";
 import LibraryHome from "../../zArchive/2.2Library/LibraryHome";
 import AdaptiveHome from "../../zArchive/2.3Adaptive/AdaptiveHome";
@@ -81,6 +86,17 @@ function Dashboard() {
     fetchAllData,
   } = useBooksViewer();
 
+  /* 2️⃣  NOW define the helper so it can "see" setViewMode */
+const hubNavigate = (dest) => {
+  switch (dest) {
+    case "home":         setViewMode("home");         break;   // Active Plans
+    case "tools":        setViewMode("newHome2");      break;   // Tools
+    case "profile":      setViewMode("profile");      break;   // Profile
+    case "conceptGraph": setViewMode("newHome"); break;   // Concept graph
+    default:             setViewMode("overview");
+  }
+};
+
   const isAdmin = ADMIN_UIDS.includes(userId);
 
     /* ------------------------------------------------------------------ */
@@ -89,7 +105,7 @@ function Dashboard() {
   const examType = useSelector((state) => state.exam.examType);
 
     /* 0️⃣ choose mode: hard-code, get from feature flag, or derive from examType */
-const onboardingType = "plan";   // "plan" | "pain" | "toolkit"
+const onboardingType = "pain";   // "plan" | "pain" 
 
   // 1) Controls whether onboarding is shown
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
@@ -369,36 +385,14 @@ if (onboardingType === "plan" && showOnboardingModal) {
   // Decide main content based on viewMode
   let mainContent;
   if (viewMode === "overview") {
-    mainContent = (
-      <>
-        <StatsPanel userId={userId} />
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "20px",
-          }}
-        >
-          <PanelC
-            db = {db}
-            userId={userId}
-            onOpenOnboarding={() => setShowOnboardingModal(true)}
-            onSeeAllCourses={() => setViewMode("home")}
-          />
-          <ProfilePanel
-            userId={userId}
-          />
-          {/* 
-  {examType === "TOEFL" || examType === "RELUX" ? (
-    <TOEFLAdaptiveProcess />
-  ) : (
-    <PanelAdaptiveProcess />
-  )}
-*/}
-        </div>
-      </>
-    );
-  } else if (viewMode === "profile") {
+  mainContent = (
+    <HomeHub
+  userId={userId}
+  onOpenOnboarding={() => setShowOnboardingModal(true)}
+ onNavigate={hubNavigate}   // ← now actually flips viewMode
+/>
+  );
+} else if (viewMode === "profile") {
     mainContent = <UserProfileAnalytics />;
   } else if (viewMode === "library") {
     if (!selectedBook) {
