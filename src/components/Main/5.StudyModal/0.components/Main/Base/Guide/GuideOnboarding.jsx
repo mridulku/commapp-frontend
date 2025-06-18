@@ -83,7 +83,7 @@ export default function GuideOnboarding({
   const [loadingBook, setLB]    = useState(false);
 
   const [planDoc,  setPlanDoc]  = useState(null);    // ← new
-
+const [generatedId, setGeneratedId] = useState(null);   // NEW
   
 
   useEffect(() => {
@@ -245,12 +245,14 @@ useEffect(() => {
       const { data } = await axios.post(PLAN_ENDPOINT, buildBody(), {
         headers: { "Content-Type": "application/json" },
       });
-      setPlanDoc(data?.planDoc || null);             // ← save it
+        setPlanDoc(data?.planDoc || null);
+  setGeneratedId(
+    data?.planId ||                  // backend usually returns this
+    data?.planDocId ||               // fallback names we’ve seen
+    data?.planDoc?.id || null
+  );
       setSuccess(true);
-      if (data?.planDoc?.planId) {
-  onPlanCreated(data.planDoc.planId);   // <<< STEP 6
-}
-
+      
 
          /* ★★★  mark the learner as onboarded  ★★★ */
    {
@@ -548,17 +550,30 @@ useEffect(() => {
   }
 
   /* 2️⃣  Normal wizard once everything is ready ---------------- */
-  if (success) {
-    return (
-      <SuccessPlanCreation
-        planDoc={planDoc}
-          onClose={() => {
-    setSuccess(false);
-    if (typeof onClose === "function") onClose();  // invoke only if supplied
-  }}
-      />
-    );
-  }
+  /* ─────────────────────────────────────────────────────────────
+   FINAL STEP  – show “plan ready” slide
+──────────────────────────────────────────────────────────── */
+if (success) {
+  return (
+    <SuccessPlanCreation
+      planDoc={planDoc}
+      planId={generatedId}          // NEW
+
+      /* 1️⃣  let the user close the wizard via the “×” */
+      onClose={() => {
+        setSuccess(false);          // hide SuccessPlanCreation
+        if (typeof onClose === "function") onClose();   // bubble to parent
+      }}
+
+      /* 2️⃣  when the learner clicks  ➜  Start learning */
+      onStart={(newId) => {
+        console.log("[GuideOnboarding] onStart got", newId);
+        if (typeof onPlanCreated === "function") onPlanCreated(newId);  // pass id up
+        setSuccess(false);          // ensure wizard closes
+      }}
+    />
+  );
+}
 
    return (
     <Box

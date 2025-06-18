@@ -90,7 +90,12 @@ function groupSubjGrp(chapters = []) {
 /* ════════════════════════════════════════════════════════════════════════
    MAIN COMPONENT
 ════════════════════════════════════════════════════════════════════════ */
-export default function SuccessPlanCreation({ planDoc = MOCK_PLAN, onClose = () => {} }) {
+export default function SuccessPlanCreation({
+  planDoc = MOCK_PLAN,
+  planId,  
+  onClose = () => {},
+  onStart = () => {},          // ① new prop
+}) {
   /* ── de-structure props with safe defaults ── */
   const {
     level               = "–",
@@ -104,41 +109,35 @@ export default function SuccessPlanCreation({ planDoc = MOCK_PLAN, onClose = () 
   /* ── redux handles ── */
   const dispatch     = useDispatch();
   const userId       = useSelector((s) => s.auth?.userId);
-  const planId       = useSelector((s) => s.plan?.planDoc?.id);
   const currentIndex = useSelector((s) => s.plan?.currentIndex);
 
   /* ── advance to next activity (without re-loading the new plan) ── */
-  async function handleStart() {
-    const oldIndex = currentIndex;
-    try {
-      await axios.post(
-        `${import.meta.env.VITE_BACKEND_URL}/api/markActivityCompletion`,
-        {
-          userId,
-          planId,
-          activityId: "GUIDE_CAROUSEL_ID", // placeholder — replace with real ID if you track this slide
-          completionStatus: "complete",
-        }
-      );
+async function handleStart() {
+  /* 0 — log for sanity */
+  console.log("[SuccessPlanCreation] CTA clicked", { planDoc, planId });
 
-      /* ------------------------------------------------------------------
-       *  ⚠️  IMPORTANT  ⚠️
-       *  We **do not** dispatch fetchPlan() here any more.
-       *  That call was pushing the newly-created plan into the global
-       *  plan slice while the study modal is still mounted, which made the
-       *  player auto-start.  All we really want is to finish the wizard
-       *  and let the parent decide what to do next.
-       * ------------------------------------------------------------------ */
-
-      dispatch(setCurrentIndex(oldIndex + 1));  // advance local guide index
-    } catch (err) {
-      console.error("Error finishing carousel guide:", err);
-      dispatch(setCurrentIndex(oldIndex + 1));
-    }
-
-    /* optional callback supplied by parent */
-    typeof onClose === "function" && onClose();
+  /* 1 — we don’t really care if this call fails in demo mode       */
+  try {
+    await axios.post(
+      `${import.meta.env.VITE_BACKEND_URL}/api/markActivityCompletion`,
+      {
+        userId,
+        planId,                      // <-- send the real id we received
+        activityId: "GUIDE_CAROUSEL",
+        completionStatus: "complete",
+      }
+    );
+  } catch (err) {
+    console.warn(
+      "[SuccessPlanCreation] markActivityCompletion failed → proceeding anyway ",
+      err
+    );
   }
+
+  /* 2 — bubble the id up, then close */
+  onStart(planId);
+  onClose();
+}
 
   const subjGrp = groupSubjGrp(selectedChapters);
 
