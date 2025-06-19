@@ -1,71 +1,308 @@
 // ────────────────────────────────────────────────────────────────
-// File: src/components/HomeHub.jsx        (v6 – proper row spacing)
+//  File: src/components/HomeHub.jsx          (2025-06-19 demo build)
+//  ▸ Metrics strip
+//  ▸ Your Study Plans row
+//  ▸ NEW  Mini-Tools carousel with category tabs
+//  ▸ Profile + Concept Graph
+//  ▸ GuideOnboarding / PlanPlayer dialogs
 // ────────────────────────────────────────────────────────────────
-import React, { useEffect, useState } from "react";
-import { useSelector } from "react-redux";
-import axios from "axios";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import {
   Box, Grid, Card, Typography, Button, Avatar, Stack,
-  LinearProgress, Dialog, DialogContent
+  LinearProgress, Dialog, DialogContent, IconButton, Chip, Tabs, Tab,  Tooltip 
 } from "@mui/material";
+import { motion } from "framer-motion";
+import axios      from "axios";
 
-import { useDispatch } from "react-redux";
-import { setExamType } from "../../../store/examSlice";   // ⚠️ adjust path
-import { setAuth }     from "../../../store/authSlice";   /* NEW */
+/* icons */
+import AccessTimeIcon   from "@mui/icons-material/AccessTime";
+import FlagIcon         from "@mui/icons-material/Flag";
+import TimelapseIcon    from "@mui/icons-material/Timelapse";
+import WhatshotIcon     from "@mui/icons-material/Whatshot";
+import MenuBookIcon     from "@mui/icons-material/AutoStories";
+import BoltIcon         from "@mui/icons-material/FlashOn";
+import PersonIcon       from "@mui/icons-material/Person";
+import CalendarIcon     from "@mui/icons-material/CalendarMonth";
+import PublicIcon       from "@mui/icons-material/Public";
+import ArrowBackIos     from "@mui/icons-material/ArrowBackIos";
+import ArrowForwardIos  from "@mui/icons-material/ArrowForwardIos";
 
+/* redux */
+import { useDispatch, useSelector } from "react-redux";
+import { setExamType } from "../../../store/examSlice";
+import { setAuth }     from "../../../store/authSlice";
 
-import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import FlagIcon       from "@mui/icons-material/Flag";
-import TimelapseIcon  from "@mui/icons-material/Timelapse";
-import WhatshotIcon   from "@mui/icons-material/Whatshot";
-import MenuBookIcon   from "@mui/icons-material/AutoStories";
-import EditIcon       from "@mui/icons-material/Edit";
-import BoltIcon       from "@mui/icons-material/FlashOn";
-import PublicIcon     from "@mui/icons-material/Public";
-import PersonIcon     from "@mui/icons-material/Person";
-import CalendarIcon   from "@mui/icons-material/CalendarMonth";
-import { motion }     from "framer-motion";
+/* study-plan wizard & player */
+import GuideOnboarding from "../5.StudyModal/0.components/Main/Base/Guide/GuideOnboarding";
+import PlanFetcher     from "../5.StudyModal/StudyModal";
 
-/* ⚠  adjust these two import paths for your project */
-import GuideOnboarding from "../5.StudyModal/0.components/Main/Base/Guide/GuideOnboarding"; // ⚠
-import PlanFetcher     from "../5.StudyModal/StudyModal";                                    // ⚠
+/* tools master list (used on the dedicated Tools page) */
+import { toolCatalog } from "../8.NewHome2/toolCatalog";   // ⚠ adjust path
 
-/* ─────────────────── palette / helpers ─────────────────── */
+/* ─── shared design tokens ───────────────────────────────────── */
 const GRAD = [
   ["#f87171", "#fca5a5"], ["#ec4899", "#f9a8d4"], ["#818cf8", "#d8b4fe"],
   ["#6366f1", "#a5b4fc"], ["#3b82f6", "#6ee7b7"], ["#f59e0b", "#fde68a"],
 ];
-const grad = ([a, b]) => `linear-gradient(135deg,${a} 0%,${b} 100%)`;
-
+const grad = ([a,b]) => `linear-gradient(135deg,${a} 0%,${b} 100%)`;
 const PAGE_BG = "radial-gradient(circle at 35% 0%, #181924 0%, #0e0f15 100%)";
 const GLASS   = "rgba(255,255,255,.06)";
-const CardSX  = {
-  borderRadius: 4, p: 3, bgcolor: GLASS,
-  backdropFilter: "blur(6px)",
-  boxShadow: "0 8px 24px rgba(0,0,0,.55)",
-  color: "#f0f0f0",
-};
+const CardSX  = { borderRadius:4, p:3, bgcolor:GLASS,
+                  backdropFilter:"blur(6px)",
+                  boxShadow:"0 8px 24px rgba(0,0,0,.55)", color:"#f0f0f0" };
 const MotionCard = motion(Card);
-const lift = { whileHover: { y: -4, boxShadow: "0 12px 28px rgba(0,0,0,.85)" } };
+const lift = { whileHover:{ y:-4, boxShadow:"0 12px 28px rgba(0,0,0,.85)" } };
 
+/* colour chips for categories */
+const stageColors = {
+  Plan:"#f87171", Learn:"#3b82f6", Diagnose:"#818cf8",
+  Test:"#6366f1", Sprint:"#ec4899",
+};
+
+/* canonical tab order + emoji */
+const ORDER     = ["Plan","Learn","Diagnose","Test","Sprint"];
+const TAB_EMOJI = { Plan:"🗺️", Learn:"📖", Diagnose:"🔍", Test:"📝", Sprint:"⚡",
+                    Recent:"🕑", All:"🔢" };
+
+/* ═════════════════════════  Mini-Tools carousel  ═══════════════════════ */
+
+/* ═════════════════════════  Mini-Tools carousel  ══════════════════════ */
+/* ═════════════════════════  Mini-Tools carousel  ═════════════════════ */
+function ToolsStrip({ onOpenTool }) {
+  /* —— tab list —— */
+  const extraCats = Array.from(
+    new Set(toolCatalog.flatMap(t => t.categories)
+                       .filter(c => !ORDER.includes(c)))
+  ).sort();
+  const tabs = [...ORDER, ...extraCats, "All"];
+  const [tab, setTab] = useState(0);
+
+  /* —— filter —— */
+  const cat = tabs[tab];
+  const filtered =
+    cat === "All"
+      ? toolCatalog
+      : toolCatalog.filter(t => t.categories.includes(cat));
+
+  /* —— rail scroll —— */
+  const rail = useRef(null);
+  const scrollBy = dir =>
+    rail.current?.scrollBy({ left: dir * 320, behavior: "smooth" });
+
+  /* —— helper to order stage chips —— */
+  const sortCats = cats =>
+    [...cats].sort((a, b) => {
+      const ai = ORDER.indexOf(a);
+      const bi = ORDER.indexOf(b);
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    });
+
+  /* —— mini card —— */
+  const ToolCardMini = ({ tool }) => {
+    const cats = sortCats(tool.categories);
+    const shown = cats.slice(0, 3);
+    const overflow = cats.length - shown.length;
+
+    return (
+      <MotionCard
+        {...lift}
+        onClick={() => onOpenTool(tool)}
+        sx={{
+          width: 300,
+          flex: "0 0 auto",
+          mr: 3,
+          borderRadius: 4,
+          cursor: "pointer",
+          bgcolor: tool.bg ? "transparent" : GLASS,
+          backdropFilter: "blur(6px)",
+        }}
+      >
+        {/* hero bar */}
+        <Box
+          sx={{
+            height: 110,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 48,
+            background: tool.bg || GLASS,
+          }}
+        >
+          {tool.emoji}
+        </Box>
+
+        {/* body */}
+        <Box sx={{ px: 2, pt: 1.5, pb: 2 }}>
+          <Typography
+            variant="subtitle2"
+            sx={{ fontWeight: 700, color: "#fff", mb: 0.4 }}
+          >
+            {tool.title}
+          </Typography>
+
+          {!!tool.blurb && (
+            <Typography
+              variant="caption"
+              sx={{
+                color: "#ccc",
+                display: "-webkit-box",
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+                minHeight: 34, // reserve 2 lines so cards equalise
+              }}
+            >
+              {tool.blurb}
+            </Typography>
+          )}
+
+          {/* stage chips */}
+          <Stack direction="row" spacing={0.5} mt={0.8} flexWrap="wrap">
+            {shown.map(c => (
+              <Chip
+                key={c}
+                label={c}
+                size="small"
+                sx={{
+                  height: 18,
+                  bgcolor: stageColors[c] || "rgba(255,255,255,.12)",
+                  color: "#fff",
+                  fontWeight: 600,
+                }}
+              />
+            ))}
+
+            {overflow > 0 && (
+              <Tooltip title={cats.slice(3).join(", ")}>
+                <Chip
+                  label={`+${overflow} more`}
+                  size="small"
+                  sx={{
+                    height: 18,
+                    bgcolor: "rgba(255,255,255,.12)",
+                    color: "#fff",
+                    fontWeight: 600,
+                  }}
+                />
+              </Tooltip>
+            )}
+          </Stack>
+        </Box>
+      </MotionCard>
+    );
+  };
+
+  /* —— render —— */
+  return (
+    <Box sx={{ mt: 2 }}>
+      {/* tabs */}
+      <Tabs
+        value={tab}
+        onChange={(_, v) => setTab(v)}
+        variant="scrollable"
+        scrollButtons="auto"
+        allowScrollButtonsMobile
+        sx={{
+          mb: 2,
+          ".MuiTab-root": { textTransform: "none", fontWeight: 700, color: "#ddd" },
+          ".Mui-selected": { color: "#4FC3F7" },
+          ".MuiTabs-indicator": { backgroundColor: "#4FC3F7" },
+        }}
+      >
+        {tabs.map(label => (
+          <Tab
+            key={label}
+            label={
+              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {TAB_EMOJI[label] || "📌"} {label}
+              </span>
+            }
+          />
+        ))}
+      </Tabs>
+
+      {/* rail + arrows */}
+      <Box sx={{ position: "relative" }}>
+        {/* left */}
+        <IconButton
+          size="small"
+          onClick={() => scrollBy(-1)}
+          sx={{
+            position: "absolute",
+            left: -28,
+            top: "50%",
+            transform: "translateY(-50%)",
+            bgcolor: "#0008",
+            backdropFilter: "blur(6px)",
+            "&:hover": { bgcolor: "#000c" },
+            zIndex: 2,
+          }}
+        >
+          <ArrowBackIos fontSize="inherit" />
+        </IconButton>
+
+        {/* rail */}
+        <Box
+          ref={rail}
+          sx={{
+            display: "flex",
+            overflowX: "auto",
+            pr: 1,
+            pb: 1,
+            scrollBehavior: "smooth",
+            "&::-webkit-scrollbar": { display: "none" },
+          }}
+        >
+          {filtered.map(t => (
+            <ToolCardMini key={t.id} tool={t} />
+          ))}
+        </Box>
+
+        {/* right */}
+        <IconButton
+          size="small"
+          onClick={() => scrollBy(1)}
+          sx={{
+            position: "absolute",
+            right: -28,
+            top: "50%",
+            transform: "translateY(-50%)",
+            bgcolor: "#0008",
+            backdropFilter: "blur(6px)",
+            "&:hover": { bgcolor: "#000c" },
+            zIndex: 2,
+          }}
+        >
+          <ArrowForwardIos fontSize="inherit" />
+        </IconButton>
+      </Box>
+    </Box>
+  );
+}
+/* ═════════════════════════════════════════════════════════════ */
+
+
+/* ══════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════ */
+
+/*  Stats data & small helpers … (unchanged) */
 const stats = [
   { icon: <AccessTimeIcon/>, label: "Time Today",     val: "0 m",   g: GRAD[0] },
   { icon: <FlagIcon/>,       label: "Today's Target", val: "0 %",   g: GRAD[1] },
   { icon: <TimelapseIcon/>,  label: "Total Studied",  val: "0 h",   g: GRAD[2] },
   { icon: <WhatshotIcon/>,   label: "Current Streak", val: "1 day", g: GRAD[3] },
 ];
-const tools = [
-  { id: "planner", icon: <EditIcon/>,  lab: "Study Planner", sub: "Auto schedules", g: GRAD[0] },
-  { id: "revise",  icon: <BoltIcon/>,  lab: "Quick Revise",  sub: "10-min flashes", g: GRAD[4] },
-  { id: "concept", icon: <PublicIcon/>,lab: "Concept Map",   sub: "Topic network",  g: GRAD[5] },
-  { id: "dummy",   icon: <BoltIcon/>,  lab: "Extra Slot",    sub: "Coming soon",    g: GRAD[2] },
-];
-const fmtDate = d =>
-  d?.toLocaleDateString(undefined,{ year:"numeric", month:"short", day:"numeric" });
 
-/* ─────────────────────────────────────────────────────────── */
-export default function HomeHub({ userId, onNavigate = () => {} }) {
-  const examType = useSelector(s => s.exam.examType);
+const fmtDate = d => d?.toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"});
+
+/* ────────────────────────────────────────────────────────────
+                MAIN COMPONENT
+──────────────────────────────────────────────────────────── */
+export default function HomeHub({ userId, onNavigate = ()=>{} }) {
+
+
+   const examType = useSelector(s => s.exam.examType);
 
   /* profile -------------------------------------------------- */
   const [profile, setProfile] = useState({ email: "demo@user.com", joined: null });
@@ -170,20 +407,28 @@ const handlePlanCreated = (newId) => {
   setShowOnboard(false);
 };
 
+/* helper: jump to the MaterialsDashboard and (optionally) pre-select a plan */
+const goToPlans = (planId = null) => {
+  // for backward-compat leave the 1-arg signature untouched
+  //        page --------v          extra payload ----v
+  if (typeof onNavigate === "function") onNavigate("home", { planId });
+};
+
+
   /* helper goes just above the return or with the other handlers */
 const openWizard = () => {
   if (!examType) dispatch(setExamType("NEET")); // <- default for demo
   setShowOnboard(true);                         // open the dialog
 };
 
-  /* ─────────────────────────── render */
+
   return (
     <Box sx={{
-      minHeight: "100vh", background: PAGE_BG,
-      p: { xs: 3, md: 5 }, fontFamily: "Inter, sans-serif", color: "#f0f0f0"
+      minHeight:"100vh", background:PAGE_BG, color:"#f0f0f0",
+      p:{ xs:3, md:5 }, fontFamily:"Inter, sans-serif"
     }}>
 
-      {/* ── metrics strip ─────────────────────── */}
+       {/* ── metrics strip ─────────────────────── */}
       <Grid container spacing={2}>
         {stats.map((s, i) => (
           <Grid key={i} item xs={6} md={3}>
@@ -210,9 +455,9 @@ const openWizard = () => {
           <MotionCard {...lift} sx={CardSX}>
             <Header
               icon={<MenuBookIcon/>}
-              text={`Active Plans (${plans.length})`}
+              text={`Your Study Plans (${plans.length})`}
               action={plans.length > 0 ? "See All" : null}
-              onAction={() => onNavigate("home")}
+      onAction={() => goToPlans()}        
             />
 
             {loading && <Typography variant="body2">Loading plans…</Typography>}
@@ -246,7 +491,8 @@ const openWizard = () => {
                   <Grid key={p.id} item xs={12} sm={6} md={3}>
                     <MotionCard {...lift}
                       sx={{ ...CardSX, background: grad(GRAD[(i + 2) % GRAD.length]),
-                            textAlign: "center" }}>
+                            textAlign: "center", cursor:"pointer" }}
+                            onClick={() => goToPlans(p.id)} >
                       <Avatar sx={{ bgcolor: "rgba(255,255,255,.20)",
                                     width: 56, height: 56, mx: "auto" }}>
                         <MenuBookIcon/>
@@ -266,51 +512,25 @@ const openWizard = () => {
           </MotionCard>
         </Grid>
 
-        {/* Row 2 — Recommended Tools  (full-width) */}
+        {/* Row 2 — Study Tools  (NEW carousel) */}
         <Grid item xs={12}>
           <MotionCard {...lift} sx={CardSX}>
             <Header
               icon={<BoltIcon/>}
-              text="Recommended Tools"
+              text="Study Tools"
               action="See All"
-              onAction={() => onNavigate("tools")}
+              onAction={()=>onNavigate("tools")}
             />
 
-            <Grid container spacing={2}>
-              {tools.map(t => (
-                <Grid key={t.id} item xs={12} sm={6} md={3}>
-                  <MotionCard {...lift}
-                    sx={{ ...CardSX, background: grad(t.g),
-                          height: 140, display: "flex", flexDirection: "column",
-                          justifyContent: "center", px: 2 }}>
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <Avatar sx={{
-                        bgcolor: "rgba(255,255,255,.20)", width: 48, height: 48
-                      }}>
-                        {t.icon}
-                      </Avatar>
-                      <Box sx={{ flexGrow: 1 }}>
-                        <Typography sx={{ fontWeight: 700 }}>{t.lab}</Typography>
-                        <Typography variant="caption">{t.sub}</Typography>
-                      </Box>
-                      <Button
-                        size="small" variant="contained"
-                        sx={{ bgcolor: "#fff", color: "#000", fontWeight: 700 }}
-                      >
-                        OPEN
-                      </Button>
-                    </Stack>
-                  </MotionCard>
-                </Grid>
-              ))}
-            </Grid>
+            {/* NEW reusable strip */}
+            <ToolsStrip onOpenTool={()=>onNavigate("tools")} />
           </MotionCard>
         </Grid>
 
         {/* Row 3 — Profile | Concept Graph  (two-column) */}
         <Grid item xs={12} md={6}>
           <MotionCard {...lift} sx={CardSX}>
-            <Header icon={<PersonIcon/>} text="Profile"
+            <Header icon={<PersonIcon/>} text="My Profile"
                     action="See All Details" onAction={() => onNavigate("profile")} />
             <Stack direction="row" spacing={2} alignItems="center">
               <Avatar sx={{
@@ -390,6 +610,7 @@ const openWizard = () => {
   );
 }
 
+
 /* ───── small helpers ───── */
 function Header({ icon, text, action, onAction }) {
   return (
@@ -424,3 +645,6 @@ function MiniStat({ title, value, grad: g }) {
     </Box>
   );
 }
+
+
+

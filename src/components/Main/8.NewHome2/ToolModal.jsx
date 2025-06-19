@@ -89,7 +89,7 @@ export default function ToolModal({ open, onClose, tool }) {
           >
             <Stack spacing={2}>
               <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                {tool.description}
+                {tool.description ?? tool.blurb}
               </Typography>
 
               <Box>

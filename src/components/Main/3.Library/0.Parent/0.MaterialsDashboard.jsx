@@ -5,6 +5,8 @@ import React, { useEffect, useState } from "react";
 import { useSelector, useDispatch }   from "react-redux";
 import DashboardHeader     from "./DashboardHeader";
 
+import { useLocation } from "react-router-dom";   // NEW
+
 import usePlans            from "./usePlans";
 import PlanDropdown        from "./PlanDropdown";
 
@@ -107,6 +109,16 @@ export default function MaterialsDashboard({
     setSelected: setSelectedPlanId,
     loading: loadingPlans,
   } = usePlans({ userId, bookId });
+
+   /* ---------- NEW: pre-select plan coming from HomeHub ---------- */
+const location = useLocation();
+useEffect(() => {
+  const incoming = location.state?.planId;
+  if (incoming && planIds.includes(incoming)) {
+    setSelectedPlanId(incoming);        // auto-select once
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [location.state?.planId, planIds.length]);
 
   /* ---------- subject list for header chips ---------- */
   const [subjects, setSubjects] = useState([]);

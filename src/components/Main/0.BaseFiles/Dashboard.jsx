@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useSelector, useDispatch } from "react-redux";
 
 import { doc, getDoc } from "firebase/firestore";
@@ -163,6 +163,8 @@ const onboardingType = "pain";   // "plan" | "pain"
     overflowY: "auto",
     backgroundColor: themeColors.background,
   };
+
+  const contentRef = useRef(null);   // <—— NEW
 
     const loaderStyle = {
     position: "fixed", inset: 0, background: "#000", color: "#fff",
@@ -352,6 +354,13 @@ useEffect(() => {
       setShowOnboardingModal(false);
     }
   }, [examType, isOnboarded]);
+
+  useEffect(() => {
+  // wait one paint so the new content height is known
+  requestAnimationFrame(() => {
+    contentRef.current?.scrollTo({ top: 0, behavior: "instant" });
+  });
+}, [viewMode]);
 
    // 🔒 1. Pause *all* dashboard data-fetching while onboarding modal is shown
 if (onboardingType === "plan" && showOnboardingModal) {
@@ -577,8 +586,13 @@ if (onboardingType === "plan" && showOnboardingModal) {
           onOpenPlayer={handleOpenPlayer}
         />
 
-        <div style={mainContentStyle}>{mainContent}</div>
+       <div ref={contentRef} style={mainContentStyle}>{mainContent}</div>
       </div>
+
+
+
+
+
 {/*
       <button
         style={floatTourButtonStyle}

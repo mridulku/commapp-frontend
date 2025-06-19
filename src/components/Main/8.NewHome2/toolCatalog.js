@@ -19,12 +19,20 @@ const grad = (a, b) => `linear-gradient(135deg,${a} 0%,${b} 100%)`;
    1.  PLANNING
    ──────────────────────────────────────────────────────── */
 export const toolCatalog = [
+   {
+    id:        "e2e_planner",               // ⚠ must stay unique
+    title:     "End-to-End Planner",
+    emoji:     "🗺️",                        // big map-pin
+    bg:        "linear-gradient(135deg,#f87171,#fca5a5)",
+    categories:["Plan","Learn","Diagnose","Test","Sprint","Reinforce"],
+    blurb:     "Auto-builds a day-by-day roadmap across all stages."
+  },
   {
     id: "plan-wizard",
     emoji: "🗺️",
     title: "Plan Wizard",
     categories: [Stage.Plan],
-    description:
+    blurb:
       "3-step wizard: pick topics ► set start level ► time budget ► auto-schedule.",
     conceptUse:
       "Scans the concept graph for each chosen chapter to pull prerequisite chains and difficulty weights.",
@@ -40,7 +48,7 @@ export const toolCatalog = [
     title: "Auto-Gantt Planner",
     categories: [Stage.Plan],
     tags: ["Analytics"],
-    description:
+    blurb:
       "Backward Gantt with buffer days and a red-zone sprint inserted automatically.",
     conceptUse:
       "Uses critical-path lengths inside the concept graph to decide where buffers must live.",
@@ -55,7 +63,7 @@ export const toolCatalog = [
     emoji: "🎯",
     title: "Study-Scope Picker",
     categories: [Stage.Plan],
-    description:
+    blurb:
       "Fetches official syllabus + past-paper weightings so you can tick exactly what matters.",
     conceptUse:
       "Queries concepts tagged with ‘high-yield’ frequencies and syllabus flags.",
@@ -70,7 +78,7 @@ export const toolCatalog = [
     emoji: "⏱️",
     title: "Time-Budget Simulator",
     categories: [Stage.Plan],
-    description:
+    blurb:
       "Drag a daily-minutes slider and preview how long the plan will stretch.",
     conceptUse:
       "Sums estimated minutes for all concepts still ‘unmastered’.",
@@ -89,7 +97,7 @@ export const toolCatalog = [
     emoji: "🧭",
     title: "Concept Explorer",
     categories: [Stage.Learn],
-    description:
+    blurb:
       "Interactive graph of chapter ► sub-chapter ► concept with breadcrumb trail.",
     conceptUse:
       "Streams the neighbourhood nodes and edge types (prereq, example-of, etc.).",
@@ -104,7 +112,7 @@ export const toolCatalog = [
     emoji: "🤖",
     title: "Smart Chat",
     categories: [Stage.Learn],
-    description:
+    blurb:
       "Context-aware doubt solver that pulls your notes + past mistakes into the prompt.",
     conceptUse:
       "Runs semantic search over concept summaries & my own note snippets.",
@@ -119,7 +127,7 @@ export const toolCatalog = [
     emoji: "👶",
     title: "Explain-Like-I’m-5",
     categories: [Stage.Learn],
-    description:
+    blurb:
       "Toggle any paragraph between L5 / L10 / L15 depth for progressive reveal.",
     conceptUse:
       "Selects abstraction layers stored on each concept node.",
@@ -138,7 +146,7 @@ export const toolCatalog = [
     emoji: "⚡",
     title: "5-min Lightning Quiz",
     categories: [Stage.Diagnose],
-    description:
+    blurb:
       "Ten adaptive MCQs that map weak sub-chapters in under five minutes.",
     conceptUse:
       "Selects one representative item per high-weight concept.",
@@ -153,7 +161,7 @@ export const toolCatalog = [
     emoji: "📶",
     title: "Confidence Ranker",
     categories: [Stage.Diagnose],
-    description:
+    blurb:
       "Swipe left / right on concept cards to self-label comfort level—feeds planner.",
     conceptUse:
       "Streams concept titles & short definitions onto cards.",
@@ -172,7 +180,7 @@ export const toolCatalog = [
     emoji: "🔍",
     title: "Auto-Cloze Builder",
     categories: [Stage.Reinforce],
-    description:
+    blurb:
       "Paste notes ➜ converts to spaced-repetition cloze cards automatically.",
     conceptUse:
       "Detects key nouns and links them to concept IDs for tagging.",
@@ -187,7 +195,7 @@ export const toolCatalog = [
     emoji: "🏰",
     title: "Memory-Palace Mapper",
     categories: [Stage.Reinforce],
-    description:
+    blurb:
       "Assigns each concept to a 3-D room in a VR house to aid vivid recall.",
     conceptUse:
       "Groups sibling concepts into spatial clusters.",
@@ -202,7 +210,7 @@ export const toolCatalog = [
     emoji: "🚀",
     title: "Rapid-Fire Drill",
     categories: [Stage.Reinforce],
-    description:
+    blurb:
       "One-question-per-second stream that penalises hesitation—builds reflexes.",
     conceptUse:
       "Pings micro-facts linked to high-weight concepts.",
@@ -221,7 +229,7 @@ export const toolCatalog = [
     emoji: "🧪",
     title: "Mock-to-Drill",
     categories: [Stage.Test],
-    description:
+    blurb:
       "Turn any past paper into a targeted drill list grouped by concept difficulty.",
     conceptUse:
       "Auto-tags every question with concept IDs and Bloom level.",
@@ -237,7 +245,7 @@ export const toolCatalog = [
     title: "Past-Paper Surface",
     categories: [Stage.Test],
     tags: ["Analytics"],
-    description:
+    blurb:
       "Pie-charts of question types & topics across years—spot hot zones instantly.",
     conceptUse:
       "Aggregates concept frequency by year and difficulty.",
@@ -252,7 +260,7 @@ export const toolCatalog = [
     emoji: "🎯",
     title: "Adaptive Mock",
     categories: [Stage.Test],
-    description:
+    blurb:
       "Difficulty climbs every two correct answers; live percentile at the end.",
     conceptUse:
       "Pulls items by concept & calibrated difficulty logits.",
@@ -271,7 +279,7 @@ export const toolCatalog = [
     emoji: "🏁",
     title: "Red-Zone Sprint",
     categories: [Stage.Sprint],
-    description:
+    blurb:
       "14-day finishing plan mixing hardest questions with speed drills.",
     conceptUse:
       "Ranks yet-unmastered high-weight concepts and packs them front-loaded.",
@@ -286,7 +294,7 @@ export const toolCatalog = [
     emoji: "⏩",
     title: "Full-Paper Speed Run",
     categories: [Stage.Sprint],
-    description:
+    blurb:
       "Timed, non-pausable paper to train pacing; heat-map shows time spent per Q.",
     conceptUse:
       "Logs concept per question to correlate with over-time spots.",
@@ -306,7 +314,7 @@ export const toolCatalog = [
     title: "TOEFL Speaking Timer",
     categories: [Stage.Test],
     tags: ["TOEFL"],
-    description:
+    blurb:
       "Simulates the official prompt, records audio & highlights filler words.",
     conceptUse:
       "Uses rubric concepts (coherence, fluency, vocab) to grade the transcript.",
