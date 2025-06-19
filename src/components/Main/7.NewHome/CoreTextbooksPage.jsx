@@ -95,11 +95,7 @@ export default function CoreTextbooksPage() {
             <Typography variant="h5" sx={{ fontWeight: 800 }}>
               Core Textbooks Library
             </Typography>
-            <Typography variant="body2" sx={{ opacity: 0.85 }}>
-              We’ve parsed the **official NCERT set** first. More reference books
-              (HC Verma, OP Tandon, JD Lee…) will be stitched in over the next
-              sprint so your concept-graph keeps getting richer.
-            </Typography>
+            
           </Box>
         </Stack>
       </MotionCard>

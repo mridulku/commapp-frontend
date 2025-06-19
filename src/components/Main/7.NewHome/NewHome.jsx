@@ -91,7 +91,7 @@ export default function ConceptGraphHome(){
             <Typography variant="h2" sx={{ fontWeight:800 }}>
               {TOTAL_CONCEPTS.toLocaleString()}
             </Typography>
-            <Typography sx={{ opacity:.8, mb:2 }}>Total Concepts • <b>NEET 2025</b></Typography>
+            <Typography sx={{ opacity:.8, mb:2 }}>Total Concepts • <b>NEET 2026</b></Typography>
 
             <Grid container spacing={2} justifyContent="center">
               {SUBJECTS.map(s=>(
