@@ -5,8 +5,10 @@
 import React, { useState } from "react";
 import {
   Box, Tabs, Tab, Accordion, AccordionSummary,
-  AccordionDetails, Typography, Stack
+  AccordionDetails, Typography, Chip, Stack,
+  IconButton, Avatar          // 👈 NEW
 } from "@mui/material";
+import ArrowBackIos from "@mui/icons-material/ArrowBackIos";   // 👈 NEW
 
 import ScienceIcon   from "@mui/icons-material/Science";
 import CategoryIcon  from "@mui/icons-material/Category";
@@ -163,7 +165,7 @@ function UnitRow({ idx, unitData, subject, onSelectTopic }) {
 }
 
 /* ═════════════════════════ Main page component ═════════════ */
-export default function OfficialSyllabusPage() {
+export default function OfficialSyllabusPage({ onBack = () => {} }) {
   const subjects = Object.keys(syllabus);
   const [tab, setTab] = useState(0);
   const [activeTopic, setActiveTopic] = useState(null);
@@ -179,11 +181,30 @@ export default function OfficialSyllabusPage() {
         fontFamily: "Inter, sans-serif",
       }}
     >
-      <Typography variant="h4" sx={{ fontWeight: 800, mb: 4 }}>
-        NEET&nbsp;2026 · Official&nbsp;Syllabus
-      </Typography>
+      
 
-      {/* SUBJECT TABS */}
+            {/* ── HEADER ───────────────────────────────────── */}
+      <Stack direction="row" spacing={1} alignItems="center" mb={3}>
+        <IconButton onClick={onBack} sx={{ color: "#fff" }}>
+          <ArrowBackIos />
+        </IconButton>
+        <Avatar
+         sx={{
+            width: 30,
+            height: 30,
+            bgcolor: "rgba(255,255,255,.15)",
+            mr: 1,
+          }}
+        >
+          📚
+        </Avatar>
+        <Typography variant="h4" sx={{ fontWeight: 800 }}>
+          Official&nbsp;Syllabus
+        </Typography>
+      </Stack>
+
+      {/* ── SUBJECT TABS ─────────────────────────────── */}
+
       <Tabs
         value={tab}
         onChange={(_, v) => setTab(v)}

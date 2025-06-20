@@ -4,7 +4,7 @@
 import React, { useState } from "react";
 import {
   Box, Grid, Card, Typography, Avatar, Stack, Chip, LinearProgress,
-  Dialog, DialogTitle, DialogContent, IconButton, Icon
+  Dialog, DialogTitle, DialogContent, IconButton, Icon, Slider, Divider
 } from "@mui/material";
 import LibraryBooksIcon  from "@mui/icons-material/LibraryBooks";
 import EditIcon          from "@mui/icons-material/Edit";
@@ -13,9 +13,15 @@ import ArrowForwardIos   from "@mui/icons-material/ArrowForwardIos";
 import ArrowBackIos      from "@mui/icons-material/ArrowBackIos";
 import { motion }        from "framer-motion";
 
+import TrendingUpIcon    from "@mui/icons-material/TrendingUp";   // ← NEW
+
+import { conceptCatalog } from "./conceptCatalog";
+
 import CoreTextbooksPage     from "./CoreTextbooksPage.jsx";
 import PastPapersPage        from "./PastPapersPage";
 import OfficialSyllabusPage  from "./OfficialSyllabusPage";
+
+import ConceptInsightModal from "./ConceptInsightModal";
 
 /* ═══════════ 1. Dummy data (unchanged) ═══════════ */
 const TOTAL_CONCEPTS = 3421;
@@ -37,13 +43,7 @@ const PAST_PAPER_YEARS = [...Array(15)].map((_,i)=>2024-i);
 
 const rnd=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 const DEPTH=["Basic","Intermediate","Advanced"];
-const CONCEPTS=[...Array(30)].map((_,i)=>({
-  subject: SUBJECTS[i%3].name,
-  chapter:["Optics","Mechanics","Thermo","Organic","Botany"][i%5],
-  subChap:["Refraction","Reflection","Dynamics","Isomerism","Plant Cell"][i%5],
-  name:`Concept ${i+1}`,
-  weight:rnd(2,10), depth:DEPTH[i%3], papers:rnd(0,12)
-}));
+
 
 /* ═══════════ 2. Styling tokens ═══════════ */
 const PAGE_BG  ="radial-gradient(circle at 35% 0%, #181924 0%, #0e0f15 100%)";
@@ -61,9 +61,15 @@ const chipStyle=(bg="rgba(255,255,255,.12)")=>({
 const headerAvatar={ width:30, height:30, bgcolor:"rgba(255,255,255,.15)" };
 
 /* ═══════════ 3. Main component ═══════════ */
-export default function ConceptGraphHome(){
+export default function NewHome(){
   const [openConcept,setOpenConcept]=useState(null);
   const [section,setSection]       =useState(null);   // null | "textbooks" | "papers" | "syllabus"
+
+   const [filter, setFilter] = useState({
+   subjects: [],
+   weightBuckets : [],
+   masteryBuckets: []
+ });
 
   /* --------- render sub-pages (delegated to child components) --------- */
   const renderSection = () => {
@@ -78,6 +84,108 @@ export default function ConceptGraphHome(){
         return null;
     }
   };
+
+
+const FilterBar = ({ value, onChange }) => (
+  <MotionCard {...lift} sx={{ ...cardBase, p:2, mt:2 }}>
+    {/* Subjects */}
+    <SubjectFilter
+      value={value.subjects}
+      onChange={sub =>
+        onChange(v=>({
+          ...v,
+          subjects: v.subjects.includes(sub)
+            ? v.subjects.filter(s=>s!==sub)
+            : [...v.subjects, sub]
+        }))
+      }
+    />
+
+    <Divider sx={{ my:1, opacity:.12 }} />
+
+    {/* Weight & Mastery segments */}
+    <Stack direction={{ xs:"column", sm:"row" }} spacing={1}>
+      <Segment
+        group="Weight"
+        opts={["Low","Mid","High"]}
+        active={value.weightBuckets}
+        color="#4fc3f7"
+        onChange={w =>
+          onChange(v=>({
+            ...v,
+            weightBuckets: v.weightBuckets.includes(w)
+              ? v.weightBuckets.filter(x=>x!==w)
+              : [...v.weightBuckets, w]
+          }))
+        }
+      />
+      <Segment
+        group="Mastery"
+        opts={["Low","Mid","High"]}
+        active={value.masteryBuckets}
+        color="#66bb6a"
+        onChange={m =>
+          onChange(v=>({
+            ...v,
+            masteryBuckets: v.masteryBuckets.includes(m)
+              ? v.masteryBuckets.filter(x=>x!==m)
+              : [...v.masteryBuckets, m]
+          }))
+        }
+      />
+    </Stack>
+  </MotionCard>
+);
+
+const SubjectFilter = ({ value, onChange }) => (
+  <Stack direction="row" spacing={1}>
+    {["Physics","Chemistry","Biology"].map(s=>(
+      <Chip
+        key={s}
+        label={s}
+        clickable
+        onClick={()=>onChange(s)}
+        sx={{
+          ...chipStyle(),
+          ...(value.includes(s) && { bgcolor:"#BB86FC", color:"#000" })
+        }}
+      />
+    ))}
+  </Stack>
+);
+
+const Segment = ({ group, opts, active, onChange, color }) => (
+  <Stack direction="row" spacing={1} alignItems="center">
+    <Typography variant="caption" sx={{ width:60 }}>{group}</Typography>
+    {opts.map(o=>(
+      <Chip
+        key={o}
+        label={o}
+        clickable
+        onClick={()=>onChange(o)}
+        sx={{
+          ...chipStyle(color),
+          ...(active.includes(o) && { bgcolor:"#BB86FC", color:"#000" })
+        }}
+      />
+    ))}
+  </Stack>
+);
+
+
+
+ /* helper to see if a value falls in any selected bucket */
+ const inBucket = (val, buckets, map) =>
+   !buckets.length || buckets.some(b => val >= map[b][0] && val <= map[b][1]);
+
+ const visibleConcepts = conceptCatalog
+   .filter(c => !filter.subjects.length || filter.subjects.includes(c.subject))
+   .filter(c => inBucket(c.weight , filter.weightBuckets , {Low:[0,3], Mid:[4,7], High:[8,10]}))
+   .filter(c => inBucket(c.mastery, filter.masteryBuckets, {L:[0,39], M:[40,69], H:[70,100]}));
+
+  const avgMastery =
+  visibleConcepts.reduce((sum, c) => sum + (c.mastery ?? 0), 0) /
+  (visibleConcepts.length || 1);
 
   /* --------- main dashboard --------- */
   return(
@@ -128,70 +236,60 @@ export default function ConceptGraphHome(){
           {/* explanation cards */}
           <ExplanationAccordion/>
 
+
           {/* CONCEPT GRID */}
-          <MotionCard {...lift} sx={{ ...cardBase, mt:5 }}>
-            <Header icon={<LibraryBooksIcon/>} text="Explore Concepts (sample 30)"/>
-            <Grid container spacing={4}>
-              {CONCEPTS.map(c=>(
-                <Grid item xs={12} sm={6} md={4} lg={3} key={c.name}>
-                  <MotionCard {...lift}
-                    sx={{ ...cardBase, cursor:"pointer", minHeight:220 }}
-                    onClick={()=>setOpenConcept(c)}>
-                    {/* breadcrumb */}
-                    <Typography sx={{ fontWeight:700 }}>{c.subject}</Typography>
-                    <Typography variant="body2">{c.chapter}</Typography>
-                    <Typography variant="body2" sx={{ mb:1 }}>{c.subChap}</Typography>
-                    <Typography variant="subtitle2" sx={{ mb:1, mt:-.5 }}>
-                      {c.name}
-                    </Typography>
+<MotionCard {...lift} sx={{ ...cardBase, mt: 5 }}>
+  <Header icon={<LibraryBooksIcon />} text="Explore Concept Graph" />
 
-                    {/* weight bar */}
-                    <LinearProgress variant="determinate" value={c.weight*10}
-                      sx={{ height:6, borderRadius:3, mb:.5,
-                        "& .MuiLinearProgress-bar":{ background:"#B39DDB"} }}/>
-                    <Typography variant="caption">{c.weight}/10 weight</Typography>
+  {/* ❶  stats strip */}
+  <StatsSummary total={visibleConcepts.length} avg={avgMastery} />
 
-                    {/* meta chips */}
-                    <Stack direction="row" spacing={.5} sx={{ mt:1, alignItems:"center" }}>
-                      <Chip label={c.depth} size="small" sx={chipStyle("#4fc3f7")}/>
-                      <Chip label={`${c.papers} hits`} size="small" sx={chipStyle("#ffa726")}/>
-                    </Stack>
-                  </MotionCard>
-                </Grid>
-              ))}
-            </Grid>
-          </MotionCard>
+  {/* ❷  filter bar */}
+  <FilterBar value={filter} onChange={setFilter} />
+
+  {/* ❸  the grid itself */}
+  <Grid container spacing={4} sx={{ mt: 2 }}>
+    {visibleConcepts.map((c) => (
+      <Grid item xs={12} sm={6} md={4} lg={3} key={c.id}>
+        <MotionCard
+          {...lift}
+          sx={{ ...cardBase, cursor: "pointer", p: 2, minHeight: 140 }}
+          onClick={() => setOpenConcept(c)}
+        >
+          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+            {c.name}
+          </Typography>
+          <Typography variant="caption" sx={{ opacity: 0.8 }}>
+            {c.subject} · {c.unit} · {c.chapter} · {c.subChap}
+          </Typography>
+
+          <Stack direction="row" spacing={0.5} sx={{ mt: 1 }} flexWrap="wrap">
+            <Chip
+              label={`Weight ${c.weight}/10`}
+              size="small"
+              sx={chipStyle("#4fc3f7")}
+            />
+            <Chip
+              label={`Mastery ${c.mastery ?? 0}%`}
+              size="small"
+              sx={chipStyle("#66bb6a")}
+            />
+          </Stack>
+        </MotionCard>
+      </Grid>
+    ))}
+  </Grid>
+</MotionCard>
         </>
       )}
 
-      {/* Concept detail dialog */}
-      <Dialog open={!!openConcept} onClose={()=>setOpenConcept(null)} maxWidth="sm" fullWidth>
-        {openConcept && (
-          <>
-            <DialogTitle sx={{ bgcolor:"#1a1a1a", color:"#fff" }}>
-              {openConcept.name}
-              <IconButton onClick={()=>setOpenConcept(null)}
-                sx={{ position:"absolute", right:8, top:8, color:"#fff" }}>
-                ✕
-              </IconButton>
-            </DialogTitle>
-            <DialogContent dividers sx={{ bgcolor:"#121212", color:"#eee" }}>
-              {["Subject","Chapter","Sub-chapter","Weight","Depth","Past paper hits"]
-                .map((k,i)=>(
-                  <Typography key={i} variant="body2" sx={{ mb:.5 }}>
-                    <b>{k}:</b>{" "}
-                    {k==="Subject"      ? openConcept.subject :
-                     k==="Chapter"      ? openConcept.chapter :
-                     k==="Sub-chapter"  ? openConcept.subChap :
-                     k==="Weight"       ? `${openConcept.weight}/10` :
-                     k==="Depth"        ? openConcept.depth :
-                     openConcept.papers}
-                  </Typography>
-                ))}
-            </DialogContent>
-          </>
-        )}
-      </Dialog>
+            {/* 🔥 full-fat insight modal */}
+      <ConceptInsightModal
+        open={!!openConcept}
+        data={openConcept ?? {}}
+        onClose={() => setOpenConcept(null)}
+        onStartQuiz={() => console.info("launch 5-Q concept quiz")}
+      />
     </Box>
   );
 }
@@ -210,7 +308,7 @@ const SourceRow = ({ icon, label, onClick }) => (
       onClick={onClick}
       sx={{ ...cardBase, display:"flex", alignItems:"center",
             justifyContent:"space-between", cursor:"pointer" }}>
-      <Stack direction="row" spacing={1} alignItems="center">
+     <Stack direction="row" spacing={.5} flexWrap="wrap" sx={{ mt:1 }}>
         <Avatar sx={headerAvatar}>{icon}</Avatar>
         <Typography sx={{ fontWeight:600 }}>{label}</Typography>
       </Stack>
@@ -226,7 +324,7 @@ const EXPLAIN_CARDS=[
   { emoji:"📝", title:"Past-Paper Heat-map", grad:["#6366f1","#a5b4fc"],
     blurb:"15 years of NEET papers light up the concepts they really test."},
   { emoji:"📜", title:"Syllabus Boost",       grad:["#3b82f6","#6ee7b7"],
-    blurb:"Anything the NMC names gets an automatic priority bump."},
+    blurb:"Anything mentioned in the official syllabus gets an automatic priority bump."},
   { emoji:"🎯", title:"Your Activity Loop",   grad:["#ec4899","#f9a8d4"],
     blurb:"Quizzes & mocks keep the map focused on *your* weak spots."},
 ];
@@ -257,5 +355,40 @@ const BackHeader = ({ icon, title, onBack }) => (
     <IconButton onClick={onBack} sx={{ color:"#fff", mr:1 }}><ArrowBackIos/></IconButton>
     <Avatar sx={headerAvatar}>{icon}</Avatar>
     <Typography variant="h5" sx={{ fontWeight:800 }}>{title}</Typography>
+  </Stack>
+);
+
+
+/* ─────────────────  stats strip ───────────────── */
+const StatsSummary = ({ total, avg }) => (
+  <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
+    <Chip
+      icon={<LibraryBooksIcon fontSize="small" />}
+      label={`${total} concept${total !== 1 ? "s" : ""}`}
+      sx={chipStyle("#374151")}            // dark-grey, not accent colour
+    />
+    <Chip
+      icon={<TrendingUpIcon fontSize="small" />}
+      label={`Avg mastery ${avg.toFixed(0)} %`}
+      sx={chipStyle("#374151")}
+    />
+  </Stack>
+);
+
+/* ─────────────────  range slider  ───────────────── */
+const RangeSlider = ({ label, min, max, value, onChange }) => (
+  <Stack sx={{ flex: 1, pr: 2 }}>
+    <Typography variant="caption" sx={{ mb: 0.5 }}>
+      {label}
+    </Typography>
+    <Slider
+      value={value}
+      min={min}
+      max={max}
+      onChange={(_, v) => onChange(v)}
+      valueLabelDisplay="auto"
+      size="small"
+      sx={{ color: "#BB86FC" }}
+    />
   </Stack>
 );

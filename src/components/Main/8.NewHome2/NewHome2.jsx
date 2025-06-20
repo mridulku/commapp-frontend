@@ -175,10 +175,38 @@ function ToolCard({ tool, onOpen }) {
   const hidden  = tool.categories.slice(MAX_COLOURED);
   const extraN  = hidden.length;
 
+ 
+  const isPlanner = tool.id === "e2e_planner";
+
   return (
     <MotionCard {...lift}
-      sx={{ borderRadius:4, bgcolor:tool.bg?"transparent":GLASS_BG,
-            backdropFilter:"blur(6px)", boxShadow:"0 8px 24px rgba(0,0,0,.55)" }}>
+      sx={{ position:"relative",                /* ⬅️ allow absolute-pos pill   */
+            borderRadius:4,
+            bgcolor:tool.bg ? "transparent" : GLASS_BG,
+            backdropFilter:"blur(6px)",
+            boxShadow:"0 8px 24px rgba(0,0,0,.55)" }}>
+
+      {/* ▸ COMING-SOON PILL  ─────────────── */}
+      {!isPlanner && (
+        <Chip
+          label="Coming soon"
+          size="small"
+          sx={{
+            position:"absolute",
+            top:8,
+            right:8,
+            bgcolor:"#ffc107",
+            color:"#000",
+            fontWeight:700,
+            height:18,
+            fontSize:10,
+                        px:0.8,
+            zIndex:10,          // ⬅️ sits above CardActionArea
+            pointerEvents:"none"// ⬅️ keeps underlying click behaviour
+          }}
+        />
+      )}
+
       <CardActionArea onClick={onOpen} sx={{ borderRadius:4, overflow:"hidden" }}>
 
         {/* hero */}

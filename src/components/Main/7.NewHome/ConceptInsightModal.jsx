@@ -78,8 +78,8 @@ export default function ConceptInsightModal({ open, data={}, onClose,
       }}
     >
       {/* HEADER */}
-      <DialogTitle sx={{ pr:7 }}>
-        {data.label}
+       <DialogTitle sx={{ pr:7 }}>
+   {data.name ?? data.label}
         <IconButton onClick={onClose}
           sx={{ position:"absolute", right:12, top:12, color:"#fff" }}>
           <CloseIcon/>
