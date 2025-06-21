@@ -108,9 +108,19 @@ export default function NewHome2({ userId="", recentlyUsedIds=[] }) {
       p:{ xs:3, md:5 }, fontFamily:"Inter, sans-serif"
     }}>
 
-      <Typography variant="h4" sx={{ fontWeight:800, mb:2 }}>
-        Mini&nbsp;Tools
-      </Typography>
+
+
+      <Typography
+  component="h1"
+  sx={{
+    fontWeight: 800,
+    fontSize: { xs: "2.25rem", md: "2.5rem" },  // ≈ 36 px → 40 px
+    lineHeight: 1.25,
+    mb: 3                                        // keep the same bottom gap
+  }}
+>
+  🧰 Study&nbsp;Tools
+</Typography>
 
       {/* tab strip */}
       <Tabs

@@ -60,6 +60,8 @@ const chipStyle=(bg="rgba(255,255,255,.12)")=>({
 });
 const headerAvatar={ width:30, height:30, bgcolor:"rgba(255,255,255,.15)" };
 
+
+
 /* ═══════════ 3. Main component ═══════════ */
 export default function NewHome(){
   const [openConcept,setOpenConcept]=useState(null);
@@ -190,6 +192,19 @@ const Segment = ({ group, opts, active, onChange, color }) => (
   /* --------- main dashboard --------- */
   return(
     <Box sx={{ minHeight:"100vh", background:PAGE_BG, p:{xs:3,md:5}, fontFamily:"Inter, sans-serif" }}>
+
+            {/* page title */}
+      <Typography
+        component="h1"
+        sx={{
+          fontWeight: 800,
+          fontSize: { xs: "2.25rem", md: "2.5rem" },   // same scale used elsewhere
+          lineHeight: 1.25,
+          mb: 3
+        }}
+      >
+        🌐 Concept&nbsp;Graph
+      </Typography>
 
       {/* show sub-page if selected */}
       {section ? renderSection() : (

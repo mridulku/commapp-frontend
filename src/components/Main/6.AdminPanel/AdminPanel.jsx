@@ -1,153 +1,183 @@
-// src/components/Admin/AdminPanel.jsx
-import React, { useState } from "react";
+// ────────────────────────────────────────────────────────────────
+// File: src/components/Admin/AdminPanel.jsx   • 2025-06-20 compact
+// ────────────────────────────────────────────────────────────────
+import React, { useState, useMemo } from "react";
+import {
+  Box, FormControl, InputLabel, Select, MenuItem, Typography
+} from "@mui/material";
 
-// --- local tools -------------------------------------------------
+/* =============== import tool components ======================= */
+/* PDF Content Extraction */
 import SliceUploader from "./Support/SliceUploader";
 import SliceViewer   from "./Support/SliceViewer";
-import BookExplorer   from "./Support/BookExplorer";
-import CSVBookUploader from "./Support/CSVBookUploader";
-import OnboardingWizard from "./Support/OnboardingWizard";
-
-import QuickChapterClassifier from "./Support/QuickChapterClassifier";
-
-import ReadingViewDummy from "./Support/ReadingViewDummy";
-
-import MetricsDashboard from "./Support/MetricsDashboard";
-
+/* Core Content Editing */
+import BookExplorer      from "./Support/BookExplorer";
+import CSVBookUploader   from "./Support/CSVBookUploader";
+/* Metrics */
+import MetricsDashboard  from "./Support/MetricsDashboard";
+import CostDashboard     from "./Support/CostDashboard";
+/* Prompt Discovery */
+import { QuizPromptEditor } from "./Support/QuizPrompEditor";
+import PromptPlayground     from "./Support/PromptPlayground";
+/* Ongoing Experiments */
+import DoubtChat       from "./Support/DoubtChat";
+import BondVisualizer  from "./Support/BondVisualizer";
+/* Debug / misc (optional) */
 import AggregatorBootloader from "./Support/AggregatorBootloader";
 import AggregatorDebugPanel from "./Support/AggregatorDebugPanel";
 
-import ConceptExtractionPage from "./Support/ConceptExtractionPage";
+/* =============== category → tool map ========================= */
+const GROUPS = [
+  {
+    label: "PDF Content Extraction",
+    tools: [
+      { key: "uploader", label: "Slice Uploader",   comp: SliceUploader },
+      { key: "viewer",   label: "Slice Viewer",     comp: SliceViewer   },
+    ],
+  },
+  {
+    label: "Core Content Editing",
+    tools: [
+      { key: "explorer", label: "Book Explorer",     comp: BookExplorer    },
+      { key: "csv",      label: "CSV Book Uploader", comp: CSVBookUploader },
+    ],
+  },
+  {
+    label: "Metrics",
+    tools: [
+      { key: "metrics", label: "Metrics Dashboard", comp: MetricsDashboard },
+      { key: "cost",    label: "Cost Dashboard",    comp: CostDashboard    },
+    ],
+  },
+  {
+    label: "Prompt Discovery",
+    tools: [
+      { key: "quizPrompt", label: "Quiz Prompt Editor", comp: QuizPromptEditor },
+      { key: "playground", label: "Prompt Playground",  comp: PromptPlayground },
+    ],
+  },
+  {
+    label: "Ongoing Experiments",
+    tools: [
+      { key: "doubt", label: "Doubt Chat",     comp: DoubtChat      },
+      { key: "bond",  label: "Bond Visualizer",comp: BondVisualizer },
+    ],
+  },
+  {
+    label: "Debug / Misc",
+    tools: [
+      { key: "aggBoot",  label: "Aggregator Bootloader", comp: AggregatorBootloader },
+      { key: "aggDebug", label: "Aggregator Debug Panel",comp: AggregatorDebugPanel },
+    ],
+  },
+];
 
-import CostDashboard from "./Support/CostDashboard"; // ← add this line
+/* prettier dark-glass styling */
+const selectBoxSX = { minWidth: 240 };
 
-import PromptPlayground from "./Support/PromptPlayground";
-
-import { QuizPromptEditor } from "./Support/QuizPrompEditor";
-
-import DoubtChat from "./Support/DoubtChat";
-
-
-import BondVisualizer from "./Support/BondVisualizer";
-
-// Add more admin tools here later and extend the enum ↓
-const TOOLS = {
-  uploader: "Slice Uploader",
-  viewer:   "Slice Viewer",
-    explorer: "Book Explorer",
-  csv:      "CSV Book Uploader",
-  onboarding: "Onboarding Wizard",
-  readingviewdummy: "Reading View Dummy", 
-  AggregatorBootloader: "Aggregator Bootloader",
-  AggregatorDebugPanel: "Aggregator Debug Panel",
-  ConceptExtractionPage: "Concept Extraction Page",
-  CostDashboard: "Cost Dashboard",
-  MetricsDashboard: "Metrics Dashboard",
-  QuizPromptEditor: "Quiz Prompt Editor",
-  PromptPlayground : "PromptPlayground"  ,
-  QuickChapterClassifier: "QuickChapterClassifier",
-  DoubtChat: "Doubt Chat",
-  BondVisualizer: "Bond Visualizer",
+const labelSX = {
+  color: "#bbb",
+  "&.Mui-focused": { color: "#BB86FC" },
 };
 
-function AdminPanel({ userId }) {
-  // pick a default tool
-  const [activeTool, setActiveTool] = useState("uploader");
+const selectSX = {
+  color: "#fff",
+  bgcolor: "rgba(255,255,255,.05)",
+  ".MuiOutlinedInput-notchedOutline": { borderColor: "#555" },
+  "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: "#BB86FC" },
+  "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: "#BB86FC" },
+};
 
-  /* ---------------------------   styles   ---------------------- */
-  const container = {
-    display: "flex",
-    flexDirection: "column",
-    height: "100%",
-    padding: "24px",
-    boxSizing: "border-box",
+const itemSX = { color: "#fff" };
+
+const menuProps = {
+  PaperProps: { sx: { bgcolor: "#1e1e1e" } },
+};
+
+/* ─────────────────────────────────────────────────────────────── */
+export default function AdminPanel({ userId }) {
+  /* default to first category / first tool */
+  const [groupIdx, setGroupIdx] = useState(0);
+  const [toolKey , setToolKey ] = useState(GROUPS[0].tools[0].key);
+
+  /* when category changes, jump to its first tool */
+  const handleGroupChange = (idx) => {
+    setGroupIdx(idx);
+    setToolKey(GROUPS[idx].tools[0].key);
   };
 
-  const tabBar = {
-    display: "flex",
-    gap: "8px",
-    marginBottom: "16px",
-  };
+  const ActiveTool = useMemo(() => {
+    const t = GROUPS[groupIdx].tools.find((x) => x.key === toolKey);
+    return t ? t.comp : () => <Typography>No tool</Typography>;
+  }, [groupIdx, toolKey]);
 
-  const tabButton = (selected) => ({
-    padding: "8px 16px",
-    fontWeight: "bold",
-    borderRadius: 6,
-    border: "1px solid #444",
-    cursor: "pointer",
-    background: selected ? "#BB86FC" : "transparent",
-    color: selected ? "#000" : "#FFF",
-    transition: "background 0.2s, color 0.2s",
-  });
-
-  const toolArea = {
-    flex: 1,
-    overflow: "auto",
-    border: "1px solid #333",
-    borderRadius: 8,
-    padding: "20px",
-  };
-  /* ------------------------------------------------------------- */
-
-  // map keys to actual components
-  const renderTool = () => {
-    switch (activeTool) {
-      case "uploader":
-        return <SliceUploader userId={userId} />;
-      case "viewer":
-        return <SliceViewer   userId={userId} />;
-    case "explorer":
-            return <BookExplorer   userId={userId} />;
-            case "csv":
-            return <CSVBookUploader   userId={userId} />;
-            case "onboarding":
-            return <OnboardingWizard   userId={userId} />;
-            case "readingviewdummy":
-            return <ReadingViewDummy   userId={userId} />;
-            case "AggregatorBootloader":
-            return <AggregatorBootloader   userId={userId} />;
-            case "AggregatorDebugPanel":
-            return <AggregatorDebugPanel   userId={userId} />;
-            case "ConceptExtractionPage":
-            return <ConceptExtractionPage   userId={userId} />;
-            case "CostDashboard":
-            return <CostDashboard   userId={userId} />;
-            case "MetricsDashboard":
-            return <MetricsDashboard   userId={userId} />;
-      case "QuizPromptEditor":
-        return <QuizPromptEditor userId={userId} />;
-        case "PromptPlayground":
-        return <PromptPlayground userId={userId} />; 
-        case "QuickChapterClassifier":
-        return <QuickChapterClassifier userId={userId} />;
-        case "DoubtChat":
-        return <DoubtChat userId={userId} />;  
-      case "BondVisualizer":
-        return <BondVisualizer userId={userId} />;
-      default:
-        return null;
-    }
-  };
-
+  /* --------------------------- layout -------------------------- */
   return (
-    <div style={container}>
-      {/* Top tab bar ------------------------------------------------ */}
-      <div style={tabBar}>
-        {Object.entries(TOOLS).map(([key, label]) => (
-          <button
-            key={key}
-            style={tabButton(activeTool === key)}
-            onClick={() => setActiveTool(key)}
+    <Box
+      sx={{
+        height: "100%",
+        p: 3,
+        boxSizing: "border-box",
+        color: "#fff",
+        fontFamily: "Inter, sans-serif",
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
+      }}
+    >
+      {/* ▼ selector strip */}
+      <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
+        {/* Category dropdown */}
+               {/* ▼ Category */}
+        <FormControl size="small" sx={selectBoxSX}>
+          <InputLabel sx={labelSX}>Category</InputLabel>
+          <Select
+            label="Category"
+            value={groupIdx}
+            onChange={(e) => handleGroupChange(e.target.value)}
+            sx={selectSX}
+            MenuProps={menuProps}
           >
-            {label}
-          </button>
-        ))}
-      </div>
+            {GROUPS.map((g, idx) => (
+              <MenuItem key={g.label} value={idx} sx={itemSX}>
+                {g.label}
+              </MenuItem>
+            ))}
+          </Select>
+       </FormControl>
 
-      {/* Tool viewport -------------------------------------------- */}
-      <div style={toolArea}>{renderTool()}</div>
-    </div>
+
+                {/* ▼ Tool */}
+        <FormControl size="small" sx={selectBoxSX}>
+          <InputLabel sx={labelSX}>Tool</InputLabel>
+          <Select
+            label="Tool"
+            value={toolKey}
+            onChange={(e) => setToolKey(e.target.value)}
+            sx={selectSX}
+            MenuProps={menuProps}
+          >
+            {GROUPS[groupIdx].tools.map((t) => (
+              <MenuItem key={t.key} value={t.key} sx={itemSX}>
+                {t.label}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </Box>
+
+      {/* ▼ tool viewport */}
+      <Box
+        sx={{
+          flex: 1,
+          overflow: "auto",
+          border: "1px solid #333",
+          borderRadius: 2,
+          p: 2,
+        }}
+      >
+        <ActiveTool userId={userId} />
+      </Box>
+    </Box>
   );
 }
-
-export default AdminPanel;

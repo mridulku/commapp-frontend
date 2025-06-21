@@ -1,367 +1,258 @@
 /* ────────────────────────────────────────────────────────────────
-   File:  src/components/GuideCarousel.jsx          (a.k.a. “Your
-          plan is ready” summary slide)                         
-   • Pure presentational – give it a `planDoc` prop or it falls  
-     back to MOCK_PLAN (handy for Storybook / local testing)     
-   • No Redux imports from parents; mount / un-mount anywhere    
+   File:  src/components/GuideCarousel.jsx      2025-06-21  ✦ revamp
+   “Your plan is ready” — modern, dark-theme, data-driven
 ───────────────────────────────────────────────────────────────── */
-import React from "react";
 
+import React, { useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import axios from "axios";
 
 import {
-  /* fetchPlan,   ⟵  ❌  no longer needed here */
-  setCurrentIndex,
-} from "../../../../../../../store/planSlice";   // ← adjust the path if needed
+  setCurrentIndex,          // path may vary in your project
+} from "../../../../../../../store/planSlice";
 
-import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import {
-  Box,
-  Typography,
-  Chip,
-  Divider,
-  Paper,
-  Button,
-  Tooltip,
+  Box, Paper, Grid, Typography, Button, Divider, Stack, Chip,
+  IconButton, Collapse, Tooltip
 } from "@mui/material";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import MenuBookIcon from "@mui/icons-material/MenuBook";
-import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import QuizIcon from "@mui/icons-material/Quiz";
 
-/* ───────────────────────────  visual constants  ────────────────────────── */
-const ACCENT  = "#BB86FC";
-const OFF_BG  = "rgba(255,255,255,.08)";   /* card border */
-const OFF_BOX = "rgba(255,255,255,.06)";   /* inner paper */
+import EventIcon            from "@mui/icons-material/Event";
+import AccessTimeIcon       from "@mui/icons-material/AccessTime";
+import AutoAwesomeIcon      from "@mui/icons-material/AutoAwesome";
+import ExpandMoreIcon       from "@mui/icons-material/ExpandMore";
+import MenuBookIcon         from "@mui/icons-material/MenuBook";
+import QuizIcon             from "@mui/icons-material/Quiz";
+import MoreHorizIcon        from "@mui/icons-material/MoreHoriz";
+import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined";
+import QuizOutlinedIcon     from "@mui/icons-material/QuizOutlined";
+import WbIncandescentIcon   from "@mui/icons-material/WbIncandescent";
+import BuildCircleIcon      from "@mui/icons-material/BuildCircle";
+import PsychologyIcon       from "@mui/icons-material/Psychology";
+import ReplayIcon           from "@mui/icons-material/Replay";
+import ArrowForwardIcon     from "@mui/icons-material/ArrowForward";
 
-const EMOJI = { physics: "🔭", chemistry: "⚗️", biology: "🧬" };
+/* ───── visual constants ───── */
+const ACCENT     = "#BB86FC";
+const DARK_BG    = "#111";
+const PANEL_BG   = "#1C1C1C";
+const OFF_BOX    = "rgba(255,255,255,.06)";
+const PREVIEW_BG = "#1F1F1F";
 
-/* ───────────────────────────  local mock (delete in prod)  ─────────────── */
+const EMOJI = { physics:"🔭", chemistry:"⚗️", biology:"🧬" };
+
+/* local mock – delete in prod */
 const MOCK_PLAN = {
-  level: "mastery",
-  wpmUsed: 200,
-  dailyReadingTimeUsed: 30,
-  quizTime: 1, // 1 min × concept
-  selectedChapters: [
-    { id: "c1", title: "Mechanics", subject: "physics", grouping: "Mechanics" },
-    { id: "c2", title: "Optics",    subject: "physics", grouping: "Optics" },
-    { id: "c3", title: "Thermo",    subject: "physics", grouping: "Thermodynamics" },
-    { id: "c4", title: "Organic",   subject: "chemistry", grouping: "Organic" },
-    { id: "c5", title: "Botany",    subject: "biology",   grouping: "Botany" },
+  dailyReadingTimeUsed : 30,
+  selectedChapters     : [
+    {subject:"physics",  grouping:"Mechanics"},
+    {subject:"chemistry",grouping:"Organic Chemistry"},
   ],
   sessions: [
-    {
-      sessionLabel: "1",
-      activities: [
-        { type: "READ", subChapterName: "1 · Kinematics", timeNeeded: 10 },
-        { type: "QUIZ", quizStage: "remember", subChapterName: "1 · Kinematics", timeNeeded: 1 },
-      ],
-    },
-    {
-      sessionLabel: "2",
-      activities: [
-        { type: "READ", subChapterName: "2 · Dynamics", timeNeeded: 12 },
-        { type: "QUIZ", quizStage: "remember", subChapterName: "2 · Dynamics", timeNeeded: 1 },
-      ],
-    },
-    {
-      sessionLabel: "3",
-      activities: [
-        { type: "READ", subChapterName: "Thermo Intro", timeNeeded: 8 },
-        { type: "QUIZ", quizStage: "remember", subChapterName: "Thermo Intro", timeNeeded: 1 },
-      ],
-    },
-  ],
+    {activities:[
+      {type:"READ",subChapterName:"1 · Kinematics"},
+      {type:"QUIZ",subChapterName:"Kinematics",quizStage:"remember"},
+      {type:"READ",subChapterName:"2 · Dynamics"},
+    ]},
+    {activities:[{type:"READ",subChapterName:"Thermo Intro"}]},
+  ]
 };
+/* ─────────────────────────── */
 
-/* ───────────────────────────  helper: subject/group map  ──────────────── */
-function groupSubjGrp(chapters = []) {
-  const out = {};
-  chapters.forEach((c) => {
-    const subj = (c.subject || "unknown").toLowerCase();
-    const grp  = c.grouping || "Other";
-    (out[subj]      = out[subj] || {});
-    (out[subj][grp] = true);
-  });
-  return out;
-}
-
-/* ════════════════════════════════════════════════════════════════════════
-   MAIN COMPONENT
-════════════════════════════════════════════════════════════════════════ */
 export default function SuccessPlanCreation({
   planDoc = MOCK_PLAN,
-  planId,  
-  onClose = () => {},
-  onStart = () => {},          // ① new prop
+  planId,
+  onClose = ()=>{},
+  onStart = ()=>{},
 }) {
-  /* ── de-structure props with safe defaults ── */
+  /* ───── data extraction ───── */
   const {
-    level               = "–",
-    wpmUsed             = 200,
-    dailyReadingTimeUsed= 30,
-    quizTime            = 1,
-    selectedChapters    = [],
-    sessions            = [],
+    dailyReadingTimeUsed = 30,
+    selectedChapters     = [],
+    sessions             = [],
   } = planDoc;
 
-  /* ── redux handles ── */
-  const dispatch     = useDispatch();
-  const userId       = useSelector((s) => s.auth?.userId);
-  const currentIndex = useSelector((s) => s.plan?.currentIndex);
+  const totalDays = sessions.length;
 
-  /* ── advance to next activity (without re-loading the new plan) ── */
-async function handleStart() {
-  /* 0 — log for sanity */
-  console.log("[SuccessPlanCreation] CTA clicked", { planDoc, planId });
+  /* group subject → chips */
+  const subjGrp = useMemo(()=>{
+    const o={}; selectedChapters.forEach(c=>{
+      (o[c.subject] ??= new Set()).add(c.grouping);
+    }); return o;
+  },[selectedChapters]);
 
-  /* 1 — we don’t really care if this call fails in demo mode       */
-  try {
-    await axios.post(
-      `${import.meta.env.VITE_BACKEND_URL}/api/markActivityCompletion`,
-      {
-        userId,
-        planId,                      // <-- send the real id we received
-        activityId: "GUIDE_CAROUSEL",
-        completionStatus: "complete",
-      }
-    );
-  } catch (err) {
-    console.warn(
-      "[SuccessPlanCreation] markActivityCompletion failed → proceeding anyway ",
-      err
-    );
+  /* ───── redux handles ───── */
+  const dispatch   = useDispatch();
+  const userId     = useSelector(s=>s.auth?.userId);
+  const curIndex   = useSelector(s=>s.plan?.currentIndex);
+
+  /* accordion state */
+  const [openPrev,setOpenPrev] = useState(false);
+
+  /* CTA */
+  async function handleBegin() {
+    /* fire-and-forget progress ping */
+    try {
+      await axios.post(
+        `${import.meta.env.VITE_BACKEND_URL}/api/markActivityCompletion`,
+        { userId, planId, activityId:"GUIDE_CAROUSEL", completionStatus:"complete" }
+      );
+    } catch(e){ console.warn("markActivityCompletion failed → ignoring"); }
+
+    /* jump to next activity */
+    dispatch(setCurrentIndex(curIndex + 1));
+    onStart(planId);
+    onClose();
   }
 
-  /* 2 — bubble the id up, then close */
-  onStart(planId);
-  onClose();
-}
-
-  const subjGrp = groupSubjGrp(selectedChapters);
-
-  /* ─────────────────────  small sub-components  ───────────────────── */
-
-  /* Assumptions row */
-  const MetricsRow = () => (
-    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 2 }}>
-      <Tooltip title="Reading time for any sub-chapter = words ÷ WPM">
-        <Chip
-          icon={<MenuBookIcon sx={{ color: "#000" }} />}
-          label={`Reading ≈ words ÷ ${wpmUsed}`}
-          sx={{ bgcolor: ACCENT, "& .MuiChip-label": { fontWeight: 500, color: "#000" } }}
-        />
-      </Tooltip>
-
-      <Tooltip title="Max minutes we’ll schedule for you per day">
-        <Chip
-          icon={<AccessTimeIcon sx={{ color: "#000" }} />}
-          label={`Daily budget ${dailyReadingTimeUsed} m`}
-          sx={{ bgcolor: ACCENT, "& .MuiChip-label": { fontWeight: 500, color: "#000" } }}
-        />
-      </Tooltip>
-
-      <Tooltip title="Each concept quiz is budgeted at this many minutes">
-        <Chip
-          icon={<QuizIcon sx={{ color: "#000" }} />}
-          label={`Quiz ${quizTime} m × concept`}
-          sx={{ bgcolor: ACCENT, "& .MuiChip-label": { fontWeight: 500, color: "#000" } }}
-        />
-      </Tooltip>
-    </Box>
+  /* mini Bloom card */
+  const StageCard = ({icon,title,tagline,tint})=>(
+    <Grid item xs={6} sm={4} md={2.4}>
+      <Box sx={{
+        display:"flex",flexDirection:"column",alignItems:"center",
+        bgcolor:PANEL_BG,p:2,borderRadius:2,height:"100%",
+        border:`1px solid ${tint}55`
+      }}>
+        {React.cloneElement(icon,{sx:{fontSize:36,color:tint,mb:.5}})}
+        <Typography sx={{fontWeight:600,color:"#fff"}}>{title}</Typography>
+        <Typography variant="caption" sx={{color:"#aaa",mt:.5,lineHeight:1.2}}>
+          {tagline}
+        </Typography>
+      </Box>
+    </Grid>
   );
 
-  /* Topics block */
-  const TopicsCovered = () => {
-    const flatPieces = Object.entries(subjGrp).map(([subj, groups]) => {
-      const grpLabels = Object.keys(groups).join(" • ");
-      return `${EMOJI[subj] || "📘"} ${subj[0].toUpperCase() + subj.slice(1)}: ${grpLabels}`;
-    });
-    const flatText = flatPieces.join("  |  ");
+  /* ─────────── render ─────────── */
+  return (
+    <Box sx={{
+      width:"100%",minHeight:"100%",bgcolor:DARK_BG,
+      p:{xs:2,sm:4},display:"flex",justifyContent:"center",alignItems:"center"
+    }}>
+      <Paper elevation={4} sx={{
+        maxWidth:880,width:"100%",bgcolor:"#000",color:"#fff",
+        borderRadius:3,p:{xs:3,sm:5}
+      }}>
 
-    /* one-liner version */
-    if (flatText.length <= 110)
-      return (
-        <Typography variant="body2" sx={{ color: "#ccc", fontWeight: 500, mb: 2, lineHeight: 1.4 }}>
-          {flatText}
+        {/* headline */}
+        <Typography variant="h3" sx={{fontWeight:700,mb:1}}>
+          Your plan is ready — let’s get started!
         </Typography>
-      );
+        <Typography variant="body1" sx={{color:"#ccc",mb:3}}>
+          Complete a few quick tasks every day. The plan adapts automatically if
+          you miss a day or want to go faster.
+        </Typography>
 
-    /* fallback chip list */
-    return (
-      <Box sx={{ display: "flex", flexDirection: "column", gap: 1, mb: 2 }}>
-        {Object.entries(subjGrp).map(([subj, groups]) => (
-          <Box key={subj} sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-            <Typography sx={{ fontWeight: "bold", textTransform: "capitalize" }}>
-              {EMOJI[subj] || "📘"} {subj}
-            </Typography>
-            {Object.keys(groups).map((g) => (
-              <Chip
-                key={g}
-                label={g}
-                size="small"
-                sx={{ bgcolor: ACCENT, "& .MuiChip-label": { fontWeight: 500, color: "#000" } }}
-              />
-            ))}
+        {/* summary cards */}
+        <Grid container spacing={2} mb={3}>
+          {[ {icon:<EventIcon/>,       big:`${totalDays} day${totalDays!==1?"s":""}`, sub:"total duration"},
+             {icon:<AccessTimeIcon/>,  big:`${dailyReadingTimeUsed} min`,             sub:"per day"},
+             {icon:<AutoAwesomeIcon/>, big:"Adaptive",                               sub:"auto-adjusts"}]
+            .map(({icon,big,sub},i)=>(
+            <Grid item xs={4} md={3} key={i}>
+              <Paper elevation={0} sx={{
+                bgcolor:PANEL_BG,p:2,borderRadius:2,textAlign:"center",
+                border:`1px solid ${ACCENT}55`
+              }}>
+                {React.cloneElement(icon,{sx:{color:ACCENT,fontSize:28,mb:.5}})}
+                <Typography sx={{fontWeight:700,color:"#fff"}}>{big}</Typography>
+                <Typography variant="caption" sx={{color:"#bbb"}}>{sub}</Typography>
+              </Paper>
+            </Grid>
+          ))}
+        </Grid>
+
+        
+
+        {/* Day-1 preview accordion */}
+        <Paper elevation={0} sx={{
+          bgcolor:OFF_BOX,borderRadius:2,mb:3,overflow:"hidden",
+          border:`1px solid ${ACCENT}22`
+        }}>
+<Box
+  onClick={()=>setOpenPrev(o=>!o)}
+  sx={{
+    bgcolor:"#1E1A2A",                 // subtle lift from pure black
+    display:"flex",alignItems:"center",justifyContent:"space-between",
+    p:1.6, pl:2,                       // a touch more breathing room
+    cursor:"pointer",
+    borderLeft:4, borderColor:ACCENT,  // accent strip
+    "&:hover":{ bgcolor:"#2A2440" }    // hover glow
+  }}
+>
+            <Typography sx={{ fontWeight: 600, color: 'white' }}>
+  Day&nbsp;1&nbsp;at&nbsp;a&nbsp;glance
+</Typography>
+            <IconButton size="small" sx={{color:"#fff"}}>
+              <ExpandMoreIcon
+                sx={{color:ACCENT,   transition:".2s",transform:openPrev?"rotate(180deg)":"none"}}/>
+            </IconButton>
           </Box>
-        ))}
-      </Box>
-    );
-  };
 
-  /* Sessions preview (first 3 days) */
-  const SessionsPreview = () => {
-    const META = {
-      READ: {
-        chip: "Read",
-        icon: <MenuBookIcon sx={{ fontSize: 16, color: "#000" }} />,
-        color: "#4FC3F7",
-      },
-      QUIZ: {
-        chip: (a) => `${a.quizStage?.charAt(0).toUpperCase() + a.quizStage?.slice(1)} Quiz`,
-        icon: <QuizIcon sx={{ fontSize: 16, color: "#000" }} />,
-        color: "#FFD54F",
-      },
-    };
-
-    const ActivityRow = (a, idx) => {
-      const m = META[a.type] || {};
-      const chipLabel = typeof m.chip === "function" ? m.chip(a) : m.chip;
-
-      return (
-        <Box
-          key={idx}
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            gap: 1.2,
-            mb: 0.6,
-            overflow: "hidden",
-          }}
-        >
-          <Chip
-            icon={m.icon}
-            label={chipLabel}
-            size="small"
-            sx={{
-              bgcolor: m.color || ACCENT,
-              "& .MuiChip-label": { color: "#000", fontWeight: 600 },
-            }}
-          />
-
-          <Typography
-            variant="body2"
-            sx={{
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              maxWidth: 460,
-              color: "#ddd",
-            }}
-            title={a.subChapterName}
-          >
-            {a.subChapterName}
-          </Typography>
-        </Box>
-      );
-    };
-
-    return (
-      <Paper variant="outlined" sx={{ bgcolor: OFF_BOX, p: 2 }}>
-        <Typography sx={{ fontWeight: "bold", mb: 1, color: "#fff" }}>
-          First&nbsp;3&nbsp;days at a glance
-        </Typography>
-
-        {sessions.slice(0, 3).map((s) => {
-          const acts   = s.activities || [];
-          const preview= acts.slice(0, 3);
-          const extra  = acts.length - preview.length;
-
-          return (
-            <Box key={s.sessionLabel} sx={{ mb: 2 }}>
-              <Typography sx={{ fontWeight: 600, color: "#fff", mb: 0.5 }}>
-                Day&nbsp;{s.sessionLabel}
-              </Typography>
-
-              {preview.map(ActivityRow)}
-
-              {extra > 0 && (
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1.2 }}>
+          <Collapse in={openPrev} timeout="auto" unmountOnExit>
+            <Box sx={{p:2}}>
+              {(sessions[0]?.activities||[]).slice(0,3).map((a,i)=>(
+                <Stack key={i} direction="row" spacing={1} alignItems="center" mb={.8}>
                   <Chip
-                    icon={<MoreHorizIcon sx={{ fontSize: 16, color: "#fff" }} />}
-                    label={`+${extra} more`}
+                    icon={a.type==="READ"
+                      ? <MenuBookOutlinedIcon sx={{fontSize:16,color:"#000"}}/>
+                      : <QuizOutlinedIcon sx={{fontSize:16,color:"#000"}}/>}
+                    label={a.type==="READ"?"Read":"Quiz"}
                     size="small"
                     sx={{
-                      bgcolor: "#333",
-                      "& .MuiChip-label": { color: "#fff", fontWeight: 500 },
-                    }}
-                  />
-                </Box>
+                      bgcolor:ACCENT,
+                      "& .MuiChip-label":{fontWeight:600,color:"#000"}
+                    }}/>
+                  <Typography variant="caption" sx={{color:"#ccc"}}>
+                    {a.subChapterName}
+                  </Typography>
+                </Stack>
+              ))}
+              {sessions[0]?.activities.length>3 && (
+                <Chip size="small"
+                  icon={<MoreHorizIcon sx={{fontSize:16,color:"#fff"}}/>}
+                  label={`+ ${sessions[0].activities.length-3} more`}
+                  sx={{bgcolor:"#444","& .MuiChip-label":{color:"#fff"}}}/>
               )}
             </Box>
-          );
-        })}
+          </Collapse>
+        </Paper>
 
-        {sessions.length > 3 && (
-          <Typography variant="caption" sx={{ color: "#aaa" }}>
-            …plus {sessions.length - 3} more day(s)
-          </Typography>
-        )}
-      </Paper>
-    );
-  };
+        {/* Bloom ladder */}
+        <Typography sx={{fontWeight:600,mb:1}}>The 5 stages you’ll master:</Typography>
+        <Grid container spacing={2}>
+          <StageCard icon={<MenuBookIcon/>}       title="Reading"   tagline="Fast skim"          tint="#FFD54F"/>
+          <StageCard icon={<QuizIcon/>}           title="Remember"  tagline="1 Q / concept"      tint="#03A9F4"/>
+          <StageCard icon={<WbIncandescentIcon/>} title="Understand"tagline="Why & how"          tint="#4CAF50"/>
+          <StageCard icon={<BuildCircleIcon/>}    title="Apply"     tagline="Use in context"     tint="#FF7043"/>
+          <StageCard icon={<PsychologyIcon/>}     title="Analyze"   tagline="Novel problems"     tint="#AB47BC"/>
+        </Grid>
 
-  /* ─────────────────────  render  ───────────────────── */
-  return (
-    <Box
-      sx={{
-        maxWidth: 820,
-        mx: "auto",
-        my: 4,
-        p: 4,
-        bgcolor: "#000",
-        color: "#fff",
-        border: `1px solid ${OFF_BG}`,
-        borderRadius: 2,
-        boxShadow: "0 4px 12px rgba(0,0,0,0.45)",
-      }}
-    >
-      {/* header */}
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
-        <CheckCircleIcon sx={{ color: ACCENT, fontSize: 30 }} />
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: "bold", lineHeight: 1.1 }}>
-            Your plan is ready!
-          </Typography>
-          <Typography variant="body2" sx={{ color: "#bbb" }}>
-            We made the following assumptions to craft it ↴
+        {/* retry loop */}
+        <Divider sx={{my:3,bgcolor:"#333"}}/>
+        <Box sx={{display:"flex",alignItems:"center",gap:1,mb:1}}>
+          <ReplayIcon sx={{color:ACCENT}}/>
+          <Typography variant="h6" sx={{fontWeight:600}}>
+            The <em>retry loop</em>
           </Typography>
         </Box>
-      </Box>
+        <Typography variant="body2" sx={{color:"#ccc"}}>
+          Miss any concept in a quiz stage? We drop you into a short, focused
+          revision, then retest only those concepts — repeating until
+          <strong> every concept sticks</strong>. No wasted time on what you
+          already know.
+        </Typography>
 
-      {/* assumptions */}
-      <MetricsRow />
-      <Divider sx={{ mb: 2, bgcolor: "#333" }} />
-
-      {/* topics */}
-      <Typography sx={{ fontWeight: "bold", mb: 0.5 }}>Topics covered</Typography>
-      <TopicsCovered />
-      <Divider sx={{ mb: 2, bgcolor: "#333" }} />
-
-      {/* sessions preview */}
-      <SessionsPreview />
-
-      {/* CTA */}
-      <Box sx={{ textAlign: "center", mt: 4 }}>
-        <Button
-          variant="contained"
-          sx={{ bgcolor: ACCENT, fontWeight: "bold" }}
-          onClick={handleStart}
-        >
-          Start learning
-        </Button>
-      </Box>
+        {/* CTA bottom-right */}
+        <Box sx={{display:"flex",justifyContent:"flex-end",mt:4}}>
+          <Button
+            variant="contained"
+            endIcon={<ArrowForwardIcon/>}
+            sx={{bgcolor:ACCENT,fontWeight:700,px:4,"&:hover":{bgcolor:"#A57BF7"}}}
+            onClick={handleBegin}
+          >
+            Jump into Day&nbsp;1
+          </Button>
+        </Box>
+      </Paper>
     </Box>
   );
 }

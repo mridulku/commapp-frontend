@@ -1,266 +1,414 @@
-/********************************************************************
- *  UserProfileAnalytics.jsx  ▸  V‑0.1.1 “fix dark‑mode text + overflow”
- ********************************************************************/
-
-import React, { useState, useEffect } from "react";
+// ────────────────────────────────────────────────────────────────
+// File: src/components/ProfileAnalyticsHub.jsx   (v0.5.0)
+// Dark-glass UI • learner-profile – full feature set
+// ────────────────────────────────────────────────────────────────
+import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { auth } from "../../../firebase";
-import { signOut } from "firebase/auth";
-import ConceptMappingView from "../7.NewHome/Support/ConceptMappingView";
-import ExamPaperBrowser from "../7.NewHome/Support/ExamPaperBrowser";
-import ExamGuidelinesViewer from "../7.NewHome/Support/ExamGuidelinesViewer";
-
 
 import {
-  Box,
-  Button,
-  Grid,
-  Paper,
-  Typography,
-  Tooltip,
-  IconButton,
-  Divider,
+  Box, Grid, Card, Typography, Avatar, Stack, Chip, Divider, IconButton,
+  Tooltip, Button, Tabs, Tab, Table, TableHead, TableRow, TableCell,
+  TableBody, LinearProgress, Paper, Dialog, DialogTitle, DialogContent,
+  DialogActions
 } from "@mui/material";
-import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-import UserHistory from "./REDUNDANT/UserHistory";
-import BookExplorer from "../6.AdminPanel/Support/BookExplorer";
-import SliceUploader from "../6.AdminPanel/Support/SliceUploader";
+import CalendarIcon   from "@mui/icons-material/CalendarMonth";
+import RankIcon       from "@mui/icons-material/EmojiEvents";
+import EmailIcon      from "@mui/icons-material/Email";
+import InfoIcon       from "@mui/icons-material/InfoOutlined";
+import LibraryBooks   from "@mui/icons-material/LibraryBooks";
+import FlashOnIcon    from "@mui/icons-material/FlashOn";
+import MapIcon        from "@mui/icons-material/AutoStories";
+import HistoryIcon    from "@mui/icons-material/History";
+import TrendingUpIcon from "@mui/icons-material/TrendingUp";
+import AddIcon        from "@mui/icons-material/AddCircleOutline";
+import { ResponsiveContainer, LineChart, Line } from "recharts";
+import { motion }     from "framer-motion";
 
-import SliceViewer from "../6.AdminPanel/Support/SliceViewer";
+/* ─── firebase helpers ─── */
+import { auth, db } from "../../../firebase";          // adjust if needed
+import {
+  doc, getDoc, setDoc, updateDoc, serverTimestamp
+} from "firebase/firestore";
 
-/* -------------------------------------------------- auth stuff (unchanged) */
-export default function UserProfileAnalytics({ colorScheme = {} }) {
-  const [userId, setUserId] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
+/* ─── design tokens ─── */
+const PAGE_BG  = "radial-gradient(circle at 35% 0%, #181924 0%, #0e0f15 100%)";
+const GLASS_BG = "rgba(255,255,255,.06)";
+const grad     = ([a,b]) => `linear-gradient(135deg,${a} 0%,${b} 100%)`;
+const CardSX = {
+  borderRadius:4, p:3, bgcolor:GLASS_BG,
+  backdropFilter:"blur(6px)", boxShadow:"0 8px 24px rgba(0,0,0,.55)",
+  color:"#f0f0f0",
+};
+const MotionCard = motion(Card);
+const lift={ whileHover:{ y:-4, boxShadow:"0 14px 30px rgba(0,0,0,.9)" } };
+
+/* ─── static demo filler ─── */
+const CHALLENGE_OPTIONS = [
+  "Time management","Concept gaps","Low motivation",
+  "Application practice","Silly mistakes"
+];
+
+const capacity = {
+  wpm        : { v:190, spark:[155,160,170,175,180,185,190] },
+  wmSpan     : { v:5,   spark:[4,4,5,5,5,5,5] },
+  recall     : { v:67,  spark:[52,55,58,60,62,64,67] },
+  logic      : { v:3,   spark:[2,2,2,3,3,3,3] },
+  motivation : { v:15,  spark:[12,13,13,14,14,15,15] },
+};
+const capGrad = {
+  wpm:["#3b82f6","#6ee7b7"], wmSpan:["#ec4899","#f9a8d4"],
+  recall:["#f59e0b","#fde68a"], logic:["#818cf8","#d8b4fe"],
+  motivation:["#f87171","#fca5a5"],
+};
+
+const TOOLS = [
+  {id:"planner", icon:<LibraryBooks/>, name:"Study Planner", state:"Configured", last:"Today"},
+  {id:"revise",  icon:<FlashOnIcon/>,  name:"Quick Revise",  state:"2 sessions",last:"Yesterday"},
+  {id:"concept", icon:<MapIcon/>,      name:"Concept Map",   state:"Viewed",    last:"2 days ago"},
+];
+
+
+
+/* ─── profile → plan explainer cards ─── */
+const PROFILE_EXPLAIN_CARDS = [
+  {emoji:"🧭", title:"Personalised Planner",
+   grad:["#6366f1","#a5b4fc"],
+   blurb:"Your goals, pace and daily minutes generate an auto-Gantt that writes each day’s tasks."},
+  {emoji:"🎯", title:"Adaptive Difficulty",
+   grad:["#3b82f6","#6ee7b7"],
+   blurb:"Every attempt re-tunes question level so you stay in your ideal challenge zone."},
+  {emoji:"⏳", title:"Spaced Recall",
+   grad:["#f59e0b","#fde68a"],
+   blurb:"Concepts resurface on day 2, 7, 30 based on *your* memory curve."},
+  {emoji:"🔍", title:"Mock-Drill Loop",
+   grad:["#ec4899","#f9a8d4"],
+   blurb:"Missed mock topics drop into a drill queue until they’re mastered."},
+];
+
+
+const labelMap = {
+  wpm:"Reading pace",
+  wmSpan:"Mental workspace",
+  recall:"Recall accuracy",
+  logic:"Reasoning score",
+  motivation:"Motivation index"
+};
+
+const tipMap = {
+  wpm:"Words you can read per minute in science text.\n\nWhy it matters: sets how many pages fit in a study block.",
+  wmSpan:"Items you can juggle in short-term memory.\n\nWhy it matters: low span triggers extra scaffolds on problems.",
+  recall:"Percent of flash cards nailed on the first attempt.\n\nWhy it matters: drives spaced-recall timing.",
+  logic:"0-5 accuracy on puzzle & mixed-concept tasks.\n\nWhy it matters: higher score unlocks harder questions sooner.",
+  motivation:"0-20 blend of grit, mood and streak streak.\n\nWhy it matters: lowers daily load on low-grit days."
+};
+
+const CapacityCard = ({ id, data }) => (
+  <MotionCard {...lift} sx={{
+    ...CardSX, width:240, background:grad(capGrad[id])
+  }}>
+    <Box sx={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      <Typography variant="subtitle2" sx={{fontWeight:600}}>
+        {labelMap[id]}
+      </Typography>
+      <Tooltip title={tipMap[id]} arrow>
+        <IconButton size="small" sx={{color:"#fff"}}><InfoIcon fontSize="inherit"/></IconButton>
+      </Tooltip>
+    </Box>
+
+    <Typography variant="h4" sx={{fontWeight:700, mt:.5}}>
+      {data.v}{id==="recall"?" %":""}
+    </Typography>
+
+    <Box sx={{width:"100%",height:40,mt:1}}>
+      <ResponsiveContainer>
+        <LineChart data={data.spark.map((v,i)=>({i,v}))}>
+          <Line dataKey="v" dot={false} stroke="#ffffffaa" strokeWidth={2}/>
+        </LineChart>
+      </ResponsiveContainer>
+    </Box>
+  </MotionCard>
+);
+
+
+/* ─────────────────────────────────────────────────────────────── */
+export default function ProfileAnalyticsHub(){
+
+  /* ─── auth state ─── */
+  const [user, setUser]           = useState(null);
+  const [authLoading,setAuthLoading]=useState(true);
+  const [email,setEmail]          = useState("—");
+
+  /* profile fields */
+  const [targetRank,setTargetRank]=useState(null);
+  const [challenges,setChallenges]=useState([]);
+
+  /* UI state */
+  const [rankDlg,setRankDlg]      = useState(false);
+  const [subjectTab,setSubjectTab]= useState(0);
+
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const unsub = auth.onAuthStateChanged((u) => {
-      setUserId(u ? u.uid : null);
+  /* === load / watch user document === */
+  useEffect(()=>{
+    const unsub = auth.onAuthStateChanged(async (u)=>{
+      if(!u){ setUser(null); setAuthLoading(false); return; }
+
+      setUser(u); setEmail(u.email || "—");
+
+      const ref  = doc(db,"learnerPersonas",u.uid);
+      const snap = await getDoc(ref);
+
+      if(snap.exists()){
+        const d=snap.data();
+        setTargetRank(d.targetRank||null);
+        setChallenges(Array.isArray(d.majorChallenges)?d.majorChallenges:[]);
+      } else {
+        await setDoc(ref,{createdAt:serverTimestamp()},{merge:true});
+      }
       setAuthLoading(false);
     });
-    return () => unsub();
-  }, []);
+    return ()=>unsub();
+  },[]);
 
-  useEffect(() => {
-    if (!authLoading && !userId) navigate("/");
-  }, [authLoading, userId, navigate]);
+  useEffect(()=>{
+    if(!authLoading && user===null) navigate("/");
+  },[authLoading,user,navigate]);
 
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      localStorage.clear();
-      navigate("/");
-    } catch (e) {
-      console.error(e);
-    }
+  const personaRef = useCallback(()=>doc(db,"learnerPersonas",user.uid),[user]);
+  const persistField = async (k,v)=>{
+    if(!user) return;
+    await updateDoc(personaRef(),{[k]:v,updatedAt:serverTimestamp()});
   };
 
-  /* ------------------------------------------------ demo placeholder data */
-  const purposeDemo = { exam: "IIT‑JEE Advanced", target: "Rank ≤ 5 000" };
-
-  const constraintDemo = {
-    deadline: "2026‑05‑20 (320 days left)",
-    dailyMinutes: 120,
-    timeWindow: "19 : 00 – 22 : 30",
+  /* handlers */
+  const toggleChallenge = async(c)=>{
+    const next = challenges.includes(c)
+      ? challenges.filter(x=>x!==c)
+      : [...challenges,c];
+    setChallenges(next);
+    await persistField("majorChallenges",next);
+  };
+  const handleRankSelect = async(r)=>{
+    setTargetRank(r); setRankDlg(false);
+    await persistField("targetRank",r);
   };
 
-  const capacityTiles = [
-    {
-      cat: "Intake Speed & Fidelity",
-      metric: "Reading WPM",
-      value: 180,
-      expl:
-        "Average words‑per‑minute for factual science text. " +
-        "Drives how large each study brick can be without overflowing the daily budget.",
-    },
-    {
-      cat: "Short‑Term Manipulation",
-      metric: "Working‑Memory Span",
-      value: 5,
-      expl:
-        "Forward digit‑span score (0‑9). Lower span → system shows multi‑step problems with scaffolds.",
-    },
-    {
-      cat: "Retrieval Fluency",
-      metric: "1st‑Try Fact Recall",
-      value: "62 %",
-      expl:
-        "Rolling 20‑card window: percent of flash cards answered correctly on the first attempt. " +
-        "Paces the spaced‑recall interval.",
-    },
-    {
-      cat: "Reasoning / Transformation",
-      metric: "Logic Score",
-      value: 3,
-      expl:
-        "0‑to‑5 score from pattern puzzles + accuracy on mixed‑concept items. " +
-        "Higher → earlier exposure to composite JEE questions.",
-    },
-    {
-      cat: "Affective / Self‑Regulation",
-      metric: "Motivation Index",
-      value: 14,
-      expl:
-        "0‑20 scale from grit + mood + streaks. Low index triggers lighter sessions and extra nudges.",
-    },
-  ];
-
-  /* ---------------------------------------------------- helper component */
-  const SectionPaper = ({ title, children }) => (
-    <Paper
-      variant="outlined"
-      sx={{
-        bgcolor: colorScheme.cardBg || "#262626",
-        borderColor: colorScheme.borderColor || "#3A3A3A",
-        color: colorScheme.textColor || "#FFFFFF",   // ← NEW: sets default text colour
-        p: 2.5,
-        mb: 3,
-      }}
-    >
-      <Typography
-        variant="h6"
-        sx={{ color: colorScheme.heading || "#BB86FC", mb: 1 }}
-      >
-        {title}
-      </Typography>
+  /* ─── reusable section wrapper ─── */
+  const Section = ({title,children})=>(
+    <MotionCard {...lift} sx={{...CardSX, mt:5}}>
+      <Typography variant="h5" sx={{fontWeight:800,mb:2}}>{title}</Typography>
       {children}
-    </Paper>
+    </MotionCard>
   );
 
-  /* --------------------------------------------------------- render */
-  return (
-    <Box
-      sx={{
-        flex: 1,
-        bgcolor: colorScheme.mainBg || "#141414",
-        color: colorScheme.textColor || "#FFFFFF",
-        p: 3,
-        position: "relative",
-        overflowY: "auto",
-      }}
-    >
-      {/* logout */}
-      <Box sx={{ position: "absolute", top: 16, right: 16 }}>
-        <Button variant="contained" color="secondary" onClick={handleLogout}>
-          Logout
-        </Button>
-      </Box>
+  /* ─── render ─── */
+  return(
+    <Box sx={{
+      minHeight:"100vh", background:PAGE_BG,
+      p:{xs:3,md:5}, fontFamily:"Inter, sans-serif"
+    }}>
 
-      <Typography
-        variant="h4"
-        sx={{ color: colorScheme.heading || "#BB86FC", mb: 3 }}
-      >
-        User Analytics
-      </Typography>
+      {/* top page title */}
+<MotionCard {...lift}
+  sx={{
+    ...CardSX,
+    mb:4,
+    px:{xs:2, md:4},
+    py:2,
+    display:"inline-block",
+    background:"transparent",          /* just to reuse glassy border / shadow */
+    boxShadow:"none"                   /* kill inner shadow so it looks like plain text */
+}}>
+  <Typography variant="h3" sx={{ fontWeight:800 }}>
+    🧑‍💻 User Profile
+  </Typography>
+</MotionCard>
 
-      {authLoading && <p>Checking auth …</p>}
-      {!authLoading && !userId && <p>No user logged in.</p>}
+      {/* ¹  OVERVIEW CARDS */}
+      <Grid container spacing={2}>
+        <Grid item xs={12} md={4}>
+          <InfoCard
+            icon={<CalendarIcon/>}
+            label="for NEET"
+            value="10 months left"
+          />
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <InfoCard icon={<EmailIcon/>} label="Email" value={email}/>
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <InfoCard
+            icon={targetRank?<RankIcon/>:<AddIcon/>}
+            label="Target rank"
+            value={targetRank??"Add target rank"}
+            onClick={()=>setRankDlg(true)}
+            clickable
+            empty={!targetRank}
+            sx={!targetRank?{border:"1px dashed #BB86FC"}:{}}
+          />
+        </Grid>
+      </Grid>
 
-      {!authLoading && userId && (
-        <>
-          {/* account */}
-          <SectionPaper title="Account">
-            <Typography variant="body2">
-              <strong>User‑ID:</strong>&nbsp;{userId}
-            </Typography>
-          </SectionPaper>
+      {/* ²  PROFILE EXPLAINER */}
+      <ProfileExplainer/>
 
-          {/* purpose */}
-          <SectionPaper title="Purpose (Goal)">
-            <Typography variant="body2" sx={{ mb: 0.5 }}>
-              <strong>Exam:</strong>&nbsp;{purposeDemo.exam}
-            </Typography>
-            <Typography variant="body2">
-              <strong>Target:</strong>&nbsp;{purposeDemo.target}
-            </Typography>
-          </SectionPaper>
+      {/* ³  MAJOR CHALLENGES */}
 
-          {/* constraints */}
-          <SectionPaper title="Constraints">
-            <Typography variant="body2" sx={{ mb: 0.5 }}>
-              <strong>Deadline:</strong>&nbsp;{constraintDemo.deadline}
-            </Typography>
-            <Typography variant="body2" sx={{ mb: 0.5 }}>
-              <strong>Daily Time Budget:</strong>&nbsp;
-              {constraintDemo.dailyMinutes}&nbsp;min
-            </Typography>
-            <Typography variant="body2">
-              <strong>Preferred Window:</strong>&nbsp;{constraintDemo.timeWindow}
-            </Typography>
-          </SectionPaper>
+      <Section title="Major Challenges">
+          <Typography variant="caption" sx={{ mt:1, display:"block", opacity:.75 }}>
+          *Tap to add / remove hurdles you’d like the system to account for.*
+        </Typography>
+        <Stack direction="row" spacing={1} flexWrap="wrap">
+          {CHALLENGE_OPTIONS.map(c=>(
+            <Chip
+              key={c} label={c} clickable onClick={()=>toggleChallenge(c)}
+              color={challenges.includes(c)?"primary":"default"}
+              sx={{
+                fontWeight:600,
+                color:"#fff",
+                bgcolor:challenges.includes(c)?"primary.main":"#444"
+              }}
+            />
+          ))}
+        </Stack>
+      
 
-          {/* capacity */}
-          <SectionPaper title="Capacity Snapshot">
-            <Grid
-              container
-              spacing={2}
-              sx={{ /* ensures paper grows to fit */ pb: 1 }}
-            >
-              {capacityTiles.map((t) => (
-                <Grid item xs={12} sm={6} md={4} key={t.metric}>
-                  <Paper
-                    variant="outlined"
-                    sx={{
-                      bgcolor: "#1E1E1E",
-                      borderColor: "#333",
-                      p: 2,
-                      height: "100%",
-                    }}
-                  >
-                    {/* heading row */}
-                    <Box
-                      sx={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                      }}
-                    >
-                      <Typography
-                        variant="subtitle2"
-                        sx={{ fontWeight: 600, color: "#FFFFFF" }}
-                      >
-                        {t.metric}
-                      </Typography>
-                      <Tooltip title={t.expl} arrow>
-                        <IconButton size="small" sx={{ color: "#BBBBBB" }}>
-                          <InfoOutlinedIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
+        {challenges.length===0 && (
+          <Typography variant="body2" sx={{
+            mt:2, bgcolor:"#333", p:1.5, borderRadius:2,
+            textAlign:"center", opacity:.8
+          }}>
+            You haven’t selected any challenges yet. Tap the chips so we can tailor your plan.
+          </Typography>
+        )}
 
-                    <Divider sx={{ my: 1, borderColor: "#444" }} />
-
-                    <Typography
-                      variant="h5"
-                      sx={{ color: "#FFFFFF", fontWeight: 700 }}
-                    >
-                      {t.value}
-                    </Typography>
-
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        color: "#CCCCCC",
-                        mt: 0.5,
-                        display: "block",
-                        lineHeight: 1.3,
-                      }}
-                    >
-                      {t.cat}
-                    </Typography>
-                  </Paper>
-                </Grid>
-              ))}
-            </Grid>
-          </SectionPaper>
-        </>
-      )}
-       
         
+      </Section>
 
+      {/* ⁴  CAPACITY SNAPSHOT */}
+  {/* ⁴  CAPACITY SNAPSHOT */}
+  <Section title="Capacity Snapshot">
+    <Typography variant="body2" sx={{ opacity:.8, mb:2 }}>
+      These five cards track the skills that power your learning engine. They
+      start from a short onboarding diagnostic and shift automatically after
+      every quiz, mock or timed reading—so you can watch them climb.
+    </Typography>
+  <Box sx={{
+    overflowX:"auto", p:1,
+    "&::-webkit-scrollbar":{ display:"none" }
+  }}>
+    <Stack direction="row" spacing={2}>
+      {Object.entries(capacity).map(([id,m])=>(
+        <CapacityCard key={id} id={id} data={m}/>
+      ))}
+    </Stack>
+  </Box>
+</Section>
+
+
+
+      {/* ⁶  RECENT CONCEPT ACTIVITY */}
+      <Section title="Recent Concept Activity">
+  <Placeholder
+    icon="📈"
+    text="As you quiz or read, the concepts you touched will appear here."
+  />
+</Section>
+
+      {/* ⁷  TOOL HISTORY */}
+      <Section title="Tool History">
+  <Placeholder
+    icon="🕒"
+    text="Each planner session, mock or quick-revise run will show up here."
+  />
+</Section>
+
+      {/* ⁸  PROFICIENCY EXPLORER */}
+     <Section title="Proficiency Explorer">
+  <Placeholder
+    icon="🧪"
+    text="Once you attempt questions, we’ll plot your topic-wise mastery here."
+  />
+</Section>
+
+      {/* ─── Target Rank dialog ─── */}
+      <Dialog open={rankDlg} onClose={()=>setRankDlg(false)}>
+        <DialogTitle>Select target rank</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{mt:1}}>
+            {["Under 100","Under 1 000","Under 10 000"].map(r=>(
+              <Button key={r}
+                variant={r===targetRank?"contained":"outlined"}
+                onClick={()=>handleRankSelect(r)}
+              >{r}</Button>
+            ))}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={()=>setRankDlg(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
 
     </Box>
   );
-
 }
+
+/* ─── sub-components ─── */
+const InfoCard = ({
+  icon,label,value,onClick,clickable=false,empty=false, sx={}
+})=>(
+  <MotionCard {...lift}
+    onClick={clickable?onClick:undefined}
+    sx={{
+      ...CardSX, textAlign:"center",
+      cursor:clickable?"pointer":"default",
+      opacity:empty?0.65:1,
+      ...sx
+    }}>
+    <Avatar sx={{bgcolor:"rgba(255,255,255,.25)",mx:"auto",mb:1}}>{icon}</Avatar>
+    <Typography variant="h5" sx={{fontWeight:700}}>{value}</Typography>
+    <Typography variant="caption" sx={{opacity:.8}}>{label}</Typography>
+  </MotionCard>
+);
+
+const Th = (p)=><TableCell sx={{color:"#BB86FC",fontWeight:600}} {...p}/>;
+const Td = (p)=><TableCell sx={{color:"#fff"}} {...p}/>;
+
+const ProfileExplainer = () => (
+  <MotionCard {...lift} sx={{...CardSX, mt:3}}>
+    <Stack direction="row" spacing={1} alignItems="center" mb={2}>
+      <Avatar sx={{width:30,height:30,bgcolor:"rgba(255,255,255,.15)"}}>📈</Avatar>
+      <Typography variant="h5" sx={{fontWeight:800}}>
+        How your profile powers your study plan
+      </Typography>
+    </Stack>
+    <Box sx={{display:"flex", overflowX:"auto", pb:1,
+              "&::-webkit-scrollbar":{display:"none"}}}>
+      {PROFILE_EXPLAIN_CARDS.map(c=>(
+        <MotionCard key={c.title} {...lift}
+          sx={{...CardSX, flex:"0 0 240px", mr:2,
+              background:`linear-gradient(135deg,${c.grad[0]} 0%,${c.grad[1]} 100%)`}}>
+          <Box sx={{fontSize:46,textAlign:"center",mb:1}}>{c.emoji}</Box>
+          <Typography variant="subtitle1" sx={{fontWeight:700,mb:.5}}>
+            {c.title}
+          </Typography>
+          <Typography variant="body2" sx={{opacity:.9}}>{c.blurb}</Typography>
+        </MotionCard>
+      ))}
+    </Box>
+  </MotionCard>
+);
+
+
+/* ─── simple empty-state card ─── */
+const Placeholder = ({ icon="ℹ️", text }) => (
+  <Box sx={{
+    display:"flex", flexDirection:"column", alignItems:"center",
+    justifyContent:"center", height:160, opacity:.7
+  }}>
+    <Box sx={{ fontSize:42 }}>{icon}</Box>
+    <Typography variant="body2" align="center" sx={{ mt:1, maxWidth:240 }}>
+      {text}
+    </Typography>
+  </Box>
+);

@@ -35,6 +35,8 @@ import Adapting             from "../PlanBalancer PLUS EXPERIMENTAL/Adapting";
 import AggregatorPanel      from "../PlanBalancer PLUS EXPERIMENTAL/AggregatorPanel";
 import DailyOverviewDemo    from "../PlanBalancer PLUS EXPERIMENTAL/DailyOverviewDemo";
 
+import HowItWorks from "../6.HowItWorks/HowItWorks";
+
 import Tools               from "../5.Tools/Tools";
 
 
@@ -174,13 +176,14 @@ const flatActs  = useSelector(
     { label:"Activity",     comp: renderTimeline },
     { label:"Progress",    admin:true, comp: renderProgress },
     { label:"Admin",       admin:true, comp: renderAdmin },
-    { label:"AdaptPlayground", comp: renderAdaptPlayground },
+    { label:"AdaptPlayground", admin:true, comp: renderAdaptPlayground },
     { label:"Daily Plan Dummy", admin:true, comp: renderDaily },
     { label:"Daily Overview", admin:true, comp: () =>
         <DailyOverviewDemo userId={userId} plan={plan} planId={planId} colorScheme={colorScheme}/> },
     { label:"AdaptPG",     admin:true, comp: renderAdaptPG },
     { label:"Adapting",    admin:true, comp: renderAdapting },
-    { label:"Aggregator",  admin:true, comp: renderAggregator }
+    { label:"Aggregator",  admin:true, comp: renderAggregator },
+    { label:"How It Works",  comp: () => <HowItWorks userId={userId} plan={plan} planId={planId}/> },
   ];
   const VISIBLE_TABS = TAB_CONF.filter(t => !t.admin || isAdmin);
 

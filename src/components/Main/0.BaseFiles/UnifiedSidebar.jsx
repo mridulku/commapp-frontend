@@ -1,5 +1,8 @@
 // src/components/DetailedBookViewer/UnifiedSidebar.jsx
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { signOut } from "firebase/auth";
+import { auth } from "../../../firebase";             // adjust path if required
 
 function UnifiedSidebar({
   // Theming
@@ -12,9 +15,22 @@ function UnifiedSidebar({
   // 1) Start collapsed by default
   const [collapsed, setCollapsed] = useState(true);
 
+  const navigate = useNavigate(); // NEW
+
   // 2) Toggle collapse
   const handleToggleCollapse = () => {
     setCollapsed((prev) => !prev);
+  };
+
+  /* ─── Logout helper ─── */
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);    // kill Firebase session
+      localStorage.clear();   // app-side caches
+      navigate("/");          // back to landing / login
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   // 3) Container style
@@ -97,18 +113,16 @@ function UnifiedSidebar({
 
       {/* Mode toggle buttons stacked vertically */}
       <div style={modeToggleContainerStyle}>
+        {/* Duplicate overview button (#1) */}
+        <button
+          style={toggleButtonStyle(viewMode === "overview")}
+          onClick={() => switchMode("overview")}
+          title="Home"
+        >
+          {collapsed ? "🏠" : <>🏠 Home</>}
+        </button>
 
-
-          <button
-           style={toggleButtonStyle(viewMode === "overview")}
-           onClick={() => switchMode("overview")}
-           title="Home"
-         >
-           {collapsed ? "🏠" : <>🏠 Home</>}
-         </button>
-        
-
-        {/* Home */}
+        {/* Home → Study Plans */}
         <button
           style={toggleButtonStyle(viewMode === "home")}
           onClick={() => switchMode("home")}
@@ -117,22 +131,14 @@ function UnifiedSidebar({
           {collapsed ? "📚" : <>📚 Study Plans</>}
         </button>
 
-
+        {/* Study Tools */}
         <button
-  style={toggleButtonStyle(viewMode === "newHome2")}
-  onClick={() => switchMode("newHome2")}
-  title="Study Tools"
->
-  {collapsed ? "🧰" : <>🧰 Study Tools</>}
-</button>
-
-    
-
-      
-
-      
-
-        
+          style={toggleButtonStyle(viewMode === "newHome2")}
+          onClick={() => switchMode("newHome2")}
+          title="Study Tools"
+        >
+          {collapsed ? "🧰" : <>🧰 Study Tools</>}
+        </button>
 
         {/* Profile */}
         <button
@@ -143,17 +149,8 @@ function UnifiedSidebar({
           {collapsed ? "🧑‍💻" : <>🧑‍💻 Profile</>}
         </button>
 
-             {/* Admin — show a wrench icon when collapsed */}
-                 
-        <>
-          
-
-          
-
-          
-
-
-{isAdmin && (
+        {/* Admin buttons (visible only to admins) */}
+        {isAdmin && (
           <button
             style={toggleButtonStyle(viewMode === "admin")}
             onClick={() => switchMode("admin")}
@@ -161,36 +158,28 @@ function UnifiedSidebar({
           >
             {collapsed ? "🛠️" : <>🛠️ Admin</>}
           </button>
+        )}
 
-         )} 
-
-                 {/* Overview  (only visible to admins) */}
-       {isAdmin && (
-         <button
-           style={toggleButtonStyle(viewMode === "overview")}
-           onClick={() => switchMode("overview")}
-           title="Home"
-         >
-           {collapsed ? "🏠" : <>🏠 Home</>}
-         </button>
-       )}
-
-
-
+       
+        {/* Concept Graph */}
         <button
-            style={toggleButtonStyle(viewMode === "newHome")}
-            onClick={() => switchMode("newHome")}
-            title="Concept Graph"
-          >
-{collapsed ? "🌐" : <>🌐 Concept Graph</>}
-          </button>
+          style={toggleButtonStyle(viewMode === "newHome")}
+          onClick={() => switchMode("newHome")}
+          title="Concept Graph"
+        >
+          {collapsed ? "🌐" : <>🌐 Concept Graph</>}
+        </button>
+      </div>
 
-
-
-
-
-        </>
-     
+      {/* Logout button anchored at the bottom */}
+      <div style={{ marginTop: "auto", width: "100%" }}>
+        <button
+          style={toggleButtonStyle(false)} // never "active"
+          onClick={handleLogout}
+          title="Logout"
+        >
+          {collapsed ? "🚪" : <>🚪 Logout</>}
+        </button>
       </div>
 
       {/* 

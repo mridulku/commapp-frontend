@@ -1,629 +1,463 @@
 /* ────────────────────────────────────────────────────────────────
-   File:  src/components/GuideOnboarding.jsx
-   Purpose:
-     • Pick subjects → groups (tied to chapter selection behind the scenes)
-     • Pick target date, daily minutes, mastery level
-     • POST to PLAN_ENDPOINT to generate an adaptive plan
+   File:  src/components/GuideOnboarding.jsx           2025-06-20 v8
+   − integrates FancySyllabusPicker, keeps original Goal step
 ───────────────────────────────────────────────────────────────── */
 
 import React, { useEffect, useState, useMemo } from "react";
 import { useSelector } from "react-redux";
 import axios from "axios";
-import SuccessPlanCreation from "./SuccessPlanCreation";
 
-import LockIcon from "@mui/icons-material/Lock";
-import Loader from "./Loader";
+import SuccessPlanCreation from "./SuccessPlanCreation";
+import FancyLoader          from "./FancyLoader";
+import FancySyllabusPicker  from "./FancySyllabusPicker";
 
 import {
-  Box,
-  Typography,
-  CircularProgress,
-  Alert,
-  LinearProgress  ,
-  Chip,
-  Button,
-  Grid,
-  Paper,
-  Slider,
-  Stack,
-  TextField,
-  Tooltip,
-  IconButton,
-  RadioGroup,
-  Radio,
-  FormControlLabel,
-  FormControl,
-  FormLabel,
+  Box, Button, Grid, Paper, Slider, Stack, Typography, Alert,
+  LinearProgress, Collapse
 } from "@mui/material";
 
-import CalendarMonthIcon        from "@mui/icons-material/CalendarMonth";
-import AccessTimeIcon           from "@mui/icons-material/AccessTime";
-import AssignmentTurnedInIcon   from "@mui/icons-material/AssignmentTurnedIn";
-import InfoIcon                 from "@mui/icons-material/Info";
+const ACCENT = "#BB86FC";
+const OFF_BG = "rgba(255,255,255,.08)";
 
-/* ════════════════════════════════════════════════════════════════
-   0.  CONSTANTS / STYLES
-═════════════════════════════════════════════════════════════════ */
-const ACCENT  = "#BB86FC";               // primary purple accent
-const OFF_BG  = "rgba(255,255,255,.08)"; // muted card bg
 
-/* emojis for subject headers (optional) */
-const EMOJI = {
-  physics:   "🔭",
-  chemistry: "⚗️",
-  biology:   "🧬",
-};
 
-/* ── which buckets the learner can click ─────────────── */
-/* Keys = subject (lower-case).  Values = array of group labels.  */
+
+/* ── buckets that are allowed right now ─────────────── */
 const ALLOWED_GROUPS = {
-  biology:   ["Human Physiology", "Plant Physiology", "Genetics & Evolution"],
-  physics:   ["Mechanics", "Optics"],
-  chemistry: ["Organic Chemistry - Basic", "Physical Chemistry"],
+  physics   : ["Mechanics"],
+  chemistry : ["Physical Chemistry", "Inorganic Chemistry", "Organic Chemistry"],
+  biology   : [],                       // lock every Biology bucket for now
 };
+/* quick helper */
+const isBucketAllowed = (sub, grp) =>
+  ALLOWED_GROUPS[(sub || "").toLowerCase()]?.includes(grp) ?? false;
 
-/* ════════════════════════════════════════════════════════════════
-   1.  COMPONENT
-═════════════════════════════════════════════════════════════════ */
 export default function GuideOnboarding({
-  onClose = () => {},
+  onClose       = () => {},
   onPlanCreated = () => {},
-  showCloseBtn  = false,       // ⇠  NEW explicit flag
+  showCloseBtn  = false,
 }) {
-  /* ───── Redux selectors ───── */
-  const userId   = useSelector((s) => s.auth?.userId);
-  const examType = useSelector((s) => s.exam?.examType);
+  /* ───────── redux selectors ───────── */
+  const userId   = useSelector(s => s.auth?.userId);
+  const examType = useSelector(s => s.exam?.examType);
 
-  /* ───── Wizard state (step switch) ───── */
-  const [step, setStep] = useState(0);               // 0: topics, 1: goal/minutes
+  /* ───── add this beside your other top-level hooks ───────────── */
+const [openSubj, setOpenSubj] = useState({
+  Chemistry : true,          // open by default
+  Physics   : true,
+  Biology   : false
+});
 
-  /* ───── BookId lookup (Firestore read) ───── */
+
+  /* ───────── wizard steps ──────────── */
+  const [step, setStep] = useState(0);             // 0: picker | 1: goal/min
+
+  /* ───────── book lookup ───────────── */
   const [bookId,   setBookId]   = useState(null);
   const [bookErr,  setBookErr]  = useState(null);
   const [loadingBook, setLB]    = useState(false);
 
-  const [planDoc,  setPlanDoc]  = useState(null);    // ← new
-const [generatedId, setGeneratedId] = useState(null);   // NEW
+  /* ───────── chapters list ─────────── */
+  const [chapters, setChapters]  = useState([]);
+  const [chapErr,  setChapErr]   = useState(null);
+  const [loadingCh,setLoadingCh] = useState(false);
+
   
 
+  /* ───────── plan-creation state ───── */
+  const [creating, setCreating] = useState(false);
+  const [fakePct,  setFakePct]  = useState(0);
+  const [success,  setSuccess]  = useState(false);
+  const [planDoc,  setPlanDoc]  = useState(null);
+  const [planId,   setPlanId]   = useState(null);
+  const [genErr,   setGenErr]   = useState(null);
+
+  /* --- misc step-2 state --- */
+  const [dailyMinutes, setDailyMinutes] = useState(30);
+  const [goal, setGoal] = useState("fresh");       // fresh | brush | diagnose
+
+    const [timeMode,      setTimeMode]     = useState("preset-30"); // preset-30 | preset-60 | custom
+  const minCustom = 30;
+
+
+  /* ═════════ 1. FIRESTORE: get bookId ══════════════════════════ */
   useEffect(() => {
     if (!userId || !examType) return;
-
     (async () => {
-      setLB(true); setBookErr(null);
       try {
-        const { doc, getDoc, updateDoc } = await import("firebase/firestore");
-        const firebase        = await import("../../../../../../../firebase");
+        setLB(true);
+        const { doc, getDoc } = await import("firebase/firestore");
+        const fb = await import("../../../../../../../firebase");
+        const snap = await getDoc(doc(fb.db,"users",userId));
+        if (!snap.exists()) throw new Error("user doc missing");
 
-        const snap = await getDoc(doc(firebase.db, "users", userId));
-        if (!snap.exists()) throw new Error("User doc not found");
-
-        const fieldMap = {
-          NEET:  "clonedNeetBook",
-          TOEFL: "clonedToeflBooks",
-        };
-
-        const entry = snap.data()[fieldMap[(examType || "").toUpperCase()]];
-        const id =
-          Array.isArray(entry) ? entry?.[0]?.newBookId : entry?.newBookId;
-
+        const bookEntry = snap.data().clonedNeetBook;
+        const id = Array.isArray(bookEntry)
+                   ? bookEntry?.[0]?.newBookId
+                   : bookEntry?.newBookId;
         if (!id) throw new Error("newBookId missing");
         setBookId(id);
       } catch (e) {
-        setBookErr(typeof e === "string" ? e : e.message);
-      } finally {
-        setLB(false);
-      }
+        setBookErr(e.message || String(e));
+      } finally { setLB(false); }
     })();
   }, [userId, examType]);
 
-  /* ───── Chapter list (API fetch) ───── */
-  const backendURL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
-  const [chapters, setChapters]   = useState([]);     // [{ id, title, subject, grouping, selected }]
-  const [chapErr, setChapErr]     = useState(null);
-  const [loadingCh, setLoadingCh] = useState(false);
-  const [topicErr, setTopicErr] = useState(null);
-
-
-
-
-
+  /* ═════════ 2. BACKEND: fetch chapters for that book ═════════ */
   useEffect(() => {
     if (!userId || !bookId) return;
-
     (async () => {
-      setLoadingCh(true); setChapErr(null);
       try {
-        const res  = await axios.get(`${backendURL}/api/process-book-data`, {
-          params: { userId, bookId },
-        });
-        const list = res.data?.chapters ?? [];
-
-         const cooked = list.map((c) => ({
-             id:        c.id,
-             title:     c.name,
-             subject:   c.subject  || "Unknown",
-             grouping:  c.grouping || "Other",
-             selected:  false,         // ← default OFF ✅
-             isLocked: !ALLOWED_GROUPS[(c.subject || "").toLowerCase()]
-                     ?.includes(c.grouping),   // true ⟹ locked
-           }));
-
-        setChapters(cooked);
+        setLoadingCh(true); setChapErr(null);
+        const url = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
+        const { data } = await axios.get(`${url}/api/process-book-data`,
+                          { params:{ userId, bookId } });
+        setChapters(
+          (data?.chapters || []).map(c=>({
+            id:c.id, title:c.name,
+            subject:c.subject||"Unknown",
+            grouping:c.grouping||"Other",
+            selected:false
+          }))
+        );
       } catch (e) {
-        setChapErr(typeof e === "string" ? e : e.message);
-      } finally {
-        setLoadingCh(false);
-      }
+        setChapErr(e.message || String(e));
+      } finally { setLoadingCh(false); }
     })();
-  }, [userId, bookId, backendURL]);
+  }, [userId, bookId]);
 
-  /* ───── Subject → Group lookup (memoised) ───── */
-  const subjectsMap = useMemo(() => {
-    const map = {};
-    chapters.forEach((c, idx) => {
-      const subj = c.subject;
-      const grp  = c.grouping;
-      (map[subj]      = map[subj] || {});
-      (map[subj][grp] = map[subj][grp] || []).push(idx);
-    });
-    return map;
+  /* ═════════ 3. Make data shape for FancySyllabusPicker ═══════ */
+ /* ═════════ 3. Make data shape for FancySyllabusPicker ═══════ */
+const pickerData = useMemo(() => {
+  if (!chapters.length) return [];
+
+  /* nice rotating gradient palette */
+  const PAL = [
+    ["#ff7d7d", "#ffb199"], ["#818cf8", "#d8b4fe"],
+    ["#34d399", "#6ee7b7"], ["#f59e0b", "#fde68a"],
+    ["#60a5fa", "#a5b4fc"], ["#ec4899", "#f9a8d4"],
+  ];
+  let p = 0;
+
+  const dict = {};
+  chapters.forEach((ch) => {
+    const subj = ch.subject;
+    const grp  = ch.grouping;
+    const key  = `${subj}___${grp}`;
+
+    /* make subject entry if needed */
+    (dict[subj] ??= { subject: subj, icon: "📘", buckets: [] });
+
+    /* make / find the bucket */
+    let bucket = dict[subj].buckets.find((b) => b.id === key);
+    if (!bucket) {
+      bucket = {
+        id   : key,
+        label: grp,
+        grad : PAL[p++ % PAL.length],
+        comingSoon: !isBucketAllowed(subj, grp),
+        chapters  : [],
+      };
+      dict[subj].buckets.push(bucket);
+    }
+
+    /*  ‼️ store both id & visible name, not just id  */
+    bucket.chapters.push({ id: ch.id, name: ch.title });
+  });
+
+  return Object.values(dict);
+}, [chapters]);
+
+  /* ═════════ 4. Sync picker selection <-> chapters array ══════ */
+  const selectedSet = useMemo(() => {
+    const s=new Set(); chapters.forEach(c=>{ if (c.selected) s.add(c.id); });
+    return s;
   }, [chapters]);
 
-  /* ───── Plan-option local state ───── */
-  const [targetDate,       setTargetDate]       = useState("");
-  const [dailyMinutes,     setDailyMinutes]     = useState(30);
-  const [masteryLevel]     = useState("mastery"); // mastery | revision | glance
+  const handlePickerChange = (newSet) => {
+    setChapters(prev => prev.map(c=>({ ...c, selected:newSet.has(c.id) })));
+  };
 
-  /* ───── Goal cards state (fresh / brush / diagnose) ───── */
-  const [goal, setGoal] = useState("fresh");
-
-  /* ───── Generate-plan call state ───── */
-  const [creating, setCreating] = useState(false);
-  const [success,  setSuccess]  = useState(false);
-  const [genErr,   setGenErr]   = useState(null);
-
-  const [fakePct, setFakePct] = useState(0);   // visual progress 0–100
-
-  // ⬇︎  drop this useEffect block anywhere in the component
-useEffect(() => {
-  if (!creating) {                     // request finished → reset
-    setFakePct(0);
-    return;
-  }
-
-  /* every 400 ms add 3 %   ( ≈ 13 s to reach 100 ) */
-  const id = setInterval(() => {
-    setFakePct((p) => (p >= 97 ? 97 : p + 3));   // never show 100 %
-  }, 400);
-
-  return () => clearInterval(id);      // cleanup on un-mount / done
-}, [creating]);
-
-  const PLAN_ENDPOINT =
-    "https://generateadaptiveplan2-zfztjkkvva-uc.a.run.app";
-
-  /* ════════════════════════════════════════════════════════════
-       Helper: build request body from current selections
-  ════════════════════════════════════════════════════════════ */
-  function buildBody() {
-      /* derive selected-chapter IDs */
-      const selected = chapters.filter((c) => c.selected);
-      const chapterIds =
-        selected.length === chapters.length ? null : selected.map((c) => c.id);
-    
-      /* derive quiz / revise minutes from mastery level */
-      const qrMap = { mastery: 5, revision: 3, glance: 1 };
-      const qr    = qrMap[masteryLevel] ?? 1;
-    
-      /* generate a default target date = today + 6 months */
-      const d = new Date();
-      d.setMonth(d.getMonth() + 6);
-      const targetDateISO = d.toISOString().slice(0, 10); // "YYYY-MM-DD"
-    
-      return {
-        userId,
-        bookId,
-        targetDate: targetDateISO,           // always present
-        dailyReadingTime: dailyMinutes,
-        planType: masteryLevel,
-        quizTime: qr,
-        reviseTime: qr,
-        ...(chapterIds ? { selectedChapters: chapterIds } : {}),
-      };
-    }
+  /* ═════════ 5. Plan generation helpers (unchanged) ═══════════ */
+  const PLAN_ENDPOINT = "https://generateadaptiveplan2-zfztjkkvva-uc.a.run.app";
 
   async function handleGenerate() {
-    if (!bookId) return;
-    if (!chapters.some((c) => c.selected)) {
-      setGenErr("Please keep at least one chapter selected.");
+    if (!chapters.some(c=>c.selected)) {
+      setGenErr("Select at least one chapter.");
       return;
     }
+    const body = {
+      userId, bookId,
+      dailyReadingTime:dailyMinutes,
+      targetDate: new Date(Date.now()+155*24*3600e3).toISOString().slice(0,10),
+      planType:"mastery",
+      quizTime:5, reviseTime:5,
+      selectedChapters:[...selectedSet]
+    };
 
-    setCreating(true); setSuccess(false); setGenErr(null);
     try {
-      const { data } = await axios.post(PLAN_ENDPOINT, buildBody(), {
-        headers: { "Content-Type": "application/json" },
-      });
-        setPlanDoc(data?.planDoc || null);
-  setGeneratedId(
-    data?.planId ||                  // backend usually returns this
-    data?.planDocId ||               // fallback names we’ve seen
-    data?.planDoc?.id || null
-  );
+      setCreating(true); setGenErr(null);
+      const { data } = await axios.post(PLAN_ENDPOINT, body,
+                             { headers:{ "Content-Type":"application/json" } });
+      setPlanDoc(data?.planDoc||null);
+      setPlanId (data?.planId  || data?.planDocId || data?.planDoc?.id || null);
       setSuccess(true);
-      
-
-         /* ★★★  mark the learner as onboarded  ★★★ */
-   {
-     const { doc, setDoc } = await import("firebase/firestore");
-     const firebase        = await import("../../../../../../../firebase");
-
-     await setDoc(
-       doc(firebase.db, "learnerPersonas", userId),   // ← correct collection
-       { isOnboarded: true },                         //  simple flat field
-       { merge: true }                                //  keep existing data
-     );
-   }
-
-
-
-
-    } catch (e) {
-      const msg = e.response?.data?.error ||
-                  e.response?.data?.message ||
-                  e.message;
-      setGenErr(msg);
-    } finally {
-      setCreating(false);
-    }
+    } catch(e){ setGenErr(e.message||String(e)); }
+    finally  { setCreating(false); }
   }
 
-  /* ════════════════════════════════════════════════════════════
-       UI BUILDERS
-  ════════════════════════════════════════════════════════════ */
+  /* fake progress bar */
+  useEffect(()=>{
+    if (!creating) { setFakePct(0); return; }
+    const id=setInterval(()=>setFakePct(p=>p>=97?97:p+3),400);
+    return ()=>clearInterval(id);
+  },[creating]);
 
-  /* -- GoalCard subcomponent ----------------------------------- */
-  function GoalCard({ id, emoji, title, desc, disabled = false }) {
-    const active = goal === id;
-    return (
-      <Paper
-      onClick={() => !disabled && setGoal(id)}      // ignore clicks when disabled
-        elevation={0}
-        sx={{
-          p: 2,
-          flex: 1,
-          cursor: "pointer",
-          bgcolor: disabled
-          ? "rgba(255,255,255,.12)"
-          : active
-            ? ACCENT
-            : OFF_BG,
-          color: active ? "#000" : "#fff",
-          border: `1px solid ${active ? ACCENT : "#666"}`,
-          transition: ".2s",
-          "&:hover": { borderColor: ACCENT },
-          display: "flex",
-          flexDirection: "column",
-          gap: 1,
-        }}
-      >
-        <Typography sx={{ fontSize: "1.8rem" }}>{emoji}</Typography>
-        <Typography sx={{ fontWeight: "bold" }}>{title}</Typography>
-        <Typography variant="body2" sx={{ opacity: 0.8 }}>
-          {desc}
-        </Typography>
-      </Paper>
-    );
-  }
+  /* ═════════ 6.  loader shortcuts ═════════════════════════════ */
+  if (loadingBook || loadingCh) return <FancyLoader/>;
 
-  /* -- STEP 0  : subject → group picker ------------------------ */
-  const StepTopics = (
+  /* ═════════ 7.  STEP-0 UI (picker) ═══════════════════════════ */
+  /* ═════════ STEP 0  ── subject picker  ═════════════════════════════ */
+
+/* ═════════ STEP-0 UI – subject picker ═════════════════════════ */
+function StepTopics() {
+  const subjOrder = ["Chemistry", "Physics", "Biology"];
+
+  return (
     <>
-      <Typography variant="h5" sx={{ fontWeight: "bold", mb: 3 }}>
-        1&nbsp;&nbsp;Pick the areas you’d like to cover
+      {/* pill header */}
+      <Box sx={{
+        mx:"auto", mb:3, px:3, py:1, width:"max-content",
+        bgcolor:ACCENT, color:"#000", fontWeight:700,
+        borderRadius:20, fontSize:14, letterSpacing:0.3
+      }}>
+        {examType} study-plan setup
+      </Box>
+
+            {/* STEP 1 title */}
+      <Typography
+        variant="h5"
+        sx={{ fontWeight: 700, mb: 3 }}
+      >
+        Step&nbsp;1:&nbsp;Pick the areas you’d like to cover
       </Typography>
 
-      {Object.entries(subjectsMap).map(([subj, groups]) => (
-        <Box key={subj} sx={{ mb: 3 }}>
-          {/* subject header */}
-          <Typography
-            sx={{
-              fontWeight: "bold",
-              mb: 1,
-              display: "flex",
-              alignItems: "center",
-              gap: 1,
-              textTransform: "capitalize",
-            }}
-          >
-            <span style={{ fontSize: "1.4rem" }}>
-              {EMOJI[subj.toLowerCase()] || "📘"}
-            </span>
-            {subj}
-          </Typography>
+      
 
-          {/* group chips */}
-          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-            {Object.entries(groups).map(([grpLabel, idxArr]) => {
-              const allOn = idxArr.every((i) => chapters[i].selected);
+      {/* subjects */}
+      {subjOrder.map(subj => {
+        const subjObj = pickerData.find(s => s.subject === subj);
+        if (!subjObj) return null;
 
-              function toggleGroup() {
-                  if (locked) return;              // <- early-exit
-  setChapters((prev) =>
-                  prev.map((c, i) =>
-                    idxArr.includes(i)
-                      ? { ...c, selected: !allOn }
-                      : c
-                  )
-                );
-              }
+        return (
+          <Box key={subj} sx={{mb:4}}>
+            {/* toggler */}
+            <Box
+              onClick={() => setOpenSubj(o => ({...o, [subj]:!o[subj]}))}
+              sx={{cursor:"pointer",userSelect:"none",
+                   display:"flex",alignItems:"center",gap:1,mb:1}}
+            >
+              <Typography component="span" sx={{fontSize:22}}>
+                {subjObj.icon || "📘"}
+              </Typography>
+              <Typography variant="h6" sx={{fontWeight:700}}>
+                {subj}
+              </Typography>
+              <Typography component="span" sx={{
+                ml:0.5,fontSize:18,
+                transform:openSubj[subj] ? "rotate(90deg)" : "none",
+                transition:".2s",opacity:.7
+              }}>
+                ▶
+              </Typography>
+            </Box>
 
-              const locked = chapters[idxArr[0]].isLocked;   // any one entry works
-
-
-              return (
-
-               
-
-  <Chip
-    key={grpLabel}
-    label={grpLabel}
-    icon={locked ? <LockIcon sx={{ fontSize: 14 }} /> : undefined}
-    onClick={locked ? undefined : toggleGroup}
-    disabled={locked}
-    variant={allOn && !locked ? "filled" : "outlined"}
-    sx={{
-      cursor: locked ? "not-allowed" : "pointer",
-      bgcolor: allOn && !locked ? ACCENT : "transparent",
-      borderColor: locked ? "#555" : ACCENT,
-      "& .MuiChip-label": {
-        color: locked ? "#777" : allOn ? "#000" : "#fff",
-        fontStyle: locked ? "italic" : "normal",
-      },
-    }}
-  />
-);
-            })}
+            {/* bucket grid */}
+            <Collapse in={openSubj[subj]} unmountOnExit timeout="auto">
+              <FancySyllabusPicker
+                data={[subjObj]}            /* only this subject’s buckets */
+                value={selectedSet}
+                onChange={handlePickerChange}
+                 showSubjectHeader={false}     /* hide inner header */
+              />
+            </Collapse>
           </Box>
-        </Box>
-      ))}
+        );
+      })}
 
-      {/* nav button */}
-      <Box sx={{ textAlign: "right", mt: 4 }}>
+      {/* helper + nav */}
+      {selectedSet.size===0 &&
+        <Alert severity="info" sx={{mt:2}}>
+          Select at least one chapter to continue.
+        </Alert>}
+
+      <Box sx={{textAlign:"right",mt:4}}>
         <Button
           variant="contained"
-          sx={{ bgcolor: ACCENT, fontWeight: "bold" }}
-           onClick={() => {
-              if (chapters.some(c => c.selected && !c.isLocked)) {
-                 setTopicErr(null);
-                 setStep(1);
-               } else {
-                 setTopicErr("Please select at least one unit before continuing.");
-               }
-             }}
+          sx={{bgcolor:ACCENT,fontWeight:"bold"}}
+          disabled={selectedSet.size===0}
+          onClick={() => setStep(1)}
         >
           Next
         </Button>
       </Box>
     </>
   );
+}
 
-  /* -- STEP 1 : goal & daily minutes --------------------------- */
+  /* ═════════ 8. STEP-1 UI (goal & minutes)  – unchanged logic ═ */
+  const GoalCard = ({ id, emoji, title, desc, disabled=false }) => {
+    const active = goal===id;
+    return (
+      <Paper
+        onClick={()=>!disabled&&setGoal(id)}
+        elevation={0}
+        sx={{
+          p:2,flex:1,cursor:disabled?"not-allowed":"pointer",
+          bgcolor:disabled?"rgba(255,255,255,.12)":active?ACCENT:OFF_BG,
+          color:active?"#000":"#fff",
+          border:`1px solid ${active?ACCENT:"#666"}`,
+          display:"flex",flexDirection:"column",gap:1
+        }}
+      >
+        <Typography sx={{fontSize:"1.8rem"}}>{emoji}</Typography>
+        <Typography sx={{fontWeight:"bold"}}>{title}</Typography>
+        <Typography variant="body2" sx={{opacity:.8}}>{desc}</Typography>
+      </Paper>
+    );
+  };
+
   const StepGoal = (
     <>
-      <Typography variant="h5" sx={{ fontWeight: "bold", mb: 2 }}>
+      <Typography variant="h5" sx={{fontWeight:"bold",mb:2}}>
         2&nbsp;&nbsp;Set your goal & daily budget
       </Typography>
 
-      {/* goal cards */}
-      <Grid container spacing={2} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={4}>
-          <GoalCard
-            id="fresh"
-            emoji="📚"
-            title="Start fresh"
-            desc="Cover everything from scratch"
-          />
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <GoalCard
-            id="brush"
-            emoji="📝"
-            title="Quick brush-up"
-            desc="(coming soon)"
-            disabled
-          />
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <GoalCard
-            id="diagnose"
-            emoji="❓"
-            title="Not sure – diagnose me"
-            desc="(coming soon)"
-            disabled
-          />
-        </Grid>
+      <Grid container spacing={2} sx={{mb:4}}>
+                {[
+          { id:"fresh",    emoji:"📚", title:"Start fresh",
+            desc:"Full coverage of the chosen units." },
+          { id:"brush",    emoji:"📝", title:"Quick brush-up",
+            desc:"Revision schedule when basics already covered. Coming soon.", coming:true },
+          { id:"diagnose", emoji:"❓", title:"Diagnose me",
+            desc:"We probe weak spots before planning Coming Soon.", coming:true },
+        ].map(cfg=>(
+          <Grid item xs={12} md={4} key={cfg.id}>
+            <GoalCard
+              id={cfg.id}
+              emoji={cfg.emoji}
+              title={cfg.title}
+              desc={cfg.desc}
+              disabled={cfg.coming}
+            />
+          </Grid>
+        ))}
       </Grid>
 
-      {/* minutes slider */}
+            {/* ─── daily-minutes picker ────────────────────── */}
       <Typography variant="h6" sx={{ mb: 1 }}>
         Daily study budget
       </Typography>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-        <Slider
-          min={5}
-          max={120}
-          step={5}
-          value={dailyMinutes}
-          onChange={(_, v) => setDailyMinutes(v)}
-          sx={{ flex: 1, color: ACCENT }}
-        />
-        <Typography sx={{ width: 60, textAlign: "right" }}>
-          {dailyMinutes} m
-        </Typography>
-      </Box>
 
-      {/* mastery radio */}
-      
-
-      {/* nav */}
-      <Stack direction="row" spacing={2} sx={{ mt: 4 }}>
+      {/* preset chips */}
+      <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+        {["30","60"].map(n=>(
+          <Button
+            key={n}
+            variant={timeMode===`preset-${n}`?"contained":"outlined"}
+            sx={{
+              bgcolor: timeMode===`preset-${n}` ? ACCENT : "transparent",
+              borderColor: ACCENT, color:"#fff", fontWeight:600,
+              "&.MuiButton-contained":{ color:"#000" }
+            }}
+            onClick={()=>{ setTimeMode(`preset-${n}`); setDailyMinutes(+n); }}
+          >
+            {n}&nbsp;m
+          </Button>
+        ))}
         <Button
-          variant="outlined"
-          onClick={() => setStep(0)}
-          sx={{ borderColor: ACCENT, color: "#fff" }}
+          variant={timeMode==="custom"?"contained":"outlined"}
+          sx={{
+            bgcolor: timeMode==="custom" ? ACCENT : "transparent",
+            borderColor: ACCENT, color:"#fff", fontWeight:600,
+            "&.MuiButton-contained":{ color:"#000" }
+          }}
+          onClick={()=>setTimeMode("custom")}
         >
-          Back
-        </Button>
-        <Button
-          variant="contained"
-          disabled={creating || !bookId || loadingBook || loadingCh}
-          sx={{ bgcolor: ACCENT, fontWeight: "bold" }}
-          onClick={handleGenerate}
-        >
-           {creating ? (
-     <Box sx={{ width: "100%" }}>
-       <LinearProgress
-         variant="determinate"
-         value={fakePct}
-         sx={{
-           "& .MuiLinearProgress-bar": { transition: "transform 0.4s linear" },
-           height: 6, borderRadius: 3, bgcolor: "#664bb0"
-         }}
-       />
-       <Typography
-         variant="caption"
-         sx={{ mt: 0.5, display: "block", color: "#eee" }}
-       >
-         Generating plan… {fakePct}%
-       </Typography>
-   </Box>
- ) : (
-   "Generate Plan"
- )}
+          Custom
         </Button>
       </Stack>
 
-      
-      {genErr && (
-        <Alert severity="error" sx={{ mt: 2 }}>
-          {genErr}
+      {/* slider only when Custom is active */}
+      {timeMode==="custom" && (
+        <Box sx={{ display:"flex", alignItems:"center", gap:2 }}>
+          <Slider
+            min={minCustom}
+            max={120}
+            step={5}
+            value={dailyMinutes}
+            onChange={(_,v)=>setDailyMinutes(v)}
+            sx={{ flex:1, color:ACCENT }}
+          />
+          <Typography sx={{ width:60, textAlign:"right" }}>
+            {dailyMinutes}&nbsp;m
+          </Typography>
+        </Box>
+      )}
+
+      {/* warning if custom < 30 m (shouldn’t happen but guard anyway) */}
+      {timeMode==="custom" && dailyMinutes<minCustom && (
+        <Alert severity="warning" sx={{ mt:1 }}>
+          Minimum daily budget is {minCustom} minutes.
         </Alert>
       )}
+
+      <Stack direction="row" spacing={2} sx={{mt:4}}>
+        <Button variant="outlined" onClick={()=>setStep(0)}
+                sx={{borderColor:ACCENT,color:"#fff"}}>Back</Button>
+        <Button variant="contained" sx={{bgcolor:ACCENT,fontWeight:"bold"}}
+                disabled={creating}
+                onClick={handleGenerate}>
+          {creating
+            ? <Box sx={{width:"160px"}}>
+                <LinearProgress value={fakePct} variant="determinate"
+                                sx={{height:6,borderRadius:3,
+                                     "& .MuiLinearProgress-bar":{transition:"transform .4s linear"},
+                                     bgcolor:"#664bb0"}}/>
+                <Typography variant="caption" sx={{color:"#eee"}}>
+                  Generating… {fakePct}%
+                </Typography>
+              </Box>
+            : "Generate plan"}
+        </Button>
+      </Stack>
+
+      {genErr && <Alert severity="error" sx={{mt:2}}>{genErr}</Alert>}
     </>
   );
 
-  /* ════════════════════════════════════════════════════════════
-       RENDER WRAPPER
-  ════════════════════════════════════════════════════════════ */
- 
-
-    /* 1️⃣  Early-exit while we are still fetching ----------------- */
-  if (loadingBook || loadingCh) {
+  /* ═════════ 9. Success slide (unchanged) ═════════════════════ */
+  if (success) {
     return (
-      <Box
-        sx={{
-          maxWidth: 760,
-          mx: "auto",
-          my: 8,
-          textAlign: "center",
-          color: "#fff",
-        }}
-      >
-        <Typography variant="h5" sx={{ fontWeight: "bold", mb: 4 }}>
-         {examType ? `${examType} Plan Setup` : "Loading…"}
-        </Typography>
-
-        <Loader
-          type="bar"
-          accent={ACCENT}
-          fullScreen={false}
-          message={
-            loadingBook
-              ? "Fetching your cloned book…"
-              : "Loading chapter metadata…"
-          }
-        />
-      </Box>
+      <SuccessPlanCreation
+        planDoc={planDoc}
+        planId={planId}
+        onClose={()=>{ setSuccess(false); onClose(); }}
+        onStart={(id)=>{ onPlanCreated(id); setSuccess(false); }}
+      />
     );
   }
 
-  /* 2️⃣  Normal wizard once everything is ready ---------------- */
-  /* ─────────────────────────────────────────────────────────────
-   FINAL STEP  – show “plan ready” slide
-──────────────────────────────────────────────────────────── */
-if (success) {
+  /* ═════════ 10. Wrapper shell ════════════════════════════════ */
   return (
-    <SuccessPlanCreation
-      planDoc={planDoc}
-      planId={generatedId}          // NEW
-
-      /* 1️⃣  let the user close the wizard via the “×” */
-      onClose={() => {
-        setSuccess(false);          // hide SuccessPlanCreation
-        if (typeof onClose === "function") onClose();   // bubble to parent
-      }}
-
-      /* 2️⃣  when the learner clicks  ➜  Start learning */
-      onStart={(newId) => {
-        console.log("[GuideOnboarding] onStart got", newId);
-        if (typeof onPlanCreated === "function") onPlanCreated(newId);  // pass id up
-        setSuccess(false);          // ensure wizard closes
-      }}
-    />
-  );
-}
-
-   return (
-    <Box
-      sx={{
-        maxWidth: 760,
-        mx: "auto",
-        my: 4,
-        px: 3,
-        py: 4,
-        bgcolor: "#000",
-        color: "#fff",
-        border: `1px solid ${OFF_BG}`,
-        borderRadius: 2,
-        position: "relative",      /* so the close btn is positioned */
-      }}
-    >
-      {/* ─── floating close icon ─── */}
-      {showCloseBtn && typeof onClose === "function" && (
-        <Button
-          aria-label="Close wizard"
-          onClick={onClose}
-          sx={{
-            position: "absolute",
-            top: 16,
-            right: 16,
-            minWidth: 0,
-            width: 36,
-            height: 36,
-            borderRadius: "50%",
-            bgcolor: "rgba(255,255,255,.08)",
-            color: "#fff",
-            fontSize: 22,
-            lineHeight: 1,
-            "&:hover": { bgcolor: "rgba(255,255,255,.18)" },
-            zIndex: 1,
-          }}
-        >
-          ×
-        </Button>
-      )}
-
-      {/* ─── header ─── */}
-      <Typography variant="h5" sx={{ fontWeight: "bold", mb: 2 }}>
-        {examType} Plan Setup
-      </Typography>
-      {bookErr && <Alert severity="error" sx={{ mb: 2 }}>{bookErr}</Alert>}
-      {chapErr && <Alert severity="error" sx={{ mb: 2 }}>{chapErr}</Alert>}
-
-      {/* ─── wizard body ─── */}
-      {step === 0 ? StepTopics : StepGoal}
+    <Box sx={{
+      maxWidth:760,mx:"auto",my:4,px:3,py:4,
+      bgcolor:"#000",color:"#fff",border:`1px solid ${OFF_BG}`,borderRadius:2
+    }}>
+      
+      {bookErr && <Alert severity="error" sx={{mb:2}}>{bookErr}</Alert>}
+      {chapErr && <Alert severity="error" sx={{mb:2}}>{chapErr}</Alert>}
+      {step===0 ? <StepTopics/> : StepGoal}
     </Box>
   );
- }
+}
