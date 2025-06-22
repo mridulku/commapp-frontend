@@ -14,6 +14,8 @@ import QuizIcon         from "@mui/icons-material/Quiz";
 import SchoolIcon       from "@mui/icons-material/School";
 import AssignmentIcon   from "@mui/icons-material/Assignment";
 
+import PlanExplainerPanel from "../3.Library/3.AdaptivePlanView/AdaptPGComponent/AdaptPG2/ExplainerStrips/PastPapersExplainerStrip";
+
 /* ── design tokens (match rest of app) ────────────────────────── */
 const PAGE_BG  = "radial-gradient(circle at 35% 0%, #181924 0%, #0e0f15 100%)";
 const GLASS_BG = "rgba(255,255,255,.06)";
@@ -123,6 +125,9 @@ export default function PastPapersPage({ onBack = ()=>{} }) {
         <Avatar sx={headerAvatar}><EditIcon/></Avatar>
         <Typography variant="h4" sx={{ fontWeight:800 }}>Past&nbsp;Papers</Typography>
       </Stack>
+
+            {/* collapsible explainer */}
+            <PlanExplainerPanel sx={{ mb: 3 }} />
 
       {/* YEAR PICKER */}
       <Stack direction="row" spacing={1} flexWrap="wrap" mb={3}>

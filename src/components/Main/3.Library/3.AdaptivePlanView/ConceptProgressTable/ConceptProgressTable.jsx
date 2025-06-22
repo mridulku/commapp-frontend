@@ -19,6 +19,8 @@ import {
 } from "../../../../../store/conceptSlice";
 import { selectSubChList } from "../../../../../store/planSlice";
 
+import PlanExplainerPanel from "../AdaptPGComponent/AdaptPG2/ExplainerStrips/SecondaryToolsExplainerStrip";
+
 import {
   Box, Typography, FormControl, Select, MenuItem,
   Table, TableHead, TableRow, TableCell, TableBody,
@@ -261,6 +263,11 @@ export default function ConceptProgressTable(){
           sx={{height:8,borderRadius:1,bgcolor:"#333",
               "& .MuiLinearProgress-bar":{bgcolor:"#FFD700"}}}/>
         <Typography sx={{fontSize:12,mt:.4}}>{fakePct}% completed</Typography>
+
+
+        {/* adaptive-plan explainer */}
+<PlanExplainerPanel sx={{ mt: 2, mb: 3 }} />
+
       </Box>
 
       <Table size="small" sx={{bgcolor:"#111"}}>

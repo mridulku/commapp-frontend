@@ -17,6 +17,7 @@ import TaskCard from "../../../../5.StudyModal/0.components/Secondary/shared/Tas
 /* ---------- icon & colour presets ---------- */
 
 
+import PlanExplainerStrip from "./ExplainerStrips/DailyTasksExplainerStrip";  // adjust path
 
 
 
@@ -70,6 +71,9 @@ export default function DayActivities({
   return (
     <Box sx={{ mt: 1 }}>
       <SummaryBar tasks={tasks} />
+
+       {/* new explainer */}
+  <PlanExplainerStrip sx={{ mb: 2 }} />
 
       <Box
         sx={{

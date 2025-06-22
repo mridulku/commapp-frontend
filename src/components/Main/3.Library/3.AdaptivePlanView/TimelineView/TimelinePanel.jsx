@@ -15,6 +15,9 @@ import {
 import TimelineView from "./TimelineView";
 import TimelineView2 from "./TimelineView2";
 
+
+import PlanExplainerPanel from "../AdaptPGComponent/AdaptPG2/ExplainerStrips/ActivityExplainerStrip";
+
 export default function TimelinePanel({
   db,
   userId,
@@ -54,6 +57,12 @@ if (PLACEHOLDER_ON) {
       <Typography sx={{ opacity: 0.7 }}>
         Check back soon!
       </Typography>
+
+
+        {/* quick explainer for demo mode */}
+  <PlanExplainerPanel sx={{ mt: 3, width: "100%" }} />
+
+
     </Box>
   );
 }
@@ -362,6 +371,14 @@ if (PLACEHOLDER_ON) {
   return (
     <div style={styles.container}>
       <h2 style={styles.title}>Timeline</h2>
+
+
+    {/* how-it-works strip */}
+  <PlanExplainerPanel sx={{ mb: 3 }} />
+
+
+
+
       {loading && <p>Loading timeline data...</p>}
       {error && <p style={styles.errorText}>{error}</p>}
 

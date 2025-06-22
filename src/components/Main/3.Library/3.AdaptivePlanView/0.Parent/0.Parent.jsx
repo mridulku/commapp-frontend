@@ -183,7 +183,7 @@ const flatActs  = useSelector(
     { label:"AdaptPG",     admin:true, comp: renderAdaptPG },
     { label:"Adapting",    admin:true, comp: renderAdapting },
     { label:"Aggregator",  admin:true, comp: renderAggregator },
-    { label:"How It Works",  comp: () => <HowItWorks userId={userId} plan={plan} planId={planId}/> },
+    { label:"❓ About",  comp: () => <HowItWorks userId={userId} plan={plan} planId={planId}/> },
   ];
   const VISIBLE_TABS = TAB_CONF.filter(t => !t.admin || isAdmin);
 

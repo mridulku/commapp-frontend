@@ -16,6 +16,10 @@ import {
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import { curriculum }   from "./dummyCurriculum";
 
+import PlanExplainerPanel from "../AdaptPGComponent/AdaptPG2/ExplainerStrips/ConceptMapExplainerStrip";
+
+
+
 /* ───────── colour palette (unchanged + a few extras) ───────── */
 const CLR = {
   reading:"#BB86FC", remember:"#80DEEA", understand:"#FFD54F",
@@ -158,6 +162,8 @@ export default function ConceptProgressTableOld(){
       <Filters {...{subjects,subject,setSubject,topic,setTopic,
                     chapter,setChapter,subch,setSubch,
                     topicOpt,chapOpt,subOpt}}/>
+
+      <PlanExplainerPanel sx={{ mb: 3 }} />
 
       {rows.length===0? <Typography>No concepts match the filter.</Typography>:
         <Table size="small" sx={{bgcolor:"#111"}}>

@@ -5,7 +5,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import {
   Box, Grid, Card, CardActionArea, CardContent, Typography,
-  Chip, Stack, Tabs, Tab, Dialog, DialogContent, Tooltip     // ← added Tooltip
+  Chip, Stack, Tabs, Tab, Dialog, DialogContent, Tooltip, Avatar
 } from "@mui/material";
 import { motion }        from "framer-motion";
 import { useSelector, useDispatch } from "react-redux";
@@ -35,6 +35,80 @@ const stageColors = {
   Plan:"#f87171", Learn:"#3b82f6", Diagnose:"#818cf8",
   Test:"#6366f1", Sprint:"#ec4899"
 };
+
+const PROFILE_EXPLAIN_CARDS = [
+  {
+    emoji: "🧠",
+    title: "Your Learning Engine",
+    grad: ["#6366f1", "#a5b4fc"], // violet
+    blurb: "Everything starts with two smart layers—your concept understanding and personal profile."
+  },
+  {
+    emoji: "🛠️",
+    title: "End-to-End Planner",
+    grad: ["#10b981", "#6ee7b7"], // green
+    blurb: "This is your main tool. It guides you through all learning stages, from reading to revision."
+  },
+  {
+    emoji: "📚",
+    title: "Full Learning Flow",
+    grad: ["#f59e0b", "#fcd34d"], // amber
+    blurb: "You explore concepts, drill weak spots, and prepare for mocks—all in one smooth loop."
+  },
+  {
+    emoji: "🧩",
+    title: "Mini-Tools Snap In",
+    grad: ["#ec4899", "#f9a8d4"], // pink
+    blurb: "Each mini-tool targets a specific task—like scope picking or concept recall—when you need it."
+  },
+  {
+    emoji: "🔄",
+    title: "Smarter Each Time",
+    grad: ["#3b82f6", "#60a5fa"], // blue
+    blurb: "Everything you do feeds back into the system to sharpen plans, questions, and priorities."
+  }
+];
+
+const ProfileExplainer = () => {
+  return (
+    <MotionCard {...lift} sx={{
+      borderRadius: 4, p: 2, bgcolor: GLASS_BG,
+      backdropFilter: "blur(6px)", boxShadow: "0 8px 24px rgba(0,0,0,.55)",
+      color: "#f0f0f0", mt: 3
+    }}>
+      <Stack direction="row" spacing={1} alignItems="center">
+        <Avatar sx={{ width: 26, height: 26, fontSize: 18, bgcolor: "rgba(255,255,255,.15)" }}>📈</Avatar>
+        <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: "1rem" }}>
+          How Study Tools take your Learning to the Next Level
+        </Typography>
+      </Stack>
+
+      {/* Always expanded content */}
+      <Box sx={{
+        display: "flex", overflowX: "auto", pt: 2,
+        "&::-webkit-scrollbar": { display: "none" }
+      }}>
+        {PROFILE_EXPLAIN_CARDS.map(c => (
+          <MotionCard key={c.title} {...lift}
+            sx={{
+              borderRadius: 3, flex: "0 0 220px", mr: 2, px: 2, py: 2,
+              background: `linear-gradient(135deg,${c.grad[0]} 0%,${c.grad[1]} 100%)`,
+              color: "#fff"
+            }}>
+            <Box sx={{ fontSize: 36, textAlign: "center", mb: 1 }}>{c.emoji}</Box>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: .5 }}>
+              {c.title}
+            </Typography>
+            <Typography variant="body2" sx={{ opacity: .9, fontSize: "0.78rem" }}>
+              {c.blurb}
+            </Typography>
+          </MotionCard>
+        ))}
+      </Box>
+    </MotionCard>
+  );
+};
+
 
 /* canonical tab order + emoji */
 const ORDER = ["Plan","Learn","Diagnose","Test","Sprint"];
@@ -122,6 +196,9 @@ export default function NewHome2({ userId="", recentlyUsedIds=[] }) {
   🧰 Study&nbsp;Tools
 </Typography>
 
+      <ProfileExplainer />
+
+
       {/* tab strip */}
       <Tabs
         value={tab}
@@ -143,6 +220,8 @@ export default function NewHome2({ userId="", recentlyUsedIds=[] }) {
                wrapped={false}/>
         ))}
       </Tabs>
+
+
 
       {/* grid */}
       <Grid container spacing={4}>

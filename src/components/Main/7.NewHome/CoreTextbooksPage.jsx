@@ -12,6 +12,9 @@ import { motion }      from "framer-motion";
 import LibraryBooksIcon from "@mui/icons-material/LibraryBooks";
 import ArrowBackIos     from "@mui/icons-material/ArrowBackIos";
 
+
+import PlanExplainerPanel from "../3.Library/3.AdaptivePlanView/AdaptPGComponent/AdaptPG2/ExplainerStrips/CoreTextBookExplainerStrip";
+
 /* ── 1. demo data (unchanged) ────────────────────────────────── */
 /* ===== 1.  Dummy data (swap with real API later) =============== */
 const SUBJECTS = [
@@ -74,6 +77,9 @@ export default function CoreTextbooksPage({ onBack = ()=>{} }) {
           Core&nbsp;Textbooks
         </Typography>
       </Stack>
+
+            {/* collapsible explainer */}
+            <PlanExplainerPanel sx={{ mb: 3 }} />
 
       {/* SUBJECT SECTIONS */}
       {SUBJECTS.map(s=>(

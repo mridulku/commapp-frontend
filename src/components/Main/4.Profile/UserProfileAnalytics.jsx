@@ -1,6 +1,7 @@
 // ────────────────────────────────────────────────────────────────
-// File: src/components/ProfileAnalyticsHub.jsx   (v0.5.0)
+// File: src/components/ProfileAnalyticsHub.jsx   (v0.5.1)
 // Dark-glass UI • learner-profile – full feature set
+// Added "Coming soon" pill support for select sections
 // ────────────────────────────────────────────────────────────────
 import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
@@ -67,24 +68,44 @@ const TOOLS = [
   {id:"concept", icon:<MapIcon/>,      name:"Concept Map",   state:"Viewed",    last:"2 days ago"},
 ];
 
-
-
 /* ─── profile → plan explainer cards ─── */
 const PROFILE_EXPLAIN_CARDS = [
-  {emoji:"🧭", title:"Personalised Planner",
-   grad:["#6366f1","#a5b4fc"],
-   blurb:"Your goals, pace and daily minutes generate an auto-Gantt that writes each day’s tasks."},
-  {emoji:"🎯", title:"Adaptive Difficulty",
-   grad:["#3b82f6","#6ee7b7"],
-   blurb:"Every attempt re-tunes question level so you stay in your ideal challenge zone."},
-  {emoji:"⏳", title:"Spaced Recall",
-   grad:["#f59e0b","#fde68a"],
-   blurb:"Concepts resurface on day 2, 7, 30 based on *your* memory curve."},
-  {emoji:"🔍", title:"Mock-Drill Loop",
-   grad:["#ec4899","#f9a8d4"],
-   blurb:"Missed mock topics drop into a drill queue until they’re mastered."},
+  {
+    emoji: "📏",
+    title: "Baseline Check",
+    grad: ["#3b82f6", "#60a5fa"],     // blue
+    blurb:
+      "We start with a best-guess for your reading pace, memory span and other study skills."
+  },
+  {
+    emoji: "🗺️",
+    title: "Plan Built Around You",
+    grad: ["#10b981", "#6ee7b7"],     // green
+    blurb:
+      "Those baseline numbers shape the study plan—how long each block is and what shows up first."
+  },
+  {
+    emoji: "📈",
+    title: "Live Tracking",
+    grad: ["#f59e0b", "#fcd34d"],     // amber
+    blurb:
+      "Every quiz, timed read or mock updates the metrics so the plan stays in step with you."
+  },
+  {
+    emoji: "⚙️",
+    title: "Plan Auto-Adjusts",
+    grad: ["#8b5cf6", "#c4b5fd"],     // violet
+    blurb:
+      "As scores rise or dip, topics move forward, repeat, or pause—no manual tweaks needed."
+  },
+  {
+    emoji: "🚀",
+    title: "Powers All Tools",
+    grad: ["#ec4899", "#f9a8d4"],     // pink
+    blurb:
+      "These data points feed every feature—from flash-card spacing to difficulty filters."
+  }
 ];
-
 
 const labelMap = {
   wpm:"Reading pace",
@@ -116,7 +137,7 @@ const CapacityCard = ({ id, data }) => (
     </Box>
 
     <Typography variant="h4" sx={{fontWeight:700, mt:.5}}>
-      {data.v}{id==="recall"?" %":""}
+      {data.v}{id==="recall"?"\u2009%":""}
     </Typography>
 
     <Box sx={{width:"100%",height:40,mt:1}}>
@@ -131,7 +152,7 @@ const CapacityCard = ({ id, data }) => (
 
 
 /* ─────────────────────────────────────────────────────────────── */
-export default function ProfileAnalyticsHub(){
+export default function UserprofileAnalytics(){
 
   /* ─── auth state ─── */
   const [user, setUser]           = useState(null);
@@ -194,9 +215,21 @@ export default function ProfileAnalyticsHub(){
   };
 
   /* ─── reusable section wrapper ─── */
-  const Section = ({title,children})=>(
+  const Section = ({title,comingSoon=false,children})=>(
     <MotionCard {...lift} sx={{...CardSX, mt:5}}>
-      <Typography variant="h5" sx={{fontWeight:800,mb:2}}>{title}</Typography>
+      {/* Title row with optional "Coming soon" pill */}
+      <Stack direction="row" spacing={1} alignItems="center" sx={{mb:2}}>
+        <Typography variant="h5" sx={{fontWeight:800}}>{title}</Typography>
+        {comingSoon && (
+          <Chip label="Coming soon" size="small"
+            sx={{
+              bgcolor:"rgba(255,255,255,.15)",
+              color:"#fff",
+              fontWeight:600,
+              textTransform:"uppercase"
+            }}/>
+        )}
+      </Stack>
       {children}
     </MotionCard>
   );
@@ -209,20 +242,20 @@ export default function ProfileAnalyticsHub(){
     }}>
 
       {/* top page title */}
-<MotionCard {...lift}
-  sx={{
-    ...CardSX,
-    mb:4,
-    px:{xs:2, md:4},
-    py:2,
-    display:"inline-block",
-    background:"transparent",          /* just to reuse glassy border / shadow */
-    boxShadow:"none"                   /* kill inner shadow so it looks like plain text */
-}}>
-  <Typography variant="h3" sx={{ fontWeight:800 }}>
-    🧑‍💻 User Profile
-  </Typography>
-</MotionCard>
+      <MotionCard {...lift}
+        sx={{
+          ...CardSX,
+          mb:4,
+          px:{xs:2, md:4},
+          py:2,
+          display:"inline-block",
+          background:"transparent",          /* just to reuse glassy border / shadow */
+          boxShadow:"none"                   /* kill inner shadow so it looks like plain text */
+      }}>
+        <Typography variant="h3" sx={{ fontWeight:800 }}>
+          🧑‍💻 User Profile
+        </Typography>
+      </MotionCard>
 
       {/* ¹  OVERVIEW CARDS */}
       <Grid container spacing={2}>
@@ -253,9 +286,8 @@ export default function ProfileAnalyticsHub(){
       <ProfileExplainer/>
 
       {/* ³  MAJOR CHALLENGES */}
-
       <Section title="Major Challenges">
-          <Typography variant="caption" sx={{ mt:1, display:"block", opacity:.75 }}>
+        <Typography variant="caption" sx={{ mt:1, display:"block", opacity:.75 }}>
           *Tap to add / remove hurdles you’d like the system to account for.*
         </Typography>
         <Stack direction="row" spacing={1} flexWrap="wrap">
@@ -271,7 +303,6 @@ export default function ProfileAnalyticsHub(){
             />
           ))}
         </Stack>
-      
 
         {challenges.length===0 && (
           <Typography variant="body2" sx={{
@@ -281,62 +312,57 @@ export default function ProfileAnalyticsHub(){
             You haven’t selected any challenges yet. Tap the chips so we can tailor your plan.
           </Typography>
         )}
-
-        
       </Section>
 
       {/* ⁴  CAPACITY SNAPSHOT */}
-  {/* ⁴  CAPACITY SNAPSHOT */}
-  <Section title="Capacity Snapshot">
-    <Typography variant="body2" sx={{ opacity:.8, mb:2 }}>
-      These five cards track the skills that power your learning engine. They
-      start from a short onboarding diagnostic and shift automatically after
-      every quiz, mock or timed reading—so you can watch them climb.
-    </Typography>
-  <Box sx={{
-    overflowX:"auto", p:1,
-    "&::-webkit-scrollbar":{ display:"none" }
-  }}>
-    <Stack direction="row" spacing={2}>
-      {Object.entries(capacity).map(([id,m])=>(
-        <CapacityCard key={id} id={id} data={m}/>
-      ))}
-    </Stack>
-  </Box>
-</Section>
-
-
+      <Section title="Capacity Snapshot" comingSoon>
+        <Typography variant="body2" sx={{ opacity:.8, mb:2 }}>
+          These five cards track the skills that power your learning engine. They
+          start from a short onboarding diagnostic and shift automatically after
+          every quiz, mock or timed reading—so you can watch them climb.
+        </Typography>
+        <Box sx={{
+          overflowX:"auto", p:1,
+          "&::-webkit-scrollbar":{ display:"none" }
+        }}>
+          <Stack direction="row" spacing={2}>
+            {Object.entries(capacity).map(([id,m])=>(
+              <CapacityCard key={id} id={id} data={m}/>
+            ))}
+          </Stack>
+        </Box>
+      </Section>
 
       {/* ⁶  RECENT CONCEPT ACTIVITY */}
-      <Section title="Recent Concept Activity">
-  <Placeholder
-    icon="📈"
-    text="As you quiz or read, the concepts you touched will appear here."
-  />
-</Section>
+      <Section title="Recent Concept Activity" comingSoon>
+        <Placeholder
+          icon="📈"
+          text="As you quiz or read, the concepts you touched will appear here."
+        />
+      </Section>
 
       {/* ⁷  TOOL HISTORY */}
-      <Section title="Tool History">
-  <Placeholder
-    icon="🕒"
-    text="Each planner session, mock or quick-revise run will show up here."
-  />
-</Section>
+      <Section title="Tool History" comingSoon>
+        <Placeholder
+          icon="🕒"
+          text="Each planner session, mock or quick-revise run will show up here."
+        />
+      </Section>
 
       {/* ⁸  PROFICIENCY EXPLORER */}
-     <Section title="Proficiency Explorer">
-  <Placeholder
-    icon="🧪"
-    text="Once you attempt questions, we’ll plot your topic-wise mastery here."
-  />
-</Section>
+      <Section title="Proficiency Explorer" comingSoon>
+        <Placeholder
+          icon="🧪"
+          text="Once you attempt questions, we’ll plot your topic-wise mastery here."
+        />
+      </Section>
 
       {/* ─── Target Rank dialog ─── */}
       <Dialog open={rankDlg} onClose={()=>setRankDlg(false)}>
         <DialogTitle>Select target rank</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{mt:1}}>
-            {["Under 100","Under 1 000","Under 10 000"].map(r=>(
+            {"Under 100".split().length===0?null:["Under 100","Under 1 000","Under 10 000"].map(r=>(
               <Button key={r}
                 variant={r===targetRank?"contained":"outlined"}
                 onClick={()=>handleRankSelect(r)}

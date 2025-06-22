@@ -18,6 +18,8 @@ import { motion }    from "framer-motion";
 
 import ConceptInsightModal from "./ConceptInsightModal";
 
+import PlanExplainerPanel from "../3.Library/3.AdaptivePlanView/AdaptPGComponent/AdaptPG2/ExplainerStrips/OfficialSyllabusExplainerStrip";
+
 /* ═════════════════════════ Demo data  ══════════════════════ */
 /* Swap with your parsed PDF payload when ready */
 const syllabus = {
@@ -203,6 +205,9 @@ export default function OfficialSyllabusPage({ onBack = () => {} }) {
         </Typography>
       </Stack>
 
+      {/* collapsible explainer */}
+      <PlanExplainerPanel sx={{ mb: 3 }} />
+
       {/* ── SUBJECT TABS ─────────────────────────────── */}
 
       <Tabs
@@ -224,6 +229,10 @@ export default function OfficialSyllabusPage({ onBack = () => {} }) {
         <Tab icon={<CategoryIcon />} iconPosition="start" label="Chemistry" />
         <Tab icon={<BiotechIcon />} iconPosition="start" label="Biology" />
       </Tabs>
+
+
+      
+ 
 
       {/* UNITS */}
       <Stack spacing={2}>

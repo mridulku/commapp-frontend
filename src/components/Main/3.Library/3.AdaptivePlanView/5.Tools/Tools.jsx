@@ -9,6 +9,8 @@ import {
 } from "@mui/material";
 import GenerateModal from "./GenerateModal"; // ⬅️ same folder
 
+import PlanExplainerPanel from "../AdaptPGComponent/AdaptPG2/ExplainerStrips/SecondaryToolsExplainerStrip";
+
 /* ------------------------------------------------------------------------- */
 /*  Tool data                                                                */
 /* ------------------------------------------------------------------------- */
@@ -105,6 +107,10 @@ const Tools = () => {
         <Typography variant="h4" fontWeight={700} mb={3}>
           Study Tools
         </Typography>
+
+        {/* collapsible “How it works” strip */}
+  <PlanExplainerPanel sx={{ mb: 3 }} />
+
 
         <Grid container spacing={3}>
           {studyTools.map((tool) => (
