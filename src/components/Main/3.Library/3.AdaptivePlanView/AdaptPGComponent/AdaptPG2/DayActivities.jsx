@@ -118,7 +118,6 @@ function SummaryBar({ tasks }) {
       }}
     >
       <span>{completed} / {total} tasks completed</span>
-      <span>{spentMin} min spent</span>
     </Box>
   );
 }

@@ -1,33 +1,29 @@
 /***********************************************************************
  * CumulativeQuiz.jsx
- * --------------------------------------------------------------------
- *  • Displays a quick dashboard for “cumulative quiz” day:
- *      – how many sub-chapters have reached each completion tier
- *        (Not Read ▸ Read ✓ ▸ Remember ✓ ▸ Understand ✓ ▸ Apply ✓ ▸ Analyse ✓)
- *  • Uses ONLY planSummarySlice (bulk loader) – zero per-row network hits
  **********************************************************************/
 import React, { useEffect, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 
 import {
   fetchAllSubSummaries,
-} from "../../../../../../store/planSummarySlice";   // ← path may differ
+} from "../../../../../../store/planSummarySlice";
 
 import {
   Box,
   Typography,
   CircularProgress,
   Table, TableHead, TableRow, TableCell, TableBody,
-  Paper
+  Paper,
+  Card,
+  CardContent,
+  Chip,
 } from "@mui/material";
 
-/* ─────────── helpers ─────────── */
+import QuizIcon from "@mui/icons-material/Quiz";
 
-/**
- * Decide the *highest* fully-completed tier for a summary doc.
- * Returns one of:
- *   'analyse' | 'apply' | 'understand' | 'remember' | 'read' | 'notRead'
- */
+const SHOW_PLACEHOLDER = true;
+
+/* ─────────── helpers ─────────── */
 function highestCompletedTier(s = {}) {
   if ((s.analyzePct     ?? 0) >= 100) return "analyse";
   if ((s.applyPct       ?? 0) >= 100) return "apply";
@@ -37,7 +33,6 @@ function highestCompletedTier(s = {}) {
   return "notRead";
 }
 
-/* Bucket display meta */
 const BUCKETS = [
   { key: "analyse"  , label: "Analyse ✓"   , color: "#F48FB1" },
   { key: "apply"    , label: "Apply ✓"     , color: "#AED581" },
@@ -49,8 +44,8 @@ const BUCKETS = [
 
 /* ─────────── component ─────────── */
 export default function CumulativeQuiz() {
-  const dispatch   = useDispatch();
-  const planId     = useSelector((s) => s.plan.planDoc?.id);
+  const dispatch = useDispatch();
+  const planId   = useSelector((s) => s.plan.planDoc?.id);
   const {
     entities,
     allLoaded,
@@ -58,7 +53,6 @@ export default function CumulativeQuiz() {
     allError,
   } = useSelector((s) => s.planSummary);
 
-  /* kick off bulk load once per mount */
   useEffect(() => {
     if (!planId) return;
     if (!allLoaded && !allLoading && !allError) {
@@ -66,9 +60,8 @@ export default function CumulativeQuiz() {
     }
   }, [planId, allLoaded, allLoading, allError, dispatch]);
 
-  /* build counts once data is ready */
   const counts = useMemo(() => {
-    if (!allLoaded) return {};           // empty during loading
+    if (!allLoaded) return {};
     const c = {
       analyse: 0, apply: 0, understand: 0,
       remember: 0, read: 0, notRead: 0,
@@ -81,6 +74,8 @@ export default function CumulativeQuiz() {
   }, [allLoaded, entities]);
 
   /* ---------- render ---------- */
+  if (SHOW_PLACEHOLDER) return <PlaceholderFullScreen />;
+
   if (allLoading || !allLoaded) {
     return (
       <Box sx={sx.outer}>
@@ -102,7 +97,6 @@ export default function CumulativeQuiz() {
     );
   }
 
-  /* success */
   return (
     <Box sx={sx.outer}>
       <Typography variant="h5" gutterBottom>
@@ -139,11 +133,6 @@ export default function CumulativeQuiz() {
           </TableBody>
         </Table>
       </Paper>
-
-      <Typography sx={{ mt: 2, fontSize: 13, color: "#bbb" }}>
-        Total sub-chapters counted:{" "}
-        {Object.values(counts).reduce((a, v) => a + v, 0)}
-      </Typography>
     </Box>
   );
 }
@@ -168,3 +157,63 @@ const sx = {
     "& thead th": { bgcolor: "#222" },
   },
 };
+
+/* ─────────── placeholder UI ─────────── */
+function PlaceholderFullScreen() {
+  return (
+    <Box
+      sx={{
+        minHeight: "100vh",
+        bgcolor: "#000",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "flex-start",
+        pt: 12,
+        color: "#fff",
+      }}
+    >
+      {/* Title chip */}
+      <Chip
+        icon={<QuizIcon sx={{ color: "#BB86FC" }} />}
+        label="Cumulative Quiz"
+        sx={{
+          bgcolor: "#1E1E1E",
+          color: "#fff",
+          px: 2,
+          py: 1,
+          fontWeight: 600,
+          fontSize: "1rem",
+          borderRadius: "999px",
+          mb: 5,
+        }}
+      />
+
+      {/* Central card */}
+      <Card
+        elevation={8}
+        sx={{
+          width: 420,
+          bgcolor: "rgba(30,30,30,0.9)",
+          backdropFilter: "blur(6px)",
+          borderRadius: 3,
+          p: 4,
+          textAlign: "center",
+          color: "#fff",
+        }}
+      >
+        <CardContent>
+          <QuizIcon sx={{ fontSize: 64, mb: 2, color: "#BB86FC" }} />
+          <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
+            An adaptive quiz awaits
+          </Typography>
+          <Typography variant="subtitle1" sx={{ opacity: 0.85 }}>
+            Once you’ve completed enough concepts,<br />
+            this section will serve up a mixed quiz<br />
+            to test what you truly remember.
+          </Typography>
+        </CardContent>
+      </Card>
+    </Box>
+  );
+}

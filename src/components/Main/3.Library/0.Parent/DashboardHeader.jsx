@@ -1,15 +1,32 @@
 // -------------------------------------------------------------
-// CompactDashboardHeader.jsx   – v4 (dark-theme + KPI pills)
+// CompactDashboardHeader.jsx – v5 (adds Stage pill w/ dropdown)
 // -------------------------------------------------------------
-import React from "react";
+import React, { useState } from "react";
 import {
   Box,
   Typography,
   Stack,
   Tooltip,
   Button,
-  Chip,          // still handy for other bits
+  Chip,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
 } from "@mui/material";
+
+import TrackChangesIcon from "@mui/icons-material/TrackChanges";
+import CheckIcon        from "@mui/icons-material/Check";
+import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
+import ClearIcon        from "@mui/icons-material/Clear";
+
+/** Hard-coded stage meta (swap later if you wire real data) */
+const CURRENT_STAGE = 1;
+const STAGES = [
+  { num: 1, title: "Diagnosis" },
+  { num: 2, title: "Deep Dive" },
+  { num: 3, title: "Mastery"   },
+];
 
 /**
  * @param {ReactNode} planName – usually a <PlanDropdown/>
@@ -26,7 +43,7 @@ export default function DashboardHeader({
   onResume = null,
 }) {
   /* ---------- pill styling for KPIs ---------- */
-  const pillSx = {
+  const pillSx  = {
     display: "flex",
     alignItems: "center",
     gap: 0.75,
@@ -37,12 +54,11 @@ export default function DashboardHeader({
     borderRadius: 2,
     minWidth: 90,
     whiteSpace: "nowrap",
+    cursor: "default",
   };
-
   const valueSx = { fontWeight: 700, fontSize: 14, color: "#fff" };
-  const labelSx = { fontSize: 12, color: "#aaa" };
+  const labelSx = { fontSize: 12,   color: "#aaa" };
 
-  /* ---------- render ---------- */
   return (
     <Box
       sx={{
@@ -55,7 +71,7 @@ export default function DashboardHeader({
         gap: 3,
         borderBottom: "1px solid #222",
         minHeight: 56,
-        flexWrap: "wrap",           // so items don’t overflow on narrow widths
+        flexWrap: "wrap",
       }}
     >
       {/* left – plan selector + resume */}
@@ -81,18 +97,22 @@ export default function DashboardHeader({
             }}
             onClick={onResume}
           >
-            Resume
+            Start Learning
           </Button>
         )}
       </Typography>
 
-      {/* centre – KPI pills */}
+      {/* centre – Stage pill + KPI pills */}
       <Stack
         direction="row"
         spacing={1.5}
         useFlexGap
         sx={{ flexWrap: "wrap", ml: 4, flexGrow: 1 }}
       >
+        {/* 0️⃣ Stage pill */}
+        <StageChip />
+
+        {/* Existing KPI pills */}
         {kpis.map((m) => (
           <Box key={m.label} sx={pillSx}>
             <span>{m.icon}</span>
@@ -108,5 +128,88 @@ export default function DashboardHeader({
 
       {/* right – reserved for future icons / avatar */}
     </Box>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* StageChip component                                                 */
+/* ------------------------------------------------------------------ */
+/* StageChip – aligned, readable, explicit                            */
+/* ------------------------------------------------------------------ */
+/* StageChip – scoped ‘isCurrent’ + vivid locked red                  */
+function StageChip() {
+  const [anchorEl, setAnchorEl] = useState(null);
+  const open = Boolean(anchorEl);
+
+  const handleOpen  = (e) => setAnchorEl(e.currentTarget);
+  const handleClose = () => setAnchorEl(null);
+
+  const LOCKED_RED = "#ff5252";   // bright red for locked stages
+
+  return (
+    <>
+      <Chip
+        icon={<TrackChangesIcon sx={{ fontSize: 18 }} />}
+        label="Current • Stage 1 · Diagnosis"
+        size="small"
+        onClick={handleOpen}
+        sx={{
+          height: 28,
+          bgcolor: "#BB86FC",
+          color: "#000",
+          fontWeight: 700,
+          cursor: "pointer",
+          "& .MuiChip-label": { px: 0.75, fontSize: 14 },
+          "&:hover": { bgcolor: "#A57BF7", color: "#000" },
+        }}
+      />
+
+      <Menu
+        anchorEl={anchorEl}
+        open={open}
+        onClose={handleClose}
+        MenuListProps={{ dense: true }}
+        sx={{
+          "& .MuiPaper-root": {
+            bgcolor: "#222",
+            color: "#fff",
+            minWidth: 220,
+          },
+        }}
+      >
+       {STAGES.map((s) => {
+  const isCurrent = s.num === CURRENT_STAGE;
+  const LOCKED_RED = "#ff5252";
+  const WIP_YELLOW = "#ffc107";       // Material amber
+
+  return (
+    <MenuItem
+      key={s.num}
+      disabled={!isCurrent}
+      sx={
+        !isCurrent
+          ? { opacity: 1, pointerEvents: "none" }  // bright but locked
+          : {}
+      }
+    >
+      <ListItemIcon
+        sx={{
+          minWidth: 32,
+          color: isCurrent ? WIP_YELLOW : LOCKED_RED,
+        }}
+      >
+        {isCurrent ? <HourglassEmptyIcon /> : <ClearIcon />}
+      </ListItemIcon>
+
+      <ListItemText
+        primary={`Stage ${s.num} — ${s.title}`}
+        sx={!isCurrent ? { color: LOCKED_RED } : {}}
+      />
+    </MenuItem>
+  );
+})}
+
+      </Menu>
+    </>
   );
 }
