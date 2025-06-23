@@ -20,6 +20,11 @@ import {
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import CheckIcon         from "@mui/icons-material/Check";
 
+
+import ConceptInsightModal from "../../../7.NewHome/ConceptInsightModal";
+
+
+
 import StatsPanel           from "../1.StatsPanel/StatsPanel";
 import DailyPlan            from "../2.DailyPlan/DailyPlan";
 import ProgressView         from "../3.ProgressView/ProgressView";
@@ -69,6 +74,9 @@ export default function Child2({
     minHeight       : "100vh",
     boxSizing       : "border-box",
   };
+
+
+  const [openConcept, setOpenConcept] = useState(null);
 
   /* fetch the plan once we have a planId */
   const [plan, setPlan]           = useState(null);
@@ -163,17 +171,17 @@ const flatActs  = useSelector(
 
   /* ---- tab config ------------------------------------------------ */
   const TAB_CONF = [
-    { label:"Tasks",        comp: renderAdaptPG2 },
-    { label:"Concept Map", admin:true,  comp: () =>
-        <ConceptProgressTable userId={userId} plan={plan} planId={planId} colorScheme={colorScheme}/> },
-    { label:"Concept Map",  comp: () =>
-          <ConceptProgressTableOld userId={userId} plan={plan} planId={planId} colorScheme={colorScheme}/> },
+    { label:"📋 Tasks",        comp: renderAdaptPG2 },
+    { label:"🌐 Concept Map", admin:true,  comp: () =>
+        <ConceptProgressTable onSelect={setOpenConcept} userId={userId} plan={plan} planId={planId} colorScheme={colorScheme}/> },
+    { label:"🌐 Concept Map",  comp: () =>
+          <ConceptProgressTableOld  onSelect={setOpenConcept} userId={userId} plan={plan} planId={planId} colorScheme={colorScheme}/> },
           { label:"Concept Map Heavy", admin:true,  comp: () =>
             <ConceptProgressTableHeavy userId={userId} plan={plan} planId={planId} colorScheme={colorScheme}/> },
-                      { label:"Tools",   comp: () =>
+                      { label:"🧰 Tools",   comp: () =>
             <Tools userId={userId} plan={plan} planId={planId} colorScheme={colorScheme}/> },
   
-    { label:"Activity",     comp: renderTimeline },
+    { label:"📈 Activity",     comp: renderTimeline },
     { label:"Progress",    admin:true, comp: renderProgress },
     { label:"Admin",       admin:true, comp: renderAdmin },
     { label:"AdaptPlayground", admin:true, comp: renderAdaptPlayground },
@@ -290,6 +298,15 @@ const flatActs  = useSelector(
                          userId={userId} onClose={()=>setShowDlg(false)}/>}
         </DialogContent>
       </Dialog>
+
+      {/* concept insight modal */}
+<ConceptInsightModal
+  open={!!openConcept}
+  data={openConcept ?? {}}
+  onClose={() => setOpenConcept(null)}
+/>
+
+
     </div>
   );
 
