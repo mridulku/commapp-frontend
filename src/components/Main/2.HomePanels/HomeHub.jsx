@@ -39,6 +39,16 @@ import PlanFetcher     from "../5.StudyModal/StudyModal";
 /* tools master list (used on the dedicated Tools page) */
 import { toolCatalog } from "../8.NewHome2/toolCatalog";   // ⚠ adjust path
 
+
+/* ─── Concept-graph mini stats ─────────────────────────────── */
+const TOTAL_CONCEPTS = 3421;                // NEET-2026 grand total
+const SUBJECTS = [
+  { id: "phy",  name: "Physics",   count: 1240, grad: ["#818cf8", "#d8b4fe"] },
+  { id: "chem", name: "Chemistry", count: 1180, grad: ["#6366f1", "#a5b4fc"] },
+  { id: "bio",  name: "Biology",   count: 1001, grad: ["#3b82f6", "#6ee7b7"] },
+];
+
+
 /* ─── shared design tokens ───────────────────────────────────── */
 const GRAD = [
   ["#f87171", "#fca5a5"], ["#ec4899", "#f9a8d4"], ["#818cf8", "#d8b4fe"],
@@ -562,21 +572,54 @@ const openWizard = () => {
           </MotionCard>
         </Grid>
 
-        <Grid item xs={12} md={6}>
-          <MotionCard {...lift} sx={CardSX}>
-            <Header icon={<PublicIcon/>} text="Concept Graph"
-                    action="View in Detail" onAction={() => onNavigate("conceptGraph")} />
-            <Avatar sx={{
-              width: 96, height: 96, mx: "auto", my: 2,
-              bgcolor: "rgba(255,255,255,.15)"
-            }}>
-              <PublicIcon sx={{ fontSize: 60 }}/>
-            </Avatar>
-            <Typography align="center" variant="body2">
-              Visualise how topics connect.<br/>Coming soon – beta preview.
+       <Grid item xs={12} md={6}>
+  <MotionCard {...lift} sx={CardSX}>
+    <Header
+      icon={<PublicIcon />}
+      text="Concept Graph"
+      action="View in Detail"
+      onAction={() => onNavigate("conceptGraph")}
+    />
+
+    {/* ——— mini dashboard ——— */}
+    <Typography
+      variant="h2"
+      align="center"
+      sx={{ fontWeight: 800, mt: 1 }}
+    >
+      {TOTAL_CONCEPTS.toLocaleString()}
+    </Typography>
+    <Typography
+      align="center"
+      sx={{ opacity: 0.8, mb: 2 }}
+    >
+      Total Concepts&nbsp;•&nbsp;<b>NEET 2026</b>
+    </Typography>
+
+    {/* subject breakdown */}
+    <Grid container spacing={1} justifyContent="center">
+      {SUBJECTS.map(s => (
+        <Grid item xs={4} key={s.id}>
+          <MotionCard
+            {...lift}
+            sx={{
+              ...CardSX,
+              background: grad(s.grad),
+              py: 1.5,
+              textAlign: "center",
+            }}
+          >
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>
+              {s.count}
             </Typography>
+            <Typography variant="caption">{s.name}</Typography>
           </MotionCard>
         </Grid>
+      ))}
+    </Grid>
+  </MotionCard>
+</Grid>
+
 
       </Grid> {/* ← closes MAIN BODY container */}
 
