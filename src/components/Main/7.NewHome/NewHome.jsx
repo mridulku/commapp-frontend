@@ -15,7 +15,8 @@ import { motion }        from "framer-motion";
 
 import TrendingUpIcon    from "@mui/icons-material/TrendingUp";   // ← NEW
 
-import { conceptCatalog } from "./conceptCatalog";
+import ConceptGraphExplorer from "./ConceptGraphExplorer";
+
 
 import CoreTextbooksPage     from "./CoreTextbooksPage.jsx";
 import PastPapersPage        from "./PastPapersPage";
@@ -180,14 +181,7 @@ const Segment = ({ group, opts, active, onChange, color }) => (
  const inBucket = (val, buckets, map) =>
    !buckets.length || buckets.some(b => val >= map[b][0] && val <= map[b][1]);
 
- const visibleConcepts = conceptCatalog
-   .filter(c => !filter.subjects.length || filter.subjects.includes(c.subject))
-   .filter(c => inBucket(c.weight , filter.weightBuckets , {Low:[0,3], Mid:[4,7], High:[8,10]}))
-   .filter(c => inBucket(c.mastery, filter.masteryBuckets, {L:[0,39], M:[40,69], H:[70,100]}));
 
-  const avgMastery =
-  visibleConcepts.reduce((sum, c) => sum + (c.mastery ?? 0), 0) /
-  (visibleConcepts.length || 1);
 
   /* --------- main dashboard --------- */
   return(
@@ -253,48 +247,7 @@ const Segment = ({ group, opts, active, onChange, color }) => (
 
 
           {/* CONCEPT GRID */}
-<MotionCard {...lift} sx={{ ...cardBase, mt: 5 }}>
-  <Header icon={<LibraryBooksIcon />} text="Explore Concept Graph" />
-
-  {/* ❶  stats strip */}
-  <StatsSummary total={visibleConcepts.length} avg={avgMastery} />
-
-  {/* ❷  filter bar */}
-  <FilterBar value={filter} onChange={setFilter} />
-
-  {/* ❸  the grid itself */}
-  <Grid container spacing={4} sx={{ mt: 2 }}>
-    {visibleConcepts.map((c) => (
-      <Grid item xs={12} sm={6} md={4} lg={3} key={c.id}>
-        <MotionCard
-          {...lift}
-          sx={{ ...cardBase, cursor: "pointer", p: 2, minHeight: 140 }}
-          onClick={() => setOpenConcept(c)}
-        >
-          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-            {c.name}
-          </Typography>
-          <Typography variant="caption" sx={{ opacity: 0.8 }}>
-            {c.subject} · {c.unit} · {c.chapter} · {c.subChap}
-          </Typography>
-
-          <Stack direction="row" spacing={0.5} sx={{ mt: 1 }} flexWrap="wrap">
-            <Chip
-              label={`Weight ${c.weight}/10`}
-              size="small"
-              sx={chipStyle("#4fc3f7")}
-            />
-            <Chip
-              label={`Mastery ${c.mastery ?? 0}%`}
-              size="small"
-              sx={chipStyle("#66bb6a")}
-            />
-          </Stack>
-        </MotionCard>
-      </Grid>
-    ))}
-  </Grid>
-</MotionCard>
+<ConceptGraphExplorer onSelect={setOpenConcept}/>
         </>
       )}
 
