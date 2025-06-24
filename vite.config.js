@@ -27,11 +27,10 @@ export default defineConfig({
 
 
 
-    // 🩹 <--  add this one line
-      './globalThis-config.mjs': resolve(
-        __dirname,
-        'node_modules/motion-utils/dist/es/globalthis-config.mjs'
-      ),
+         'motion-utils/dist/es/globalThis-config.mjs': resolve(
+       __dirname,
+       'node_modules/motion-utils/dist/es/globalthis-config.mjs'
+     ),
     },
   },
 
