@@ -1,10 +1,9 @@
-// vite.config.js
+// vite.config.js - Aggressive module resolution fix
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import nodePolyfills from "rollup-plugin-polyfill-node";
 import path, { resolve } from "path";
 
-/* CJS entry files that need explicit export maps */
 const selectorCjs = path.resolve(
   __dirname,
   "node_modules/use-sync-external-store/with-selector.js",
@@ -38,10 +37,10 @@ export default defineConfig({
         __dirname,
         "node_modules/react/jsx-dev-runtime.js",
       ),
-
-      // Let Vite handle React module resolution naturally
-      // Don't alias react or react-dom at all
     },
+    // Force ES module resolution
+    conditions: ['import', 'module', 'browser', 'default'],
+    mainFields: ['module', 'browser', 'main'],
   },
 
   /* ─── Dev dependency pre-bundle ───────────── */
@@ -49,7 +48,7 @@ export default defineConfig({
     include: [
       "react",
       "react/jsx-runtime",
-      "react/jsx-dev-runtime",
+      "react/jsx-dev-runtime", 
       "react-dom",
       "react-dom/client",
       "react-redux",
@@ -59,8 +58,11 @@ export default defineConfig({
       "util",
       "stream-browserify",
     ],
-    // Force pre-bundling of react and react-redux together
-    force: true,
+    // Force pre-bundling with ES modules
+    esbuildOptions: {
+      mainFields: ['module', 'main'],
+      conditions: ['import', 'module', 'browser', 'default'],
+    },
   },
 
   /* ─── Rollup CJS handling ─────────────────── */
@@ -68,17 +70,39 @@ export default defineConfig({
     commonjsOptions: {
       include: [/node_modules/],
       transformMixedEsModules: true,
-      requireReturnsDefault: "preferred",
-      // Remove the explicit namedExports for React - let Vite handle it
+      requireReturnsDefault: "auto",
+      // Force React to be treated as ES module
       namedExports: {
+        "react": [
+          "createElement",
+          "createContext", 
+          "useContext",
+          "useEffect",
+          "useLayoutEffect",
+          "useMemo",
+          "useRef",
+          "useCallback",
+          "useSyncExternalStore",
+          "memo",
+          "forwardRef",
+          "useState",
+          "useReducer",
+          "Component",
+          "PureComponent",
+          "Fragment",
+          "StrictMode",
+          "Suspense",
+          "cloneElement",
+          "isValidElement",
+          "Children",
+          "version"
+        ],
         [selectorCjs]: ["useSyncExternalStoreWithSelector"],
       },
     },
     rollupOptions: {
-      // Ensure React is treated as external in the right way
-      external: (id) => {
-        // Don't externalize react for the build
-        return false;
+      output: {
+        interop: 'auto',
       },
     },
   },
