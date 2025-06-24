@@ -1,12 +1,10 @@
-// vite.config.js - Alternative approach
+// vite.config.js
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import nodePolyfills from "rollup-plugin-polyfill-node";
 import path, { resolve } from "path";
 
-/* Use ES module versions for React */
-const reactEs = path.resolve(__dirname, "node_modules/react/index.js");
-const reactDomEs = path.resolve(__dirname, "node_modules/react-dom/index.js");
+/* CJS entry files that need explicit export maps */
 const selectorCjs = path.resolve(
   __dirname,
   "node_modules/use-sync-external-store/with-selector.js",
@@ -41,9 +39,8 @@ export default defineConfig({
         "node_modules/react/jsx-dev-runtime.js",
       ),
 
-      // Use the ES module version of React
-      react: reactEs,
-      "react-dom": reactDomEs,
+      // Let Vite handle React module resolution naturally
+      // Don't alias react or react-dom at all
     },
   },
 
@@ -51,7 +48,7 @@ export default defineConfig({
   optimizeDeps: {
     include: [
       "react",
-      "react/jsx-runtime", 
+      "react/jsx-runtime",
       "react/jsx-dev-runtime",
       "react-dom",
       "react-dom/client",
@@ -62,7 +59,7 @@ export default defineConfig({
       "util",
       "stream-browserify",
     ],
-    // Ensure React and react-redux are optimized together
+    // Force pre-bundling of react and react-redux together
     force: true,
   },
 
@@ -72,9 +69,16 @@ export default defineConfig({
       include: [/node_modules/],
       transformMixedEsModules: true,
       requireReturnsDefault: "preferred",
-      // Let Vite handle React exports automatically
+      // Remove the explicit namedExports for React - let Vite handle it
       namedExports: {
         [selectorCjs]: ["useSyncExternalStoreWithSelector"],
+      },
+    },
+    rollupOptions: {
+      // Ensure React is treated as external in the right way
+      external: (id) => {
+        // Don't externalize react for the build
+        return false;
       },
     },
   },
