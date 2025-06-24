@@ -21,6 +21,15 @@ export default defineConfig({
       stream:  "stream-browserify",
       util:    "util",
       buffer:  "buffer",
+
+
+
+
+    // 🩹 <--  add this one line
+      './globalThis-config.mjs': resolve(
+        __dirname,
+        'node_modules/motion-utils/dist/es/globalthis-config.mjs'
+      ),
     },
   },
 
