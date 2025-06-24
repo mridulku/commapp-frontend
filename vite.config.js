@@ -1,14 +1,12 @@
-// vite.config.js
+// vite.config.js - Alternative approach
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import nodePolyfills from "rollup-plugin-polyfill-node";
 import path, { resolve } from "path";
 
-/* CJS entry files that need explicit export maps */
-const reactCjs = path.resolve(
-  __dirname,
-  "node_modules/react/index.js",
-);
+/* Use ES module versions for React */
+const reactEs = path.resolve(__dirname, "node_modules/react/index.js");
+const reactDomEs = path.resolve(__dirname, "node_modules/react-dom/index.js");
 const selectorCjs = path.resolve(
   __dirname,
   "node_modules/use-sync-external-store/with-selector.js",
@@ -21,7 +19,7 @@ export default defineConfig({
   /* ─── Globals ─────────────────────────────── */
   define: {
     global: "globalThis",
-    "process.env": {}, // silence “process is not defined”
+    "process.env": {}, // silence "process is not defined"
   },
 
   /* ─── Aliases ─────────────────────────────── */
@@ -43,9 +41,9 @@ export default defineConfig({
         "node_modules/react/jsx-dev-runtime.js",
       ),
 
-      // force every bare import of React to the CommonJS bundle
-      react: reactCjs,
-      "react/index.js": reactCjs,
+      // Use the ES module version of React
+      react: reactEs,
+      "react-dom": reactDomEs,
     },
   },
 
@@ -53,7 +51,7 @@ export default defineConfig({
   optimizeDeps: {
     include: [
       "react",
-      "react/jsx-runtime",
+      "react/jsx-runtime", 
       "react/jsx-dev-runtime",
       "react-dom",
       "react-dom/client",
@@ -64,6 +62,8 @@ export default defineConfig({
       "util",
       "stream-browserify",
     ],
+    // Ensure React and react-redux are optimized together
+    force: true,
   },
 
   /* ─── Rollup CJS handling ─────────────────── */
@@ -72,21 +72,8 @@ export default defineConfig({
       include: [/node_modules/],
       transformMixedEsModules: true,
       requireReturnsDefault: "preferred",
+      // Let Vite handle React exports automatically
       namedExports: {
-        [reactCjs]: [
-          "version",
-          "createElement",
-          "createContext",
-          "useEffect",
-          "useLayoutEffect",
-          "useMemo",
-          "useRef",
-          "useContext",
-          "useCallback",
-          "useSyncExternalStore",
-          "memo",
-          "forwardRef",
-        ],
         [selectorCjs]: ["useSyncExternalStoreWithSelector"],
       },
     },
