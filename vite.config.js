@@ -4,7 +4,10 @@ import react from "@vitejs/plugin-react";
 import nodePolyfills from "rollup-plugin-polyfill-node";
 import { resolve } from "path";
 
+
+
 export default defineConfig({
+
   /* ──────────────────────────
      Plugins
   ────────────────────────── */
@@ -12,6 +15,8 @@ export default defineConfig({
     react(),
     nodePolyfills()  // Node-core shims (process, buffer, stream…)
   ],
+
+
 
   /* ──────────────────────────
      Globals / polyfills
@@ -21,16 +26,21 @@ export default defineConfig({
     "process.env": {},         // stop “process is not defined”
   },
 
+
+
   /* ──────────────────────────
      Module resolution tweaks
   ────────────────────────── */
   resolve: {
     alias: {
+
       // Browser-friendly Node core
       process: "process/browser",
       stream:  "stream-browserify",
       util:    "util",
       buffer:  "buffer",
+
+
 
       // 🔧 Patch motion-utils’ missing file (case-sensitive Linux)
       "motion-utils/dist/es/globalThis-config.mjs": resolve(
@@ -38,14 +48,20 @@ export default defineConfig({
         "node_modules/motion-utils/dist/es/globalthis-config.mjs"
       ),
 
-      // 🔧 React deep import → normal entry (Rollup named-export fix)
+
+
+      // 🔧 React deep import → normal entry
       "react/index.js": "react",
+
+
 
       // 🔧 react-redux helper
       "use-sync-external-store/with-selector.js":
         "use-sync-external-store/with-selector",
     },
   },
+
+
 
   /* ──────────────────────────
      Vite’s dependency pre-bundle
@@ -54,18 +70,21 @@ export default defineConfig({
     include: ["process", "buffer", "util", "stream-browserify"],
   },
 
+
+
   /* ──────────────────────────
-     Rollup CommonJS handling
+     Rollup / build tweaks
   ────────────────────────── */
   build: {
+
     commonjsOptions: {
-            include: [/node_modules/],          // run plugin on every file in node_modules
+      include: [/node_modules/],          // run plugin on every file in node_modules
       transformMixedEsModules: true,      // handle CJS+ESM hybrids
+      esmExternals: true,                 // synthetic named exports
 
-      // NEW — generate synthetic named-exports for every CommonJS dep
-      esmExternals: true,
 
-      /* ← NEW: hand-declare the names React & the selector helper export */
+
+      /* explicit names React & helper export */
       namedExports: {
         react: [
           // core
@@ -79,10 +98,15 @@ export default defineConfig({
         ],
         "use-sync-external-store/with-selector": [
           "useSyncExternalStoreWithSelector"
-        ]
-      }
+        ],
+      },
     },
+
+    // disable export check that breaks React-Redux under Rollup
+    treeshake: false,
   },
+
+
 
   /* ──────────────────────────
      Vitest
@@ -91,4 +115,5 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
   },
+
 });
