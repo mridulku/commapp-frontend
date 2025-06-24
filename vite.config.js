@@ -2,6 +2,8 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import nodePolyfills from "rollup-plugin-polyfill-node";   // ← NEW
+import { resolve } from "path";          // ← add this
+
 
 export default defineConfig({
   plugins: [
