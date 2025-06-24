@@ -20,6 +20,8 @@
     "firebase": "^11.4.0",
     "framer-motion": "^12.18.1",
     "lodash-es": "^4.17.21",
+    "motion": "12.19.1",
+    "motion-utils": "12.19.0",
     "openai": "^4.103.0",
     "papaparse": "^5.5.2",
     "posthog-js": "^1.242.2",
