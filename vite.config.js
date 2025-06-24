@@ -50,4 +50,17 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
   },
+
+  build: {
+    commonjsOptions: {
+      /**
+       * Ensure EVERY .js file under node_modules is run through
+       * @rollup/plugin-commonjs so named exports like
+       *   useSyncExternalStoreWithSelector
+       * are generated automatically.
+       */
+      include: [/node_modules/],
+      transformMixedEsModules: true,   // handle CJS+ESM hybrids
+    },
+    },
 });
