@@ -191,7 +191,7 @@ const CardColumn = () => (
       {/* --- stage chip --- */}
       <Box sx={{ display: "flex", justifyContent: "center", pb: 1 }}>
         <Chip
-          label="Stage 1 · Diagnosis"
+          label="Stage 1 · Deep Dive"
           size="small"
           sx={{
             bgcolor: "#333",

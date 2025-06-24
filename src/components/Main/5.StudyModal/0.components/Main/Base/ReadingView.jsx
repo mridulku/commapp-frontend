@@ -13,6 +13,8 @@ import { db } from "../../../../../../firebase"; // Adjust path if needed
  
 import { Fade } from "@mui/material";          // <-- already in bundle? add if not
 
+import InlineFancyLoader from "../../../../3.Library/3.AdaptivePlanView/AdaptPGComponent/AdaptPG2/InlineFancyLoader";
+
 
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 
@@ -607,31 +609,30 @@ const backendURL = import.meta.env.VITE_BACKEND_URL;
          GLOBAL LOADER
          • shows while we’re still pulling the sub-chapter from the server
       ------------------------------------------------------------ */
-      const isBusy = loadingSubchapter;   // ← there is no loadingBook / loadingCh here
-      if (isBusy) {
-        return (
-          <Loader
-            type="bar"          // animated bar with fake % inside Loader
-            fullScreen          // blur overlay
-            message="Loading your reading passage…"
-          />
-        );
-      }
-
+       if (loadingSubchapter) {
+   return (
+     <InlineFancyLoader
+       height={180}
+       expectedSecs={18}
+       status="Loading reading passage …"
+       flat            // no dark card, blends with #000 background
+     />
+   );
+ }
       /* ------------------------------------------------------------
    FINISHING OVERLAY  (NEW)
    – appears the moment the user presses “Finish Reading”
 ------------------------------------------------------------ */
-if (isFinishing) {
-  return (
-    <Loader
-      type="bar"
-      fullScreen
-      message="Saving your progress…"
-    />
-  );
-}
-
+ if (isFinishing) {
+   return (
+     <InlineFancyLoader
+       height={180}
+       expectedSecs={10}
+       status="Saving your progress …"
+       flat
+     />
+   );
+ }
 
 
 

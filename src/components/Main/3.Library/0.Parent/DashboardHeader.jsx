@@ -23,9 +23,9 @@ import ClearIcon        from "@mui/icons-material/Clear";
 /** Hard-coded stage meta (swap later if you wire real data) */
 const CURRENT_STAGE = 1;
 const STAGES = [
-  { num: 1, title: "Diagnosis" },
-  { num: 2, title: "Deep Dive" },
-  { num: 3, title: "Mastery"   },
+  { num: 1, title: "Deep Dive" },
+  { num: 2, title: "Smart Spacing" },
+  { num: 3, title: "Exam rehearsal"   },
 ];
 
 /**
@@ -150,7 +150,7 @@ function StageChip() {
     <>
       <Chip
         icon={<TrackChangesIcon sx={{ fontSize: 18 }} />}
-        label="Current • Stage 1 · Diagnosis"
+        label="Current • Stage 1 · Deep Dive"
         size="small"
         onClick={handleOpen}
         sx={{

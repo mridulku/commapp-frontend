@@ -24,6 +24,8 @@ import Loader              from "./Loader";
 
 import { setAuth }         from "../../../../store/authSlice";
 
+import FancyLoader from "../../5.StudyModal/0.components/Main/Base/Guide/FancyLoader";
+
 /* -------------------------------------------------------------
    Map exam → field in users/{uid} that stores the cloned book
 ------------------------------------------------------------- */
@@ -140,17 +142,11 @@ useEffect(() => {
   }, [selectedPlanId]);
 
   /* ---------- loading / error UI ---------- */
-  if (loadingBook || loadingPlans) {
-    return (
-      <Loader
-        type="bar"
-        fullScreen
-        accent={themeColors.accent || "#BB86FC"}
-        message="Loading your study plans…"
-        zIndex={1000}
-      />
-    );
-  }
+ if (loadingBook || loadingPlans) {
+  // 60 s is the default; tweak if you have a better ETA
+  return <FancyLoader expectedSecs={60} />;
+}
+
 
   if (bookErr || !bookId) {
     return (

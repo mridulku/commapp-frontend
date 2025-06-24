@@ -18,6 +18,8 @@ import { useSelector, useDispatch } from "react-redux";
 
 import useConceptMastery from "../QuizComp/QuizSupport/useConceptMastery";
 
+import InlineFancyLoader from "../../../../3.Library/3.AdaptivePlanView/AdaptPGComponent/AdaptPG2/InlineFancyLoader";
+
 
 import {
   fetchReviseTime,
@@ -252,15 +254,24 @@ const ConceptCard = ({ concept, status }) => (
   </div>
 );
 
-const LoadingOverlay = ({ text }) => (
+const LoadingOverlay = ({ text = "Loading…" }) => (
   <Fade in>
-    <div style={{
-      position:"absolute",inset:0,display:"flex",flexDirection:"column",
-      alignItems:"center",justifyContent:"center",
-      background:"rgba(0,0,0,.65)",zIndex:50,
-    }}>
-      <CircularProgress size={48} color="secondary"/>
-      <span style={{marginTop:12,color:"#eee"}}>{text}</span>
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "rgba(0,0,0,.65)",
+        zIndex: 50,
+      }}
+    >
+      <InlineFancyLoader
+        status={text}
+        expectedSecs={30}     /* or tweak for your average GPT time */
+        flat                  /* no card shadow; blends with backdrop */
+      />
     </div>
   </Fade>
 );

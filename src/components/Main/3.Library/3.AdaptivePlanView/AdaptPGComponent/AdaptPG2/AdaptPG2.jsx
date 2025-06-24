@@ -31,6 +31,8 @@ import { fetchAggregatorForDay }    from "../../../../../../store/aggregatorSlic
 import DayActivities from "./DayActivities";
 import Loader        from "./Loader";
 
+import InlineFancyLoader   from "./InlineFancyLoader";// NEW
+
 /* ───── helpers ───── */
 const dateOnly = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const parseCreated = (p) => {
@@ -88,6 +90,8 @@ export default function AdaptPG2({
   const createdAt = parseCreated(plan);
   const todayDate = React.useMemo(() => dateOnly(new Date()), []);
 
+
+
   const metaArr = useMemo(
     () =>
       plan.sessions.map((sess) => {
@@ -111,6 +115,14 @@ export default function AdaptPG2({
     viewMode === "future"  ? future  :
                              today;
 
+  const firstPassStillLoading =
+  sessionList.length &&
+  sessionList.every(m => loadingDays[m.idx]) &&
+  Object.keys(loadedDays).length === 0;
+
+
+ 
+
   /* ── hydrate helper ── */
    const ensureHydrated = useCallback(
        (idx) => dispatch(fetchAggregatorForDay({ dayIndex: idx })),
@@ -123,6 +135,8 @@ export default function AdaptPG2({
     if (open) ensureHydrated(meta.idx);
   };
 
+
+ 
   /* ── auto-hydrate “today only” view ── */
   useEffect(() => {
       if (viewMode === "today") {
@@ -160,22 +174,63 @@ export default function AdaptPG2({
     const isLoading = !!loadingDays[meta.idx];
     const isLoaded  = !!loadedDays [meta.idx];
 
-    return (
-      <Accordion
-        key={meta.idx}
-        expanded={expandedDay === meta.idx}
-        onChange={handleAcc(meta)}
-        sx={{ background: "transparent", border: "none", color: "#FFD700", mb: 0.5 }}
-      >
-        <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ color: "#FFD700" }} />}>
-          <Typography fontWeight={600}>{meta.label}</Typography>
-        </AccordionSummary>
-        <AccordionDetails>
-          {isLoading && <Loader type="bar" accent="#FFD700" determinate={false} />}
-          {isLoaded  && renderDay(meta)}
-        </AccordionDetails>
-      </Accordion>
-    );
+    /* ── FINAL RENDER ────────────────────────────────────────────── */
+return (
+  <Box sx={{ color: "#fff", mt: 2 }}>
+    {/* ─── main body ─── */}
+    {firstPassStillLoading ? (
+      /* full-width mini loader (first hydration only) */
+      <InlineFancyLoader
+      flat
+      
+        expectedSecs={30}
+        status="Fetching today’s sessions …"
+      />
+    ) : sessionList.length === 0 ? (
+      /* empty-state copy */
+      <Typography>
+        {viewMode === "today"   && "No session for today."}
+        {viewMode === "history" && "No past sessions."}
+        {viewMode === "future"  && "No upcoming sessions."}
+      </Typography>
+    ) : (
+      /* regular accordion panels */
+      sessionList.map(panel)
+    )}
+
+    {/* ─── dialogs (unchanged markup) ─── */}
+    {/** DEBUG dialog **/}
+    <Dialog open={debugOpen} fullWidth maxWidth="md" onClose={close(setDebugOpen)}>
+      <DialogTitle>{debugTitle}</DialogTitle>
+      <DialogContent sx={{ background: "#222" }}>
+        {debugData ? (
+          <pre style={{ color: "#0f0", fontSize: "0.85rem", whiteSpace: "pre-wrap" }}>
+            {JSON.stringify(debugData, null, 2)}
+          </pre>
+        ) : (
+          <Typography>No data.</Typography>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ background: "#222" }}>
+        <Button onClick={close(setDebugOpen)} variant="contained" color="secondary">
+          Close
+        </Button>
+      </DialogActions>
+    </Dialog>
+
+    {/** (…History / Prev / Progress / Time-detail dialogs — keep as is …)**/}
+
+    {/* optional rebalance tool */}
+    {showDevRebalance && (
+      <DevRebalanceTool
+        planId={planId}
+        userId={userId}
+        defaultTodayISO={new Date().toISOString().slice(0, 10)}
+      />
+    )}
+  </Box>
+);
+
   };
 
   /* ── TODAY-ONLY shortcut ── */
@@ -186,11 +241,9 @@ export default function AdaptPG2({
 
     return (
       <Box sx={{ mt: 2 }}>
-        {isLoading && (
-          <Box sx={{ px: 2, py: 1 }}>
-            <Loader type="bar" accent="#FFD700" determinate={false} />
-          </Box>
-        )}
+         {isLoading && (
+   <InlineFancyLoader flat height={120} expectedSecs={8} status="Hydrating …" />
+ )}
         {isLoaded && renderDay(meta)}
 
         {/* ───── dialogs block (unchanged markup) ───── */}

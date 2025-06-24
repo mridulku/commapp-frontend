@@ -12,6 +12,8 @@ import { invalidateQuizStage }                 from "../../../../../../store/qui
 import { CircularProgress, Fade, Chip, Divider,
   Typography } from "@mui/material";
 
+import InlineFancyLoader from "../../../../3.Library/3.AdaptivePlanView/AdaptPGComponent/AdaptPG2/InlineFancyLoader";
+
 import AccessTimeIcon from "@mui/icons-material/AccessTimeRounded";
 
 import Tooltip from "@mui/material/Tooltip";
@@ -109,15 +111,18 @@ function LoadingOverlay({ text = "Loading…" }) {
           position: "absolute",
           inset: 0,
           display: "flex",
-          flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          background: "rgba(0,0,0,0.65)",
+          background: "rgba(0,0,0,.65)",
           zIndex: 50,
         }}
       >
-        <CircularProgress size={48} color="secondary" />
-        <span style={{ marginTop: 12, color: "#eee" }}>{text}</span>
+        {/* fancy gradient-ring + progress bar */}
+        <InlineFancyLoader
+          status={text}
+          expectedSecs={30}   /* tweak if you like */
+          flat               /* no card shadow – stays transparent */
+        />
       </div>
     </Fade>
   );

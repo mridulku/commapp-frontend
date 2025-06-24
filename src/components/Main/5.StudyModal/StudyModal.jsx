@@ -8,6 +8,8 @@ import {
   incrementDailyTime,
 } from "../../../store/timeTrackingSlice";
 
+import FancyLoader from "./0.components/Main/Base/Guide/FancyLoader";
+
 import TopBar       from "./0.components/Secondary/TopBar";
 import BottomBar    from "./0.components/Secondary/BottomBar";
 import LeftPanel    from "./0.components/Secondary/LeftPanel";
@@ -182,10 +184,9 @@ export default function PlanFetcher({
       <div style={styles.appContainer}>
         {allowClose && <FloatingClose onClose={onClose} />}
 
-        {/* Loading / error states */}
-        {status === "loading" && (
-          <p style={{ color: "#fff", margin: 8 }}>Loading plan…</p>
-        )}
+               {status === "loading" && (
+         <FancyLoader expectedSecs={40} />  
+       )}
         {error && <p style={{ color: "red", margin: 8 }}>{error}</p>}
         {!planDoc && status !== "loading" && !error && (
           <p style={{ color: "#fff", margin: 8 }}>

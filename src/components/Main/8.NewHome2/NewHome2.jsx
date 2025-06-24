@@ -118,7 +118,12 @@ const TAB_EMOJI = {
 };
 
 /* ─────────────────────────────────────────────────────────── */
-export default function NewHome2({ userId="", recentlyUsedIds=[] }) {
+export default function NewHome2({ 
+  userId             = "",
+  recentlyUsedIds    = [],
+  showHeader         = true,   // NEW – default keeps old behaviour
+  showExplainer      = true    // NEW
+}) {
 
   /* ---------- redux bootstrapping for the planner flow ---------- */
   const dispatch  = useDispatch();
@@ -184,19 +189,18 @@ export default function NewHome2({ userId="", recentlyUsedIds=[] }) {
 
 
 
-      <Typography
-  component="h1"
-  sx={{
-    fontWeight: 800,
-    fontSize: { xs: "2.25rem", md: "2.5rem" },  // ≈ 36 px → 40 px
-    lineHeight: 1.25,
-    mb: 3                                        // keep the same bottom gap
-  }}
->
-  🧰 Study&nbsp;Tools
-</Typography>
+       {showHeader    && (
+    <Typography
+      component="h1"
+      sx={{ fontWeight:800, fontSize:{ xs:"2.25rem", md:"2.5rem"}, lineHeight:1.25, mb:3 }}
+    >
+      🧰 Study&nbsp;Tools
+    </Typography>
+  )}
 
-      <ProfileExplainer />
+  {showExplainer && <ProfileExplainer />}
+
+      
 
 
       {/* tab strip */}

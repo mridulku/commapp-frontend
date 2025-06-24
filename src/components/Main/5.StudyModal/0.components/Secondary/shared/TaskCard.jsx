@@ -11,6 +11,8 @@ import Loader from "./Loader";                  // still used elsewhere
 import { memo } from "react";  
 import LockIcon from "@mui/icons-material/Lock";   // NEW
 
+import InlineFancyLoader from "../../../../3.Library/3.AdaptivePlanView/AdaptPGComponent/AdaptPG2/InlineFancyLoader";
+
 
 /* ---------- common colours ---------- */
 const CLR_COMPLETE = "#4CAF50";
@@ -82,7 +84,7 @@ export default function TaskCard({ t, onOpen, selected = false }) {
 /*  EARLY EXIT  – plain loading placeholder                           */
 /* ------------------------------------------------------------------ */
 if (status === "loading") {
-  return (
+    return (
     <Box
       sx={{
         p: 2,
@@ -90,15 +92,18 @@ if (status === "loading") {
         border: "1px solid #444",
         borderRadius: 2,
         width: "100%",
-        minHeight: 160,          // same footprint as a normal card
+        minHeight: 160,          // keep the same footprint
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
       }}
     >
-      <Typography sx={{ color: "#cccccc", fontSize: 14 }}>
-        Loading…
-      </Typography>
+      <InlineFancyLoader
+        height={120}             /* fits nicely inside the card */
+        expectedSecs={10}        /* fake progress duration */
+        status="Fetching task data …"
+        flat                     /* no grey card background */
+      />
     </Box>
   );
 }

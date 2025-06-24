@@ -20,6 +20,8 @@ import {
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import CheckIcon         from "@mui/icons-material/Check";
 
+import InlineFancyLoader from "../AdaptPGComponent/AdaptPG2/InlineFancyLoader";
+
 
 import ConceptInsightModal from "../../../7.NewHome/ConceptInsightModal";
 
@@ -181,7 +183,7 @@ const flatActs  = useSelector(
                       { label:"🧰 Tools",   comp: () =>
             <Tools userId={userId} plan={plan} planId={planId} colorScheme={colorScheme}/> },
   
-    { label:"📈 Activity",     comp: renderTimeline },
+    { label:"🧑‍💻 Activity",     comp: renderTimeline },
     { label:"Progress",    admin:true, comp: renderProgress },
     { label:"Admin",       admin:true, comp: renderAdmin },
     { label:"AdaptPlayground", admin:true, comp: renderAdaptPlayground },
@@ -283,12 +285,18 @@ const flatActs  = useSelector(
         ))}
       </Menu>
 
-      {/* body */}
-      {loadingPlan
-        ? <div>Loading plan…</div>
-        : planId && plan
-            ? VISIBLE_TABS[activeTab].comp()
-            : <div>No plan selected.</div>}
+       {loadingPlan ? (
+   <InlineFancyLoader
+     height={160}
+     expectedSecs={20}
+     status="Loading study plan …"
+     flat
+   />
+ ) : planId && plan ? (
+   VISIBLE_TABS[activeTab].comp()
+ ) : (
+   <div>No plan selected.</div>
+ )}
 
       {/* full-screen player dialog */}
       <Dialog open={showDlg} onClose={()=>setShowDlg(false)} fullScreen>

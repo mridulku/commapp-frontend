@@ -11,6 +11,8 @@ import LockIcon from "@mui/icons-material/Lock";   // ← keep with other MUI im
 import ListAltIcon      from "@mui/icons-material/ListAltOutlined";
 import HistoryIcon      from "@mui/icons-material/HistoryEduOutlined";
 
+import InlineFancyLoader from "../../../../3.Library/3.AdaptivePlanView/AdaptPGComponent/AdaptPG2/InlineFancyLoader";
+
  import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../../../../../firebase";   // ← adjust if path differs
 
@@ -479,11 +481,14 @@ useEffect(() => {
 
   // --------------- Normal UI ---------------
   if (taskInfoLoading) {
-        return (
-          <Box sx={{ mt: 4, display: "flex", justifyContent: "center" }}>
-            <Loader type="bar" accent="#FFD700" determinate={false} />
-          </Box>
-        );
+         return (
+    <InlineFancyLoader
+      height={160}
+      expectedSecs={15}
+      status="Loading stage data …"
+      flat                    /* no card background – blends with #000 */
+    />
+  );
       }
   if (taskInfoError) {
     return <div style={{ color: "red" }}>{taskInfoError}</div>;
@@ -612,11 +617,14 @@ useEffect(() => {
     // (2) Quiz stage
     if (QUIZ_STAGES.includes(tabKey)) {
       if (loading) {
-                return (
-                  <Box sx={{ mt: 4, display: "flex", justifyContent: "center" }}>
-                    <Loader type="spinner" accent="#FFD700" />
-                  </Box>
-                );
+                     return (
+       <InlineFancyLoader
+         height={140}
+         expectedSecs={10}
+         status="Fetching quiz attempts …"
+         flat
+       />
+     );
               }
       if (error) {
         return <div style={{ color: "red" }}>{error}</div>;
