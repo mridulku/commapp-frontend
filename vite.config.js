@@ -3,35 +3,24 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import nodePolyfills from "rollup-plugin-polyfill-node";
 import { resolve } from "path";
-import path from "path";
-
-/* ── absolute CJS entry paths (needed for namedExports) ─────────── */
-const reactCjs     = path.resolve(__dirname, "node_modules/react/index.js");
-const selectorCjs  = path.resolve(
-  __dirname,
-  "node_modules/use-sync-external-store/with-selector.js"
-);
 
 export default defineConfig({
-  /* ─── Plugins ─────────────────────────────── */
   plugins: [react(), nodePolyfills()],
 
-  /* ─── Globals ─────────────────────────────── */
   define: {
     global: "globalThis",
-    "process.env": {},          // silence “process is not defined”
+    "process.env": {},
   },
 
-  /* ─── Aliases ─────────────────────────────── */
   resolve: {
     alias: {
-      /* Motion case-sensitivity patch */
+      /* motion-utils case-sensitivity patch */
       "motion-utils/dist/es/globalThis-config.mjs": resolve(
         __dirname,
         "node_modules/motion-utils/dist/es/globalthis-config.mjs"
       ),
 
-      /* React 18 JSX runtime sub-paths */
+      /* React 18 JSX runtime sub-paths — required by plugin-react */
       "react/jsx-runtime":     resolve(
         __dirname,
         "node_modules/react/jsx-runtime.js"
@@ -43,7 +32,6 @@ export default defineConfig({
     },
   },
 
-  /* ─── Dependency pre-bundle (dev) ─────────── */
   optimizeDeps: {
     include: [
       "react",
@@ -51,7 +39,7 @@ export default defineConfig({
       "react/jsx-dev-runtime",
       "react-dom",
       "react-dom/client",
-      "react-redux",
+      "react-redux",                         // ← CJS 8.1.3 pre-bundled
       "use-sync-external-store/with-selector",
       "process",
       "buffer",
@@ -60,27 +48,9 @@ export default defineConfig({
     ],
   },
 
-  /* ─── Rollup build tweaks ─────────────────── */
-  build: {
-    commonjsOptions: {
-      include: [/node_modules/],          // run on every dep
-      transformMixedEsModules: true,
-      requireReturnsDefault: "preferred",
+  /* No extra commonjsOptions or treeshake tweaks needed */
+  build: {},
 
-      /* Explicit synthetic named exports for the two CJS files */
-      namedExports: {
-        [reactCjs]: [
-          "version", "createElement", "createContext",
-          "useEffect", "useLayoutEffect", "useMemo",
-          "useRef", "useContext", "useCallback",
-          "useSyncExternalStore", "memo", "forwardRef"
-        ],
-        [selectorCjs]: ["useSyncExternalStoreWithSelector"],
-      },
-    },
-  },
-
-  /* ─── Vitest ─────────────────────────────── */
   test: {
     globals: true,
     environment: "jsdom",
