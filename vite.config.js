@@ -5,19 +5,15 @@ import nodePolyfills from "rollup-plugin-polyfill-node";
 import { resolve } from "path";
 
 export default defineConfig({
-  /* ─── Plugins ─────────────────────────────── */
   plugins: [react(), nodePolyfills()],
 
-  /* ─── Globals / polyfills ─────────────────── */
   define: {
     global: "globalThis",
-    "process.env": {},               // stop “process is not defined”
+    "process.env": {},
   },
 
-  /* ─── Module resolution tweaks ────────────── */
   resolve: {
     alias: {
-      // patch motion-utils’ case-sensitivity bug
       "motion-utils/dist/es/globalThis-config.mjs": resolve(
         __dirname,
         "node_modules/motion-utils/dist/es/globalthis-config.mjs"
@@ -25,36 +21,27 @@ export default defineConfig({
     },
   },
 
-  /* ─── Vite dependency pre-bundle ──────────── */
+  /**
+   * 🔑  Tell Vite’s optimise-deps step to pre-bundle React,
+   *     React-DOM, React-Redux and the selector helper.
+   *     The generated shims expose all the named exports
+   *     (useEffect, useContext, useSyncExternalStoreWithSelector …)
+   *     that Rollup needs at build-time.
+   */
   optimizeDeps: {
-    include: ["process", "buffer", "util", "stream-browserify"],
+    include: [
+      "react",
+      "react-dom",
+      "react-redux",
+      "use-sync-external-store/with-selector",
+      "process",
+      "buffer",
+      "util",
+      "stream-browserify",
+    ],
   },
 
-  /* ─── Rollup / build tweaks ───────────────── */
-  build: {
-    commonjsOptions: {
-      include: [/node_modules/],          // transform every dep
-      transformMixedEsModules: true,      // handle CJS+ESM hybrids
-      requireReturnsDefault: "preferred", // default + named exports
-
-      // explicit names React + helper should expose
-      namedExports: {
-        react: [
-          "version", "createElement", "createContext",
-          "useEffect", "useLayoutEffect", "useMemo",
-          "useRef", "useContext", "useCallback",
-          "useSyncExternalStore", "memo", "forwardRef"
-        ],
-        "use-sync-external-store/with-selector": [
-          "useSyncExternalStoreWithSelector"
-        ],
-      },
-    },
-
-    treeshake: true,   // keep normal tree-shaking
-  },
-
-  /* ─── Vitest ──────────────────────────────── */
+  /* nothing else has to change */
   test: {
     globals: true,
     environment: "jsdom",
