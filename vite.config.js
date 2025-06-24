@@ -19,14 +19,18 @@ export default defineConfig({
 
   /* ─── Aliases ─────────────────────────────── */
   resolve: {
-    alias: {
-      // Patch motion-utils case-sensitivity bug (Linux file-systems)
-      "motion-utils/dist/es/globalThis-config.mjs": resolve(
-        __dirname,
-        "node_modules/motion-utils/dist/es/globalthis-config.mjs"
-      ),
-    },
+  alias: {
+    // Motion typo fix
+    "motion-utils/dist/es/globalThis-config.mjs": resolve(
+      __dirname,
+      "node_modules/motion-utils/dist/es/globalthis-config.mjs"
+    ),
+
+    // NEW — point React & React-DOM to their ESM bundles
+    react:      "react/esm/react.production.js",
+    "react-dom": "react-dom/esm/react-dom.production.js",
   },
+},
 
   /* ─── Dependency pre-bundle ───────────────── */
   // Forcing these packages through esbuild makes Vite generate
