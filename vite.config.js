@@ -59,8 +59,11 @@ export default defineConfig({
   ────────────────────────── */
   build: {
     commonjsOptions: {
-      include: [/node_modules/],        // run @rollup/plugin-commonjs on everything
-      transformMixedEsModules: true,    // handle hybrid ESM+CJS files
+            include: [/node_modules/],          // run plugin on every file in node_modules
+      transformMixedEsModules: true,      // handle CJS+ESM hybrids
+
+      // NEW — generate synthetic named-exports for every CommonJS dep
+      esmExternals: true,
     },
   },
 
