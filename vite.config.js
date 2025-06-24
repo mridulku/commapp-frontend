@@ -17,25 +17,20 @@ export default defineConfig({
   /* ─── Aliases ─────────────────────────────── */
   resolve: {
     alias: {
-      /* 1️⃣  Motion-utils case-sensitivity patch */
+      /* 1️⃣  Motion case-sensitivity patch */
       "motion-utils/dist/es/globalThis-config.mjs": resolve(
         __dirname,
         "node_modules/motion-utils/dist/es/globalthis-config.mjs"
       ),
 
-      /* 2️⃣  Force Vite to use React & React-DOM’s ESM bundles
-             *and* expose the new JSX runtime sub-paths            */
-      react:                 "react/esm/react.production.js",
-      "react/jsx-runtime":   "react/esm/react-jsx-runtime.production.js",
-      "react/jsx-dev-runtime":
-        "react/esm/react-jsx-runtime.development.js",
-
-      "react-dom":           "react-dom/esm/react-dom.production.js",
-      "react-dom/client":    "react-dom/esm/react-dom-client.production.js",
+      /* 2️⃣  ONLY alias the JSX-runtime sub-paths (they exist in react 18) */
+      "react/jsx-runtime":      "react/jsx-runtime.js",
+      "react/jsx-dev-runtime":  "react/jsx-dev-runtime.js",
     },
   },
 
-  /* ─── Dependency pre-bundle ──────────────── */
+  /* ─── Dependency pre-bundle ───────────────── */
+  // Pre-bundle React & friends so esbuild emits proper ESM shims
   optimizeDeps: {
     include: [
       "react",
@@ -53,9 +48,7 @@ export default defineConfig({
   },
 
   /* ─── Build (defaults are now fine) ───────── */
-  build: {
-    // no extra commonjsOptions needed
-  },
+  build: {},
 
   /* ─── Vitest ─────────────────────────────── */
   test: {
