@@ -4,54 +4,60 @@ import react from "@vitejs/plugin-react";
 import nodePolyfills from "rollup-plugin-polyfill-node";
 import path, { resolve } from "path";
 
-/* absolute CJS entry paths */
-const reactCjs     = path.resolve(__dirname, "node_modules/react/index.js");
-const reactDomCjs  = path.resolve(__dirname, "node_modules/react-dom/index.js");
-const selectorCjs  = path.resolve(
+/* CJS entry files that need explicit export maps */
+const reactCjs = path.resolve(
   __dirname,
-  "node_modules/use-sync-external-store/with-selector.js"
+  "node_modules/react/index.js",
+);
+const selectorCjs = path.resolve(
+  __dirname,
+  "node_modules/use-sync-external-store/with-selector.js",
 );
 
 export default defineConfig({
-  /* Plugins */
+  /* ─── Plugins ─────────────────────────────── */
   plugins: [react(), nodePolyfills()],
 
-  /* Globals */
+  /* ─── Globals ─────────────────────────────── */
   define: {
     global: "globalThis",
-    "process.env": {},
+    "process.env": {}, // silence “process is not defined”
   },
 
-  /* Aliases — EVERY react* import now resolves to the CJS file above */
+  /* ─── Aliases ─────────────────────────────── */
   resolve: {
     alias: {
-      // motion-utils typo patch
+      // motion-utils case-sensitivity patch
       "motion-utils/dist/es/globalThis-config.mjs": resolve(
         __dirname,
-        "node_modules/motion-utils/dist/es/globalthis-config.mjs"
+        "node_modules/motion-utils/dist/es/globalthis-config.mjs",
       ),
 
-      // React runtime sub-paths
-      "react/jsx-runtime":     resolve(__dirname, "node_modules/react/jsx-runtime.js"),
-      "react/jsx-dev-runtime": resolve(__dirname, "node_modules/react/jsx-dev-runtime.js"),
+      // React JSX-runtime sub-paths (required by @vitejs/plugin-react)
+      "react/jsx-runtime": resolve(
+        __dirname,
+        "node_modules/react/jsx-runtime.js",
+      ),
+      "react/jsx-dev-runtime": resolve(
+        __dirname,
+        "node_modules/react/jsx-dev-runtime.js",
+      ),
 
-      // Force all plain imports to the same CommonJS file
+      // force every bare import of React to the CommonJS bundle
       react: reactCjs,
       "react/index.js": reactCjs,
-      "react-dom": reactDomCjs,
-      "react-dom/index.js": reactDomCjs,
     },
   },
 
-  /* Dev pre-bundle */
+  /* ─── Dev dependency pre-bundle ───────────── */
   optimizeDeps: {
     include: [
       "react",
       "react/jsx-runtime",
       "react/jsx-dev-runtime",
       "react-dom",
-      "react-redux",
       "react-dom/client",
+      "react-redux",
       "use-sync-external-store/with-selector",
       "process",
       "buffer",
@@ -60,7 +66,7 @@ export default defineConfig({
     ],
   },
 
-  /* Rollup: declare the synthetic named exports */
+  /* ─── Rollup CJS handling ─────────────────── */
   build: {
     commonjsOptions: {
       include: [/node_modules/],
@@ -68,17 +74,25 @@ export default defineConfig({
       requireReturnsDefault: "preferred",
       namedExports: {
         [reactCjs]: [
-          "version", "createElement", "createContext",
-          "useEffect", "useLayoutEffect", "useMemo",
-          "useRef", "useContext", "useCallback",
-          "useSyncExternalStore", "memo", "forwardRef",
+          "version",
+          "createElement",
+          "createContext",
+          "useEffect",
+          "useLayoutEffect",
+          "useMemo",
+          "useRef",
+          "useContext",
+          "useCallback",
+          "useSyncExternalStore",
+          "memo",
+          "forwardRef",
         ],
         [selectorCjs]: ["useSyncExternalStoreWithSelector"],
       },
     },
   },
 
-  /* Vitest */
+  /* ─── Vitest ─────────────────────────────── */
   test: {
     globals: true,
     environment: "jsdom",
