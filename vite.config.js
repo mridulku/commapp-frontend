@@ -28,9 +28,16 @@ export default defineConfig({
 
 
          'motion-utils/dist/es/globalThis-config.mjs': resolve(
-       __dirname,
-       'node_modules/motion-utils/dist/es/globalthis-config.mjs'
-     ),
+           __dirname,
+           'node_modules/motion-utils/dist/es/globalthis-config.mjs'
+         ),
+
+         // 🆕 tell Rollup to use the main React CJS bundle
+         'react/index.js': 'react',
+
+         // 🆕 same idea for the selector helper used by react-redux
+         'use-sync-external-store/with-selector.js':
+           'use-sync-external-store/with-selector',
     },
   },
 
