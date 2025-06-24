@@ -17,20 +17,25 @@ export default defineConfig({
   /* ─── Aliases ─────────────────────────────── */
   resolve: {
     alias: {
-      /* 1️⃣  Motion case-sensitivity patch */
+      /* Motion case-sensitivity patch */
       "motion-utils/dist/es/globalThis-config.mjs": resolve(
         __dirname,
         "node_modules/motion-utils/dist/es/globalthis-config.mjs"
       ),
 
-      /* 2️⃣  ONLY alias the JSX-runtime sub-paths (they exist in react 18) */
-      "react/jsx-runtime":      "react/jsx-runtime.js",
-      "react/jsx-dev-runtime":  "react/jsx-dev-runtime.js",
+      /* JSX-runtime files – point to the real ones under node_modules/react */
+      "react/jsx-runtime":     resolve(
+        __dirname,
+        "node_modules/react/jsx-runtime.js"
+      ),
+      "react/jsx-dev-runtime": resolve(
+        __dirname,
+        "node_modules/react/jsx-dev-runtime.js"
+      ),
     },
   },
 
   /* ─── Dependency pre-bundle ───────────────── */
-  // Pre-bundle React & friends so esbuild emits proper ESM shims
   optimizeDeps: {
     include: [
       "react",
@@ -47,10 +52,10 @@ export default defineConfig({
     ],
   },
 
-  /* ─── Build (defaults are now fine) ───────── */
+  /* Build – defaults are fine now */
   build: {},
 
-  /* ─── Vitest ─────────────────────────────── */
+  /* Vitest --------------------------------------------------------- */
   test: {
     globals: true,
     environment: "jsdom",
