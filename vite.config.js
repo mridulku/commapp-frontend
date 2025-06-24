@@ -64,6 +64,23 @@ export default defineConfig({
 
       // NEW — generate synthetic named-exports for every CommonJS dep
       esmExternals: true,
+
+      /* ← NEW: hand-declare the names React & the selector helper export */
+      namedExports: {
+        react: [
+          // core
+          "version", "createElement", "createContext",
+          // hooks
+          "useEffect", "useLayoutEffect", "useMemo",
+          "useRef", "useContext", "useCallback",
+          "useSyncExternalStore",
+          // HOCs / helpers
+          "memo", "forwardRef"
+        ],
+        "use-sync-external-store/with-selector": [
+          "useSyncExternalStoreWithSelector"
+        ]
+      }
     },
   },
 
