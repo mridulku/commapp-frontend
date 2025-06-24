@@ -23,7 +23,7 @@ export default defineConfig({
         "node_modules/motion-utils/dist/es/globalthis-config.mjs"
       ),
 
-      /* JSX-runtime files – point to the real ones under node_modules/react */
+      /* React 18 JSX-runtime entry points */
       "react/jsx-runtime":     resolve(
         __dirname,
         "node_modules/react/jsx-runtime.js"
@@ -35,7 +35,7 @@ export default defineConfig({
     },
   },
 
-  /* ─── Dependency pre-bundle ───────────────── */
+  /* ─── Dependency pre-bundle (dev only) ────── */
   optimizeDeps: {
     include: [
       "react",
@@ -52,10 +52,29 @@ export default defineConfig({
     ],
   },
 
-  /* Build – defaults are fine now */
-  build: {},
+  /* ─── Rollup / build tweaks ───────────────── */
+  build: {
+    commonjsOptions: {
+      include: [/node_modules/],          // run on every dep
+      transformMixedEsModules: true,      // CJS+ESM hybrids
+      requireReturnsDefault: "preferred", // keep default + named exports
 
-  /* Vitest --------------------------------------------------------- */
+      // explicit names React & the selector helper must expose
+      namedExports: {
+        react: [
+          "version", "createElement", "createContext",
+          "useEffect", "useLayoutEffect", "useMemo",
+          "useRef", "useContext", "useCallback",
+          "useSyncExternalStore", "memo", "forwardRef"
+        ],
+        "use-sync-external-store/with-selector": [
+          "useSyncExternalStoreWithSelector"
+        ],
+      },
+    },
+  },
+
+  /* ─── Vitest ─────────────────────────────── */
   test: {
     globals: true,
     environment: "jsdom",
