@@ -3,6 +3,14 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import nodePolyfills from "rollup-plugin-polyfill-node";
 import { resolve } from "path";
+import path from "path";
+
+/* ── absolute CJS entry paths (needed for namedExports) ─────────── */
+const reactCjs     = path.resolve(__dirname, "node_modules/react/index.js");
+const selectorCjs  = path.resolve(
+  __dirname,
+  "node_modules/use-sync-external-store/with-selector.js"
+);
 
 export default defineConfig({
   /* ─── Plugins ─────────────────────────────── */
@@ -11,7 +19,7 @@ export default defineConfig({
   /* ─── Globals ─────────────────────────────── */
   define: {
     global: "globalThis",
-    "process.env": {},
+    "process.env": {},          // silence “process is not defined”
   },
 
   /* ─── Aliases ─────────────────────────────── */
@@ -23,7 +31,7 @@ export default defineConfig({
         "node_modules/motion-utils/dist/es/globalthis-config.mjs"
       ),
 
-      /* React 18 JSX-runtime entry points */
+      /* React 18 JSX runtime sub-paths */
       "react/jsx-runtime":     resolve(
         __dirname,
         "node_modules/react/jsx-runtime.js"
@@ -35,7 +43,7 @@ export default defineConfig({
     },
   },
 
-  /* ─── Dependency pre-bundle (dev only) ────── */
+  /* ─── Dependency pre-bundle (dev) ─────────── */
   optimizeDeps: {
     include: [
       "react",
@@ -52,24 +60,22 @@ export default defineConfig({
     ],
   },
 
-  /* ─── Rollup / build tweaks ───────────────── */
+  /* ─── Rollup build tweaks ─────────────────── */
   build: {
     commonjsOptions: {
       include: [/node_modules/],          // run on every dep
-      transformMixedEsModules: true,      // CJS+ESM hybrids
-      requireReturnsDefault: "preferred", // keep default + named exports
+      transformMixedEsModules: true,
+      requireReturnsDefault: "preferred",
 
-      // explicit names React & the selector helper must expose
+      /* Explicit synthetic named exports for the two CJS files */
       namedExports: {
-        react: [
+        [reactCjs]: [
           "version", "createElement", "createContext",
           "useEffect", "useLayoutEffect", "useMemo",
           "useRef", "useContext", "useCallback",
           "useSyncExternalStore", "memo", "forwardRef"
         ],
-        "use-sync-external-store/with-selector": [
-          "useSyncExternalStoreWithSelector"
-        ],
+        [selectorCjs]: ["useSyncExternalStoreWithSelector"],
       },
     },
   },
