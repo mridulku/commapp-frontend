@@ -6,39 +6,43 @@ import { resolve } from "path";
 
 export default defineConfig({
   /* ─── Plugins ─────────────────────────────── */
-  plugins: [
-    react(),            // JSX / HMR
-    nodePolyfills(),    // polyfill Node globals (process, buffer…)
-  ],
+  plugins: [react(), nodePolyfills()],
 
   /* ─── Globals ─────────────────────────────── */
   define: {
     global: "globalThis",
-    "process.env": {},  // silence “process is not defined”
+    "process.env": {},
   },
 
   /* ─── Aliases ─────────────────────────────── */
   resolve: {
-  alias: {
-    // Motion typo fix
-    "motion-utils/dist/es/globalThis-config.mjs": resolve(
-      __dirname,
-      "node_modules/motion-utils/dist/es/globalthis-config.mjs"
-    ),
+    alias: {
+      /* 1️⃣  Motion-utils case-sensitivity patch */
+      "motion-utils/dist/es/globalThis-config.mjs": resolve(
+        __dirname,
+        "node_modules/motion-utils/dist/es/globalthis-config.mjs"
+      ),
 
-    // NEW — point React & React-DOM to their ESM bundles
-    react:      "react/esm/react.production.js",
-    "react-dom": "react-dom/esm/react-dom.production.js",
+      /* 2️⃣  Force Vite to use React & React-DOM’s ESM bundles
+             *and* expose the new JSX runtime sub-paths            */
+      react:                 "react/esm/react.production.js",
+      "react/jsx-runtime":   "react/esm/react-jsx-runtime.production.js",
+      "react/jsx-dev-runtime":
+        "react/esm/react-jsx-runtime.development.js",
+
+      "react-dom":           "react-dom/esm/react-dom.production.js",
+      "react-dom/client":    "react-dom/esm/react-dom-client.production.js",
+    },
   },
-},
 
-  /* ─── Dependency pre-bundle ───────────────── */
-  // Forcing these packages through esbuild makes Vite generate
-  // ESM shims that expose *all* the named exports React-Redux needs.
+  /* ─── Dependency pre-bundle ──────────────── */
   optimizeDeps: {
     include: [
       "react",
+      "react/jsx-runtime",
+      "react/jsx-dev-runtime",
       "react-dom",
+      "react-dom/client",
       "react-redux",
       "use-sync-external-store/with-selector",
       "process",
@@ -48,9 +52,9 @@ export default defineConfig({
     ],
   },
 
-  /* ─── Rollup build settings (defaults are fine) ─────────────── */
+  /* ─── Build (defaults are now fine) ───────── */
   build: {
-    // keep tree-shaking on; no extra commonjsOptions needed
+    // no extra commonjsOptions needed
   },
 
   /* ─── Vitest ─────────────────────────────── */
