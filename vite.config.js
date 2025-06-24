@@ -80,26 +80,11 @@ export default defineConfig({
     commonjsOptions: {
       include: [/node_modules/],          // run plugin on every file in node_modules
       transformMixedEsModules: true,      // handle CJS+ESM hybrids
-      esmExternals: true,                 // synthetic named exports
+         esmExternals: true,
 
-
-
-      /* explicit names React & helper export */
-      namedExports: {
-        react: [
-          // core
-          "version", "createElement", "createContext",
-          // hooks
-          "useEffect", "useLayoutEffect", "useMemo",
-          "useRef", "useContext", "useCallback",
-          "useSyncExternalStore",
-          // HOCs / helpers
-          "memo", "forwardRef"
-        ],
-        "use-sync-external-store/with-selector": [
-          "useSyncExternalStoreWithSelector"
-        ],
-      },
+   // ← NEW: force the plugin to expose *every* property on module.exports
+   ignoreDynamicRequires: false,
+   requireReturnsDefault: "preferred",
     },
 
     // disable export check that breaks React-Redux under Rollup
