@@ -1,13 +1,8 @@
-// vite.config.js - Aggressive module resolution fix
+// vite.config.js - React Redux compatibility fix
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import nodePolyfills from "rollup-plugin-polyfill-node";
 import path, { resolve } from "path";
-
-const selectorCjs = path.resolve(
-  __dirname,
-  "node_modules/use-sync-external-store/with-selector.js",
-);
 
 export default defineConfig({
   /* ─── Plugins ─────────────────────────────── */
@@ -37,8 +32,12 @@ export default defineConfig({
         __dirname,
         "node_modules/react/jsx-dev-runtime.js",
       ),
+
+      // Force proper React module resolution
+      "react": resolve(__dirname, "node_modules/react"),
+      "react-dom": resolve(__dirname, "node_modules/react-dom"),
     },
-    // Force ES module resolution
+    // Force ES module resolution with fallbacks
     conditions: ['import', 'module', 'browser', 'default'],
     mainFields: ['module', 'browser', 'main'],
   },
@@ -52,6 +51,7 @@ export default defineConfig({
       "react-dom",
       "react-dom/client",
       "react-redux",
+      "use-sync-external-store",
       "use-sync-external-store/with-selector",
       "process",
       "buffer",
@@ -67,42 +67,70 @@ export default defineConfig({
 
   /* ─── Rollup CJS handling ─────────────────── */
   build: {
+    rollupOptions: {
+      external: [],
+      output: {
+        interop: 'auto',
+        format: 'es',
+      },
+      // Fix for react-redux import issues
+      plugins: [
+        {
+          name: 'react-redux-fix',
+          resolveId(id) {
+            // Handle react-redux imports
+            if (id === 'react-redux') {
+              return resolve(__dirname, 'node_modules/react-redux/dist/react-redux.mjs');
+            }
+            // Handle use-sync-external-store imports
+            if (id === 'use-sync-external-store/with-selector') {
+              return resolve(__dirname, 'node_modules/use-sync-external-store/with-selector.js');
+            }
+            return null;
+          },
+        },
+      ],
+    },
     commonjsOptions: {
       include: [/node_modules/],
       transformMixedEsModules: true,
       requireReturnsDefault: "auto",
-      // Force React to be treated as ES module
+      // Explicit module handling
       namedExports: {
-        "react": [
-          "createElement",
-          "createContext", 
-          "useContext",
-          "useEffect",
-          "useLayoutEffect",
-          "useMemo",
-          "useRef",
-          "useCallback",
-          "useSyncExternalStore",
-          "memo",
-          "forwardRef",
-          "useState",
-          "useReducer",
-          "Component",
-          "PureComponent",
-          "Fragment",
-          "StrictMode",
-          "Suspense",
-          "cloneElement",
-          "isValidElement",
-          "Children",
-          "version"
+        'react': [
+          'createElement',
+          'createContext', 
+          'useContext',
+          'useEffect',
+          'useLayoutEffect',
+          'useMemo',
+          'useRef',
+          'useCallback',
+          'useSyncExternalStore',
+          'memo',
+          'forwardRef',
+          'useState',
+          'useReducer',
+          'Component',
+          'PureComponent',
+          'Fragment',
+          'StrictMode',
+          'Suspense',
+          'cloneElement',
+          'isValidElement',
+          'Children',
+          'version'
         ],
-        [selectorCjs]: ["useSyncExternalStoreWithSelector"],
-      },
-    },
-    rollupOptions: {
-      output: {
-        interop: 'auto',
+        'react-dom': [
+          'render',
+          'createRoot',
+          'hydrateRoot',
+          'findDOMNode',
+          'unmountComponentAtNode',
+          'createPortal',
+          'flushSync'
+        ],
+        'use-sync-external-store/with-selector': ['useSyncExternalStoreWithSelector'],
       },
     },
   },

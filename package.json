@@ -41,6 +41,7 @@
     "reactour": "^1.19.4",
     "recharts": "^2.15.3",
     "slick-carousel": "^1.8.1",
+    "use-sync-external-store": "^1.5.0",
     "usetiful-sdk": "^0.2.0",
     "uuid": "^11.0.5",
     "web-vitals": "^3.1.0"
