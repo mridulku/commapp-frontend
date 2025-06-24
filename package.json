@@ -54,7 +54,8 @@
     "start": "BROWSER=none WDS_SOCKET_PORT=0 vite --port 3000",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest"
+    "test": "vitest",
+     "postinstall": "mkdir -p node_modules/motion-utils/dist/es && printf 'export {};\n' > node_modules/motion-utils/dist/es/globalThis-config.mjs"
   },
   "eslintConfig": {
     "extends": [
